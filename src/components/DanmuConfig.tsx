@@ -16,6 +16,7 @@ const EXAMPLE_DANMU_API_BASE = 'https://your-danmu-api.example.com';
 
 const DanmuConfig = ({ config, refreshConfig }: DanmuConfigProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const [message, setMessage] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -29,6 +30,49 @@ const DanmuConfig = ({ config, refreshConfig }: DanmuConfigProps) => {
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleTest = async () => {
+    const trimmedUrl = apiBaseUrl.trim();
+    if (!trimmedUrl) {
+      showMessage('error', '请先填写弹幕 API 地址');
+      return;
+    }
+
+    try {
+      new URL(trimmedUrl);
+    } catch {
+      showMessage('error', '弹幕 API 地址格式不正确');
+      return;
+    }
+
+    setIsTesting(true);
+    try {
+      const response = await fetch('/api/admin/danmu/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiBaseUrl: trimmedUrl }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '连接测试失败');
+      }
+
+      showMessage(
+        'success',
+        result.version
+          ? `弹幕 API 连接正常，版本 ${result.version}`
+          : '弹幕 API 连接正常',
+      );
+    } catch (error) {
+      showMessage(
+        'error',
+        error instanceof Error ? error.message : '连接测试失败',
+      );
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -58,14 +102,11 @@ const DanmuConfig = ({ config, refreshConfig }: DanmuConfigProps) => {
 
       showMessage(
         'success',
-        trimmedUrl ? '弹幕配置保存成功' : '已清空弹幕 API 地址'
+        trimmedUrl ? '弹幕配置保存成功' : '已清空弹幕 API 地址',
       );
       await refreshConfig();
     } catch (error) {
-      showMessage(
-        'error',
-        error instanceof Error ? error.message : '保存失败'
-      );
+      showMessage('error', error instanceof Error ? error.message : '保存失败');
     } finally {
       setIsLoading(false);
     }
@@ -119,12 +160,24 @@ const DanmuConfig = ({ config, refreshConfig }: DanmuConfigProps) => {
           </p>
         </div>
 
-        <div className='flex justify-end'>
+        <div className='flex justify-end gap-3'>
+          <button
+            onClick={handleTest}
+            disabled={isLoading || isTesting}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isLoading || isTesting
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            <CheckCircle className='h-4 w-4' />
+            {isTesting ? '测试中...' : '测试连接'}
+          </button>
           <button
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isLoading || isTesting}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isLoading
+              isLoading || isTesting
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
