@@ -3,9 +3,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig, refineConfig } from '@/lib/config';
+import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
-import { refreshLiveChannels } from '@/lib/live';
+import { refreshEnabledLiveChannels } from '@/lib/live';
 import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
 import {
   buildWatchingUpdatesFromRecordsWithDetails,
@@ -103,27 +104,8 @@ async function cronJob() {
 
 async function refreshAllLiveChannels() {
   const config = await getConfig();
-
-  // 并发刷新所有启用的直播源
-  const refreshPromises = (config.LiveConfig || [])
-    .filter((liveInfo) => !liveInfo.disabled)
-    .map(async (liveInfo) => {
-      try {
-        const nums = await refreshLiveChannels(liveInfo);
-        liveInfo.channelNumber = nums;
-      } catch (error) {
-        console.error(
-          `刷新直播源失败 [${liveInfo.name || liveInfo.key}]:`,
-          error,
-        );
-        liveInfo.channelNumber = 0;
-      }
-    });
-
-  // 等待所有刷新任务完成
-  await Promise.all(refreshPromises);
-
-  // 保存配置
+  const result = await refreshEnabledLiveChannels(config);
+  console.log('📺 直播源刷新统计:', result);
   await db.saveAdminConfig(config);
 }
 
@@ -138,35 +120,9 @@ async function refreshConfig() {
     try {
       console.log('🌐 开始获取配置订阅:', config.ConfigSubscribtion.URL);
 
-      // 设置100秒超时
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 100000);
-
-      const response = await fetch(config.ConfigSubscribtion.URL, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'LunaTV-ConfigFetcher/1.0',
-        },
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`请求失败: ${response.status} ${response.statusText}`);
-      }
-
-      const configContent = await response.text();
-
-      // 对 configContent 进行 base58 解码
-      let decodedContent;
-      try {
-        const bs58 = (await import('bs58')).default;
-        const decodedBytes = bs58.decode(configContent);
-        decodedContent = new TextDecoder().decode(decodedBytes);
-      } catch (decodeError) {
-        console.warn('Base58 解码失败:', decodeError);
-        throw decodeError;
-      }
+      const decodedContent = await fetchDecodedConfigSubscription(
+        config.ConfigSubscribtion.URL,
+      );
 
       try {
         JSON.parse(decodedContent);
@@ -597,144 +553,7 @@ async function cleanupInactiveUsers() {
     } else {
       console.log('✨ 清理完成，无需删除任何用户');
     }
-
-    // 优化活跃用户的统计显示（等级系统）
-    console.log('🎯 开始优化活跃用户等级显示...');
-    await optimizeActiveUserLevels();
   } catch (err) {
     console.error('🚫 清理非活跃用户任务失败:', err);
-  }
-}
-
-// 用户等级定义
-const USER_LEVELS = [
-  {
-    level: 1,
-    name: '新星观众',
-    icon: '🌟',
-    minLogins: 1,
-    maxLogins: 9,
-    description: '刚刚开启观影之旅',
-  },
-  {
-    level: 2,
-    name: '常客影迷',
-    icon: '🎬',
-    minLogins: 10,
-    maxLogins: 49,
-    description: '热爱电影的观众',
-  },
-  {
-    level: 3,
-    name: '资深观众',
-    icon: '📺',
-    minLogins: 50,
-    maxLogins: 199,
-    description: '对剧集有独特品味',
-  },
-  {
-    level: 4,
-    name: '影院达人',
-    icon: '🎭',
-    minLogins: 200,
-    maxLogins: 499,
-    description: '深度电影爱好者',
-  },
-  {
-    level: 5,
-    name: '观影专家',
-    icon: '🏆',
-    minLogins: 500,
-    maxLogins: 999,
-    description: '拥有丰富观影经验',
-  },
-  {
-    level: 6,
-    name: '传奇影神',
-    icon: '👑',
-    minLogins: 1000,
-    maxLogins: 2999,
-    description: '影视界的传奇人物',
-  },
-  {
-    level: 7,
-    name: '殿堂影帝',
-    icon: '💎',
-    minLogins: 3000,
-    maxLogins: 9999,
-    description: '影视殿堂的至尊',
-  },
-  {
-    level: 8,
-    name: '永恒之光',
-    icon: '✨',
-    minLogins: 10000,
-    maxLogins: Infinity,
-    description: '永恒闪耀的观影之光',
-  },
-];
-
-function calculateUserLevel(loginCount: number) {
-  for (const level of USER_LEVELS) {
-    if (loginCount >= level.minLogins && loginCount <= level.maxLogins) {
-      return level;
-    }
-  }
-  return USER_LEVELS[USER_LEVELS.length - 1];
-}
-
-async function optimizeActiveUserLevels() {
-  try {
-    const allUsers = await db.getAllUsers();
-    let optimizedCount = 0;
-
-    for (const user of allUsers) {
-      try {
-        // 检查用户是否存在
-        const userExists = await db.checkUserExist(user);
-        if (!userExists) continue;
-
-        const userStats = await db.getUserPlayStat(user);
-        if (!userStats || !userStats.loginCount) continue;
-
-        // 计算用户等级（所有用户都有等级）
-        const userLevel = calculateUserLevel(userStats.loginCount);
-
-        // 为所有用户记录等级信息
-        if (userStats.loginCount > 0) {
-          const _optimizedStats = {
-            ...userStats,
-            userLevel: {
-              level: userLevel.level,
-              name: userLevel.name,
-              icon: userLevel.icon,
-              description: userLevel.description,
-              displayTitle: `${userLevel.icon} ${userLevel.name}`,
-            },
-            displayLoginCount:
-              userStats.loginCount > 10000
-                ? '10000+'
-                : userStats.loginCount > 1000
-                  ? `${Math.floor(userStats.loginCount / 1000)}k+`
-                  : userStats.loginCount.toString(),
-            lastLevelUpdate: new Date().toISOString(),
-          };
-
-          // 注意：这里我们只计算等级信息用于日志显示，不保存到数据库
-          // 等级信息会在前端动态计算，确保数据一致性
-          optimizedCount++;
-
-          console.log(
-            `🎯 用户等级: ${user} -> ${userLevel.icon} ${userLevel.name} (登录${userStats.loginCount}次)`,
-          );
-        }
-      } catch (err) {
-        console.error(`❌ 优化用户等级失败 (${user}):`, err);
-      }
-    }
-
-    console.log(`✅ 等级优化完成，共优化 ${optimizedCount} 个用户`);
-  } catch (err) {
-    console.error('🚫 等级优化任务失败:', err);
   }
 }

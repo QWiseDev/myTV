@@ -3,6 +3,8 @@
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
+import type { AdminConfig } from './admin.types';
+
 const defaultUA = 'AptvPlayer/1.4.10';
 
 export interface LiveChannels {
@@ -32,7 +34,7 @@ export function deleteCachedLiveChannels(key: string) {
 }
 
 export async function getCachedLiveChannels(
-  key: string
+  key: string,
 ): Promise<LiveChannels | null> {
   if (!cachedLiveChannels[key]) {
     const config = await getConfig();
@@ -94,6 +96,41 @@ export async function refreshLiveChannels(liveInfo: {
     epgs: epgs,
   };
   return result.channels.length;
+}
+
+export async function refreshEnabledLiveChannels(config: AdminConfig): Promise<{
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+}> {
+  const enabledSources = (config.LiveConfig || []).filter(
+    (liveInfo) => !liveInfo.disabled,
+  );
+  let successCount = 0;
+  let failedCount = 0;
+
+  await Promise.all(
+    enabledSources.map(async (liveInfo) => {
+      try {
+        const nums = await refreshLiveChannels(liveInfo);
+        liveInfo.channelNumber = nums;
+        successCount++;
+      } catch (error) {
+        console.error(
+          `刷新直播源失败 [${liveInfo.name || liveInfo.key}]:`,
+          error,
+        );
+        liveInfo.channelNumber = 0;
+        failedCount++;
+      }
+    }),
+  );
+
+  return {
+    totalCount: enabledSources.length,
+    successCount,
+    failedCount,
+  };
 }
 
 // 智能匹配 tvg-id 的函数
@@ -172,7 +209,7 @@ function createTvgIdMatcher(tvgIds: string[]) {
 async function parseEpg(
   epgUrl: string,
   ua: string,
-  tvgIds: string[]
+  tvgIds: string[],
 ): Promise<{
   [key: string]: {
     start: string;
@@ -278,7 +315,7 @@ async function parseEpg(
         ) {
           // 处理带有语言属性的title标签，如 <title lang="zh">远方的家2025-60</title>
           const titleMatch = trimmedLine.match(
-            /<title(?:\s+[^>]*)?>(.*?)<\/title>/
+            /<title(?:\s+[^>]*)?>(.*?)<\/title>/,
           );
           if (titleMatch && currentProgram) {
             currentProgram.title = titleMatch[1];
@@ -315,7 +352,7 @@ async function parseEpg(
  */
 function parseM3U(
   sourceKey: string,
-  m3uContent: string
+  m3uContent: string,
 ): {
   tvgUrl: string;
   channels: {
@@ -476,7 +513,7 @@ export function getBaseUrl(m3u8Url: string) {
     if (url.pathname.endsWith('.m3u8')) {
       url.pathname = url.pathname.substring(
         0,
-        url.pathname.lastIndexOf('/') + 1
+        url.pathname.lastIndexOf('/') + 1,
       );
     } else if (!url.pathname.endsWith('/')) {
       url.pathname += '/';

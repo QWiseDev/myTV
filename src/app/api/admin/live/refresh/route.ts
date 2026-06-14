@@ -5,10 +5,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
-import { refreshLiveChannels } from '@/lib/live';
+import { refreshEnabledLiveChannels } from '@/lib/live';
 
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
@@ -27,22 +26,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 并发刷新所有启用的直播源
-    const refreshPromises = (config.LiveConfig || [])
-      .filter((liveInfo) => !liveInfo.disabled)
-      .map(async (liveInfo) => {
-        try {
-          const nums = await refreshLiveChannels(liveInfo);
-          liveInfo.channelNumber = nums;
-        } catch (error) {
-          liveInfo.channelNumber = 0;
-        }
-      });
-
-    // 等待所有刷新任务完成
-    await Promise.all(refreshPromises);
-
-    // 保存配置
+    await refreshEnabledLiveChannels(config);
     await db.saveAdminConfig(config);
 
     return NextResponse.json({
@@ -53,7 +37,7 @@ export async function POST(request: NextRequest) {
     console.error('直播源刷新失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '刷新失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
