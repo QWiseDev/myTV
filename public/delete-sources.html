@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>删除所有视频源</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="max-w-2xl mx-auto px-4">
+        <div class="bg-white rounded-lg shadow-md p-8">
+            <h1 class="text-3xl font-bold text-red-600 mb-6 text-center">⚠️ 删除所有视频源</h1>
+
+            <div id="warning" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            <strong>警告：</strong>此操作将删除所有视频源配置！<br>
+                            删除前会自动创建备份，但请谨慎操作。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-blue-50 p-4 rounded">
+                    <h3 class="font-semibold text-blue-800 mb-2">🔑 操作步骤：</h3>
+                    <ol class="list-decimal list-inside text-sm text-blue-700 space-y-1">
+                        <li>确保已登录管理员账号</li>
+                        <li>在下方输入管理员用户名进行验证</li>
+                        <li>点击删除按钮执行操作</li>
+                    </ol>
+                </div>
+
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">管理员用户名：</label>
+                    <input
+                        type="text"
+                        id="username"
+                        placeholder="输入管理员用户名"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="confirm" class="h-4 w-4 text-red-600">
+                    <label for="confirm" class="text-sm text-gray-700">我已确认要删除所有视频源</label>
+                </div>
+
+                <button
+                    id="deleteBtn"
+                    class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-md transition duration-300"
+                    onclick="deleteAllSources()"
+                >
+                    删除所有视频源
+                </button>
+
+                <div id="result" class="hidden mt-6 p-4 rounded">
+                    <h3 class="font-semibold mb-2">操作结果：</h3>
+                    <pre id="resultContent" class="text-sm overflow-x-auto"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-white rounded-lg shadow-md p-8">
+            <h2 class="text-2xl font-bold text-green-600 mb-6 text-center">♻️ 恢复视频源</h2>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="backupFile" class="block text-sm font-medium text-gray-700 mb-2">备份文件路径：</label>
+                    <input
+                        type="text"
+                        id="backupFile"
+                        placeholder="例如: /path/to/sources-backup-1234567890.json"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                </div>
+
+                <button
+                    id="restoreBtn"
+                    class="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-md transition duration-300"
+                    onclick="restoreSources()"
+                >
+                    恢复视频源
+                </button>
+
+                <div id="restoreResult" class="hidden mt-6 p-4 rounded">
+                    <h3 class="font-semibold mb-2">恢复结果：</h3>
+                    <pre id="restoreContent" class="text-sm overflow-x-auto"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showResult(success, message, isRestore = false) {
+            const resultDiv = document.getElementById(isRestore ? 'restoreResult' : 'result');
+            const resultContent = document.getElementById(isRestore ? 'restoreContent' : 'resultContent');
+
+            resultDiv.className = `mt-6 p-4 rounded ${success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border`;
+            resultContent.textContent = message;
+            resultDiv.classList.remove('hidden');
+        }
+
+        async function deleteAllSources() {
+            const username = document.getElementById('username').value;
+            const confirm = document.getElementById('confirm').checked;
+            const deleteBtn = document.getElementById('deleteBtn');
+
+            if (!username) {
+                alert('请输入管理员用户名');
+                return;
+            }
+
+            if (!confirm) {
+                alert('请确认您要删除所有视频源');
+                return;
+            }
+
+            if (!confirm(`确定要删除所有视频源吗？\n管理员用户名: ${username}`)) {
+                return;
+            }
+
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = '删除中...';
+
+            try {
+                const response = await fetch('/api/admin/source/delete-all', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showResult(true, `✅ 成功删除 ${result.deletedCount} 个视频源\n💾 备份文件: ${result.backupFile || '未创建'}`);
+                } else {
+                    showResult(false, `❌ 删除失败: ${result.error}`);
+                }
+            } catch (error) {
+                showResult(false, `❌ 请求失败: ${error.message}`);
+            } finally {
+                deleteBtn.disabled = false;
+                deleteBtn.textContent = '删除所有视频源';
+            }
+        }
+
+        async function restoreSources() {
+            const backupFile = document.getElementById('backupFile').value;
+            const restoreBtn = document.getElementById('restoreBtn');
+
+            if (!backupFile) {
+                alert('请输入备份文件路径');
+                return;
+            }
+
+            if (!confirm(`确定要从备份文件恢复视频源吗？\n备份文件: ${backupFile}`)) {
+                return;
+            }
+
+            restoreBtn.disabled = true;
+            restoreBtn.textContent = '恢复中...';
+
+            try {
+                const response = await fetch('/api/admin/source/restore', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ backupFile }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showResult(true, `✅ 成功恢复 ${result.restoredCount} 个视频源`, true);
+                } else {
+                    showResult(false, `❌ 恢复失败: ${result.error}`, true);
+                }
+            } catch (error) {
+                showResult(false, `❌ 请求失败: ${error.message}`, true);
+            } finally {
+                restoreBtn.disabled = false;
+                restoreBtn.textContent = '恢复视频源';
+            }
+        }
+
+        // 页面加载时清除之前的错误状态
+        window.onload = function() {
+            document.getElementById('result')?.classList.add('hidden');
+            document.getElementById('restoreResult')?.classList.add('hidden');
+        };
+    </script>
+</body>
+</html>

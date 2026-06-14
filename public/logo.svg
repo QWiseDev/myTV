@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="500" height="500" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="playGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f5576c;stop-opacity:1" />
+    </linearGradient>
+
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffd700;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Circle with Gradient -->
+  <circle cx="250" cy="250" r="220" fill="url(#bgGradient)" filter="url(#shadow)"/>
+
+  <!-- Inner Ring -->
+  <circle cx="250" cy="250" r="180" fill="none" stroke="url(#textGradient)" stroke-width="4" opacity="0.8"/>
+
+  <!-- Play Button Triangle -->
+  <g filter="url(#shadow)">
+    <path d="M 200 180 L 200 320 L 320 250 Z" fill="url(#playGradient)" stroke="white" stroke-width="3" />
+  </g>
+
+  <!-- Decorative Elements - Stars/Sparkles -->
+  <g opacity="0.9">
+    <!-- Top Star -->
+    <path d="M 250 90 L 255 105 L 270 105 L 258 115 L 263 130 L 250 120 L 237 130 L 242 115 L 230 105 L 245 105 Z" fill="url(#textGradient)"/>
+
+    <!-- Left Star -->
+    <path d="M 110 250 L 115 260 L 125 260 L 118 267 L 120 277 L 110 271 L 100 277 L 102 267 L 95 260 L 105 260 Z" fill="url(#textGradient)" opacity="0.8"/>
+
+    <!-- Right Star -->
+    <path d="M 390 250 L 395 260 L 405 260 L 398 267 L 400 277 L 390 271 L 380 277 L 382 267 L 375 260 L 385 260 Z" fill="url(#textGradient)" opacity="0.8"/>
+
+    <!-- Bottom Left Circle -->
+    <circle cx="140" cy="180" r="8" fill="url(#textGradient)" opacity="0.7"/>
+
+    <!-- Bottom Right Circle -->
+    <circle cx="360" cy="320" r="8" fill="url(#textGradient)" opacity="0.7"/>
+  </g>
+
+  <!-- KLMTV Text -->
+  <text x="250" y="380" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="url(#textGradient)" letter-spacing="4">KLMTV</text>
+
+  <!-- Underline -->
+  <line x1="180" y1="395" x2="320" y2="395" stroke="url(#textGradient)" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Bottom Text -->
+  <text x="250" y="420" font-family="Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" fill="#ffffff" opacity="0.9" letter-spacing="2">卡拉米影视</text>
+</svg>

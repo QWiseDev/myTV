@@ -1,0 +1,131 @@
+/* 老虎机滚动效果样式 - 平衡性能版本 */
+
+.slot-reel-container {
+  width: 80px;
+  height: 80px;
+  border: 3px solid #fbbf24;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.6), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  position: relative;
+  /* 仅在需要时启用硬件加速 */
+  transform: translateZ(0);
+}
+
+.slot-reel {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* 最小化的硬件加速设置 */
+  backface-visibility: hidden;
+}
+
+.slot-symbols {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 仅在动画时启用硬件加速 */
+  backface-visibility: hidden;
+  /* 基本的性能优化 */
+  contain: layout style paint;
+}
+
+.slot-symbol {
+  width: 100%;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  flex-shrink: 0;
+  /* 简化的性能设置 */
+  contain: layout style paint;
+}
+
+.slot-symbol img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(rgba(0, 0, 0, 0.4) 0px 4px 12px);
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* 移除过度的硬件加速设置 */
+}
+
+/* 优化的滚动动画 - 降低动画频率 */
+@keyframes slotScroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.slot-symbols.spinning {
+  animation: slotScroll 0.5s linear infinite; /* 稍微慢一点的动画 */
+  /* 最小化的硬件加速 */
+  transform: translateZ(0);
+  /* 简化的性能设置 */
+  contain: layout style paint;
+}
+
+/* 优化的滚动停止动画 */
+.slot-symbols.stopping {
+  transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); /* 稍微慢一点的停止动画 */
+  transform: translateZ(0);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .slot-reel-container {
+    width: 60px;
+    height: 60px;
+  }
+
+  .slot-symbol {
+    height: 60px;
+    padding: 4px;
+  }
+
+  .slot-symbol img {
+    filter: drop-shadow(rgba(0, 0, 0, 0.3) 0px 2px 6px);
+  }
+}
+
+/* 减少动画偏好支持 */
+@media (prefers-reduced-motion: reduce) {
+  .slot-symbols {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* 光晕效果 */
+.slot-reel-container.glowing {
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.8), inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* 边框动画 */
+.slot-reel-container .border-glow {
+  position: absolute;
+  inset: 0;
+  border: 3px solid #facc15;
+  border-radius: 12px;
+  pointer-events: none;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+    box-shadow: inset 0 0 15px rgba(251, 191, 36, 0.8);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: inset 0 0 25px rgba(251, 191, 36, 1);
+  }
+}

@@ -1,0 +1,9 @@
+services:
+  mytv-core:
+    image: ghcr.io/qwisedev/klmtv:latest
+    container_name: mytv-core
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3001:3001"
