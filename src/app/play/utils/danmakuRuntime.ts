@@ -57,6 +57,7 @@ export type DanmakuRequestInput = {
   videoTitle?: string;
   videoYear?: string;
   videoDoubanId?: number | null;
+  videoUrl?: string;
   episodeIndex: number;
   episodeOffset: number;
   source?: string;
@@ -96,19 +97,27 @@ export function createDanmakuRequest(
   if (input.videoYear) {
     params.set('year', input.videoYear);
   }
+  if (input.videoUrl) {
+    params.set('video_url', input.videoUrl);
+  }
   if (episode > 0) {
     params.set('episode', String(episode));
   }
 
   if (!params.toString()) return null;
 
+  const keyParts = [
+    input.videoTitle || '',
+    input.videoYear || '',
+    input.videoDoubanId || '',
+    episode,
+  ];
+  if (input.videoUrl) {
+    keyParts.push(input.videoUrl);
+  }
+
   return {
-    key: [
-      input.videoTitle || '',
-      input.videoYear || '',
-      input.videoDoubanId || '',
-      episode,
-    ].join('_'),
+    key: keyParts.join('_'),
     episode,
     params,
     source: input.source,

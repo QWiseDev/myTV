@@ -777,6 +777,7 @@ function PlayPageClient() {
       videoTitleRef,
       videoYearRef,
       videoDoubanIdRef,
+      videoUrlRef,
       danmuLoadingRef,
       lastDanmuLoadKeyRef,
       currentSourceRef,

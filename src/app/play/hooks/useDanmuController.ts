@@ -19,6 +19,7 @@ interface UseDanmuControllerParams {
   videoTitleRef: MutableRefObject<string>;
   videoYearRef: MutableRefObject<string | undefined>;
   videoDoubanIdRef: MutableRefObject<number | null | undefined>;
+  videoUrlRef: MutableRefObject<string>;
   currentEpisodeIndexRef: MutableRefObject<number>; // 🔧 新增：使用 ref 获取最新集数
   danmuLoadingRef: MutableRefObject<boolean>;
   lastDanmuLoadKeyRef: MutableRefObject<string>;
@@ -34,6 +35,7 @@ export function useDanmuController({
   videoTitleRef,
   videoYearRef,
   videoDoubanIdRef,
+  videoUrlRef,
   currentEpisodeIndexRef, // 🔧 新增
   danmuLoadingRef,
   lastDanmuLoadKeyRef,
@@ -61,6 +63,7 @@ export function useDanmuController({
       videoTitle: videoTitleRef.current,
       videoYear: videoYearRef.current,
       videoDoubanId: videoDoubanIdRef.current,
+      videoUrl: videoUrlRef.current,
       episodeIndex: latestEpisodeIndex,
       episodeOffset: latestOffset,
       source: currentSourceRef.current,
@@ -81,6 +84,7 @@ export function useDanmuController({
     videoDoubanIdRef,
     videoTitleRef,
     videoYearRef,
+    videoUrlRef,
     lastDanmuLoadKeyRef,
   ]);
 

@@ -850,6 +850,20 @@ function parseKlmDanmuComment(comment: KlmDanmuComment): DanmuItem | null {
   };
 }
 
+function isSupportedDanmuPlatformUrl(videoUrl: string): boolean {
+  return [
+    'v.qq.com',
+    'iqiyi.com',
+    'youku.com',
+    'mgtv.com',
+    'bilibili.com',
+    'miguvideo.com',
+    'sohu.com',
+    'le.com',
+    'ixigua.com',
+  ].some((domain) => videoUrl.includes(domain));
+}
+
 async function fetchKlmJson<T>(
   apiUrl: string,
   options: RequestInit = {},
@@ -1202,12 +1216,14 @@ export async function GET(request: NextRequest) {
   const title = searchParams.get('title');
   const year = searchParams.get('year');
   const episode = searchParams.get('episode'); // 新增集数参数
+  const videoUrl = searchParams.get('video_url');
 
   console.log('=== 弹幕API请求参数 ===');
   console.log('豆瓣ID:', doubanId);
   console.log('标题:', title);
   console.log('年份:', year);
   console.log('集数:', episode);
+  console.log('播放URL:', videoUrl ? '已提供' : '未提供');
 
   if (!doubanId && !title) {
     return NextResponse.json(
@@ -1219,7 +1235,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (title) {
+    if (videoUrl && isSupportedDanmuPlatformUrl(videoUrl)) {
+      const urlDanmu = await fetchDanmuFromKlmAPI(videoUrl);
+      if (urlDanmu.length > 0) {
+        return NextResponse.json({
+          danmu: urlDanmu,
+          platforms: [
+            {
+              platform: 'logvar_url',
+              url: videoUrl,
+              count: urlDanmu.length,
+            },
+          ],
+          total: urlDanmu.length,
+        });
+      }
+    }
+
+    if (title && !doubanId) {
       const directKlmResult = await fetchDanmuFromKlmEpisode(
         title,
         year,
