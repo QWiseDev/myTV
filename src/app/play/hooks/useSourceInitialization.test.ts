@@ -160,6 +160,40 @@ describe('useSourceInitialization', () => {
     ]);
   });
 
+  test('skips reinitialization when route params already match current detail', async () => {
+    const switchedDetail: SearchResult = {
+      ...detail,
+      id: 'video-2',
+      source: 'site-b',
+      source_name: '站点 B',
+    };
+    const params = createParams({
+      currentSource: 'site-b',
+      currentId: 'video-2',
+      currentSourceRef: { current: 'site-b' },
+      currentIdRef: { current: 'video-2' },
+      detailRef: { current: switchedDetail },
+    });
+
+    const { result } = renderHook(() => useSourceInitialization(params));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockedCachedGet).not.toHaveBeenCalled();
+    expect(params.setLoading).not.toHaveBeenCalled();
+    expect(params.setAvailableSources).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.loadAvailableSources();
+    });
+
+    expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
+      q: '测试影片',
+    });
+  });
+
   test('shows an error when title search finds no playable source', async () => {
     const params = createParams({
       currentSource: '',

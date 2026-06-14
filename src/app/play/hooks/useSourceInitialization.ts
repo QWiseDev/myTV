@@ -51,6 +51,9 @@ export interface UseSourceInitializationParams {
   videoTitleRef: MutableRefObject<string | undefined>;
   videoYearRef: MutableRefObject<string | undefined>;
   videoDoubanIdRef: MutableRefObject<number | null | undefined>;
+  currentSourceRef?: MutableRefObject<string>;
+  currentIdRef?: MutableRefObject<string>;
+  detailRef?: MutableRefObject<SearchResult | null>;
   setDetail: (detail: SearchResult | null) => void;
   setAvailableSources: (sources: SearchResult[]) => void;
   setCurrentEpisodeIndex: (index: number) => void;
@@ -92,6 +95,9 @@ export function useSourceInitialization({
   videoTitleRef,
   videoYearRef,
   videoDoubanIdRef,
+  currentSourceRef,
+  currentIdRef,
+  detailRef,
   setDetail,
   setAvailableSources,
   setCurrentEpisodeIndex,
@@ -456,6 +462,25 @@ export function useSourceInitialization({
 
     const initAll = async () => {
       try {
+        const currentDetail = detailRef?.current;
+        const routeAlreadyApplied =
+          Boolean(currentSource && currentId) &&
+          currentSourceRef?.current === currentSource &&
+          currentIdRef?.current === currentId &&
+          Boolean(
+            currentDetail &&
+              findSourceByIdentity([currentDetail], {
+                source: currentSource,
+                id: currentId,
+              }),
+          );
+
+        if (routeAlreadyApplied && currentDetail) {
+          sourceSearchLoaderRef.current = () =>
+            enrichAvailableSources(currentDetail);
+          return;
+        }
+
         if (!currentSource && !currentId && !videoTitle && !searchTitle) {
           failInitialization(new Error('缺少必要参数'));
           return;
@@ -676,8 +701,11 @@ export function useSourceInitialization({
   }, [
     currentId,
     currentSource,
+    currentIdRef,
     currentEpisodeIndexRef,
+    currentSourceRef,
     deviceInfo,
+    detailRef,
     handleError,
     needPreferRef,
     optimizationEnabled,

@@ -1,6 +1,6 @@
 'use client';
 
-import { MutableRefObject, useCallback } from 'react';
+import { Dispatch, MutableRefObject, SetStateAction, useCallback } from 'react';
 
 import { cachedGet } from '@/lib/api-cache.client';
 import { deletePlayRecord } from '@/lib/db.client';
@@ -16,6 +16,7 @@ import {
 import {
   findSourceByIdentity,
   hydrateSourceDetail,
+  replaceSourceDetail,
   resolveDoubanId,
 } from '../utils/sourceDetails';
 
@@ -41,6 +42,7 @@ interface UseSourceSwitcherParams {
   setCurrentSource: (source: string) => void;
   setCurrentId: (id: string) => void;
   setDetail: (detail: SearchResult | null) => void;
+  setAvailableSources: Dispatch<SetStateAction<SearchResult[]>>;
   setCurrentEpisodeIndex: (index: number) => void;
   isSourceChangingRef: MutableRefObject<boolean>;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
@@ -69,6 +71,7 @@ export function useSourceSwitcher({
   setCurrentSource,
   setCurrentId,
   setDetail,
+  setAvailableSources,
   setCurrentEpisodeIndex,
   isSourceChangingRef,
   externalDanmuEnabledRef,
@@ -158,12 +161,6 @@ export function useSourceSwitcher({
           resumeTimeRef.current = currentPlayTime;
         }
 
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('source', newSource);
-        newUrl.searchParams.set('id', newId);
-        newUrl.searchParams.set('year', resolvedDetail.year);
-        window.history.replaceState({}, '', newUrl.toString());
-
         setVideoTitle(resolvedDetail.title || newTitle);
         setVideoYear(resolvedDetail.year);
         setVideoCover(resolvedDetail.poster);
@@ -173,7 +170,25 @@ export function useSourceSwitcher({
         setCurrentSource(newSource);
         setCurrentId(newId);
         setDetail(resolvedDetail);
+        setAvailableSources((sources) => {
+          const replacedSources = replaceSourceDetail(sources, resolvedDetail);
+          if (
+            findSourceByIdentity(replacedSources, {
+              source: resolvedDetail.source,
+              id: resolvedDetail.id,
+            })
+          ) {
+            return replacedSources;
+          }
+          return [resolvedDetail, ...replacedSources];
+        });
         setCurrentEpisodeIndex(targetIndex);
+
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('source', newSource);
+        newUrl.searchParams.set('id', newId);
+        newUrl.searchParams.set('year', resolvedDetail.year);
+        window.history.replaceState({}, '', newUrl.toString());
 
         setTimeout(async () => {
           const art = artPlayerRef.current;
@@ -220,6 +235,7 @@ export function useSourceSwitcher({
       setCurrentId,
       setCurrentSource,
       setDetail,
+      setAvailableSources,
       setError,
       setIsVideoLoading,
       setVideoCover,
