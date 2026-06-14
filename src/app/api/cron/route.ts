@@ -6,8 +6,12 @@ import { getConfig, refineConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshLiveChannels } from '@/lib/live';
-import { SearchResult } from '@/lib/types';
-import { rebuildWatchingUpdatesForUser } from '@/lib/watching-updates-cache';
+import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
+import {
+  buildWatchingUpdatesFromRecordsWithDetails,
+  saveWatchingUpdatesForUser,
+  VideoDetailResolver,
+} from '@/lib/watching-updates-cache';
 
 export const runtime = 'nodejs';
 
@@ -87,19 +91,11 @@ async function cronJob() {
   }
 
   try {
-    console.log('📊 刷新播放记录和收藏...');
-    await refreshRecordAndFavorites();
-    console.log('✅ 播放记录和收藏刷新完成');
+    console.log('📊 刷新播放记录、收藏和追更提醒缓存...');
+    await refreshRecordsFavoritesAndWatchingUpdates();
+    console.log('✅ 播放记录、收藏和追更提醒缓存刷新完成');
   } catch (err) {
-    console.error('❌ 播放记录和收藏刷新失败:', err);
-  }
-
-  try {
-    console.log('🔔 刷新追更提醒缓存...');
-    await refreshWatchingUpdatesCache();
-    console.log('✅ 追更提醒缓存刷新完成');
-  } catch (err) {
-    console.error('❌ 追更提醒缓存刷新失败:', err);
+    console.error('❌ 播放记录、收藏和追更提醒缓存刷新失败:', err);
   }
 
   console.log('🎉 定时任务执行完成');
@@ -142,9 +138,9 @@ async function refreshConfig() {
     try {
       console.log('🌐 开始获取配置订阅:', config.ConfigSubscribtion.URL);
 
-      // 设置30秒超时
+      // 设置100秒超时
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 100000);
 
       const response = await fetch(config.ConfigSubscribtion.URL, {
         signal: controller.signal,
@@ -189,7 +185,81 @@ async function refreshConfig() {
   }
 }
 
-async function refreshRecordAndFavorites() {
+function createSharedDetailResolver(): VideoDetailResolver {
+  const detailCache = new Map<string, Promise<SearchResult | null>>();
+
+  return async (
+    source: string,
+    id: string,
+    fallbackTitle: string,
+  ): Promise<SearchResult | null> => {
+    const key = `${source}+${id}`;
+    let promise = detailCache.get(key);
+    if (!promise) {
+      promise = fetchVideoDetail({
+        source,
+        id,
+        fallbackTitle: fallbackTitle.trim(),
+      })
+        .then((detail) => {
+          const successPromise = Promise.resolve(detail);
+          detailCache.set(key, successPromise);
+          return detail;
+        })
+        .catch((err) => {
+          console.error(`获取视频详情失败 (${source}+${id}):`, err);
+          return null;
+        });
+    }
+    return promise;
+  };
+}
+
+function applyDetailToPlayRecord(
+  record: PlayRecord,
+  detail: SearchResult,
+): PlayRecord {
+  const episodeCount = detail.episodes?.length || 0;
+  if (episodeCount <= 0 || episodeCount === record.total_episodes) {
+    return record;
+  }
+
+  return {
+    title: detail.title || record.title,
+    source_name: record.source_name,
+    cover: detail.poster || record.cover,
+    index: record.index,
+    total_episodes: episodeCount,
+    play_time: record.play_time,
+    year: detail.year || record.year,
+    douban_id: detail.douban_id || record.douban_id,
+    total_time: record.total_time,
+    save_time: record.save_time,
+    search_title: record.search_title,
+    original_episodes: record.original_episodes,
+    remarks: record.remarks,
+  };
+}
+
+function applyDetailToFavorite(fav: Favorite, detail: SearchResult): Favorite {
+  const episodeCount = detail.episodes?.length || 0;
+  if (episodeCount <= 0 || episodeCount === fav.total_episodes) {
+    return fav;
+  }
+
+  return {
+    title: detail.title || fav.title,
+    source_name: fav.source_name,
+    cover: detail.poster || fav.cover,
+    year: detail.year || fav.year,
+    total_episodes: episodeCount,
+    save_time: fav.save_time,
+    search_title: fav.search_title,
+    origin: fav.origin,
+  };
+}
+
+async function refreshRecordsFavoritesAndWatchingUpdates() {
   try {
     const users = await db.getAllUsers();
     console.log('📋 数据库中的用户列表:', users);
@@ -200,36 +270,12 @@ async function refreshRecordAndFavorites() {
     }
 
     console.log('📋 最终处理用户列表:', users);
-    // 函数级缓存：key 为 `${source}+${id}`，值为 Promise<VideoDetail | null>
-    const detailCache = new Map<string, Promise<SearchResult | null>>();
+    const getDetail = createSharedDetailResolver();
 
-    // 获取详情 Promise（带缓存和错误处理）
-    const getDetail = async (
-      source: string,
-      id: string,
-      fallbackTitle: string,
-    ): Promise<SearchResult | null> => {
-      const key = `${source}+${id}`;
-      let promise = detailCache.get(key);
-      if (!promise) {
-        promise = fetchVideoDetail({
-          source,
-          id,
-          fallbackTitle: fallbackTitle.trim(),
-        })
-          .then((detail) => {
-            // 成功时才缓存结果
-            const successPromise = Promise.resolve(detail);
-            detailCache.set(key, successPromise);
-            return detail;
-          })
-          .catch((err) => {
-            console.error(`获取视频详情失败 (${source}+${id}):`, err);
-            return null;
-          });
-      }
-      return promise;
-    };
+    let watchingSuccessCount = 0;
+    let watchingFailedCount = 0;
+    const skippedUsers: string[] = [];
+    const failedUsers: string[] = [];
 
     for (const user of users) {
       console.log(`开始处理用户: ${user}`);
@@ -237,10 +283,17 @@ async function refreshRecordAndFavorites() {
       // 检查用户是否真的存在
       const userExists = await db.checkUserExist(user);
       console.log(`用户 ${user} 是否存在: ${userExists}`);
+      if (!userExists) {
+        skippedUsers.push(user);
+        continue;
+      }
+
+      let latestPlayRecords: Record<string, PlayRecord> | null = null;
 
       // 播放记录
       try {
         const playRecords = await db.getAllPlayRecords(user);
+        latestPlayRecords = { ...playRecords };
         const totalRecords = Object.keys(playRecords).length;
         let processedRecords = 0;
 
@@ -258,25 +311,13 @@ async function refreshRecordAndFavorites() {
               continue;
             }
 
-            const episodeCount = detail.episodes?.length || 0;
-            if (episodeCount > 0 && episodeCount !== record.total_episodes) {
-              await db.savePlayRecord(user, source, id, {
-                title: detail.title || record.title,
-                source_name: record.source_name,
-                cover: detail.poster || record.cover,
-                index: record.index,
-                total_episodes: episodeCount,
-                play_time: record.play_time,
-                year: detail.year || record.year,
-                douban_id: detail.douban_id || record.douban_id,
-                total_time: record.total_time,
-                save_time: record.save_time,
-                search_title: record.search_title,
-                // 🔑 关键修复：保留原始集数，避免被Cron任务覆盖
-                original_episodes: record.original_episodes,
-              });
+            const nextRecord = applyDetailToPlayRecord(record, detail);
+            latestPlayRecords[key] = nextRecord;
+
+            if (nextRecord !== record) {
+              await db.savePlayRecord(user, source, id, nextRecord);
               console.log(
-                `更新播放记录: ${record.title} (${record.total_episodes} -> ${episodeCount})`,
+                `更新播放记录: ${record.title} (${record.total_episodes} -> ${nextRecord.total_episodes})`,
               );
             }
 
@@ -290,6 +331,25 @@ async function refreshRecordAndFavorites() {
         console.log(`播放记录处理完成: ${processedRecords}/${totalRecords}`);
       } catch (err) {
         console.error(`获取用户播放记录失败 (${user}):`, err);
+      }
+
+      if (latestPlayRecords) {
+        try {
+          const updates = await buildWatchingUpdatesFromRecordsWithDetails(
+            latestPlayRecords,
+            Date.now(),
+            getDetail,
+          );
+          await saveWatchingUpdatesForUser(user, updates);
+          watchingSuccessCount += 1;
+        } catch (error) {
+          watchingFailedCount += 1;
+          failedUsers.push(user);
+          console.error(`刷新追更提醒缓存失败 (${user}):`, error);
+        }
+      } else {
+        watchingFailedCount += 1;
+        failedUsers.push(user);
       }
 
       // 收藏
@@ -315,19 +375,12 @@ async function refreshRecordAndFavorites() {
               continue;
             }
 
-            const favEpisodeCount = favDetail.episodes?.length || 0;
-            if (favEpisodeCount > 0 && favEpisodeCount !== fav.total_episodes) {
-              await db.saveFavorite(user, source, id, {
-                title: favDetail.title || fav.title,
-                source_name: fav.source_name,
-                cover: favDetail.poster || fav.cover,
-                year: favDetail.year || fav.year,
-                total_episodes: favEpisodeCount,
-                save_time: fav.save_time,
-                search_title: fav.search_title,
-              });
+            const nextFavorite = applyDetailToFavorite(fav, favDetail);
+
+            if (nextFavorite !== fav) {
+              await db.saveFavorite(user, source, id, nextFavorite);
               console.log(
-                `更新收藏: ${fav.title} (${fav.total_episodes} -> ${favEpisodeCount})`,
+                `更新收藏: ${fav.title} (${fav.total_episodes} -> ${nextFavorite.total_episodes})`,
               );
             }
 
@@ -344,49 +397,18 @@ async function refreshRecordAndFavorites() {
       }
     }
 
-    console.log('刷新播放记录/收藏任务完成');
+    console.log('📌 追更提醒缓存刷新统计:', {
+      totalUsers: users.length,
+      successCount: watchingSuccessCount,
+      failedCount: watchingFailedCount,
+      skippedCount: skippedUsers.length,
+      skippedUsers,
+      failedUsers,
+    });
+    console.log('刷新播放记录/收藏/追更提醒缓存任务完成');
   } catch (err) {
-    console.error('刷新播放记录/收藏任务启动失败', err);
+    console.error('刷新播放记录/收藏/追更提醒缓存任务启动失败', err);
   }
-}
-
-async function refreshWatchingUpdatesCache() {
-  const users = await db.getAllUsers();
-
-  if (process.env.USERNAME && !users.includes(process.env.USERNAME)) {
-    users.push(process.env.USERNAME);
-  }
-
-  let successCount = 0;
-  let failedCount = 0;
-  const skippedUsers: string[] = [];
-  const failedUsers: string[] = [];
-
-  for (const user of users) {
-    try {
-      const userExists = await db.checkUserExist(user);
-      if (!userExists) {
-        skippedUsers.push(user);
-        continue;
-      }
-
-      await rebuildWatchingUpdatesForUser(user);
-      successCount += 1;
-    } catch (error) {
-      failedCount += 1;
-      failedUsers.push(user);
-      console.error(`刷新追更提醒缓存失败 (${user}):`, error);
-    }
-  }
-
-  console.log('📌 追更提醒缓存刷新统计:', {
-    totalUsers: users.length,
-    successCount,
-    failedCount,
-    skippedCount: skippedUsers.length,
-    skippedUsers,
-    failedUsers,
-  });
 }
 
 async function cleanupInactiveUsers() {

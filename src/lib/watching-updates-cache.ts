@@ -34,6 +34,12 @@ export interface CachedWatchingUpdate {
   updatedSeries: CachedWatchingSeries[];
 }
 
+export type VideoDetailResolver = (
+  source: string,
+  id: string,
+  fallbackTitle: string,
+) => Promise<SearchResult | null>;
+
 function getWatchingUpdatesCacheKey(username: string): string {
   return `${WATCHING_UPDATES_CACHE_PREFIX}${username}`;
 }
@@ -183,6 +189,7 @@ export function buildWatchingUpdatesFromRecords(
 export async function buildWatchingUpdatesFromRecordsWithDetails(
   playRecords: Record<string, PlayRecord>,
   timestamp = Date.now(),
+  detailResolver?: VideoDetailResolver,
 ): Promise<CachedWatchingUpdate> {
   const records = Object.entries(playRecords)
     .filter(([, record]) => parsePositiveNumber(record.total_episodes) > 1)
@@ -207,12 +214,11 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
   const updatedSeries: CachedWatchingSeries[] = [];
   const detailCache = new Map<string, Promise<SearchResult | null>>();
 
-  const resolveLatestEpisodes = async (
+  const defaultDetailResolver: VideoDetailResolver = async (
     source: string,
     id: string,
     fallbackTitle: string,
-    fallbackEpisodes: number,
-  ): Promise<number> => {
+  ) => {
     const cacheKey = `${source}+${id}`;
     let detailPromise = detailCache.get(cacheKey);
 
@@ -231,7 +237,20 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
       detailCache.set(cacheKey, detailPromise);
     }
 
-    const detail = await detailPromise;
+    return detailPromise;
+  };
+
+  const resolveLatestEpisodes = async (
+    source: string,
+    id: string,
+    fallbackTitle: string,
+    fallbackEpisodes: number,
+  ): Promise<number> => {
+    const detail = await (detailResolver || defaultDetailResolver)(
+      source,
+      id,
+      fallbackTitle,
+    );
     const latestEpisodes = detail?.episodes?.length || 0;
     return latestEpisodes > 0 ? latestEpisodes : fallbackEpisodes;
   };
