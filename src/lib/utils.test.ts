@@ -32,6 +32,23 @@ describe('processImageUrl', () => {
       `https://proxy.example/fetch?url=${encodeURIComponent(doubanImage)}`
     );
   });
+
+  it('avoids official douban image URLs for direct-style settings', () => {
+    localStorage.setItem('doubanImageProxyType', 'direct');
+
+    expect(processImageUrl(doubanImage)).toBe(
+      'https://img.doubanio.cmliussss.com/view/photo/s_ratio_poster/public/p2884182275.jpg'
+    );
+  });
+
+  it('falls back to a CDN when custom proxy URL is empty', () => {
+    localStorage.setItem('doubanImageProxyType', 'custom');
+    localStorage.setItem('doubanImageProxyUrl', '');
+
+    expect(processImageUrl(doubanImage)).toBe(
+      'https://img.doubanio.cmliussss.com/view/photo/s_ratio_poster/public/p2884182275.jpg'
+    );
+  });
 });
 
 describe('getImageFallbackUrls', () => {
@@ -81,5 +98,17 @@ describe('getImageFallbackUrls', () => {
     expect(urls).toContain(
       `/api/image-proxy?url=${encodeURIComponent(doubanImage)}`
     );
+  });
+
+  it('skips empty custom proxy result in fallback chain', () => {
+    localStorage.setItem('doubanImageProxyType', 'custom');
+    localStorage.setItem('doubanImageProxyUrl', '');
+
+    const urls = getImageFallbackUrls(doubanImage);
+
+    expect(urls[0]).toBe(
+      'https://img.doubanio.cmliussss.com/view/photo/s_ratio_poster/public/p2884182275.jpg'
+    );
+    expect(urls).not.toContain(doubanImage);
   });
 });

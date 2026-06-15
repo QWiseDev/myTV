@@ -1,14 +1,18 @@
+'use client';
+
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 
 import { processImageUrl } from '@/lib/utils';
 
-import type { BangumiDetails } from '@/app/play/types';
+import type { BangumiDetails, MovieDetails } from '@/app/play/types';
 
 interface CoverImageProps {
   videoCover?: string;
   videoTitle: string;
   videoDoubanId: number;
   bangumiDetails?: BangumiDetails | null;
+  movieDetails?: MovieDetails | null;
 }
 
 export default function CoverImage({
@@ -16,14 +20,26 @@ export default function CoverImage({
   videoTitle,
   videoDoubanId,
   bangumiDetails,
+  movieDetails,
 }: CoverImageProps) {
-  const imageUrl = bangumiDetails?.images?.large || videoCover;
+  const imageUrl =
+    bangumiDetails?.images?.large || movieDetails?.poster || videoCover;
+  const imageSrc = imageUrl ? processImageUrl(imageUrl) : '';
+  const shouldUseUnoptimizedImage =
+    imageSrc.startsWith('http://') ||
+    imageSrc.startsWith('https://') ||
+    imageSrc.startsWith('/api/image-proxy');
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageSrc]);
 
   return (
     <div className='hidden md:block md:col-span-1 md:order-first'>
       <div className='pl-0 py-4 pr-6'>
         <div className='group relative bg-gray-300 dark:bg-gray-700 aspect-[2/3] flex items-center justify-center rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 hover:scale-[1.02]'>
-          {imageUrl ? (
+          {imageSrc && !imageFailed ? (
             <>
               <div
                 className='absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-10'
@@ -35,11 +51,13 @@ export default function CoverImage({
                 }}
               />
               <Image
-                src={processImageUrl(imageUrl)}
+                src={imageSrc}
                 alt={videoTitle}
                 fill
+                unoptimized={shouldUseUnoptimizedImage}
                 className='object-cover transition-transform duration-500 group-hover:scale-105'
                 referrerPolicy='no-referrer'
+                onError={() => setImageFailed(true)}
               />
               <div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div>
               {videoDoubanId !== 0 && (

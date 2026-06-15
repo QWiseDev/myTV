@@ -140,7 +140,7 @@ function applyDoubanImageProxy(
       const proxyUrl = getConfiguredImageProxyUrl();
       return proxyUrl
         ? `${proxyUrl}${encodeURIComponent(originalUrl)}`
-        : originalUrl;
+        : applyDoubanImageProxy(originalUrl, 'cmliussss-cdn-ali');
     }
     case 'server':
       return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
@@ -162,12 +162,29 @@ function applyDoubanImageProxy(
   }
 }
 
+function isOfficialDoubanImageUrl(url: string): boolean {
+  try {
+    return /^img\d*\.doubanio\.com$/.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function processImageUrl(originalUrl: string): string {
   if (!originalUrl || !originalUrl.includes('doubanio.com')) {
     return originalUrl;
   }
 
-  return applyDoubanImageProxy(originalUrl, getConfiguredImageProxyType());
+  const processedUrl = applyDoubanImageProxy(
+    originalUrl,
+    getConfiguredImageProxyType()
+  );
+
+  if (isOfficialDoubanImageUrl(processedUrl)) {
+    return applyDoubanImageProxy(originalUrl, 'cmliussss-cdn-ali');
+  }
+
+  return processedUrl;
 }
 
 export function getImageFallbackUrls(originalUrl: string): string[] {

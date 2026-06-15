@@ -102,6 +102,7 @@ export default function PlayDetailsSection({
         videoTitle={videoTitle}
         videoDoubanId={videoDoubanId}
         bangumiDetails={bangumiDetails}
+        movieDetails={movieDetails}
       />
     </div>
   );
