@@ -9,8 +9,8 @@ WORKDIR /app
 # 仅复制依赖清单，提高构建缓存利用率
 COPY package.json pnpm-lock.yaml ./
 
-# 清理任何潜在的缓存并安装所有依赖
-RUN pnpm store prune && pnpm install --frozen-lockfile --no-optional
+# 清理任何潜在的缓存并安装所有依赖，保留 sharp 等生产运行时可选平台包
+RUN pnpm store prune && pnpm install --frozen-lockfile
 
 # ---- 第 2 阶段：构建项目 ----
 FROM node:20-alpine AS builder
@@ -60,4 +60,4 @@ USER nextjs
 EXPOSE 3000
 
 # 使用自定义启动脚本，先预加载配置再启动服务器
-CMD ["node", "start.js"] 
+CMD ["node", "start.js"]
