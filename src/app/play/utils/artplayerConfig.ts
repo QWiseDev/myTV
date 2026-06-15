@@ -39,6 +39,7 @@ interface ArtplayerConfigOptions {
 
   // 状态和回调
   blockAdEnabled: boolean;
+  blockAdEnabledRef: MutableRefObject<boolean>;
   externalDanmuEnabled: boolean;
   onBlockAdToggle: (enabled: boolean) => void;
   onDanmuToggle: (enabled: boolean) => void;
@@ -122,8 +123,7 @@ export function getLoadingIcon() {
  * 获取设置项配置（去广告）
  */
 export function getSettingsConfig(options: ArtplayerConfigOptions) {
-  const { blockAdEnabled, onBlockAdToggle, artPlayerRef, resumeTimeRef } =
-    options;
+  const { blockAdEnabled, blockAdEnabledRef, onBlockAdToggle } = options;
 
   return [
     // 去广告开关
@@ -132,20 +132,10 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
       icon: '<text x="50%" y="50%" font-size="20" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="#ffffff">AD</text>',
       tooltip: blockAdEnabled ? '已开启' : '已关闭',
       onClick() {
-        const newVal = !blockAdEnabled;
+        const newVal = !blockAdEnabledRef.current;
         try {
           localStorage.setItem('enable_blockad', String(newVal));
-          if (artPlayerRef.current) {
-            const art = artPlayerRef.current;
-            resumeTimeRef.current = art.currentTime ?? null;
-            if (art.video?.hls) {
-              art.video.hls.destroy();
-            }
-            if (art.destroy) {
-              art.destroy(false);
-            }
-            artPlayerRef.current = null;
-          }
+          blockAdEnabledRef.current = newVal;
           onBlockAdToggle(newVal);
         } catch (_) {
           // ignore

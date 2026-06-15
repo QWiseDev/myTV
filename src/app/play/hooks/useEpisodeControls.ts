@@ -64,13 +64,18 @@ export function useEpisodeControls({
     const detail = detailRef.current;
     const idx = currentEpisodeIndexRef.current;
     if (detail && detail.episodes && idx < detail.episodes.length - 1) {
+      if (artPlayerRef.current && !artPlayerRef.current.paused) {
+        saveCurrentPlayProgress();
+      }
       isSkipControllerTriggeredRef.current = true;
       setCurrentEpisodeIndex(idx + 1);
     }
   }, [
+    artPlayerRef,
     currentEpisodeIndexRef,
     detailRef,
     isSkipControllerTriggeredRef,
+    saveCurrentPlayProgress,
     setCurrentEpisodeIndex,
   ]);
 

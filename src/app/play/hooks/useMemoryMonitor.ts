@@ -93,20 +93,6 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
   const triggerMemoryCleanup = useCallback(() => {
     console.log('🧹 触发内存清理...');
 
-    // 清理缓存
-    try {
-      if ('caches' in window) {
-        caches.keys().then((names) => {
-          names.forEach((name) => {
-            caches.delete(name);
-          });
-          console.log('✅ 清理了 Service Worker 缓存');
-        });
-      }
-    } catch (error) {
-      console.warn('清理缓存失败:', error);
-    }
-
     // 强制垃圾回收（如果支持）
     try {
       const gc = (window as WindowWithGc).gc;
@@ -120,16 +106,6 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
 
     setAutoCleanupTriggered(true);
     setTimeout(() => setAutoCleanupTriggered(false), 3000);
-
-    // 清理定时器以释放内存
-    for (let i = 1; i < 99999; i++) {
-      const timerKey = `timer${i}` as keyof typeof window;
-      const timer = window[timerKey];
-      if (typeof timer === 'number') {
-        window.clearTimeout(timer);
-        Reflect.set(window, timerKey, undefined);
-      }
-    }
 
     console.log('✅ 内存清理完成');
   }, []);

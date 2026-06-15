@@ -491,19 +491,12 @@ export function handleHlsError(
               }
             }, 1000);
           }
+          return;
         } catch (error) {
           console.error('媒体错误恢复失败:', error);
-        }
-
-        // 通知用户（如果仍然致命）
-        if (data.fatal) {
-          setTimeout(() => {
-            if (onFatalError) {
-              onFatalError(
-                errorMessage + '\n\n建议：尝试刷新页面或检查网络连接',
-              );
-            }
-          }, 1000);
+          if (onFatalError) {
+            onFatalError(errorMessage + '\n\n建议：尝试刷新页面或检查网络连接');
+          }
         }
         break;
       default:

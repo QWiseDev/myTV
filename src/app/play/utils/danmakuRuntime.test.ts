@@ -36,7 +36,7 @@ describe('danmakuRuntime', () => {
 
     expect(request?.key).toBe('测试剧_2024_123_1');
     expect(request?.params.toString()).toBe(
-      'douban_id=123&title=%E6%B5%8B%E8%AF%95%E5%89%A7&year=2024&episode=1'
+      'douban_id=123&title=%E6%B5%8B%E8%AF%95%E5%89%A7&year=2024&episode=1',
     );
   });
 
@@ -101,6 +101,29 @@ describe('danmakuRuntime', () => {
     expect(setDanmuCacheItem).toHaveBeenCalledWith('测试剧_2024_123_1', [
       { text: 'fresh', time: 2 },
     ]);
+  });
+
+  test('passes an abort signal to external danmaku fetches', async () => {
+    (getDanmuCacheItem as jest.Mock).mockResolvedValue(null);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ danmu: [] }),
+    });
+
+    const manager = new DanmakuLoadManager(() => 10000);
+    await manager.load({
+      enabled: true,
+      videoTitle: '测试剧',
+      videoYear: '2024',
+      videoDoubanId: 123,
+      episodeIndex: 0,
+      episodeOffset: 0,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/danmu-external?douban_id=123&title=%E6%B5%8B%E8%AF%95%E5%89%A7&year=2024&episode=1',
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   test('clears and hides the plugin through one runtime path', () => {

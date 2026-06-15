@@ -126,8 +126,11 @@ export function createDanmakuRequest(
 
 export async function fetchExternalDanmaku(
   request: DanmakuRequest,
+  options: { signal?: AbortSignal } = {},
 ): Promise<DanmakuItemLike[]> {
-  const response = await fetch(`/api/danmu-external?${request.params}`);
+  const response = await fetch(`/api/danmu-external?${request.params}`, {
+    signal: options.signal,
+  });
 
   if (!response.ok) {
     throw new Error(`弹幕 API 请求失败: ${response.status}`);
@@ -198,9 +201,23 @@ export class DanmakuLoadManager {
       return cached.data;
     }
 
-    const danmaku = await fetchExternalDanmaku(request);
-    await setDanmuCacheItem(request.key, danmaku);
-    return danmaku;
+    const controller =
+      typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? window.setTimeout(() => controller.abort(), this.timeoutMs)
+      : null;
+
+    try {
+      const danmaku = await fetchExternalDanmaku(request, {
+        signal: controller?.signal,
+      });
+      await setDanmuCacheItem(request.key, danmaku);
+      return danmaku;
+    } finally {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    }
   }
 }
 

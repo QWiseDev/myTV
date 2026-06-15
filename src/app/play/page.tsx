@@ -33,7 +33,6 @@ import { useEpisodeControls } from './hooks/useEpisodeControls';
 import { useEpisodeDanmuSync } from './hooks/useEpisodeDanmuSync';
 import { useErrorHandler } from './hooks/useErrorHandler';
 import { useFavorite } from './hooks/useFavorite';
-import { useMemoryCleanup } from './hooks/useMemoryCleanup';
 import { MemoryPressure, useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useNetdiskSearch } from './hooks/useNetdiskSearch';
 import { useThrottle } from './hooks/usePerformance';
@@ -766,8 +765,6 @@ function PlayPageClient() {
     errorHandler,
   });
 
-  useMemoryCleanup({ isMobile: isMobileGlobal });
-
   const { handleDanmuOperationOptimized, loadExternalDanmu } =
     useDanmuController({
       artPlayerRef,
@@ -1019,6 +1016,7 @@ function PlayPageClient() {
     currentSource,
     currentId,
     setAvailableSources,
+    availableSourcesRef,
     setIsVideoLoading,
     setLoading,
     videoTitle,

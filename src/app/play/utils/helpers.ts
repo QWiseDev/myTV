@@ -87,7 +87,7 @@ export const generateChinesePunctuationVariants = (query: string): string[] => {
   // 完全去除所有标点符号
   const noPunctuation = query.replace(
     /[：；，。！？、""''（）【】《》:;,.!?"'()[\]<>]/g,
-    ''
+    '',
   );
   if (noPunctuation !== query && noPunctuation.trim()) {
     variants.push(noPunctuation);
@@ -191,7 +191,7 @@ export const generateSearchVariants = (originalQuery: string): string[] => {
  */
 export const checkAllKeywordsMatch = (
   queryTitle: string,
-  resultTitle: string
+  resultTitle: string,
 ): boolean => {
   const queryWords = queryTitle
     .replace(/[^\w\s\u4e00-\u9fff]/g, '')
@@ -205,23 +205,166 @@ export const checkAllKeywordsMatch = (
 /**
  * 过滤 M3U8 内容中的广告分段
  */
+type M3u8Section = {
+  leadingDiscontinuity: string | null;
+  lines: string[];
+};
+
+type M3u8SectionStats = {
+  totalDuration: number;
+  maxSegmentDuration: number;
+  segmentCount: number;
+  adUriCount: number;
+  hasExplicitAdMarker: boolean;
+};
+
+const AD_URI_PATTERN =
+  /(^|[/?&#._=-])(ad|ads|advert|advertise|advertisement|commercial|preroll|pre-roll|midroll|mid-roll|postroll|post-roll|sponsor|vast|vmap)([/?&#._=-]|$)/i;
+
+function splitM3u8ByDiscontinuity(lines: string[]): M3u8Section[] {
+  const sections: M3u8Section[] = [
+    {
+      leadingDiscontinuity: null,
+      lines: [],
+    },
+  ];
+
+  lines.forEach((line) => {
+    if (line.trim().toUpperCase() === '#EXT-X-DISCONTINUITY') {
+      sections.push({
+        leadingDiscontinuity: line,
+        lines: [],
+      });
+      return;
+    }
+
+    sections[sections.length - 1].lines.push(line);
+  });
+
+  return sections;
+}
+
+function isExplicitAdMarker(line: string): boolean {
+  const upper = line.toUpperCase();
+
+  if (
+    upper.includes('#EXT-X-CUE-OUT') ||
+    upper.includes('#EXT-X-SPLICEPOINT-SCTE35') ||
+    upper.includes('#EXT-OATCLS-SCTE35') ||
+    upper.includes('SCTE35-OUT') ||
+    upper.includes('SCTE35-CMD')
+  ) {
+    return true;
+  }
+
+  if (!upper.startsWith('#EXT-X-DATERANGE')) {
+    return false;
+  }
+
+  return /(CLASS|ID|X-[A-Z0-9-]+)=["'][^"']*(AD|ADS|ADVERT|COMMERCIAL|SCTE|CUE|VAST|VMAP)[^"']*["']/i.test(
+    line,
+  );
+}
+
+function getM3u8SectionStats(lines: string[]): M3u8SectionStats {
+  let pendingDuration: number | null = null;
+  let totalDuration = 0;
+  let maxSegmentDuration = 0;
+  let segmentCount = 0;
+  let adUriCount = 0;
+  let hasExplicitAdMarker = false;
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    if (isExplicitAdMarker(trimmed)) {
+      hasExplicitAdMarker = true;
+    }
+
+    const extInfMatch = trimmed.match(/^#EXTINF:([\d.]+)/i);
+    if (extInfMatch) {
+      const duration = Number(extInfMatch[1]);
+      pendingDuration = Number.isFinite(duration) ? duration : null;
+      return;
+    }
+
+    if (trimmed.startsWith('#')) return;
+
+    segmentCount += 1;
+    if (AD_URI_PATTERN.test(trimmed)) {
+      adUriCount += 1;
+    }
+
+    const segmentDuration = pendingDuration ?? 0;
+    totalDuration += segmentDuration;
+    maxSegmentDuration = Math.max(maxSegmentDuration, segmentDuration);
+    pendingDuration = null;
+  });
+
+  return {
+    totalDuration,
+    maxSegmentDuration,
+    segmentCount,
+    adUriCount,
+    hasExplicitAdMarker,
+  };
+}
+
+function shouldDropM3u8Section(
+  section: M3u8Section,
+  index: number,
+  sections: M3u8Section[],
+): boolean {
+  const stats = getM3u8SectionStats(section.lines);
+  if (stats.segmentCount === 0) return false;
+
+  if (stats.hasExplicitAdMarker) {
+    return true;
+  }
+
+  const isDiscontinuityBounded =
+    section.leadingDiscontinuity !== null && index < sections.length - 1;
+  const isShortIsland =
+    stats.totalDuration > 0 &&
+    stats.totalDuration <= 45 &&
+    stats.segmentCount <= 8 &&
+    stats.maxSegmentDuration <= 15;
+  const hasMostlyAdUris =
+    stats.adUriCount > 0 && stats.adUriCount / stats.segmentCount >= 0.5;
+
+  return isDiscontinuityBounded && isShortIsland && hasMostlyAdUris;
+}
+
 export function filterAdsFromM3U8(m3u8Content: string): string {
   if (!m3u8Content) return '';
 
-  // 按行分割M3U8内容
+  const hadTrailingNewline = m3u8Content.endsWith('\n');
   const lines = m3u8Content.split('\n');
-  const filteredLines = [];
+  const sections = splitM3u8ByDiscontinuity(lines);
+  let droppedAnySection = false;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // 只过滤#EXT-X-DISCONTINUITY标识
-    if (!line.includes('#EXT-X-DISCONTINUITY')) {
-      filteredLines.push(line);
+  const filteredLines: string[] = [];
+  sections.forEach((section, index) => {
+    if (shouldDropM3u8Section(section, index, sections)) {
+      droppedAnySection = true;
+      return;
     }
+
+    if (section.leadingDiscontinuity !== null) {
+      filteredLines.push(section.leadingDiscontinuity);
+    }
+    filteredLines.push(...section.lines);
+  });
+
+  if (!droppedAnySection) {
+    return m3u8Content;
   }
 
-  return filteredLines.join('\n');
+  const filteredContent = filteredLines.join('\n');
+  return hadTrailingNewline && !filteredContent.endsWith('\n')
+    ? `${filteredContent}\n`
+    : filteredContent;
 }
 
 /**
@@ -235,7 +378,7 @@ export const calculateSourceScore = (
   },
   maxSpeed: number,
   minPing: number,
-  maxPing: number
+  maxPing: number,
 ): number => {
   let score = 0;
 

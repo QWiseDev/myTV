@@ -121,6 +121,7 @@ interface UsePlayerInitializerParams {
   currentSource: string;
   currentId: string;
   setAvailableSources: Dispatch<SetStateAction<SearchResult[]>>;
+  availableSourcesRef: MutableRefObject<SearchResult[]>;
   setIsVideoLoading: (value: boolean) => void;
   setLoading: (value: boolean) => void;
   videoTitle: string;
@@ -184,6 +185,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       currentSource,
       currentId,
       setAvailableSources,
+      availableSourcesRef,
       setIsVideoLoading,
       setLoading,
       videoTitle,
@@ -234,27 +236,25 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       options: { allowAutoSwitch?: boolean } = {},
     ) => {
       const allowAutoSwitch = options.allowAutoSwitch ?? true;
-
-      setAvailableSources((prev) => {
-        const { sources, nextSource } = markSourceFailedAndFindNext(prev, {
+      const { sources, nextSource } = markSourceFailedAndFindNext(
+        availableSourcesRef.current,
+        {
           source: currentSource,
           id: currentId,
-        });
+        },
+      );
 
-        if (allowAutoSwitch && nextSource) {
-          finishSourceSwitch('当前源失败，允许自动换源');
-          console.log(`🔄 自动切换到下一个播放源: ${nextSource.source_name}`);
-          handleSourceChange(
-            nextSource.source,
-            nextSource.id,
-            nextSource.title,
-          );
-          return sources;
-        }
+      availableSourcesRef.current = sources;
+      setAvailableSources(sources);
 
-        showPlayerNotice(finalNotice);
-        return sources;
-      });
+      if (allowAutoSwitch && nextSource) {
+        finishSourceSwitch('当前源失败，允许自动换源');
+        console.log(`🔄 自动切换到下一个播放源: ${nextSource.source_name}`);
+        handleSourceChange(nextSource.source, nextSource.id, nextSource.title);
+        return;
+      }
+
+      showPlayerNotice(finalNotice);
     };
 
     // 异步初始化播放器，避免SSR问题
@@ -541,6 +541,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           isChrome,
           isMobile,
           blockAdEnabled,
+          blockAdEnabledRef,
           externalDanmuEnabled,
           onBlockAdToggle: setBlockAdEnabled,
           onDanmuToggle: handleDanmuOperationOptimized,
@@ -1016,17 +1017,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           if (saveNow - lastSaveTimeRef.current > interval && !isNearEnd) {
             saveCurrentPlayProgress();
             lastSaveTimeRef.current = saveNow;
-          }
-        });
-
-        artPlayer.on('pause', () => {
-          const currentTime = artPlayer.currentTime || 0;
-          const duration = artPlayer.duration || 0;
-          const remainingTime = duration - currentTime;
-          const isNearEnd = duration > 0 && remainingTime < 180;
-
-          if (!isNearEnd) {
-            saveCurrentPlayProgress();
           }
         });
 

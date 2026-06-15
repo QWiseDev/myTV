@@ -45,6 +45,23 @@ type IPadPreferenceResult = {
   score: number;
 };
 
+function createTimeoutSignal(timeoutMs: number): {
+  signal?: AbortSignal;
+  clear: () => void;
+} {
+  if (typeof AbortController === 'undefined') {
+    return { clear: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeoutId),
+  };
+}
+
 /**
  * 播放源优选函数（针对旧iPad做极端保守优化）
  */
@@ -116,11 +133,16 @@ export async function lightweightPreference(
 
         // 仅测试连通性和响应时间（缩短超时时间）
         const startTime = performance.now();
-        await fetch(episodeUrl, {
-          method: 'HEAD',
-          mode: 'no-cors',
-          signal: AbortSignal.timeout(2000), // 2秒超时（从3秒减少）
-        });
+        const timeout = createTimeoutSignal(2000);
+        try {
+          await fetch(episodeUrl, {
+            method: 'HEAD',
+            mode: 'no-cors',
+            signal: timeout.signal,
+          });
+        } finally {
+          timeout.clear();
+        }
         const pingTime = performance.now() - startTime;
 
         // 更新进度：显示测试结果
@@ -476,11 +498,16 @@ async function iPadLightweightPreference(
 
         // 仅测试连通性和响应时间（使用较短的超时时间）
         const startTime = performance.now();
-        await fetch(episodeUrl, {
-          method: 'HEAD',
-          mode: 'no-cors',
-          signal: AbortSignal.timeout(2500), // 2.5秒超时
-        });
+        const timeout = createTimeoutSignal(2500);
+        try {
+          await fetch(episodeUrl, {
+            method: 'HEAD',
+            mode: 'no-cors',
+            signal: timeout.signal,
+          });
+        } finally {
+          timeout.clear();
+        }
         const pingTime = performance.now() - startTime;
 
         // 更新进度：显示测试结果
