@@ -2,10 +2,25 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+function parseAllowedImageUrl(imageUrl: string): URL | null {
+  try {
+    const parsedUrl = new URL(imageUrl);
+    const isAllowedProtocol =
+      parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    const isAllowedHost =
+      parsedUrl.hostname === 'lain.bgm.tv' ||
+      /^img\d*\.doubanio\.com$/.test(parsedUrl.hostname);
+
+    return isAllowedProtocol && isAllowedHost ? parsedUrl : null;
+  } catch {
+    return null;
+  }
+}
+
 // OrionTV 兼容接口
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,8 +30,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing image URL' }, { status: 400 });
   }
 
+  const allowedImageUrl = parseAllowedImageUrl(imageUrl);
+  if (!allowedImageUrl) {
+    return NextResponse.json(
+      { error: 'Unsupported image URL' },
+      { status: 403 }
+    );
+  }
+
   try {
-    const imageResponse = await fetch(imageUrl, {
+    const imageResponse = await fetch(allowedImageUrl.toString(), {
       headers: {
         Referer: 'https://movie.douban.com/',
         'User-Agent':
