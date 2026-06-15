@@ -5,6 +5,9 @@ import {
 
 const doubanImage =
   'https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg';
+const bangumiImage =
+  'http://lain.bgm.tv/pic/cover/l/27/ff/377130_wDU1x.jpg';
+const invalidSourceLogo = 'https://018.shoutu.net/static/images/logo.jpg';
 type RuntimeConfigWindow = Window & { RUNTIME_CONFIG?: Record<string, string> };
 
 describe('processImageUrl', () => {
@@ -48,6 +51,16 @@ describe('processImageUrl', () => {
     expect(processImageUrl(doubanImage)).toBe(
       'https://img.doubanio.cmliussss.com/view/photo/s_ratio_poster/public/p2884182275.jpg'
     );
+  });
+
+  it('proxies bangumi image URLs through the app server', () => {
+    expect(processImageUrl(bangumiImage)).toBe(
+      `/api/image-proxy?url=${encodeURIComponent(bangumiImage)}`
+    );
+  });
+
+  it('uses local placeholder for known invalid source logos', () => {
+    expect(processImageUrl(invalidSourceLogo)).toBe('/logo.svg');
   });
 });
 
@@ -110,5 +123,18 @@ describe('getImageFallbackUrls', () => {
       'https://img.doubanio.cmliussss.com/view/photo/s_ratio_poster/public/p2884182275.jpg'
     );
     expect(urls).not.toContain(doubanImage);
+  });
+
+  it('does not direct-load bangumi image URLs in browser fallback chain', () => {
+    const urls = getImageFallbackUrls(bangumiImage);
+
+    expect(urls).toEqual([
+      `/api/image-proxy?url=${encodeURIComponent(bangumiImage)}`,
+      '/logo.svg',
+    ]);
+  });
+
+  it('does not request known invalid source logos', () => {
+    expect(getImageFallbackUrls(invalidSourceLogo)).toEqual(['/logo.svg']);
   });
 });

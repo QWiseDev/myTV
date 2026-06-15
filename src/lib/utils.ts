@@ -91,6 +91,8 @@ const DOUBAN_IMAGE_FALLBACK_TYPES: DoubanImageProxyType[] = [
   'server',
 ];
 
+const IMAGE_PLACEHOLDER_URL = '/logo.svg';
+
 function getRuntimeConfigValue(key: string): string {
   if (typeof window === 'undefined') return '';
   const runtimeConfig = (
@@ -170,7 +172,39 @@ function isOfficialDoubanImageUrl(url: string): boolean {
   }
 }
 
+function isBangumiImageUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname === 'lain.bgm.tv';
+  } catch {
+    return false;
+  }
+}
+
+function isKnownInvalidImageUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return (
+      parsedUrl.hostname === '018.shoutu.net' &&
+      parsedUrl.pathname === '/static/images/logo.jpg'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getServerImageProxyUrl(originalUrl: string): string {
+  return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
+}
+
 export function processImageUrl(originalUrl: string): string {
+  if (isKnownInvalidImageUrl(originalUrl)) {
+    return IMAGE_PLACEHOLDER_URL;
+  }
+
+  if (isBangumiImageUrl(originalUrl)) {
+    return getServerImageProxyUrl(originalUrl);
+  }
+
   if (!originalUrl || !originalUrl.includes('doubanio.com')) {
     return originalUrl;
   }
@@ -188,6 +222,14 @@ export function processImageUrl(originalUrl: string): string {
 }
 
 export function getImageFallbackUrls(originalUrl: string): string[] {
+  if (isKnownInvalidImageUrl(originalUrl)) {
+    return [IMAGE_PLACEHOLDER_URL];
+  }
+
+  if (isBangumiImageUrl(originalUrl)) {
+    return [getServerImageProxyUrl(originalUrl), IMAGE_PLACEHOLDER_URL];
+  }
+
   if (!originalUrl || !originalUrl.includes('doubanio.com')) {
     return [originalUrl].filter(Boolean);
   }
