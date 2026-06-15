@@ -2,13 +2,63 @@
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { Celebrity } from '@/lib/types';
+import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 
 interface CastSectionProps {
   celebrities: Celebrity[];
   onCelebrityClick?: (name: string) => void;
+}
+
+interface CastAvatarProps {
+  avatar: string;
+  name: string;
+}
+
+function CastAvatar({ avatar, name }: CastAvatarProps) {
+  const [fallbackIndex, setFallbackIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const normalizedAvatar = avatar.replace(/^http:/, 'https:');
+  const fallbackUrls = useMemo(
+    () => getImageFallbackUrls(normalizedAvatar),
+    [normalizedAvatar]
+  );
+  const imageSrc =
+    fallbackUrls[fallbackIndex] || processImageUrl(normalizedAvatar);
+
+  useEffect(() => {
+    setFallbackIndex(0);
+    setFailed(false);
+  }, [normalizedAvatar]);
+
+  if (!imageSrc || failed) {
+    return null;
+  }
+
+  return (
+    <Image
+      src={imageSrc}
+      alt={name}
+      width={80}
+      height={80}
+      unoptimized={
+        imageSrc.startsWith('http://') ||
+        imageSrc.startsWith('https://') ||
+        imageSrc.startsWith('/api/image-proxy')
+      }
+      referrerPolicy='no-referrer'
+      className='w-full h-full object-cover'
+      onError={() => {
+        if (fallbackIndex < fallbackUrls.length - 1) {
+          setFallbackIndex((index) => index + 1);
+          return;
+        }
+        setFailed(true);
+      }}
+    />
+  );
 }
 
 /**
@@ -52,17 +102,7 @@ const CastSection = memo(function CastSection({
             className='shrink-0 text-center group cursor-pointer'
           >
             <div className='w-20 h-20 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2 ring-2 ring-transparent group-hover:ring-blue-500 transition-all duration-300 group-hover:scale-110 shadow-md group-hover:shadow-xl'>
-              <Image
-                src={celebrity.avatar}
-                alt={celebrity.name}
-                width={80}
-                height={80}
-                unoptimized
-                className='w-full h-full object-cover'
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              <CastAvatar avatar={celebrity.avatar} name={celebrity.name} />
             </div>
             <p
               className='text-xs font-medium text-gray-700 dark:text-gray-300 w-20 truncate group-hover:text-blue-500 transition-colors'

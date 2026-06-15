@@ -2,6 +2,9 @@
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+
+import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 
 interface RecommendationItem {
   id: string;
@@ -16,6 +19,55 @@ interface RecommendationsSectionProps {
    * 当前影片是否是剧集（用于显示"喜欢这部剧"还是"喜欢这部电影"）
    */
   isEpisodic?: boolean;
+}
+
+interface RecommendationPosterProps {
+  poster: string;
+  title: string;
+}
+
+function RecommendationPoster({ poster, title }: RecommendationPosterProps) {
+  const [fallbackIndex, setFallbackIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const normalizedPoster = poster.replace(/^http:/, 'https:');
+  const fallbackUrls = useMemo(
+    () => getImageFallbackUrls(normalizedPoster),
+    [normalizedPoster]
+  );
+  const imageSrc =
+    fallbackUrls[fallbackIndex] || processImageUrl(normalizedPoster);
+
+  useEffect(() => {
+    setFallbackIndex(0);
+    setFailed(false);
+  }, [normalizedPoster]);
+
+  if (!imageSrc || failed) {
+    return null;
+  }
+
+  return (
+    <Image
+      src={imageSrc}
+      alt={title}
+      fill
+      sizes='(min-width: 1280px) 16vw, (min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw'
+      unoptimized={
+        imageSrc.startsWith('http://') ||
+        imageSrc.startsWith('https://') ||
+        imageSrc.startsWith('/api/image-proxy')
+      }
+      referrerPolicy='no-referrer'
+      className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
+      onError={() => {
+        if (fallbackIndex < fallbackUrls.length - 1) {
+          setFallbackIndex((index) => index + 1);
+          return;
+        }
+        setFailed(true);
+      }}
+    />
+  );
 }
 
 /**
@@ -59,17 +111,7 @@ export default function RecommendationsSection({
             {/* 影片卡片 */}
             <div className='relative overflow-hidden rounded-lg bg-gray-200 dark:bg-gray-700 aspect-[2/3] shadow-md hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]'>
               {/* 海报 */}
-              <Image
-                src={item.poster.replace(/^http:/, 'https:')}
-                alt={item.title}
-                fill
-                sizes='(min-width: 1280px) 16vw, (min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw'
-                unoptimized
-                className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              <RecommendationPoster poster={item.poster} title={item.title} />
 
               {/* 渐变遮罩 */}
               <div className='absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-100' />

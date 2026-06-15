@@ -131,6 +131,33 @@ describe('hlsConfig error guards', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
+  test('non-fatal HLS errors are not logged as console errors', () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation();
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+    const hls = {
+      recoverMediaError: jest.fn(),
+      startLoad: jest.fn(),
+      destroy: jest.fn(),
+      trigger: jest.fn(),
+      levels: [],
+      currentLevel: -1,
+    } as unknown as HlsErrorHandlerInstance;
+
+    handleHlsError(
+      'hlsError',
+      { fatal: false, type: 'mediaError', details: 'bufferSeekOverHole' },
+      hls,
+      document.createElement('video'),
+    );
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'HLS Error:',
+      'hlsError',
+      expect.objectContaining({ fatal: false })
+    );
+  });
+
   test('media fatal errors notify fatal handler when recovery throws', () => {
     jest.spyOn(console, 'error').mockImplementation();
     jest.spyOn(console, 'log').mockImplementation();

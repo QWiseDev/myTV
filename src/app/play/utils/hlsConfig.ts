@@ -327,7 +327,11 @@ export function handleHlsError(
   video: HTMLVideoElement,
   onFatalError?: (errorMessage: string) => void,
 ): void {
-  console.error('HLS Error:', event, data);
+  if (data.fatal) {
+    console.error('HLS Error:', event, data);
+  } else {
+    console.warn('HLS Error:', event, data);
+  }
 
   // 构建用户友好的错误信息
   const getErrorMessage = (errorData: HlsErrorData): string => {
