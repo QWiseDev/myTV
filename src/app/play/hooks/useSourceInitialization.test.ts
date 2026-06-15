@@ -160,7 +160,7 @@ describe('useSourceInitialization', () => {
     ]);
   });
 
-  test('skips reinitialization when route params already match current detail', async () => {
+  test('skips reinitialization and exits loading when route params already match current detail', async () => {
     const switchedDetail: SearchResult = {
       ...detail,
       id: 'video-2',
@@ -182,7 +182,7 @@ describe('useSourceInitialization', () => {
     });
 
     expect(mockedCachedGet).not.toHaveBeenCalled();
-    expect(params.setLoading).not.toHaveBeenCalled();
+    expect(params.setLoading).toHaveBeenCalledWith(false);
     expect(params.setAvailableSources).not.toHaveBeenCalled();
 
     await act(async () => {

@@ -478,6 +478,7 @@ export function useSourceInitialization({
         if (routeAlreadyApplied && currentDetail) {
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
+          setLoading(false);
           return;
         }
 
