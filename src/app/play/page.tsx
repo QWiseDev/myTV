@@ -962,6 +962,8 @@ function PlayPageClient() {
     detailRef,
     playRecords,
     availableSourcesRef,
+    movieDetails,
+    bangumiDetails,
     currentEpisodeIndexRef,
     searchTitle,
     lastSaveTimeRef,

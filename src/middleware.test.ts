@@ -3,7 +3,7 @@
  */
 
 const edgePrimitives = jest.requireActual(
-  'next/dist/compiled/@edge-runtime/primitives'
+  'next/dist/compiled/@edge-runtime/primitives',
 ) as {
   fetch: typeof fetch;
   Headers: typeof Headers;
@@ -37,7 +37,7 @@ describe('middleware', () => {
 
   it('allows unauthenticated image proxy requests', async () => {
     const request = new NextRequest(
-      'http://localhost/api/image-proxy?url=http%3A%2F%2Flain.bgm.tv%2Fpic%2Fcover%2Fl%2F27%2Fff%2F377130_wDU1x.jpg'
+      'http://localhost/api/image-proxy?url=http%3A%2F%2Flain.bgm.tv%2Fpic%2Fcover%2Fl%2F27%2Fff%2F377130_wDU1x.jpg',
     );
 
     const response = await middleware(request);
@@ -46,3 +46,5 @@ describe('middleware', () => {
     expect(response.headers.get('x-middleware-next')).toBe('1');
   });
 });
+
+export {};

@@ -5,6 +5,7 @@ import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 import { generateStorageKey, savePlayRecord } from '@/lib/db.client';
 import type { PlayRecord, SearchResult } from '@/lib/types';
 
+import type { BangumiDetails, MovieDetails } from '../types';
 import type { ArtPlayerLike } from '../utils/danmakuRuntime';
 
 interface UsePlayProgressOptions {
@@ -16,6 +17,8 @@ interface UsePlayProgressOptions {
   detailRef: MutableRefObject<SearchResult | null>;
   playRecords: Record<string, PlayRecord> | null;
   availableSourcesRef: MutableRefObject<SearchResult[]>;
+  movieDetails: MovieDetails | null;
+  bangumiDetails: BangumiDetails | null;
   currentEpisodeIndexRef: MutableRefObject<number>;
   searchTitle: string;
   lastSaveTimeRef: MutableRefObject<number>;
@@ -40,9 +43,36 @@ type BuildPlayProgressPayloadOptions = {
   detail: SearchResult | null;
   playRecords: Record<string, PlayRecord> | null;
   availableSources: SearchResult[];
+  movieDetails: MovieDetails | null;
+  bangumiDetails: BangumiDetails | null;
   currentEpisodeIndex: number;
   searchTitle: string;
 };
+
+function isKnownBadCover(cover: string): boolean {
+  if (!cover || cover === '/logo.svg') return true;
+
+  try {
+    const parsedUrl = new URL(cover);
+    return (
+      parsedUrl.hostname === '018.shoutu.net' &&
+      parsedUrl.pathname === '/static/images/logo.jpg'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getUsableCover(...covers: Array<string | null | undefined>): string {
+  for (const cover of covers) {
+    const trimmedCover = cover?.trim();
+    if (trimmedCover && !isKnownBadCover(trimmedCover)) {
+      return trimmedCover;
+    }
+  }
+
+  return '';
+}
 
 export function buildPlayProgressPayload({
   player,
@@ -53,6 +83,8 @@ export function buildPlayProgressPayload({
   detail,
   playRecords,
   availableSources,
+  movieDetails,
+  bangumiDetails,
   currentEpisodeIndex,
   searchTitle,
 }: BuildPlayProgressPayloadOptions): PlayProgressPayload | null {
@@ -86,6 +118,13 @@ export function buildPlayProgressPayload({
     (source) => source.source === currentSource && source.id === currentId,
   );
   const remarksToSave = sourceFromList?.remarks || detail.remarks;
+  const coverToSave = getUsableCover(
+    bangumiDetails?.images?.large,
+    movieDetails?.poster,
+    detail.poster,
+    sourceFromList?.poster,
+    existingRecord?.cover,
+  );
 
   return {
     source: currentSource,
@@ -96,7 +135,7 @@ export function buildPlayProgressPayload({
       source_name: detail.source_name || existingRecord?.source_name || '',
       year: detail.year || existingRecord?.year || '',
       douban_id: detail.douban_id || videoDoubanId || existingRecord?.douban_id,
-      cover: detail.poster || existingRecord?.cover || '',
+      cover: coverToSave,
       index: currentEpisodeIndex + 1,
       total_episodes: currentTotalEpisodes,
       original_episodes: existingRecord?.original_episodes,
@@ -143,6 +182,8 @@ export function usePlayProgress({
   detailRef,
   playRecords,
   availableSourcesRef,
+  movieDetails,
+  bangumiDetails,
   currentEpisodeIndexRef,
   searchTitle,
   lastSaveTimeRef,
@@ -156,6 +197,15 @@ export function usePlayProgress({
     playRecordsRef.current = playRecords;
   }, [playRecords]);
 
+  const movieDetailsRef = useRef(movieDetails);
+  const bangumiDetailsRef = useRef(bangumiDetails);
+  useEffect(() => {
+    movieDetailsRef.current = movieDetails;
+  }, [movieDetails]);
+  useEffect(() => {
+    bangumiDetailsRef.current = bangumiDetails;
+  }, [bangumiDetails]);
+
   const saveCurrentPlayProgress = useCallback(async () => {
     const payload = buildPlayProgressPayload({
       player: artPlayerRef.current,
@@ -166,6 +216,8 @@ export function usePlayProgress({
       detail: detailRef.current,
       playRecords: playRecordsRef.current,
       availableSources: availableSourcesRef.current,
+      movieDetails: movieDetailsRef.current,
+      bangumiDetails: bangumiDetailsRef.current,
       currentEpisodeIndex: currentEpisodeIndexRef.current,
       searchTitle,
     });
@@ -216,6 +268,8 @@ export function usePlayProgress({
         detail: detailRef.current,
         playRecords: playRecordsRef.current,
         availableSources: availableSourcesRef.current,
+        movieDetails: movieDetailsRef.current,
+        bangumiDetails: bangumiDetailsRef.current,
         currentEpisodeIndex: currentEpisodeIndexRef.current,
         searchTitle,
       });

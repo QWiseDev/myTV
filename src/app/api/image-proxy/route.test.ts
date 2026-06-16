@@ -3,7 +3,7 @@
  */
 
 const edgePrimitives = jest.requireActual(
-  'next/dist/compiled/@edge-runtime/primitives'
+  'next/dist/compiled/@edge-runtime/primitives',
 ) as {
   fetch: typeof fetch;
   Headers: typeof Headers;
@@ -40,13 +40,13 @@ describe('/api/image-proxy', () => {
         headers: {
           'content-type': 'image/jpeg',
         },
-      })
+      }),
     );
 
     const response = await GET(
       new Request(
-        `http://localhost/api/image-proxy?url=${encodeURIComponent(imageUrl)}`
-      )
+        `http://localhost/api/image-proxy?url=${encodeURIComponent(imageUrl)}`,
+      ),
     );
 
     expect(response.status).toBe(200);
@@ -57,7 +57,7 @@ describe('/api/image-proxy', () => {
         headers: expect.objectContaining({
           Referer: 'https://movie.douban.com/',
         }),
-      })
+      }),
     );
   });
 
@@ -65,12 +65,14 @@ describe('/api/image-proxy', () => {
     const response = await GET(
       new Request(
         `http://localhost/api/image-proxy?url=${encodeURIComponent(
-          'https://example.com/a.jpg'
-        )}`
-      )
+          'https://example.com/a.jpg',
+        )}`,
+      ),
     );
 
     expect(response.status).toBe(403);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+export {};
