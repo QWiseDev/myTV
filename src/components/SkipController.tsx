@@ -552,8 +552,11 @@ export default function SkipController({
     [
       id,
       episodeIndex,
+      source,
       effectiveSegments,
-    ] // 🔥 添加 episodeIndex 依赖，用于防重复检查
+      currentSkipSegment?.type,
+      handleAutoSkip,
+    ] // 🔥 含 episodeIndex/source 用于防重复检查，currentSkipSegment 用于片段类型比较
   );
 
   // 执行跳过
@@ -754,7 +757,6 @@ export default function SkipController({
     title,
     onSettingModeChange,
     timeToSeconds,
-    secondsToTime,
   ]);
 
   // 删除跳过片段
@@ -891,7 +893,7 @@ export default function SkipController({
         };
       });
     }
-  }, [skipConfig, duration]); // 🔑 移除 secondsToTime 依赖，避免不必要的触发
+  }, [skipConfig, duration, secondsToTime]); // secondsToTime 为稳定引用（[] 依赖），加入不会引发额外触发
 
   const checkCurrentPlayerTime = useCallback(() => {
     const player = artPlayerRef.current;
@@ -984,12 +986,15 @@ export default function SkipController({
 
   // 组件卸载时清理定时器
   useEffect(() => {
+    // 别名 ref 对象（非 .current）：卸载时仍读取最新挂起的定时器并清理
+    const skipTimeout = skipTimeoutRef;
+    const autoSkipTimeout = autoSkipTimeoutRef;
     return () => {
-      if (skipTimeoutRef.current) {
-        clearTimeout(skipTimeoutRef.current);
+      if (skipTimeout.current) {
+        clearTimeout(skipTimeout.current);
       }
-      if (autoSkipTimeoutRef.current) {
-        clearTimeout(autoSkipTimeoutRef.current);
+      if (autoSkipTimeout.current) {
+        clearTimeout(autoSkipTimeout.current);
       }
     };
   }, []);
