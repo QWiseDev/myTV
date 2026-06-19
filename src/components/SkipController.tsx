@@ -17,7 +17,6 @@ interface SkipControllerProps {
   title: string;
   episodeIndex?: number; // 新增：当前集数索引，用于区分不同集数
   artPlayerRef: React.MutableRefObject<any>;
-  currentTime?: number;
   duration?: number;
   isSettingMode?: boolean;
   onSettingModeChange?: (isOpen: boolean) => void;
@@ -30,7 +29,6 @@ export default function SkipController({
   title,
   episodeIndex = 0,
   artPlayerRef,
-  currentTime = 0,
   duration = 0,
   isSettingMode = false,
   onSettingModeChange,
@@ -895,12 +893,67 @@ export default function SkipController({
     }
   }, [skipConfig, duration]); // 🔑 移除 secondsToTime 依赖，避免不必要的触发
 
-  // 监听播放时间变化
-  useEffect(() => {
-    if (currentTime > 0) {
-      checkSkipSegment(currentTime);
+  const checkCurrentPlayerTime = useCallback(() => {
+    const player = artPlayerRef.current;
+    const time =
+      player?.currentTime ||
+      player?.video?.currentTime ||
+      player?.$video?.currentTime ||
+      0;
+
+    if (time > 0) {
+      checkSkipSegment(time);
     }
-  }, [currentTime, checkSkipSegment]);
+  }, [artPlayerRef, checkSkipSegment]);
+
+  // 监听播放器时间变化，避免父组件每秒传 currentTime 触发 React 重渲染
+  useEffect(() => {
+    let stopped = false;
+    let waitTimer: NodeJS.Timeout | null = null;
+    let detachTimeUpdate: (() => void) | null = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60; // 最多等待约 30s（60 × 500ms），避免无界轮询
+
+    const waitForPlayer = () => {
+      if (stopped) return;
+
+      const player = artPlayerRef.current;
+      // 播放器实例由动态导入异步创建，尚未就绪时有界重试等待
+      if (!player?.on) {
+        if (attempts++ < MAX_ATTEMPTS) {
+          waitTimer = setTimeout(waitForPlayer, 500);
+        }
+        return;
+      }
+
+      const handleTimeUpdate = () => {
+        checkCurrentPlayerTime();
+      };
+      player.on('video:timeupdate', handleTimeUpdate);
+      detachTimeUpdate = () => {
+        player.off?.('video:timeupdate', handleTimeUpdate);
+      };
+
+      // 用播放器 ready 事件触发首次检查，而非轮询/盲调
+      if (player.isReady) {
+        checkCurrentPlayerTime();
+      } else {
+        player.once?.('ready', () => {
+          if (!stopped) checkCurrentPlayerTime();
+        });
+      }
+    };
+
+    waitForPlayer();
+
+    return () => {
+      stopped = true;
+      if (waitTimer) {
+        clearTimeout(waitTimer);
+      }
+      detachTimeUpdate?.();
+    };
+  }, [artPlayerRef, checkCurrentPlayerTime, source, id, episodeIndex]);
 
   // 当 source 或 id 或 episodeIndex 变化时，清理所有状态（换集时）
   useEffect(() => {

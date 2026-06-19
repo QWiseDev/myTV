@@ -250,14 +250,14 @@ export function getOptimizedHlsConfig(
         : isIOS
           ? 15
           : 20 // iOS13+: 12s, iOS: 15s, Android: 20s
-      : 25, // ✅ 桌面从 15s 增到 25s，改善卡顿
+      : 20, // 桌面保留足够缓冲，同时降低持续预加载压力
     backBufferLength: isMobile
       ? isIOS13
         ? 8
         : isIOS
           ? 12
           : 15 // iOS13+更保守
-      : 15, // ✅ 桌面从 10s 增到 15s
+      : 10, // 桌面降低后向缓冲，减少长时间播放内存压力
 
     /* 缓冲大小配置 - 增强视频编码兼容性 */
     // ✅ 优化：减少缓冲区大小，降低内存占用
@@ -267,11 +267,11 @@ export function getOptimizedHlsConfig(
         : isIOS
           ? 40 * 1000 * 1000 // 增加iOS缓冲
           : 50 * 1000 * 1000 // 增加Android缓冲
-      : 40 * 1000 * 1000, // ✅ 桌面从 80MB 降到 40MB，减少内存压力
+      : 32 * 1000 * 1000, // 桌面保留流畅播放余量，避免缓冲过大
 
     // 增强的MediaSource配置
     maxAudioBufferSize: 30 * 1000 * 1000, // ✅ 从 60MB 降到 30MB
-    maxVideoBufferSize: isMobile ? 50 * 1000 * 1000 : 60 * 1000 * 1000, // ✅ 桌面从 100MB 降到 60MB
+    maxVideoBufferSize: isMobile ? 50 * 1000 * 1000 : 48 * 1000 * 1000,
 
     /* 网络加载优化 - 参考 defaultLoadPolicy */
     maxLoadingDelay: isMobile ? (isIOS13 ? 2 : 3) : 4, // iOS13+设备更快超时
@@ -282,7 +282,7 @@ export function getOptimizedHlsConfig(
     liveBackBufferLength: isMobile ? (isIOS13 ? 3 : 5) : undefined, // 已废弃，保持兼容
 
     /* 高级优化配置 - 参考 StreamControllerConfig */
-    maxMaxBufferLength: isMobile ? (isIOS13 ? 90 : 180) : 180, // ✅ 从 120s 增到 180s，允许更多缓冲应对慢网速
+    maxMaxBufferLength: isMobile ? (isIOS13 ? 90 : 180) : 90,
     maxFragLookUpTolerance: isMobile ? 0.1 : 0.25, // 片段查找容忍度
 
     /* ABR优化 - 参考 ABRControllerConfig */
@@ -291,21 +291,21 @@ export function getOptimizedHlsConfig(
     abrBandWidthFactor: isMobile ? 0.8 : 0.95, // 移动端更保守的带宽估计
 
     /* 启动优化 */
-    startFragPrefetch: !isMobile, // 移动端关闭预取以节省资源
+    startFragPrefetch: false, // 关闭预取，优先减少桌面持续发热
     testBandwidth: !isIOS13, // iOS13+关闭带宽测试以快速启动
 
     /* Loader配置 - 参考官方 fragLoadPolicy */
     fragLoadPolicy: {
       default: {
         maxTimeToFirstByteMs: isMobile ? 6000 : 10000,
-        maxLoadTimeMs: isMobile ? 60000 : 120000,
+        maxLoadTimeMs: isMobile ? 60000 : 90000,
         timeoutRetry: {
-          maxNumRetry: isMobile ? 2 : 4,
+          maxNumRetry: isMobile ? 2 : 3,
           retryDelayMs: 0,
           maxRetryDelayMs: 0,
         },
         errorRetry: {
-          maxNumRetry: isMobile ? 3 : 6,
+          maxNumRetry: isMobile ? 3 : 4,
           retryDelayMs: 1000,
           maxRetryDelayMs: isMobile ? 4000 : 8000,
         },

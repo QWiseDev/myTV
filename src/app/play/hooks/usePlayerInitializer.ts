@@ -132,7 +132,7 @@ interface UsePlayerInitializerParams {
   memoryPressure: MemoryPressure;
   externalDanmuEnabled: boolean;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
-  throttledTimeUpdate: (currentTime: number, duration: number) => void;
+  throttledTimeUpdate: (duration: number) => void;
   saveCurrentPlayProgress: () => Promise<void> | void;
   lastSaveTimeRef: MutableRefObject<number>;
   lastVolumeRef: MutableRefObject<number>;
@@ -1000,7 +1000,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const currentTime = artPlayer.currentTime || 0;
           const duration = artPlayer.duration || 0;
 
-          throttledTimeUpdate(currentTime, duration);
+          throttledTimeUpdate(duration);
           lastDanmakuRecoverAt = recoverStoppedDanmaku(
             artPlayer,
             Date.now(),

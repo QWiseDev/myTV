@@ -7,6 +7,7 @@ import type Artplayer from 'artplayer';
 import type { MutableRefObject } from 'react';
 
 import type { ArtPlayerLike } from './danmakuRuntime';
+import { readExternalDanmuPref } from './danmuPreference';
 
 type ArtplayerControlConfig = {
   position: 'top' | 'left' | 'right';
@@ -123,7 +124,18 @@ export function getLoadingIcon() {
  * 获取设置项配置（去广告）
  */
 export function getSettingsConfig(options: ArtplayerConfigOptions) {
-  const { blockAdEnabled, blockAdEnabledRef, onBlockAdToggle } = options;
+  const {
+    blockAdEnabled,
+    blockAdEnabledRef,
+    externalDanmuEnabled,
+    onBlockAdToggle,
+    onDanmuToggle,
+  } = options;
+
+  const getStoredDanmuEnabled = () => {
+    const pref = readExternalDanmuPref();
+    return pref === null ? externalDanmuEnabled : pref;
+  };
 
   return [
     // 去广告开关
@@ -140,6 +152,16 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
         } catch (_) {
           // ignore
         }
+        return newVal ? '当前开启' : '当前关闭';
+      },
+    },
+    {
+      html: '弹幕',
+      icon: '<text x="50%" y="50%" font-size="18" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="#ffffff">DM</text>',
+      tooltip: externalDanmuEnabled ? '已开启' : '已关闭',
+      onClick() {
+        const newVal = !getStoredDanmuEnabled();
+        onDanmuToggle(newVal);
         return newVal ? '当前开启' : '当前关闭';
       },
     },

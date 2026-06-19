@@ -10,6 +10,7 @@ import {
   loadAndRenderDanmaku,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
+import { writeExternalDanmuPref } from '../utils/danmuPreference';
 
 interface UseDanmuControllerParams {
   artPlayerRef: MutableRefObject<ArtPlayerLike | null>;
@@ -97,11 +98,7 @@ export function useDanmuController({
       externalDanmuEnabledRef.current = nextState;
       setExternalDanmuEnabled(nextState);
 
-      try {
-        localStorage.setItem('enable_external_danmu', String(nextState));
-      } catch (e) {
-        console.warn('localStorage设置失败:', e);
-      }
+      writeExternalDanmuPref(nextState);
 
       danmuOperationTimeoutRef.current = setTimeout(async () => {
         const art = artPlayerRef.current;

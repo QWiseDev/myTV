@@ -22,6 +22,7 @@ jest.mock('hls.js', () => ({
 
 import {
   extractHlsHttpStatus,
+  getOptimizedHlsConfig,
   handleHlsError,
   isRecoverableFragmentParsingError,
   isRecoverableTimestampAppendError,
@@ -185,5 +186,27 @@ describe('hlsConfig error guards', () => {
     expect(onFatalError).toHaveBeenCalledWith(
       expect.stringContaining('媒体错误'),
     );
+  });
+});
+
+describe('hlsConfig performance defaults', () => {
+  test('keeps desktop playback smooth while capping sustained buffering work', () => {
+    const config = getOptimizedHlsConfig({
+      deviceInfo: {
+        isMobile: false,
+        isIOS: false,
+        isIOS13: false,
+      },
+      blockAdEnabled: true,
+    });
+
+    expect(config.enableWorker).toBe(true);
+    expect(config.testBandwidth).toBe(true);
+    expect(config.maxBufferLength).toBe(20);
+    expect(config.backBufferLength).toBe(10);
+    expect(config.maxMaxBufferLength).toBe(90);
+    expect(config.startFragPrefetch).toBe(false);
+    expect(config.fragLoadPolicy?.default.timeoutRetry.maxNumRetry).toBe(3);
+    expect(config.fragLoadPolicy?.default.errorRetry.maxNumRetry).toBe(4);
   });
 });

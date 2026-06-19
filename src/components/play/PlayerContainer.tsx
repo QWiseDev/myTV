@@ -19,7 +19,6 @@ interface PlayerContainerProps {
   detailTitle?: string;
   episodeIndex: number;
   artPlayerRef: MutableRefObject<ArtPlayerLike | null>;
-  currentTime: number;
   duration: number;
   isSkipSettingOpen: boolean;
   onSkipSettingChange: (open: boolean) => void;
@@ -40,7 +39,6 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
       detailTitle,
       episodeIndex,
       artPlayerRef,
-      currentTime,
       duration,
       isSkipSettingOpen,
       onSkipSettingChange,
@@ -136,7 +134,6 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
               title={detailTitle}
               episodeIndex={episodeIndex}
               artPlayerRef={artPlayerRef}
-              currentTime={currentTime}
               duration={duration}
               isSettingMode={isSkipSettingOpen}
               onSettingModeChange={onSkipSettingChange}

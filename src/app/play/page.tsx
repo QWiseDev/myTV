@@ -51,6 +51,7 @@ import type {
   DanmakuItemLike,
   DanmakuPluginLike,
 } from './utils/danmakuRuntime';
+import { readExternalDanmuPref } from './utils/danmuPreference';
 import { detectDevice } from './utils/deviceDetection';
 
 // 🚀 性能优化：基于内存压力的动态组件导入
@@ -105,6 +106,11 @@ function PlayPageClient() {
       needPrefer: params.get('prefer') === 'true',
     };
   }, [routeQuery]);
+  const initialExternalDanmuEnabled = useMemo(() => {
+    // 默认开启外部弹幕；仅当用户显式关闭过（localStorage 为 'false'）才默认关闭
+    const pref = readExternalDanmuPref();
+    return pref === null ? true : pref;
+  }, []);
 
   // 使用PlayPageContext - 避免重复请求
   const { playRecords } = usePlayPageInternal();
@@ -173,7 +179,7 @@ function PlayPageClient() {
       loading: false,
     },
     danmaku: {
-      enabled: true, // ✅ 默认开启外部弹幕
+      enabled: initialExternalDanmuEnabled,
       loading: false,
       opacity: 0.5,
       fontSize: 20,
@@ -243,19 +249,19 @@ function PlayPageClient() {
   );
   const { setVideoUrl } = actions;
 
-  const {
-    currentEpisode: currentEpisodeIndex,
-    currentTime: currentPlayTime,
-    duration: videoDuration,
-  } = state.playback;
-  const {
-    setEpisode: setCurrentEpisodeIndex,
-    setCurrentTime: setCurrentPlayTime,
-  } = actions;
+  const { currentEpisode: currentEpisodeIndex, duration: videoDuration } =
+    state.playback;
+  const { setEpisode: setCurrentEpisodeIndex } = actions;
   const setVideoDuration = useCallback(
     (duration: number) => actions.setPlaybackInfo({ duration }),
     [actions],
   );
+  // 🔑 用 ref 镜像 duration：timeupdate 监听器在播放器初始化时仅挂一次，
+  //    直接闭包捕获的 videoDuration 会被钉死在初始值，必须通过 ref 读取最新值
+  const videoDurationRef = useRef(videoDuration);
+  useEffect(() => {
+    videoDurationRef.current = videoDuration;
+  }, [videoDuration]);
 
   const {
     movie: movieDetails,
@@ -289,14 +295,13 @@ function PlayPageClient() {
   // -----------------------------------------------------------------------------
   // 🚀 性能优化：节流高频事件处理
   // -----------------------------------------------------------------------------
-  // timeupdate 事件每秒触发约 60 次，节流可以显著减少重渲染
-  const throttledTimeUpdate = useThrottle(
-    (currentTime: number, duration: number) => {
-      setCurrentPlayTime(currentTime);
+  // timeupdate 事件每秒触发约 60 次，只同步页面真实需要的 duration。
+  const throttledTimeUpdate = useThrottle((duration: number) => {
+    // 通过 ref 读取最新 duration，确保守卫生效（监听器在播放器初始化时仅挂一次）
+    if (duration > 0 && Math.abs(duration - videoDurationRef.current) > 0.5) {
       setVideoDuration(duration);
-    },
-    1000,
-  ); // 每秒最多更新一次，平衡响应性和性能
+    }
+  }, 1000); // 每秒最多更新一次，平衡响应性和性能
 
   // -----------------------------------------------------------------------------
   // 🛡️ 统一错误处理
@@ -323,11 +328,9 @@ function PlayPageClient() {
 
   // 外部弹幕开关 - 需要从 localStorage 加载初始值
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const v = localStorage.getItem('enable_external_danmu');
-      if (v !== null) {
-        actions.setDanmakuConfig({ enabled: v === 'true' });
-      }
+    const pref = readExternalDanmuPref();
+    if (pref !== null) {
+      actions.setDanmakuConfig({ enabled: pref });
     }
   }, [actions]);
   const externalDanmuEnabledRef = useRef(externalDanmuEnabled);
@@ -1127,7 +1130,6 @@ function PlayPageClient() {
               detailTitle: detail?.title,
               episodeIndex: currentEpisodeIndex,
               artPlayerRef,
-              currentTime: currentPlayTime,
               duration: videoDuration,
               isSkipSettingOpen,
               onSkipSettingChange: setIsSkipSettingOpen,

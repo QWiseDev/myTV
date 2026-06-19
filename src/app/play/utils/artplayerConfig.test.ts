@@ -65,4 +65,20 @@ describe('artplayerConfig settings', () => {
     expect(options.onBlockAdToggle).toHaveBeenLastCalledWith(false);
     expect(localStorage.getItem('enable_blockad')).toBe('false');
   });
+
+  test('external danmu setting toggles through callback without rebuilding player', () => {
+    const options = createOptions();
+    const player = options.artPlayerRef.current as unknown as TestPlayer;
+    const setting = getSettingsConfig(options)[1];
+
+    expect(setting.onClick()).toBe('当前开启');
+    expect(options.onDanmuToggle).toHaveBeenLastCalledWith(true);
+    expect(player.destroy).not.toHaveBeenCalled();
+    expect(player.video.hls.destroy).not.toHaveBeenCalled();
+
+    localStorage.setItem('enable_external_danmu', 'true');
+
+    expect(setting.onClick()).toBe('当前关闭');
+    expect(options.onDanmuToggle).toHaveBeenLastCalledWith(false);
+  });
 });
