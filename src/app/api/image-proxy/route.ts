@@ -6,6 +6,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const IMAGE_PROXY_FETCH_TIMEOUT_MS = 5000;
+const IMAGE_PROXY_MAX_CONCURRENT_REQUESTS = 12;
+
+let activeImageProxyRequests = 0;
+
 function parseAllowedImageUrl(imageUrl: string): URL | null {
   try {
     const parsedUrl = new URL(imageUrl);
@@ -21,6 +26,62 @@ function parseAllowedImageUrl(imageUrl: string): URL | null {
   }
 }
 
+function acquireImageProxySlot(): boolean {
+  if (activeImageProxyRequests >= IMAGE_PROXY_MAX_CONCURRENT_REQUESTS) {
+    return false;
+  }
+
+  activeImageProxyRequests += 1;
+  return true;
+}
+
+function releaseImageProxySlot() {
+  activeImageProxyRequests = Math.max(0, activeImageProxyRequests - 1);
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.name === 'TimeoutError')
+  );
+}
+
+function createReleasingBody(
+  body: ReadableStream<Uint8Array>,
+  release: () => void,
+): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  let released = false;
+
+  const releaseOnce = () => {
+    if (released) return;
+    released = true;
+    release();
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          releaseOnce();
+          controller.close();
+          return;
+        }
+
+        controller.enqueue(value);
+      } catch (error) {
+        releaseOnce();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      releaseOnce();
+      await reader.cancel(reason);
+    },
+  });
+}
+
 // OrionTV 兼容接口
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,9 +95,23 @@ export async function GET(request: Request) {
   if (!allowedImageUrl) {
     return NextResponse.json(
       { error: 'Unsupported image URL' },
-      { status: 403 }
+      { status: 403 },
     );
   }
+
+  if (!acquireImageProxySlot()) {
+    return NextResponse.json(
+      { error: 'Image proxy is busy' },
+      {
+        status: 503,
+        headers: {
+          'Retry-After': '5',
+        },
+      },
+    );
+  }
+
+  let shouldReleaseSlot = true;
 
   try {
     const imageResponse = await fetch(allowedImageUrl.toString(), {
@@ -45,12 +120,13 @@ export async function GET(request: Request) {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       },
+      signal: AbortSignal.timeout(IMAGE_PROXY_FETCH_TIMEOUT_MS),
     });
 
     if (!imageResponse.ok) {
       return NextResponse.json(
         { error: imageResponse.statusText },
-        { status: imageResponse.status }
+        { status: imageResponse.status },
       );
     }
 
@@ -59,7 +135,7 @@ export async function GET(request: Request) {
     if (!imageResponse.body) {
       return NextResponse.json(
         { error: 'Image response has no body' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -75,15 +151,31 @@ export async function GET(request: Request) {
     headers.set('Vercel-CDN-Cache-Control', 'public, s-maxage=15720000');
     headers.set('Netlify-Vary', 'query');
 
-    // 直接返回图片流
-    return new Response(imageResponse.body, {
+    // 直接返回图片流，并在响应流结束或取消时释放并发槽。
+    const responseBody = createReleasingBody(
+      imageResponse.body,
+      releaseImageProxySlot,
+    );
+    shouldReleaseSlot = false;
+    return new Response(responseBody, {
       status: 200,
       headers,
     });
   } catch (error) {
+    if (isTimeoutError(error)) {
+      return NextResponse.json(
+        { error: 'Image fetch timeout' },
+        { status: 504 },
+      );
+    }
+
     return NextResponse.json(
       { error: 'Error fetching image' },
-      { status: 500 }
+      { status: 500 },
     );
+  } finally {
+    if (shouldReleaseSlot) {
+      releaseImageProxySlot();
+    }
   }
 }
