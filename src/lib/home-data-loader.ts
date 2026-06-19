@@ -6,6 +6,7 @@ import { GetBangumiCalendarData } from '@/lib/bangumi.client';
 import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
 import { getDoubanCategories } from '@/lib/douban.client';
 import { EMPTY_HOME_DATA, HomeData } from '@/lib/home-data-types';
+import { withTimeout } from '@/lib/promise-timeout';
 
 export async function loadHomeDataFromApi(): Promise<HomeData> {
   const response = await fetch('/api/home');
@@ -17,42 +18,10 @@ export async function loadHomeDataFromApi(): Promise<HomeData> {
 }
 
 /**
- * 带超时的数据获取函数
- */
-export function fetchWithTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number = DATA_FETCH_TIMEOUTS.TERTIARY,
-  fallback?: T
-): Promise<T | undefined> {
-  return new Promise<T | undefined>((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(fallback);
-    }, timeoutMs);
-
-    promise
-      .then((result) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(result);
-      })
-      .catch(() => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(fallback);
-      });
-  });
-}
-
-/**
  * 加载关键数据 - 热门电影
  */
 export const loadCriticalData = async () => {
-  const hotMoviesPromise = fetchWithTimeout(
+  const hotMoviesPromise = withTimeout(
     getDoubanCategories({ kind: 'movie', category: '热门', type: '全部' }),
     DATA_FETCH_TIMEOUTS.CRITICAL,
     {
@@ -70,7 +39,7 @@ export const loadCriticalData = async () => {
  */
 export const loadSecondaryData = async () => {
   const [tvShowsResult, varietyShowsResult] = await Promise.allSettled([
-    fetchWithTimeout(
+    withTimeout(
       getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
       DATA_FETCH_TIMEOUTS.SECONDARY,
       {
@@ -79,7 +48,7 @@ export const loadSecondaryData = async () => {
         list: [],
       }
     ),
-    fetchWithTimeout(
+    withTimeout(
       getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
       DATA_FETCH_TIMEOUTS.SECONDARY,
       {
@@ -105,7 +74,7 @@ export const loadSecondaryData = async () => {
  */
 export const loadTertiaryData = async () => {
   const [bangumiResult] = await Promise.allSettled([
-    fetchWithTimeout(GetBangumiCalendarData(), DATA_FETCH_TIMEOUTS.TERTIARY),
+    withTimeout(GetBangumiCalendarData(), DATA_FETCH_TIMEOUTS.TERTIARY),
   ]);
 
   return {

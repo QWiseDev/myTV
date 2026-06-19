@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console,no-case-declarations */
 
+import {
+  type DoubanRecentHotResponse,
+  buildDoubanCategoryUrl,
+  DOUBAN_RECENT_HOT_HOSTS,
+  mapDoubanRecentHotItems,
+} from '@/lib/douban-shared';
+
 import { ClientCache } from './client-cache';
 import { DoubanCommentsResult, DoubanItem, DoubanResult } from './types';
 
@@ -194,22 +201,6 @@ interface DoubanCategoriesParams {
   pageStart?: number;
 }
 
-interface DoubanCategoryApiResponse {
-  total: number;
-  items: Array<{
-    id: string;
-    title: string;
-    card_subtitle: string;
-    pic: {
-      large: string;
-      normal: string;
-    };
-    rating: {
-      value: number;
-    };
-  }>;
-}
-
 interface DoubanListApiResponse {
   total: number;
   subjects: Array<{
@@ -307,11 +298,15 @@ export async function fetchDoubanCategories(
     throw new Error('pageStart 不能小于 0');
   }
 
-  const target = useTencentCDN
-    ? `https://m.douban.cmliussss.net/rexxar/api/v2/subject/recent_hot/${kind}?start=${pageStart}&limit=${pageLimit}&category=${category}&type=${type}`
+  const host = useTencentCDN
+    ? DOUBAN_RECENT_HOT_HOSTS.tencent
     : useAliCDN
-    ? `https://m.douban.cmliussss.com/rexxar/api/v2/subject/recent_hot/${kind}?start=${pageStart}&limit=${pageLimit}&category=${category}&type=${type}`
-    : `https://m.douban.com/rexxar/api/v2/subject/recent_hot/${kind}?start=${pageStart}&limit=${pageLimit}&category=${category}&type=${type}`;
+    ? DOUBAN_RECENT_HOT_HOSTS.ali
+    : DOUBAN_RECENT_HOT_HOSTS.default;
+  const target = buildDoubanCategoryUrl(
+    { kind, category, type, pageStart, pageLimit },
+    host
+  );
 
   try {
     const response = await fetchWithTimeout(
@@ -323,16 +318,10 @@ export async function fetchDoubanCategories(
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    const doubanData: DoubanCategoryApiResponse = await response.json();
+    const doubanData: DoubanRecentHotResponse = await response.json();
 
     // 转换数据格式
-    const list: DoubanItem[] = doubanData.items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      poster: item.pic?.normal || item.pic?.large || '',
-      rate: item.rating?.value ? item.rating.value.toFixed(1) : '',
-      year: item.card_subtitle?.match(/(\d{4})/)?.[1] || '',
-    }));
+    const list = mapDoubanRecentHotItems(doubanData);
 
     return {
       code: 200,

@@ -1,5 +1,7 @@
 'use client';
 
+import { BANGUMI_CALENDAR_ENDPOINT } from '@/lib/bangumi-shared';
+
 import { ClientCache } from './client-cache';
 
 export interface BangumiCalendarData {
@@ -54,7 +56,7 @@ export async function GetBangumiCalendarData(): Promise<BangumiCalendarData[]> {
   }
 
   try {
-    const response = await fetch('https://api.bgm.tv/calendar', {
+    const response = await fetch(BANGUMI_CALENDAR_ENDPOINT, {
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
