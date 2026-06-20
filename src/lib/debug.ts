@@ -12,7 +12,7 @@ export const debug = {
   /**
    * 普通日志
    */
-  log: (message: string, data?: any) => {
+  log: (message: string, data?: unknown) => {
     if (isDevelopment) {
       console.log(message, data ?? '');
     }
@@ -21,7 +21,7 @@ export const debug = {
   /**
    * 警告日志
    */
-  warn: (message: string, data?: any) => {
+  warn: (message: string, data?: unknown) => {
     if (isDevelopment) {
       console.warn(message, data ?? '');
     }
@@ -30,14 +30,14 @@ export const debug = {
   /**
    * 错误日志（始终输出）
    */
-  error: (message: string, data?: any) => {
+  error: (message: string, data?: unknown) => {
     console.error(message, data ?? '');
   },
 
   /**
    * 信息日志
    */
-  info: (message: string, data?: any) => {
+  info: (message: string, data?: unknown) => {
     if (isDevelopment) {
       console.info(message, data ?? '');
     }

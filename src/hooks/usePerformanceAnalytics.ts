@@ -2,6 +2,15 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { useAnalytics } from './useAnalytics';
 
+// Network Information API（实验性，标准 DOM 类型未包含此接口）
+interface NetworkInformation extends EventTarget {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
+}
+type NavigatorWithConnection = Navigator & { connection: NetworkInformation };
+
 /**
  * 性能分析 Hook
  */
@@ -99,7 +108,6 @@ export function usePerformanceAnalytics() {
  */
 export function useAutoPerformanceMonitoring() {
   const { trackApiRequest, trackResourceLoad } = usePerformanceAnalytics();
-  const apiRequestsRef = useRef<Map<string, number>>(new Map());
   const interactionsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -163,7 +171,7 @@ export function useAutoPerformanceMonitoring() {
     interactionsRef.current.set(interactionId, performance.now());
   }, []);
 
-  const endInteractionTiming = useCallback((interactionId: string, interactionType: string, target?: string) => {
+  const endInteractionTiming = useCallback((interactionId: string, interactionType: string, _target?: string) => {
     const startTime = interactionsRef.current.get(interactionId);
     if (startTime) {
       const endTime = performance.now();
@@ -218,7 +226,7 @@ export function useNetworkAnalytics() {
 
     // 监控网络连接信息（如果支持）
     if ('connection' in navigator) {
-      const connection = (navigator as any).connection;
+      const connection = (navigator as NavigatorWithConnection).connection;
       connection.addEventListener('change', handleConnectionChange);
     }
 
@@ -227,7 +235,7 @@ export function useNetworkAnalytics() {
       window.removeEventListener('offline', handleOffline);
 
       if ('connection' in navigator) {
-        const connection = (navigator as any).connection;
+        const connection = (navigator as NavigatorWithConnection).connection;
         connection.removeEventListener('change', handleConnectionChange);
       }
     };
@@ -249,15 +257,15 @@ function getResourceType(url: string): string {
 
 function getConnectionType(): string {
   if ('connection' in navigator) {
-    const connection = (navigator as any).connection;
+    const connection = (navigator as NavigatorWithConnection).connection;
     return connection.effectiveType || 'unknown';
   }
   return 'unknown';
 }
 
-function getConnectionInfo(): Record<string, any> {
+function getConnectionInfo(): Record<string, unknown> {
   if ('connection' in navigator) {
-    const connection = (navigator as any).connection;
+    const connection = (navigator as NavigatorWithConnection).connection;
     return {
       effective_type: connection.effectiveType,
       downlink: connection.downlink,

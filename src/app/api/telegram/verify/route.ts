@@ -49,24 +49,6 @@ async function generateSignature(
     .join('');
 }
 
-// 生成认证Cookie（带签名）
-async function generateAuthCookie(
-  username: string,
-  role: 'owner' | 'admin' | 'user' = 'user'
-): Promise<string> {
-  const authData: Record<string, any> = { role };
-
-  if (username && process.env.PASSWORD) {
-    authData.username = username;
-    const signature = await generateSignature(username, process.env.PASSWORD);
-    authData.signature = signature;
-    authData.timestamp = Date.now();
-    authData.loginTime = Date.now();
-  }
-
-  return encodeURIComponent(JSON.stringify(authData));
-}
-
 export async function GET(request: Request) {
   const requestId = Math.random().toString(36).substring(7);
   console.log(
@@ -300,7 +282,7 @@ export async function GET(request: Request) {
     );
 
     // 生成认证数据对象（不手动编码，让 Next.js 自动处理）
-    const authData: Record<string, any> = { role: 'user' };
+    const authData: Record<string, unknown> = { role: 'user' };
     if (username && process.env.PASSWORD) {
       authData.username = username;
       const signature = await generateSignature(username, process.env.PASSWORD);

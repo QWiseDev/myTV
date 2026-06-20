@@ -5,8 +5,8 @@ import { db } from '@/lib/db';
 import {
   checkWin,
   getRandomSymbol,
-  PUNISHMENTS as BASE_PUNISHMENTS,
-  SLOT_SYMBOLS} from '@/lib/slot-config';
+  SLOT_SYMBOLS,
+} from '@/lib/slot-config';
 
 export const runtime = 'nodejs';
 
@@ -24,8 +24,6 @@ const CLEANUP_INTERVAL_MS = 30 * 1000; // 每30秒清理一次过期记录（更
 // 限速惩罚配置（更严厉）
 const PENALTY_DURATION_MS = 10 * 60 * 1000; // 10分钟惩罚时长
 const PENALTY_MULTIPLIER_INCREMENT = 2; // 每次限速触发增加2倍律师函概率
-const HARD_BAN_DURATION = 60 * 60 * 1000; // 严重违规1小时硬封禁
-const VIOLATION_THRESHOLD = 5; // 5次违规触发硬封禁
 
 // 内存中的速率限制存储（生产环境建议使用Redis）
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -203,32 +201,8 @@ function checkRateLimit(identifier: string): { allowed: boolean; remaining: numb
   };
 }
 
-/**
- * 获取客户端IP地址
- */
-function getClientIP(req: NextRequest): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) {
-    return xff.split(',')[0].trim();
-  }
-  return req.ip || 'unknown';
-}
-
 // 使用共享的符号配置
 const SYMBOLS = SLOT_SYMBOLS;
-
-// 惩罚组合配置
-// 惩罚配置接口
-interface PunishmentConfig {
-  multiplier: number;
-  name: string;
-  pattern: string[];
-  penalty: number;
-  ban?: number; // 可选的封禁时间（小时）
-}
-
-// 使用共享的惩罚配置
-const PUNISHMENTS = BASE_PUNISHMENTS;
 
 // 用户数据接口
 interface SlotUserData {
@@ -411,10 +385,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== 已认证用户的速率限制检查 =====
-    // 获取客户端IP
-    const clientIP = getClientIP(req);
-
-    // 使用用户名作为标识符，防止IP修改绕过限制
     const identifier = `user:${auth.username}`;
 
     // 首先检查硬封禁
@@ -718,10 +688,6 @@ export async function GET(req: NextRequest) {
     }
 
     // ===== 已认证用户的速率限制检查 =====
-    // 获取客户端IP
-    const clientIP = getClientIP(req);
-
-    // 使用用户名作为标识符，防止IP修改绕过限制
     const identifier = `user:${auth.username}:GET`;
     const rateLimitResult = checkRateLimit(identifier);
 

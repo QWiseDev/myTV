@@ -23,8 +23,8 @@ const CACHE_CONFIG = {
 };
 
 // 缓存存储
-const requestCache = new Map<string, CacheEntry<any>>();
-const pendingRequests = new Map<string, Promise<any>>();
+const requestCache = new Map<string, CacheEntry<unknown>>();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 async function extractErrorMessage(response: Response): Promise<string | null> {
   try {
@@ -54,7 +54,7 @@ async function extractErrorMessage(response: Response): Promise<string | null> {
 /**
  * 生成缓存键
  */
-function generateCacheKey(url: string, params?: Record<string, any>): string {
+function generateCacheKey(url: string, params?: Record<string, unknown>): string {
   const paramStr = params ? `:${JSON.stringify(params)}` : '';
   return `${url}${paramStr}`;
 }
@@ -104,7 +104,7 @@ function enforceMaxCacheSize(): void {
 /**
  * 从缓存获取数据
  */
-function getFromCache<T>(url: string, params?: Record<string, any>): T | null {
+function getFromCache<T>(url: string, params?: Record<string, unknown>): T | null {
   cleanupExpiredCache();
 
   const cacheKey = generateCacheKey(url, params);
@@ -127,7 +127,7 @@ function getFromCache<T>(url: string, params?: Record<string, any>): T | null {
 /**
  * 保存到缓存
  */
-function saveToCache<T>(url: string, data: T, params?: Record<string, any>): void {
+function saveToCache<T>(url: string, data: T, params?: Record<string, unknown>): void {
   const cacheKey = generateCacheKey(url, params);
   requestCache.set(cacheKey, {
     data,
@@ -163,10 +163,10 @@ export function clearAllCache(): void {
  * @param params 请求参数（用于缓存键）
  * @returns 响应数据
  */
-export async function cachedFetch<T = any>(
+export async function cachedFetch<T = unknown>(
   url: string,
   options?: RequestInit,
-  params?: Record<string, any>
+  params?: Record<string, unknown>
 ): Promise<T> {
   // 先检查缓存（只对 GET 请求启用缓存）
   if ((!options || options.method === 'GET' || !options.method)) {
@@ -222,7 +222,7 @@ export async function cachedFetch<T = any>(
  * @param url 请求 URL（参数可以直接写在 URL 中，或单独传入 params）
  * @param params 查询参数
  */
-export async function cachedGet<T = any>(
+export async function cachedGet<T = unknown>(
   url: string,
   params?: Record<string, string | number>
 ): Promise<T> {

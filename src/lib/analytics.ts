@@ -18,14 +18,14 @@ export interface UserEvent {
   userId?: string;
   userType?: 'guest' | 'registered' | 'premium';
   action: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SearchEvent {
   query: string;
   category?: string;
   resultsCount?: number;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
   searchType?: 'general' | 'advanced' | 'voice';
 }
 
@@ -34,7 +34,7 @@ export interface PerformanceEvent {
   value: number;
   unit?: string;
   page?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BusinessEvent {
@@ -43,7 +43,7 @@ export interface BusinessEvent {
   currency?: string;
   step?: string;
   success?: boolean;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 class ClarityAnalytics {
@@ -233,7 +233,7 @@ class ClarityAnalytics {
   /**
    * 追踪页面浏览
    */
-  trackPageView(page: string, title?: string, metadata?: Record<string, any>) {
+  trackPageView(page: string, title?: string, metadata?: Record<string, unknown>) {
     this.trackEvent('page_view', {
       page,
       title: title || page,
@@ -289,7 +289,7 @@ class ClarityAnalytics {
   /**
    * 追踪错误事件
    */
-  trackError(errorType: string, errorMessage: string, context?: Record<string, any>) {
+  trackError(errorType: string, errorMessage: string, context?: Record<string, unknown>) {
     this.trackEvent('error', {
       error_type: errorType,
       error_message: errorMessage,
@@ -329,7 +329,7 @@ class ClarityAnalytics {
   /**
    * 追踪功能使用情况
    */
-  trackFeatureUsage(featureName: string, used = true, metadata?: Record<string, any>) {
+  trackFeatureUsage(featureName: string, used = true, metadata?: Record<string, unknown>) {
     this.trackEvent('feature_usage', {
       feature_name: featureName,
       used,
@@ -342,7 +342,7 @@ class ClarityAnalytics {
   /**
    * 通用事件追踪方法
    */
-  private trackEvent(eventName: string, properties: Record<string, any>) {
+  private trackEvent(eventName: string, properties: Record<string, unknown>) {
     // 如果未初始化，尝试初始化
     if (!this.isInitialized) {
       this.tryInit();
@@ -375,12 +375,12 @@ class ClarityAnalytics {
   /**
    * 将事件加入队列，等待初始化后发送
    */
-  private eventQueue: Array<{ eventName: string; properties: Record<string, any>; timestamp: number }> = [];
+  private eventQueue: Array<{ eventName: string; properties: Record<string, unknown>; timestamp: number }> = [];
   private queueProcessTimer: NodeJS.Timeout | null = null;
   private retryCount = 0;
   private maxRetries = 5; // 最多重试5次
 
-  private queueEvent(eventName: string, properties: Record<string, any>) {
+  private queueEvent(eventName: string, properties: Record<string, unknown>) {
     // 如果已经重试次数过多，不再添加新事件到队列
     if (this.retryCount >= this.maxRetries) {
       // 静默跳过，不输出日志以减少控制台噪音
@@ -454,7 +454,7 @@ class ClarityAnalytics {
   /**
    * 实际发送事件的方法
    */
-  private sendEvent(eventName: string, properties: Record<string, any>) {
+  private sendEvent(eventName: string, properties: Record<string, unknown>) {
     try {
       // 添加通用属性
       const enrichedProperties = {
@@ -489,7 +489,7 @@ export const analytics = new ClarityAnalytics();
 // 扩展 Window 接口
 declare global {
   interface Window {
-    clarity?: (event: string, ...args: any[]) => void;
+    clarity?: (event: string, ...args: unknown[]) => void;
   }
 }
 

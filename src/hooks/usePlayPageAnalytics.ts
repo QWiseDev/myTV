@@ -1,8 +1,16 @@
 import { useCallback, useEffect,useRef } from 'react';
 
 import { useAnalytics } from './useAnalytics';
-import { usePerformanceAnalytics } from './usePerformanceAnalytics';
 import { useVideoAnalytics } from './useVideoAnalytics';
+
+// Network Information API（实验性，标准 DOM 类型未包含此接口）
+interface NetworkInformation extends EventTarget {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
+}
+type NavigatorWithConnection = Navigator & { connection: NetworkInformation };
 
 interface PlayPageAnalyticsOptions {
   videoId: string;
@@ -29,7 +37,6 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   const {
     trackPlay,
     trackPause,
-    trackComplete,
     trackFavorite,
     trackShare,
     trackDownload,
@@ -37,8 +44,6 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     getTotalWatchTime,
     getCurrentSessionTime
   } = useVideoAnalytics(options);
-
-  const { trackApiRequest } = usePerformanceAnalytics();
 
   // 页面状态 refs
   const playStartTimeRef = useRef<number>(0);
@@ -66,7 +71,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   }, [videoId, videoTitle, videoType, episodeNumber, seasonNumber, seriesId, options.source]);
 
   // 播放器控制埋点
-  const trackPlayerControl = useCallback((action: string, metadata?: Record<string, any>) => {
+  const trackPlayerControl = useCallback((action: string, metadata?: Record<string, unknown>) => {
     trackFeatureUsage('player_control', true, {
       action,
       video_id: videoId,
@@ -179,7 +184,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   }, [videoId, getCurrentSessionTime, trackFeatureUsage]);
 
   // 错误处理
-  const handlePlayerError = useCallback((errorType: string, errorMessage: string, context?: Record<string, any>) => {
+  const handlePlayerError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
     errorCountRef.current++;
     trackError('player_error', errorMessage, {
       error_type: errorType,
@@ -192,7 +197,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     });
   }, [videoId, videoTitle, getCurrentSessionTime, trackError]);
 
-  const handleNetworkError = useCallback((errorType: 'network' | 'timeout' | 'server_error', details?: Record<string, any>) => {
+  const handleNetworkError = useCallback((errorType: 'network' | 'timeout' | 'server_error', details?: Record<string, unknown>) => {
     trackError('network_error', `Network error: ${errorType}`, {
       error_type: errorType,
       video_id: videoId,
@@ -329,7 +334,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
 // 辅助函数
 function getConnectionType(): string {
   if (typeof navigator !== 'undefined' && 'connection' in navigator) {
-    const connection = (navigator as any).connection;
+    const connection = (navigator as NavigatorWithConnection).connection;
     return connection?.effectiveType || 'unknown';
   }
   return 'unknown';

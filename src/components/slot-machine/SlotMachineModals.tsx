@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Cog, Gift, Trophy, X } from 'lucide-react';
 import React, { memo } from 'react';
 
-import { formatCoins, type LeaderboardItem, type LuckyWheelReward } from '@/lib/slot-machine-utils';
+import { type LeaderboardItem, type LuckyWheelReward, formatCoins } from '@/lib/slot-machine-utils';
 
 // 通用模态框属性
 interface BaseModalProps {

@@ -16,7 +16,6 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
     trackUserLogin,
     trackUserLogout,
     trackSearch,
-    trackPageView,
     trackCategoryView,
     trackConversion,
     trackFeatureUsage,
@@ -40,25 +39,25 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
   }, [userId, userType, setUserId, setUserType]);
 
   // 追踪用户注册
-  const trackRegistration = useCallback((method: 'email' | 'phone' | 'social' | 'guest', metadata?: Record<string, any>) => {
+  const trackRegistration = useCallback((method: 'email' | 'phone' | 'social' | 'guest', metadata?: Record<string, unknown>) => {
     trackUserRegistration({
       userId,
       action: 'registration',
       userType: userType || 'registered',
       method,
       metadata
-    } as any);
+    });
   }, [userId, userType, trackUserRegistration]);
 
   // 追踪用户登录
-  const trackLogin = useCallback((method: 'email' | 'phone' | 'social' | 'auto', metadata?: Record<string, any>) => {
+  const trackLogin = useCallback((method: 'email' | 'phone' | 'social' | 'auto', metadata?: Record<string, unknown>) => {
     trackUserLogin({
       userId,
       action: 'login',
       userType: userType || 'registered',
       method,
       metadata
-    } as any);
+    });
   }, [userId, userType, trackUserLogin]);
 
   // 追踪用户登出
@@ -66,14 +65,14 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
     trackUserLogout({
       userId,
       action: 'logout'
-    } as any);
+    });
   }, [userId, trackUserLogout]);
 
   // 追踪搜索行为
   const trackSearchBehavior = useCallback((query: string, options?: {
     category?: string;
     resultsCount?: number;
-    filters?: Record<string, any>;
+    filters?: Record<string, unknown>;
     searchType?: 'general' | 'advanced' | 'voice';
     searchFrom?: string;
   }) => {
@@ -137,7 +136,7 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
     currency?: string;
     step?: string;
     success?: boolean;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }) => {
     trackConversion({
       eventName,
@@ -150,7 +149,7 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
   }, [trackConversion]);
 
   // 追踪功能使用
-  const trackFeatureUse = useCallback((featureName: string, used = true, metadata?: Record<string, any>) => {
+  const trackFeatureUse = useCallback((featureName: string, used = true, metadata?: Record<string, unknown>) => {
     trackFeatureUsage(featureName, used, metadata);
 
     // 更新活动时间
@@ -160,7 +159,7 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
   }, [trackFeatureUsage]);
 
   // 追踪错误
-  const trackUserError = useCallback((errorType: string, errorMessage: string, context?: Record<string, any>) => {
+  const trackUserError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
     trackError(errorType, errorMessage, {
       user_id: userId,
       user_type: userType,
@@ -216,16 +215,16 @@ export function useUserBehaviorAnalytics(options: UserBehaviorOptions = {}) {
  * 用户路径分析 Hook
  */
 export function useUserJourneyAnalytics() {
-  const { trackPageView, trackFeatureUsage } = useAnalytics();
+  const { trackFeatureUsage } = useAnalytics();
   const journeyStepsRef = useRef<Array<{
     step: string;
     timestamp: number;
     page?: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }>>([]);
 
   // 追踪用户路径步骤
-  const trackJourneyStep = useCallback((step: string, metadata?: Record<string, any>) => {
+  const trackJourneyStep = useCallback((step: string, metadata?: Record<string, unknown>) => {
     const journeyStep = {
       step,
       timestamp: Date.now(),
@@ -279,7 +278,7 @@ export function useSearchAnalytics() {
 
   const trackSearchQuery = useCallback((query: string, resultsCount: number, searchTime: number, options?: {
     category?: string;
-    filters?: Record<string, any>;
+    filters?: Record<string, unknown>;
     searchType?: 'general' | 'advanced' | 'voice';
     searchFrom?: string;
   }) => {

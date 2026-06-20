@@ -136,13 +136,13 @@ export async function GET(request: NextRequest) {
       `✅ 网盘搜索完成: "${query}" - ${responseData.data.total} 个结果`
     );
     return NextResponse.json(responseData);
-  } catch (error: any) {
+  } catch (error) {
     console.error('网盘搜索失败:', error);
 
     let errorMessage = '网盘搜索失败';
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       errorMessage = '网盘搜索请求超时';
-    } else if (error.message) {
+    } else if (error instanceof Error && error.message) {
       errorMessage = `网盘搜索失败: ${error.message}`;
     }
 

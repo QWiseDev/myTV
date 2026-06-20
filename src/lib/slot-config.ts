@@ -3,6 +3,18 @@
  * 统一前端和后端的概率、符号和奖励配置
  */
 
+// 老虎机符号类型（部分符号含动态调整/变体字段，故设为可选）
+export interface SlotSymbol {
+  id: string;
+  name: string;
+  weight: number;
+  value: number;
+  rarity: string;
+  dynamic?: boolean;
+  variant?: string;
+  special?: boolean;
+}
+
 // 基础符号配置
 export const SLOT_SYMBOLS = [
   { id: 'j', name: '姬', weight: 140, value: 10, rarity: 'common' },
@@ -81,7 +93,7 @@ export const DYNAMIC_WEIGHT_CONFIG = {
 };
 
 // 动态权重计算函数
-export function getDynamicSymbols(symbols: any[], userCoins: number) {
+export function getDynamicSymbols(symbols: SlotSymbol[], userCoins: number) {
   return symbols.map(symbol => {
     let adjustedWeight = symbol.weight;
 
@@ -119,7 +131,7 @@ export function getDynamicSymbols(symbols: any[], userCoins: number) {
 }
 
 // 权重随机选择函数
-export function getRandomSymbol(symbols: any[], userCoins: number) {
+export function getRandomSymbol(symbols: SlotSymbol[], userCoins: number) {
   const dynamicSymbols = getDynamicSymbols(symbols, userCoins);
   const totalWeight = dynamicSymbols.reduce((sum, symbol) => sum + symbol.weight, 0);
   let random = Math.random() * totalWeight;
@@ -166,17 +178,13 @@ export function checkWin(results: string[]) {
   const hzCount = results.filter(s => hzIds.includes(s)).length;
   if (hzCount >= 2) {
     let multiplier = 0;
-    let name = '';
 
     if (hzCount === 4) {
       multiplier = 200;
-      name = '4侯总';
     } else if (hzCount === 3) {
       multiplier = 100;
-      name = '3侯总';
     } else if (hzCount === 2) {
       multiplier = 50;
-      name = '2侯总';
     }
 
     allResults.push({
@@ -212,7 +220,7 @@ export function checkWin(results: string[]) {
   }
 
   // 检查4个相同符号
-  for (const [symbol, count] of Object.entries(symbolCounts)) {
+  for (const [, count] of Object.entries(symbolCounts)) {
     if (count === 4) {
       allResults.push({ amount: 32, type: 'fourSame', independent: true });
     }
@@ -282,7 +290,7 @@ export function checkWin(results: string[]) {
 }
 
 // 获取调试信息函数
-export function getDebugInfo(symbols: any[], userCoins: number) {
+export function getDebugInfo(symbols: SlotSymbol[], userCoins: number) {
   const dynamicSymbols = getDynamicSymbols(symbols, userCoins);
   const hzSymbols = dynamicSymbols.filter(s => s.id.startsWith('hz'));
   const lawyerSymbols = dynamicSymbols.filter(s => s.id === 'lawyer');

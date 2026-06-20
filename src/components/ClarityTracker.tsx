@@ -33,7 +33,7 @@ export function ClarityTracker({
     const initializeClarity = () => {
       try {
         // 检查是否已经初始化
-        if ((window as any).clarity) {
+        if (window.clarity) {
           // 如果 Clarity 已经存在，初始化我们的 Analytics 并设置用户信息
           analytics.init();
           setClarityUserIdentifier();
@@ -55,7 +55,7 @@ export function ClarityTracker({
 
         // 等待 Clarity 初始化完成，然后初始化我们的 Analytics 并设置用户信息
         const initAnalytics = () => {
-          if ((window as any).clarity) {
+          if (window.clarity) {
             // 确保Analytics已初始化
             analytics.init();
             setClarityUserIdentifier();
@@ -86,36 +86,36 @@ export function ClarityTracker({
 
   // 设置 Clarity 用户识别信息的函数
   const setClarityUserIdentifier = () => {
-    if (typeof window === 'undefined' || !(window as any).clarity) {
+    if (typeof window === 'undefined' || !window.clarity) {
       return;
     }
 
     try {
       // 设置用户ID - 使用账号名作为唯一标识
       if (accountName) {
-        (window as any).clarity('set', 'userId', accountName);
+        window.clarity?.('set', 'userId', accountName);
       }
 
       // 设置显示名称 - 使用displayName或accountName
       const displayUserName = displayName || accountName;
       if (displayUserName) {
-        (window as any).clarity('set', 'username', displayUserName);
+        window.clarity?.('set', 'username', displayUserName);
       }
 
       // 设置会话类型
       if (sessionType) {
-        (window as any).clarity('set', 'sessionType', sessionType);
+        window.clarity?.('set', 'sessionType', sessionType);
       }
 
       // 设置用户角色
       const userRole = sessionType === 'premium' ? 'premium' :
                       sessionType === 'registered' ? 'registered' : 'guest';
-      (window as any).clarity('set', 'userRole', userRole);
+      window.clarity?.('set', 'userRole', userRole);
 
       // 设置自定义标签
       if (customTags) {
         Object.entries(customTags).forEach(([key, value]) => {
-          (window as any).clarity('set', key, value);
+          window.clarity?.('set', key, value);
         });
       }
 
@@ -123,7 +123,7 @@ export function ClarityTracker({
       if (email) {
         // 对邮箱进行脱敏处理，只显示用户名部分
         const emailUser = email.split('@')[0];
-        (window as any).clarity('set', 'emailDomain', emailUser);
+        window.clarity?.('set', 'emailDomain', emailUser);
       }
 
       console.log('[Clarity] User identifier set:', {

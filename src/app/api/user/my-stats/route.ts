@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     if ('response' in guardResult) {
       return guardResult.response;
     }
-    const { config, user: resolvedUser } = guardResult.resolved;
+    const { user: resolvedUser } = guardResult.resolved;
 
     // 获取用户个人统计数据
     const userStats = await db.getUserPlayStat(authInfo.username);

@@ -3,7 +3,6 @@ import { useCallback, useEffect,useRef } from 'react';
 import { SearchResult } from '@/lib/types';
 
 import { useAnalytics } from './useAnalytics';
-import { usePerformanceAnalytics } from './usePerformanceAnalytics';
 import { useSearchAnalytics } from './useUserBehaviorAnalytics';
 
 interface SearchPageAnalyticsOptions {
@@ -27,8 +26,6 @@ export function useSearchPageAnalytics(options: SearchPageAnalyticsOptions = {})
     trackSearchFilter,
     trackSearchSuggestion
   } = useSearchAnalytics();
-
-  const { trackApiRequest } = usePerformanceAnalytics();
 
   // 搜索状态 refs
   const searchSessionIdRef = useRef<string>(`search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
@@ -54,7 +51,7 @@ export function useSearchPageAnalytics(options: SearchPageAnalyticsOptions = {})
     searchTime: number,
     searchOptions?: {
       category?: string;
-      filters?: Record<string, any>;
+      filters?: Record<string, unknown>;
       searchType?: 'general' | 'advanced' | 'voice';
       searchFrom?: string;
     }

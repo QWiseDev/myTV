@@ -53,16 +53,6 @@ async function checkRateLimit(
   }
 }
 
-// 清理过期的频率限制缓存（内部使用）
-async function cleanExpiredRateLimitCache(): Promise<void> {
-  try {
-    await db.clearExpiredCache('tvbox-rate-limit');
-    console.log('Cleaned expired TVBox rate limit cache');
-  } catch (error) {
-    console.error('Failed to clean expired rate limit cache:', error);
-  }
-}
-
 // 并发控制器 - 限制同时请求数量（优化分类获取性能）
 class ConcurrencyLimiter {
   private running = 0;
@@ -484,7 +474,10 @@ export async function GET(request: NextRequest) {
                 const data = await response.json();
                 if (data.class && Array.isArray(data.class)) {
                   return data.class
-                    .map((cat: any) => cat.type_name || cat.name)
+                    .map(
+                      (cat: { type_name?: string; name?: string }) =>
+                        cat.type_name || cat.name || ''
+                    )
                     .filter((name: string) => name);
                 }
               }
@@ -833,7 +826,15 @@ export async function GET(request: NextRequest) {
       // 快速切换优化模式：专门针对资源源切换体验优化
       tvboxConfig = {
         spider: tvboxConfig.spider,
-        sites: tvboxConfig.sites.map((site: any) => {
+        sites: tvboxConfig.sites.map(
+          (
+            site: TVBoxSource & {
+              timeout?: unknown;
+              retry?: unknown;
+              header?: Record<string, string>;
+              changeable?: number;
+            }
+          ) => {
           const fastSite = { ...site };
           // 快速模式：移除可能导致卡顿的配置
           delete fastSite.timeout;
@@ -930,7 +931,7 @@ export async function GET(request: NextRequest) {
           },
         ],
         maxHomeVideoContent: '20',
-      } as any;
+      } as TVBoxConfig;
     }
 
     // 添加 Spider 状态透明化字段（帮助诊断）

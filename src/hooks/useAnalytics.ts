@@ -92,7 +92,7 @@ export function useAnalytics() {
     analytics.trackSearch(event);
   }, []);
 
-  const trackPageView = useCallback((page: string, title?: string, metadata?: Record<string, any>) => {
+  const trackPageView = useCallback((page: string, title?: string, metadata?: Record<string, unknown>) => {
     analytics.trackPageView(page, title, metadata);
   }, []);
 
@@ -114,7 +114,7 @@ export function useAnalytics() {
     analytics.trackApiPerformance(apiEndpoint, responseTime, statusCode);
   }, []);
 
-  const trackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, any>) => {
+  const trackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
     analytics.trackError(errorType, errorMessage, context);
   }, []);
 
@@ -128,7 +128,7 @@ export function useAnalytics() {
     analytics.trackUserRetention(dayCount);
   }, []);
 
-  const trackFeatureUsage = useCallback((featureName: string, used = true, metadata?: Record<string, any>) => {
+  const trackFeatureUsage = useCallback((featureName: string, used = true, metadata?: Record<string, unknown>) => {
     analytics.trackFeatureUsage(featureName, used, metadata);
   }, []);
 

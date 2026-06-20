@@ -491,8 +491,8 @@ class HybridCacheManager {
    * @deprecated 豆瓣缓存已迁移到统一存储，请使用 douban.client.ts 中的方法
    */
   private isDoubanCacheValid<T>(
-    cache: CacheData<T>,
-    type: 'details' | 'lists'
+    _cache: CacheData<T>,
+    _type: 'details' | 'lists'
   ): boolean {
     return false; // 始终返回false，强制使用新的缓存系统
   }
@@ -503,28 +503,28 @@ class HybridCacheManager {
   /**
    * @deprecated 豆瓣缓存已迁移到统一存储，请使用 douban.client.ts 中的方法
    */
-  getDoubanDetails(id: string): any | null {
+  getDoubanDetails(_id: string): any | null {
     return null; // 不再使用本地缓存，返回null强制使用新系统
   }
 
   /**
    * @deprecated 豆瓣缓存已迁移到统一存储，请使用 douban.client.ts 中的方法
    */
-  setDoubanDetails(id: string, data: any): void {
+  setDoubanDetails(_id: string, _data: any): void {
     // 不再使用本地缓存，空实现
   }
 
   /**
    * @deprecated 豆瓣缓存已迁移到统一存储，请使用 douban.client.ts 中的方法
    */
-  getDoubanList(cacheKey: string): any | null {
+  getDoubanList(_cacheKey: string): any | null {
     return null; // 不再使用本地缓存，返回null强制使用新系统
   }
 
   /**
    * @deprecated 豆瓣缓存已迁移到统一存储，请使用 douban.client.ts 中的方法
    */
-  setDoubanList(cacheKey: string, data: any): void {
+  setDoubanList(_cacheKey: string, _data: any): void {
     // 不再使用本地缓存，空实现
   }
 
@@ -1974,7 +1974,7 @@ export async function deleteSkipConfig(
  * @param id 豆瓣ID
  * @returns null
  */
-export function getDoubanDetailsCache(id: string): any | null {
+export function getDoubanDetailsCache(_id: string): any | null {
   return null; // 不再使用本地缓存
 }
 
@@ -1983,7 +1983,7 @@ export function getDoubanDetailsCache(id: string): any | null {
  * @param id 豆瓣ID
  * @param data 详情数据
  */
-export function setDoubanDetailsCache(id: string, data: any): void {
+export function setDoubanDetailsCache(_id: string, _data: any): void {
   // 不再使用本地缓存
 }
 
@@ -1996,10 +1996,10 @@ export function setDoubanDetailsCache(id: string, data: any): void {
  * @returns null
  */
 export function getDoubanListCache(
-  type: string,
-  tag: string,
-  pageStart: number,
-  pageSize: number
+  _type: string,
+  _tag: string,
+  _pageStart: number,
+  _pageSize: number
 ): any | null {
   return null; // 不再使用本地缓存
 }
@@ -2013,11 +2013,11 @@ export function getDoubanListCache(
  * @param data 列表数据
  */
 export function setDoubanListCache(
-  type: string,
-  tag: string,
-  pageStart: number,
-  pageSize: number,
-  data: any
+  _type: string,
+  _tag: string,
+  _pageStart: number,
+  _pageSize: number,
+  _data: any
 ): void {
   // 不再使用本地缓存
 }

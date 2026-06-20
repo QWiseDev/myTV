@@ -5,7 +5,7 @@ import { getAvailableApiSites } from '@/lib/config';
 import { getDetailFromApi } from '@/lib/downstream';
 
 // 🔧 新增：基于参数的内存缓存
-const detailCache = new Map<string, { data: any; timestamp: number }>();
+const detailCache = new Map<string, { data: unknown; timestamp: number }>();
 const DETAIL_CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
 
 export const runtime = 'nodejs';

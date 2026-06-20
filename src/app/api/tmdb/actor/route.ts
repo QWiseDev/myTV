@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
       'episode_count',
     ].includes(sortBy)
   ) {
-    filterOptions.sortBy = sortBy as any;
+    filterOptions.sortBy = sortBy as TMDBFilterOptions['sortBy'];
   }
   if (sortOrder && ['asc', 'desc'].includes(sortOrder)) {
-    filterOptions.sortOrder = sortOrder as any;
+    filterOptions.sortOrder = sortOrder as TMDBFilterOptions['sortOrder'];
   }
 
   // 结果限制

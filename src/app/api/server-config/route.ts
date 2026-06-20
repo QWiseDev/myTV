@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const config = await getConfig();
   console.log('TelegramAuthConfig:', config.TelegramAuthConfig);
 
-  const result: any = {
+  const result: Record<string, unknown> = {
     SiteName: config.SiteConfig.SiteName,
     DoubanProxyType: config.SiteConfig.DoubanProxyType,
     DoubanProxy: config.SiteConfig.DoubanProxy,

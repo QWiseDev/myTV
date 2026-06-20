@@ -129,7 +129,7 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
   }, [videoId, trackVideoLoadTime]);
 
   // 追踪播放错误
-  const trackPlaybackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, any>) => {
+  const trackPlaybackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
     trackError('video_playback_error', errorMessage, {
       error_type: errorType,
       video_id: videoId,

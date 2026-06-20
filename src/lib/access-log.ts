@@ -66,7 +66,7 @@ export class AccessLogService {
    * @param action 访问的菜单或动作，如 'home', 'search', 'play'
    * @param extraData 额外的数据
    */
-  public async logAccess(action: string, extraData?: Record<string, any>): Promise<void> {
+  public async logAccess(action: string, extraData?: Record<string, unknown>): Promise<void> {
     if (!this.isEnabled) {
       return;
     }
@@ -241,7 +241,7 @@ export class AccessLogService {
 /**
  * 快速记录访问日志的便捷函数
  */
-export function logAccess(action: string, extraData?: Record<string, any>): void {
+export function logAccess(action: string, extraData?: Record<string, unknown>): void {
   if (typeof window === 'undefined') return; // 服务端运行时不记录
 
   AccessLogService.getInstance()
@@ -258,7 +258,7 @@ export function logAccess(action: string, extraData?: Record<string, any>): void
  */
 export function useAccessLog(
   action: string,
-  extraData?: Record<string, any>
+  extraData?: Record<string, unknown>
 ): void {
   useEffect(() => {
     logAccess(action, {

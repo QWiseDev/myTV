@@ -283,7 +283,7 @@ ${
       }
     }
 
-    const requestBody: any = {
+    const requestBody: Record<string, unknown> = {
       model: requestModel,
       messages: chatMessages,
     };
@@ -637,7 +637,9 @@ export async function GET(request: NextRequest) {
 }
 
 // 视频链接解析处理函数
-async function handleVideoLinkParsing(videoLinks: any[]) {
+async function handleVideoLinkParsing(
+  videoLinks: Array<{ videoId: string; originalUrl: string }>
+) {
   const parsedVideos = [];
 
   for (const link of videoLinks) {
@@ -699,7 +701,10 @@ function extractYouTubeSearchKeywords(content: string): string[] {
 }
 
 // YouTube视频搜索函数（仅支持真实API）
-async function searchYouTubeVideos(keywords: string[], youtubeConfig: any) {
+async function searchYouTubeVideos(
+  keywords: string[],
+  youtubeConfig: { apiKey?: string }
+) {
   const videos = [];
 
   // 检查API Key
