@@ -479,6 +479,7 @@ export function useSourceInitialization({
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
           setLoading(false);
+          void enrichAvailableSources(currentDetail);
           return;
         }
 
@@ -655,6 +656,9 @@ export function useSourceInitialization({
         setDetail(resolvedDetail);
         sourceSearchLoaderRef.current = () =>
           enrichAvailableSources(resolvedDetail);
+        if (directSourceRequested) {
+          void enrichAvailableSources(resolvedDetail);
+        }
         if (currentEpisodeIndexRef.current >= resolvedDetail.episodes.length) {
           setCurrentEpisodeIndex(0);
         }
@@ -680,9 +684,6 @@ export function useSourceInitialization({
         setTimeout(() => {
           if (isActive()) {
             setLoading(false);
-            if (directSourceRequested) {
-              void enrichAvailableSources(detailData);
-            }
           }
         }, 1000);
       } catch (error) {

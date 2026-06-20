@@ -94,7 +94,7 @@ describe('useSourceInitialization', () => {
     jest.clearAllMocks();
   });
 
-  test('loads explicit source detail before running background source search', async () => {
+  test('loads explicit source detail and starts background source search', async () => {
     const params = createParams();
 
     renderHook(() => useSourceInitialization(params));
@@ -103,17 +103,9 @@ describe('useSourceInitialization', () => {
       expect(params.setDetail).toHaveBeenCalledWith(detail);
     });
 
-    expect(mockedCachedGet).toHaveBeenCalledTimes(1);
     expect(mockedCachedGet).toHaveBeenCalledWith('/api/detail', {
       source: 'site-a',
       id: 'video-1',
-    });
-    expect(mockedCachedGet).not.toHaveBeenCalledWith('/api/search', {
-      q: expect.any(String),
-    });
-
-    act(() => {
-      jest.advanceTimersByTime(1000);
     });
 
     await waitFor(() => {
@@ -123,7 +115,7 @@ describe('useSourceInitialization', () => {
     });
   });
 
-  test('manual source loading searches other sites after explicit detail init', async () => {
+  test('background source search merges other sites after explicit detail init', async () => {
     const otherSource: SearchResult = {
       ...detail,
       id: 'video-2',
@@ -141,23 +133,21 @@ describe('useSourceInitialization', () => {
     });
     const params = createParams();
 
-    const { result } = renderHook(() => useSourceInitialization(params));
+    renderHook(() => useSourceInitialization(params));
 
     await waitFor(() => {
       expect(params.setDetail).toHaveBeenCalledWith(detail);
     });
 
-    await act(async () => {
-      await result.current.loadAvailableSources();
-    });
-
     expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
       q: '测试影片',
     });
-    expect(params.setAvailableSources).toHaveBeenLastCalledWith([
-      detail,
-      otherSource,
-    ]);
+    await waitFor(() => {
+      expect(params.setAvailableSources).toHaveBeenLastCalledWith([
+        detail,
+        otherSource,
+      ]);
+    });
   });
 
   test('skips reinitialization and exits loading when route params already match current detail', async () => {
@@ -175,22 +165,19 @@ describe('useSourceInitialization', () => {
       detailRef: { current: switchedDetail },
     });
 
-    const { result } = renderHook(() => useSourceInitialization(params));
+    renderHook(() => useSourceInitialization(params));
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(mockedCachedGet).not.toHaveBeenCalled();
     expect(params.setLoading).toHaveBeenCalledWith(false);
     expect(params.setAvailableSources).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await result.current.loadAvailableSources();
-    });
-
-    expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
-      q: '测试影片',
+    await waitFor(() => {
+      expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
+        q: '测试影片',
+      });
     });
   });
 
