@@ -100,6 +100,7 @@ function PlayPageClient() {
       id: params.get('id') || '',
       title: params.get('title') || '',
       year: params.get('year') || '',
+      poster: params.get('poster') || '',
       doubanId,
       searchTitle: params.get('stitle') || '',
       searchType: params.get('stype') || '',
@@ -139,7 +140,7 @@ function PlayPageClient() {
     video: {
       title: routeParams.title,
       year: routeParams.year,
-      cover: '',
+      cover: routeParams.poster,
       source: routeParams.source,
       id: routeParams.id,
       doubanId: routeParams.doubanId,
@@ -613,7 +614,6 @@ function PlayPageClient() {
   >('initing');
 
   // 播放进度保存相关
-  const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSaveTimeRef = useRef<number>(0);
 
   // 弹幕加载状态管理，防止重复加载
@@ -661,10 +661,6 @@ function PlayPageClient() {
   }, []);
 
   const clearPlaybackTimers = useCallback(() => {
-    if (saveIntervalRef.current) {
-      clearInterval(saveIntervalRef.current);
-      saveIntervalRef.current = null;
-    }
     if (seekResetTimeoutRef.current) {
       clearTimeout(seekResetTimeoutRef.current);
       seekResetTimeoutRef.current = null;
@@ -736,6 +732,7 @@ function PlayPageClient() {
     videoTitle: routeParams.title,
     searchTitle,
     fallbackTitle: routePlayRecord?.title,
+    fallbackCover: routeParams.poster,
     fallbackDoubanId: routePlayRecord?.douban_id,
     searchType,
     needPreferRef,
@@ -961,6 +958,7 @@ function PlayPageClient() {
     currentSourceRef,
     currentIdRef,
     videoTitleRef,
+    videoCover,
     videoDoubanIdRef,
     detailRef,
     playRecords,

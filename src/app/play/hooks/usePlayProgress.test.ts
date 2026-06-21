@@ -50,6 +50,7 @@ describe('usePlayProgress', () => {
         currentSourceRef: { current: 'source' },
         currentIdRef: { current: 'id' },
         videoTitleRef: { current: 'Title' },
+        videoCover: '',
         videoDoubanIdRef: { current: 123 },
         detailRef: { current: createDetail() },
         playRecords: null,
@@ -89,6 +90,7 @@ describe('buildPlayProgressPayload', () => {
       currentSource: 'source',
       currentId: 'id',
       videoTitle: 'Title',
+      videoCover: '',
       videoDoubanId: 123,
       detail: {
         ...createDetail(),
@@ -126,6 +128,7 @@ describe('buildPlayProgressPayload', () => {
       currentSource: 'source',
       currentId: 'id',
       videoTitle: 'Title',
+      videoCover: '',
       videoDoubanId: 123,
       detail: {
         ...createDetail(),
@@ -145,5 +148,38 @@ describe('buildPlayProgressPayload', () => {
     });
 
     expect(payload?.record.cover).toBe('https://source.example/poster.jpg');
+  });
+
+  test('uses route cover before source poster when detail posters are unavailable', () => {
+    const routeCover =
+      'https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg';
+    const payload = buildPlayProgressPayload({
+      player: {
+        currentTime: 75,
+        duration: 1200,
+      } as ArtPlayerLike,
+      currentSource: 'source',
+      currentId: 'id',
+      videoTitle: 'Title',
+      videoCover: routeCover,
+      videoDoubanId: 123,
+      detail: {
+        ...createDetail(),
+        poster: 'https://broken-source.example/poster.jpg',
+      },
+      playRecords: null,
+      availableSources: [
+        {
+          ...createDetail(),
+          poster: 'https://broken-source.example/poster.jpg',
+        },
+      ],
+      movieDetails: null,
+      bangumiDetails: null,
+      currentEpisodeIndex: 0,
+      searchTitle: 'Title',
+    });
+
+    expect(payload?.record.cover).toBe(routeCover);
   });
 });

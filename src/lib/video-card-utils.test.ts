@@ -27,9 +27,29 @@ describe('buildPlayUrl', () => {
         query: '南部档案',
         year: '2026',
         searchType: 'tv',
-      })
+      }),
     ).toBe(
-      '/play?source=iqiyizyapi.com&id=79487&title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&stitle=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&stype=tv'
+      '/play?source=iqiyizyapi.com&id=79487&title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&stitle=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&stype=tv',
+    );
+  });
+
+  it('keeps poster metadata when opening a douban card', () => {
+    const poster =
+      'https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg';
+
+    expect(
+      buildPlayUrl({
+        from: 'douban',
+        title: '南部档案',
+        year: '2026',
+        doubanId: 35465012,
+        searchType: 'tv',
+        poster,
+      }),
+    ).toBe(
+      `/play?title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&douban_id=35465012&poster=${encodeURIComponent(
+        poster,
+      )}&stype=tv`,
     );
   });
 });

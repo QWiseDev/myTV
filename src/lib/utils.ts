@@ -91,7 +91,7 @@ const DOUBAN_IMAGE_FALLBACK_TYPES: DoubanImageProxyType[] = [
   'server',
 ];
 
-const IMAGE_PLACEHOLDER_URL = '/logo.svg';
+export const IMAGE_PLACEHOLDER_URL = '/logo.svg';
 
 function getRuntimeConfigValue(key: string): string {
   if (typeof window === 'undefined') return '';
@@ -135,7 +135,7 @@ function getConfiguredImageProxyUrl(): string {
 
 function applyDoubanImageProxy(
   originalUrl: string,
-  proxyType: DoubanImageProxyType | 'custom'
+  proxyType: DoubanImageProxyType | 'custom',
 ): string {
   switch (proxyType) {
     case 'custom': {
@@ -149,12 +149,12 @@ function applyDoubanImageProxy(
     case 'cmliussss-cdn-ali':
       return originalUrl.replace(
         /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.com'
+        'img.doubanio.cmliussss.com',
       );
     case 'cmliussss-cdn-tencent':
       return originalUrl.replace(
         /img\d+\.doubanio\.com/g,
-        'img.doubanio.cmliussss.net'
+        'img.doubanio.cmliussss.net',
       );
     case 'img3':
       return originalUrl.replace(/img\d+\.doubanio\.com/g, 'img3.doubanio.com');
@@ -180,7 +180,7 @@ function isBangumiImageUrl(url: string): boolean {
   }
 }
 
-function isKnownInvalidImageUrl(url: string): boolean {
+export function isKnownInvalidImageUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     return (
@@ -190,6 +190,30 @@ function isKnownInvalidImageUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function isUsableImageUrl(
+  url: string | null | undefined,
+): url is string {
+  const trimmedUrl = url?.trim();
+  return Boolean(
+    trimmedUrl &&
+    trimmedUrl !== IMAGE_PLACEHOLDER_URL &&
+    !isKnownInvalidImageUrl(trimmedUrl),
+  );
+}
+
+export function selectUsableImageUrl(
+  ...urls: Array<string | null | undefined>
+): string {
+  for (const url of urls) {
+    const trimmedUrl = url?.trim();
+    if (isUsableImageUrl(trimmedUrl)) {
+      return trimmedUrl;
+    }
+  }
+
+  return '';
 }
 
 function getServerImageProxyUrl(originalUrl: string): string {
@@ -211,7 +235,7 @@ export function processImageUrl(originalUrl: string): string {
 
   const processedUrl = applyDoubanImageProxy(
     originalUrl,
-    getConfiguredImageProxyType()
+    getConfiguredImageProxyType(),
   );
 
   if (isOfficialDoubanImageUrl(processedUrl)) {
@@ -251,9 +275,9 @@ export function getImageFallbackUrls(originalUrl: string): string[] {
   return Array.from(
     new Set(
       proxyTypes.map((proxyType) =>
-        applyDoubanImageProxy(originalUrl, proxyType)
-      )
-    )
+        applyDoubanImageProxy(originalUrl, proxyType),
+      ),
+    ),
   ).filter(Boolean);
 }
 
@@ -265,7 +289,7 @@ export function getImageFallbackUrls(originalUrl: string): string[] {
  */
 export async function getVideoResolutionFromM3u8(
   m3u8Url: string,
-  timeout = 5000
+  timeout = 5000,
 ): Promise<{
   quality: string;
   loadSpeed: string;
@@ -338,16 +362,16 @@ export async function getVideoResolutionFromM3u8(
             height >= 2160
               ? '4K'
               : height >= 1440
-              ? '2K'
-              : height >= 1080
-              ? '1080p'
-              : height >= 720
-              ? '720p'
-              : height >= 480
-              ? '480p'
-              : height > 0
-              ? 'SD'
-              : '未知';
+                ? '2K'
+                : height >= 1080
+                  ? '1080p'
+                  : height >= 720
+                    ? '720p'
+                    : height >= 480
+                      ? '480p'
+                      : height > 0
+                        ? 'SD'
+                        : '未知';
 
           const result = {
             quality,
@@ -372,7 +396,7 @@ export async function getVideoResolutionFromM3u8(
           });
 
           console.log(
-            `✅ iPad 文本解析成功: ${quality} (${resolutions.length}个清晰度)`
+            `✅ iPad 文本解析成功: ${quality} (${resolutions.length}个清晰度)`,
           );
           return result;
         }
@@ -414,7 +438,9 @@ export async function getVideoResolutionFromM3u8(
 
       try {
         const response = await fetch(m3u8Url, {
-          signal: AbortSignal.timeout(Math.min(timeout, isMobile ? 2500 : 3500)),
+          signal: AbortSignal.timeout(
+            Math.min(timeout, isMobile ? 2500 : 3500),
+          ),
         });
         const pingTimeFast = Math.round(performance.now() - pingStartFast);
 
@@ -468,7 +494,7 @@ export async function getVideoResolutionFromM3u8(
         }
 
         const sortedLevels = [...levels].sort(
-          (a, b) => b.height - a.height || b.bitrate - a.bitrate
+          (a, b) => b.height - a.height || b.bitrate - a.bitrate,
         );
         const best = sortedLevels[0];
         const worst = sortedLevels[sortedLevels.length - 1];
@@ -477,24 +503,24 @@ export async function getVideoResolutionFromM3u8(
           best.height >= 2160
             ? '4K'
             : best.height >= 1440
-            ? '2K'
-            : best.height >= 1080
-            ? '1080p'
-            : best.height >= 720
-            ? '720p'
-            : best.height >= 480
-            ? '480p'
-            : best.height > 0
-            ? 'SD'
-            : '未知';
+              ? '2K'
+              : best.height >= 1080
+                ? '1080p'
+                : best.height >= 720
+                  ? '720p'
+                  : best.height >= 480
+                    ? '480p'
+                    : best.height > 0
+                      ? 'SD'
+                      : '未知';
 
         const speedKBps = best.bitrate > 0 ? best.bitrate / 8 / 1024 : 0;
         const loadSpeed =
           speedKBps >= 1024
             ? `${(speedKBps / 1024).toFixed(2)} MB/s`
             : speedKBps > 0
-            ? `${speedKBps.toFixed(2)} KB/s`
-            : '未知';
+              ? `${speedKBps.toFixed(2)} KB/s`
+              : '未知';
 
         return {
           quality,

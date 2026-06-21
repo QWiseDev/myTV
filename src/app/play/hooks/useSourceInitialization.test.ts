@@ -248,4 +248,26 @@ describe('useSourceInitialization', () => {
     );
     expect(window.location.search).toContain('douban_id=456');
   });
+
+  test('keeps route poster as fallback cover during explicit source initialization', async () => {
+    const routePoster =
+      'https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg';
+    const params = createParams({
+      fallbackCover: routePoster,
+    });
+
+    renderHook(() => useSourceInitialization(params));
+
+    await waitFor(() => {
+      expect(params.setDetail).toHaveBeenCalledWith({
+        ...detail,
+        poster: routePoster,
+      });
+    });
+
+    expect(params.setVideoCover).toHaveBeenCalledWith(routePoster);
+    expect(new URL(window.location.href).searchParams.get('poster')).toBe(
+      routePoster,
+    );
+  });
 });

@@ -4,6 +4,7 @@ import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
 import { cachedGet } from '@/lib/api-cache.client';
 import type { SearchResult } from '@/lib/types';
+import { selectUsableImageUrl } from '@/lib/utils';
 
 import { SpeedTestProgress } from '../types';
 import {
@@ -36,6 +37,7 @@ export interface UseSourceInitializationParams {
   videoTitle: string;
   searchTitle: string;
   fallbackTitle?: string;
+  fallbackCover?: string;
   fallbackDoubanId?: number;
   searchType: string;
   needPreferRef: MutableRefObject<boolean>;
@@ -80,6 +82,7 @@ export function useSourceInitialization({
   videoTitle,
   searchTitle,
   fallbackTitle,
+  fallbackCover,
   fallbackDoubanId,
   searchType,
   needPreferRef,
@@ -469,10 +472,10 @@ export function useSourceInitialization({
           currentIdRef?.current === currentId &&
           Boolean(
             currentDetail &&
-              findSourceByIdentity([currentDetail], {
-                source: currentSource,
-                id: currentId,
-              }),
+            findSourceByIdentity([currentDetail], {
+              source: currentSource,
+              id: currentId,
+            }),
           );
 
         if (routeAlreadyApplied && currentDetail) {
@@ -637,10 +640,14 @@ export function useSourceInitialization({
           searchTitle ||
           '';
         const resolvedYear = detailData.year || videoYearRef.current || '';
+        const resolvedCover = selectUsableImageUrl(
+          fallbackCover,
+          detailData.poster,
+        );
 
         setVideoYear(resolvedYear);
         setVideoTitle(resolvedTitle);
-        setVideoCover(detailData.poster);
+        setVideoCover(resolvedCover);
         const resolvedDoubanId = resolveDoubanId(
           detailData,
           videoDoubanIdRef.current || fallbackDoubanId || null,
@@ -649,6 +656,7 @@ export function useSourceInitialization({
           ...detailData,
           title: resolvedTitle,
           year: resolvedYear,
+          poster: resolvedCover || detailData.poster,
           douban_id: resolvedDoubanId || detailData.douban_id,
         };
 
@@ -670,6 +678,11 @@ export function useSourceInitialization({
           newUrl.searchParams.set('year', resolvedYear);
         }
         newUrl.searchParams.set('title', resolvedTitle);
+        if (resolvedCover) {
+          newUrl.searchParams.set('poster', resolvedCover);
+        } else {
+          newUrl.searchParams.delete('poster');
+        }
         if (resolvedDoubanId > 0) {
           newUrl.searchParams.set('douban_id', String(resolvedDoubanId));
         } else {
@@ -713,6 +726,7 @@ export function useSourceInitialization({
     optimizationEnabled,
     searchTitle,
     fallbackTitle,
+    fallbackCover,
     fallbackDoubanId,
     searchType,
     setAvailableSources,

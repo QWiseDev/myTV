@@ -100,7 +100,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       priority = false,
       sizes,
     }: VideoCardProps,
-    ref
+    ref,
   ) {
     const router = useRouter();
     const [favorited, setFavorited] = useState(false);
@@ -110,18 +110,18 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     const [imageProxyVersion, setImageProxyVersion] = useState(0);
     const [showMobileActions, setShowMobileActions] = useState(false);
     const [searchFavorited, setSearchFavorited] = useState<boolean | null>(
-      null
+      null,
     ); // 搜索结果的收藏状态
 
     // 可外部修改的可控字段
     const [dynamicEpisodes, setDynamicEpisodes] = useState<number | undefined>(
-      episodes
+      episodes,
     );
     const [dynamicSourceNames, setDynamicSourceNames] = useState<
       string[] | undefined
     >(source_names);
     const [dynamicDoubanId, setDynamicDoubanId] = useState<number | undefined>(
-      douban_id
+      douban_id,
     );
 
     useEffect(() => {
@@ -155,9 +155,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         ? 'movie'
         : 'tv'
       : type;
+    const entryPoster =
+      from === 'douban' || from === 'search' ? actualPoster : undefined;
     const imageFallbackUrls = useMemo(
       () => getImageFallbackUrls(actualPoster),
-      [actualPoster, imageProxyVersion]
+      [actualPoster, imageProxyVersion],
     );
     const imageSrc =
       imageFallbackUrls[imageFallbackIndex] || processImageUrl(actualPoster);
@@ -191,12 +193,15 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         }
       };
 
-      window.addEventListener('doubanImageProxyChanged', handleImageProxyChange);
+      window.addEventListener(
+        'doubanImageProxyChanged',
+        handleImageProxyChange,
+      );
       window.addEventListener('storage', handleStorageChange);
       return () => {
         window.removeEventListener(
           'doubanImageProxyChanged',
-          handleImageProxyChange
+          handleImageProxyChange,
         );
         window.removeEventListener('storage', handleStorageChange);
       };
@@ -229,7 +234,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           window as Window & {
             requestIdleCallback: (
               callback: IdleRequestCallback,
-              options?: IdleRequestOptions
+              options?: IdleRequestOptions,
             ) => number;
           }
         ).requestIdleCallback(
@@ -238,7 +243,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               void fetchFavoriteStatus();
             }, 300);
           },
-          { timeout: 1200 }
+          { timeout: 1200 },
         );
       } else {
         delayTimer = setTimeout(() => {
@@ -252,7 +257,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         (newFavorites: Record<string, any>) => {
           const isNowFavorited = !!newFavorites[storageKey];
           setFavorited(isNowFavorited);
-        }
+        },
       );
 
       return () => {
@@ -328,7 +333,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         actualEpisodes,
         favorited,
         searchFavorited,
-      ]
+      ],
     );
 
     const handleDeleteRecord = useCallback(
@@ -347,7 +352,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           throw new Error('删除播放记录失败');
         }
       },
-      [from, actualSource, actualId, onDelete]
+      [from, actualSource, actualId, onDelete],
     );
 
     const handleClick = useCallback(() => {
@@ -362,6 +367,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         searchType: actualSearchType,
         isAggregate,
         query: actualQuery,
+        poster: entryPoster,
       });
       if (url) router.push(url);
     }, [
@@ -376,6 +382,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       actualQuery,
       actualSearchType,
       actualDoubanId,
+      entryPoster,
     ]);
 
     // 新标签页播放处理函数
@@ -391,6 +398,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         searchType: actualSearchType,
         isAggregate,
         query: actualQuery,
+        poster: entryPoster,
       });
       if (url) window.open(url, '_blank');
     }, [
@@ -404,6 +412,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       actualQuery,
       actualSearchType,
       actualDoubanId,
+      entryPoster,
     ]);
 
     // 检查搜索结果的收藏状态
@@ -809,7 +818,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         />
       </>
     );
-  }
+  },
 );
 
 export default memo(VideoCard);

@@ -4,6 +4,7 @@ import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
 import { generateStorageKey, savePlayRecord } from '@/lib/db.client';
 import type { PlayRecord, SearchResult } from '@/lib/types';
+import { selectUsableImageUrl } from '@/lib/utils';
 
 import type { BangumiDetails, MovieDetails } from '../types';
 import type { ArtPlayerLike } from '../utils/danmakuRuntime';
@@ -13,6 +14,7 @@ interface UsePlayProgressOptions {
   currentSourceRef: MutableRefObject<string>;
   currentIdRef: MutableRefObject<string>;
   videoTitleRef: MutableRefObject<string>;
+  videoCover: string;
   videoDoubanIdRef: MutableRefObject<number | null | undefined>;
   detailRef: MutableRefObject<SearchResult | null>;
   playRecords: Record<string, PlayRecord> | null;
@@ -39,6 +41,7 @@ type BuildPlayProgressPayloadOptions = {
   currentSource: string;
   currentId: string;
   videoTitle: string;
+  videoCover: string;
   videoDoubanId: number | null | undefined;
   detail: SearchResult | null;
   playRecords: Record<string, PlayRecord> | null;
@@ -49,36 +52,12 @@ type BuildPlayProgressPayloadOptions = {
   searchTitle: string;
 };
 
-function isKnownBadCover(cover: string): boolean {
-  if (!cover || cover === '/logo.svg') return true;
-
-  try {
-    const parsedUrl = new URL(cover);
-    return (
-      parsedUrl.hostname === '018.shoutu.net' &&
-      parsedUrl.pathname === '/static/images/logo.jpg'
-    );
-  } catch {
-    return false;
-  }
-}
-
-function getUsableCover(...covers: Array<string | null | undefined>): string {
-  for (const cover of covers) {
-    const trimmedCover = cover?.trim();
-    if (trimmedCover && !isKnownBadCover(trimmedCover)) {
-      return trimmedCover;
-    }
-  }
-
-  return '';
-}
-
 export function buildPlayProgressPayload({
   player,
   currentSource,
   currentId,
   videoTitle,
+  videoCover,
   videoDoubanId,
   detail,
   playRecords,
@@ -118,9 +97,10 @@ export function buildPlayProgressPayload({
     (source) => source.source === currentSource && source.id === currentId,
   );
   const remarksToSave = sourceFromList?.remarks || detail.remarks;
-  const coverToSave = getUsableCover(
+  const coverToSave = selectUsableImageUrl(
     bangumiDetails?.images?.large,
     movieDetails?.poster,
+    videoCover,
     detail.poster,
     sourceFromList?.poster,
     existingRecord?.cover,
@@ -178,6 +158,7 @@ export function usePlayProgress({
   currentSourceRef,
   currentIdRef,
   videoTitleRef,
+  videoCover,
   videoDoubanIdRef,
   detailRef,
   playRecords,
@@ -199,12 +180,16 @@ export function usePlayProgress({
 
   const movieDetailsRef = useRef(movieDetails);
   const bangumiDetailsRef = useRef(bangumiDetails);
+  const videoCoverRef = useRef(videoCover);
   useEffect(() => {
     movieDetailsRef.current = movieDetails;
   }, [movieDetails]);
   useEffect(() => {
     bangumiDetailsRef.current = bangumiDetails;
   }, [bangumiDetails]);
+  useEffect(() => {
+    videoCoverRef.current = videoCover;
+  }, [videoCover]);
 
   const saveCurrentPlayProgress = useCallback(async () => {
     const payload = buildPlayProgressPayload({
@@ -212,6 +197,7 @@ export function usePlayProgress({
       currentSource: currentSourceRef.current,
       currentId: currentIdRef.current,
       videoTitle: videoTitleRef.current,
+      videoCover: videoCoverRef.current,
       videoDoubanId: videoDoubanIdRef.current,
       detail: detailRef.current,
       playRecords: playRecordsRef.current,
@@ -264,6 +250,7 @@ export function usePlayProgress({
         currentSource: currentSourceRef.current,
         currentId: currentIdRef.current,
         videoTitle: videoTitleRef.current,
+        videoCover: videoCoverRef.current,
         videoDoubanId: videoDoubanIdRef.current,
         detail: detailRef.current,
         playRecords: playRecordsRef.current,
