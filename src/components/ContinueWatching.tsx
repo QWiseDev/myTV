@@ -8,16 +8,17 @@ import {
   sortHomeContinueWatchingRecords,
 } from '@/lib/home-display';
 import type { PlayRecord } from '@/lib/types';
-import type { WatchingUpdate } from '@/lib/watching-updates';
+import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
 import ScrollableRow from '@/components/ScrollableRow';
 import SectionTitle from '@/components/SectionTitle';
+import SkeletonCard from '@/components/SkeletonCard';
 import VideoCard from '@/components/VideoCard';
 
 interface ContinueWatchingProps {
   className?: string;
   playRecords: Record<string, PlayRecord> | null;
-  watchingUpdates?: WatchingUpdate | null;
+  watchingUpdates?: WatchingUpdatesCache | null;
   loading: boolean;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
@@ -45,56 +46,52 @@ export default function ContinueWatching({
     [playRecords],
   );
 
-  const watchingUpdatesMap = useMemo(() => {
-    if (!watchingUpdates?.updatedSeries?.length) {
-      return new Map<string, WatchingUpdate['updatedSeries'][number]>();
-    }
-
-    return new Map(
-      watchingUpdates.updatedSeries.map((series) => [
-        `${series.sourceKey}+${series.videoId}`,
-        series,
-      ]),
+  // 一次性处理 watchingUpdates 的所有派生数据，减少 useMemo 和遍历次数
+  const {
+    watchingUpdatesMap,
+    newEpisodeSeries,
+    continueWatchingSeries,
+    continueWatchingMap,
+    latestTotalEpisodesByKey,
+  } = useMemo(() => {
+    const seriesList = (watchingUpdates?.updatedSeries || []).filter((s) =>
+      Boolean(s.videoId),
     );
-  }, [watchingUpdates]);
 
-  const watchingSeriesList = useMemo(
-    () =>
-      (watchingUpdates?.updatedSeries || []).filter((series) =>
-        Boolean(series.videoId),
-      ),
-    [watchingUpdates],
-  );
+    const updatesMap = new Map<
+      string,
+      WatchingUpdatesCache['updatedSeries'][number]
+    >();
+    const totalEpisodesMap = new Map<string, number>();
 
-  const newEpisodeSeries = useMemo(
-    () => watchingSeriesList.filter((series) => series.hasNewEpisode),
-    [watchingSeriesList],
-  );
-
-  const continueWatchingSeries = useMemo(
-    () =>
-      watchingSeriesList.filter(
-        (series) => series.hasContinueWatching && !series.hasNewEpisode,
-      ),
-    [watchingSeriesList],
-  );
-
-  const continueWatchingMap = useMemo(() => {
-    const map = new Map<string, WatchingUpdate['updatedSeries'][number]>();
-    continueWatchingSeries.forEach((series) => {
-      map.set(`${series.sourceKey}+${series.videoId}`, series);
-    });
-    return map;
-  }, [continueWatchingSeries]);
-
-  const latestTotalEpisodesByKey = useMemo(() => {
-    const map = new Map<string, number>();
     watchingUpdates?.updatedSeries?.forEach((series) => {
+      const key = `${series.sourceKey}+${series.videoId}`;
+      updatesMap.set(key, series);
       if (series.totalEpisodes > 0) {
-        map.set(`${series.sourceKey}+${series.videoId}`, series.totalEpisodes);
+        totalEpisodesMap.set(key, series.totalEpisodes);
       }
     });
-    return map;
+
+    const newEpisodes = seriesList.filter((s) => s.hasNewEpisode);
+    const continueWatching = seriesList.filter(
+      (s) => s.hasContinueWatching && !s.hasNewEpisode,
+    );
+
+    const cwMap = new Map<
+      string,
+      WatchingUpdatesCache['updatedSeries'][number]
+    >();
+    continueWatching.forEach((series) => {
+      cwMap.set(`${series.sourceKey}+${series.videoId}`, series);
+    });
+
+    return {
+      watchingUpdatesMap: updatesMap,
+      newEpisodeSeries: newEpisodes,
+      continueWatchingSeries: continueWatching,
+      continueWatchingMap: cwMap,
+      latestTotalEpisodesByKey: totalEpisodesMap,
+    };
   }, [watchingUpdates]);
 
   const displayRecords = useMemo(
@@ -110,10 +107,10 @@ export default function ContinueWatching({
     return null;
   }
 
-  // 计算播放进度百分比
+  // 计算播放进度百分比（限制在 0-100 范围内）
   const getProgress = (record: PlayRecord) => {
-    if (record.total_time === 0) return 0;
-    return (record.play_time / record.total_time) * 100;
+    if (record.total_time <= 0) return 0;
+    return Math.min(100, Math.round((record.play_time / record.total_time) * 100));
   };
 
   // 从 key 中解析 source 和 id
@@ -196,11 +193,7 @@ export default function ContinueWatching({
                 key={index}
                 className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
               >
-                <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-200 animate-pulse dark:bg-gray-800'>
-                  <div className='absolute inset-0 bg-gray-300 dark:bg-gray-700'></div>
-                </div>
-                <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
-                <div className='mt-1 h-3 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
+                <SkeletonCard />
               </div>
             ))
           : // 显示真实数据

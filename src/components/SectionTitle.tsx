@@ -7,14 +7,14 @@ interface SectionTitleProps {
   iconColor?: string;
 }
 
-export default function SectionTitle({ title, icon: Icon }: SectionTitleProps) {
+export default function SectionTitle({ title, icon: Icon, iconColor }: SectionTitleProps) {
   return (
     <div className='relative inline-block group'>
       {/* 标题文本 */}
       <div className='flex items-center gap-2'>
         {/* 图标 */}
         {Icon && (
-          <div className='text-[#b85c38] transition-transform duration-300 group-hover:scale-105 dark:text-[#e09a7a]'>
+          <div className={`transition-transform duration-300 group-hover:scale-105 ${iconColor || 'text-[#b85c38] dark:text-[#e09a7a]'}`}>
             <Icon size={24} strokeWidth={2.5} />
           </div>
         )}

@@ -81,18 +81,7 @@ function ScrollableRow({
       checkScroll();
     }, 100);
 
-    // 监听窗口大小变化（使用防抖）
-    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const handleResize = () => {
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      resizeTimeout = setTimeout(checkScroll, 150);
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    // 创建一个 ResizeObserver 来监听容器大小变化
+    // 使用 ResizeObserver 监听容器大小变化
     const resizeObserver = new ResizeObserver(() => {
       // 使用防抖来减少不必要的检查
       if (checkScrollTimeoutRef.current) {
@@ -107,11 +96,7 @@ function ScrollableRow({
     }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
       if (checkScrollTimeoutRef.current) {
         clearTimeout(checkScrollTimeoutRef.current);
       }
