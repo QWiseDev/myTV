@@ -33,6 +33,7 @@ export default function ContinueWatching({
   onClearAll,
 }: ContinueWatchingProps) {
   // 将播放记录转换为数组并根据 save_time 由近到远排序
+  // 预截断到 60 条（最终展示 30 条，预留排序空间），避免全量记录遍历
   const recordsArray = useMemo(
     () =>
       playRecords
@@ -42,6 +43,7 @@ export default function ContinueWatching({
               key,
             }))
             .sort((a, b) => b.save_time - a.save_time)
+            .slice(0, 60)
         : [],
     [playRecords],
   );
@@ -230,11 +232,13 @@ export default function ContinueWatching({
                     />
 
                     {shouldShowContinueWatchingBadge && (
-                      <div className='absolute inset-0 rounded-lg ring-2 ring-blue-400/60 animate-pulse pointer-events-none z-[501] transition-transform duration-300 ease-in-out group-hover/card:scale-[1.05]'></div>
-                    )}
-
-                    {newEpisodesCount > 0 && (
-                      <div className='absolute inset-0 rounded-lg ring-2 ring-red-400/60 animate-pulse pointer-events-none z-[501] transition-transform duration-300 ease-in-out group-hover/card:scale-[1.05]'></div>
+                      <div
+                        className={`absolute inset-0 rounded-lg animate-pulse pointer-events-none z-[501] transition-transform duration-300 ease-in-out group-hover/card:scale-[1.05] ${
+                          newEpisodesCount > 0
+                            ? 'ring-2 ring-red-400/60'
+                            : 'ring-2 ring-blue-400/60'
+                        }`}
+                      ></div>
                     )}
                   </div>
                   {/* 新集数徽章 */}

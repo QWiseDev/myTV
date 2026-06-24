@@ -791,6 +791,47 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
 }
 
 /**
+ * 获取最近的播放记录（按 save_time 倒序取前 N 条）。
+ * 用于首页继续观看等非全量场景，避免全量记录的网络传输和客户端处理。
+ */
+export async function getRecentPlayRecords(
+  limit = 60,
+): Promise<Record<string, PlayRecord>> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  // 数据库模式：调用 API 加 ?limit=N
+  if (STORAGE_TYPE !== 'localstorage') {
+    try {
+      const freshData = await fetchFromApi<Record<string, PlayRecord>>(
+        `/api/playrecords?limit=${limit}`,
+      );
+      return freshData;
+    } catch (err) {
+      console.warn('获取最近播放记录失败:', err);
+      triggerGlobalError('获取最近播放记录失败');
+      return {};
+    }
+  }
+
+  // localStorage 模式：全量读取后截断
+  try {
+    const raw = localStorage.getItem(PLAY_RECORDS_KEY);
+    if (!raw) return {};
+    const allRecords = JSON.parse(raw) as Record<string, PlayRecord>;
+    const entries = Object.entries(allRecords)
+      .sort(([, a], [, b]) => (b.save_time || 0) - (a.save_time || 0))
+      .slice(0, limit);
+    return Object.fromEntries(entries);
+  } catch (err) {
+    console.error('读取最近播放记录失败:', err);
+    triggerGlobalError('读取最近播放记录失败');
+    return {};
+  }
+}
+
+/**
  * 保存播放记录。
  * 数据库存储模式下使用乐观更新：先更新缓存（立即生效），再异步同步到数据库。
  * @param existingRecords 可选参数：已有的播放记录，用于避免重复GET请求

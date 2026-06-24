@@ -16,6 +16,24 @@ import {
 import type { PlayRecord } from '@/lib/types';
 import { type WatchingUpdate } from '@/lib/watching-updates';
 
+const INIT_REF_DEFAULT =
+  typeof window !== 'undefined'
+    ? { playRecords: false, watchingUpdates: false }
+    : { playRecords: false, watchingUpdates: false };
+
+// 开发环境日志：仅在非生产环境输出
+function debugLog(...args: unknown[]) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(...args);
+  }
+}
+
+function debugError(...args: unknown[]) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.error(...args);
+  }
+}
+
 interface PlayPageContextType {
   // 播放记录数据
   playRecords: Record<string, PlayRecord> | null;
@@ -71,28 +89,24 @@ export function PlayPageProvider({ children }: PlayPageProviderProps) {
   const [loadingWatchingUpdates, setLoadingWatchingUpdates] = useState(false);
 
   // 🔧 防抖定时器
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 🔧 防重复初始化标记
-  const initRef = useRef(
-    typeof window !== 'undefined'
-      ? { playRecords: false, watchingUpdates: false }
-      : { playRecords: false, watchingUpdates: false }
-  );
+  const initRef = useRef(INIT_REF_DEFAULT);
 
-  // 加载播放记录
+  // 加载播放记录（只取最近 60 条，避免全量）
   const loadPlayRecords = async () => {
     // 🔧 修复：移除防重复加载机制，允许页面重新访问时重新加载播放记录
     // 这样可以确保从其他页面返回播放页面时能正确恢复播放进度
     try {
       setLoadingPlayRecords(true);
-      const { getAllPlayRecords } = await import('@/lib/db.client');
-      const records = await getAllPlayRecords();
+      const { getRecentPlayRecords } = await import('@/lib/db.client');
+      const records = await getRecentPlayRecords(60);
       setPlayRecords(records);
       initRef.current.playRecords = true;
-      console.log('✅ 播放记录加载完成');
+      debugLog('✅ 播放记录加载完成');
     } catch (error) {
-      console.error('加载播放记录失败:', error);
+      debugError('加载播放记录失败:', error);
       setPlayRecords(null);
     } finally {
       setLoadingPlayRecords(false);
@@ -106,7 +120,7 @@ export function PlayPageProvider({ children }: PlayPageProviderProps) {
 
     // 🔧 防重复：如果不是强制刷新且已经加载过，不再重复加载
     if (!force && initRef.current.watchingUpdates) {
-      console.log('📦 观看更新已加载，跳过重复加载');
+      debugLog('📦 观看更新已加载，跳过重复加载');
       return;
     }
 
@@ -121,16 +135,16 @@ export function PlayPageProvider({ children }: PlayPageProviderProps) {
       const updates = getDetailedWatchingUpdates();
       if (updates) {
         setWatchingUpdates(updates);
-        console.log('📦 从缓存获取观看更新');
+        debugLog('📦 从缓存获取观看更新');
       } else {
-        console.log('📦 暂无缓存的观看更新');
+        debugLog('📦 暂无缓存的观看更新');
         setWatchingUpdates(null);
       }
 
       initRef.current.watchingUpdates = true;
-      console.log('✅ 观看更新加载完成');
+      debugLog('✅ 观看更新加载完成');
     } catch (error) {
-      console.error('加载观看更新失败:', error);
+      debugError('加载观看更新失败:', error);
       setWatchingUpdates(null);
     } finally {
       setLoadingWatchingUpdates(false);
@@ -162,14 +176,21 @@ export function PlayPageProvider({ children }: PlayPageProviderProps) {
     await loadWatchingUpdates(true);
   }, []);
 
-  // 初始化加载 - 🚀 优化：移除追番更新检查，避免在播放页面进行不必要的API调用
-  // 追番更新检查应该在专门的追番页面或首页进行，而不是在播放页面
+  // 初始化加载 - 🚀 优化：延迟非关键数据加载，让首屏先渲染
+  // 播放记录和追更数据对首页而言在首屏可见区域下方（继续观看区块），无需阻塞首次渲染
   useEffect(() => {
-    loadPlayRecords();
-    // 注意：移除了追番更新检查逻辑，因为：
-    // 1. 播放页面应该专注于播放功能
-    // 2. 对所有历史记录调用 /api/detail 是没必要的
-    // 3. 追番更新检查应该在用户真正需要时进行（如追番页面）
+    const idleCallback =
+      typeof window !== 'undefined' &&
+      'requestIdleCallback' in window
+        ? (window as Window & { requestIdleCallback: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number }).requestIdleCallback
+        : null;
+
+    if (idleCallback) {
+      idleCallback(() => loadPlayRecords(), { timeout: 1000 });
+    } else {
+      // 降级：用 setTimeout 延迟到首次渲染之后
+      setTimeout(() => loadPlayRecords(), 200);
+    }
   }, []);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染

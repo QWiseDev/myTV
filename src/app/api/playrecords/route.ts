@@ -27,6 +27,28 @@ export async function GET(request: NextRequest) {
     }
 
     const records = await db.getAllPlayRecords(authInfo.username);
+
+    // ?limit=N 支持：按 save_time 倒序取最近 N 条，用于首页继续观看等场景
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 0;
+
+    if (limit > 0) {
+      const entries = Object.entries(records)
+        .sort(([, a], [, b]) => (b.save_time || 0) - (a.save_time || 0))
+        .slice(0, limit);
+      const limited = Object.fromEntries(entries);
+
+      return NextResponse.json(limited, {
+        status: 200,
+        headers: {
+          'Cache-Control':
+            'public, max-age=30, s-maxage=30, stale-while-revalidate=30',
+          Vary: 'Cookie',
+        },
+      });
+    }
+
     return NextResponse.json(records, {
       status: 200,
       headers: {
