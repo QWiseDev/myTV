@@ -170,7 +170,7 @@ export default function HomeClient({
   initialHomeData?: HomeData;
 }) {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <PlayPageProvider>
         <HomeContent initialHomeData={initialHomeData} />
       </PlayPageProvider>
