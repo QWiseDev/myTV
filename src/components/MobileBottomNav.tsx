@@ -72,7 +72,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
         return;
       }
     },
-    []
+    [],
   );
 
   const [navItems, setNavItems] = useState([
@@ -168,19 +168,28 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
               <Link
                 href={item.href}
                 onClick={(e) => handleNavClick(e, item.href)}
-                className='flex flex-col items-center justify-center w-full h-14 gap-1 text-xs'
+                className='group relative flex flex-col items-center justify-center w-full h-14 gap-1 text-xs'
               >
-                <item.icon
-                  className={`h-6 w-6 ${
+                {/* 图标容器：激活态暖色圆角底 + 微浮起，呼应首页板块图标风格 */}
+                <div
+                  className={`relative flex items-center justify-center h-7 w-7 rounded-lg transition-all duration-200 ${
                     active
-                      ? 'text-[#b85c38] dark:text-[#f0b195]'
-                      : 'text-[#5e5d59] dark:text-[#b7b1a8]'
+                      ? 'bg-[#ead8cf] dark:bg-[#b85c38]/15 scale-105'
+                      : 'group-hover:bg-[#f0eee6] dark:group-hover:bg-[#302d29]/60 group-hover:scale-105'
                   }`}
-                />
+                >
+                  <item.icon
+                    className={`h-5 w-5 transition-colors duration-200 ${
+                      active
+                        ? 'text-[#b85c38] dark:text-[#f0b195]'
+                        : 'text-[#5e5d59] dark:text-[#b7b1a8] group-hover:text-[#b85c38] dark:group-hover:text-[#f0b195]'
+                    }`}
+                  />
+                </div>
                 <span
                   className={
                     active
-                      ? 'text-[#8f4329] dark:text-[#f0b195]'
+                      ? 'text-[#8f4329] dark:text-[#f0b195] font-medium'
                       : 'text-[#5e5d59] dark:text-[#d9d3c9]'
                   }
                 >

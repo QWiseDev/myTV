@@ -270,7 +270,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
                                   action: 'manualNavigation',
                                   targetUrl: item.href,
                                 },
-                              }
+                              },
                             );
                             window.dispatchEvent(progressEvent);
                           } catch (error) {
@@ -310,11 +310,11 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
                       />
                     )}
 
-                    {/* 图标容器 */}
+                    {/* 图标容器：圆角描边感，hover 暖色淡底高亮，呼应首页板块图标风格 */}
                     <div
-                      className={`relative flex items-center justify-center w-4 h-4 ${theme.icon} ${theme.hoverIcon} ${theme.activeIcon}`}
+                      className={`relative flex items-center justify-center w-4 h-4 rounded-md transition-colors duration-200 group-hover:bg-[#ead8cf]/60 dark:group-hover:bg-[#4a332a]/60 ${theme.icon} ${theme.hoverIcon} ${theme.activeIcon}`}
                     >
-                      <Icon className='w-3.5 h-3.5 lg:w-4 lg:h-4 transition-transform duration-200 group-hover:scale-110' />
+                      <Icon className='w-3.5 h-3.5 lg:w-4 lg:h-4 transition-transform duration-200 group-hover:scale-110 group-active:scale-95' />
                     </div>
 
                     {/* 文字标签 */}
@@ -409,7 +409,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
                                 action: 'manualNavigation',
                                 targetUrl: item.href,
                               },
-                            }
+                            },
                           );
                           window.dispatchEvent(progressEvent);
                         } catch (error) {

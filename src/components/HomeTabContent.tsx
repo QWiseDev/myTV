@@ -72,7 +72,6 @@ export default function HomeTabContent({
         <LazyVideoSection
           title='热门电影'
           icon={Film}
-          iconColor='text-red-500'
           linkHref='/douban?type=movie'
           data={hotMovies}
           loading={criticalLoading}
@@ -97,7 +96,6 @@ export default function HomeTabContent({
         <LazyVideoSection
           title='热门剧集'
           icon={Tv}
-          iconColor='text-blue-500'
           linkHref='/douban?type=tv'
           data={hotTvShows}
           loading={secondaryLoading}
@@ -129,7 +127,6 @@ export default function HomeTabContent({
         <LazyVideoSection
           title='热门综艺'
           icon={Sparkles}
-          iconColor='text-pink-500'
           linkHref='/douban?type=show'
           data={hotVarietyShows}
           loading={secondaryLoading}

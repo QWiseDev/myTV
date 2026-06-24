@@ -39,11 +39,7 @@ export default function BangumiSection({
   return (
     <section className='mb-8'>
       <div className='mb-4 flex items-center justify-between'>
-        <SectionTitle
-          title='新番放送'
-          icon={Calendar}
-          iconColor='text-purple-500'
-        />
+        <SectionTitle title='新番放送' icon={Calendar} />
         <Link
           href='/douban?type=anime'
           className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'

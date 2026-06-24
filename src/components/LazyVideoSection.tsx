@@ -14,7 +14,6 @@ const ScrollableRow = lazy(() => import('./ScrollableRow'));
 interface LazyVideoSectionProps {
   title: string;
   icon: LucideIcon;
-  iconColor: string;
   linkHref: string;
   data: DoubanItem[];
   loading: boolean;
@@ -28,7 +27,6 @@ interface LazyVideoSectionProps {
 export default function LazyVideoSection({
   title,
   icon: Icon,
-  iconColor,
   linkHref,
   data,
   loading,
@@ -38,7 +36,7 @@ export default function LazyVideoSection({
   return (
     <section className='mb-8'>
       <div className='mb-4 flex items-center justify-between'>
-        <SectionTitle title={title} icon={Icon} iconColor={iconColor} />
+        <SectionTitle title={title} icon={Icon} />
         <Link
           href={linkHref}
           className='flex items-center text-sm text-[#5e5d59] hover:text-[#b85c38] dark:text-[#b7b1a8] dark:hover:text-[#f0b195] transition-colors'

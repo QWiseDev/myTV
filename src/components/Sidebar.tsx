@@ -50,9 +50,9 @@ const Logo = () => {
     >
       <div className='relative'>
         {/* 发光背景效果 */}
-        <div className='absolute inset-0 bg-gradient-to-r from-green-400 via-emerald-500 to-teal-500 opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-300 rounded-lg scale-110'></div>
+        <div className='absolute inset-0 bg-gradient-to-r from-[#d97757] via-[#b85c38] to-[#e09a7a] opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-300 rounded-lg scale-110'></div>
 
-        <span className='relative text-2xl font-bold bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 dark:from-green-400 dark:via-emerald-400 dark:to-teal-400 bg-clip-text text-transparent tracking-tight transition-all duration-300 group-hover:scale-105 inline-block group-hover:drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]'>
+        <span className='relative text-2xl font-bold bg-gradient-to-r from-[#b85c38] via-[#d97757] to-[#e09a7a] dark:from-[#e09a7a] dark:via-[#f0b195] dark:to-[#f5c9b3] bg-clip-text text-transparent tracking-tight transition-all duration-300 group-hover:scale-105 inline-block group-hover:drop-shadow-[0_0_8px_rgba(184,92,56,0.5)]'>
           {siteName}
         </span>
       </div>
@@ -196,7 +196,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
   useEffect(() => {
     setMenuItems((prevItems) => {
       const hasSourceTest = prevItems.some(
-        (item) => item.href === '/source-test'
+        (item) => item.href === '/source-test',
       );
 
       if (isAdmin) {
@@ -206,7 +206,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
 
         const newItems = [...prevItems];
         const insertIndex = newItems.findIndex(
-          (item) => item.href === '/source-browser'
+          (item) => item.href === '/source-browser',
         );
         const sourceTestItem = {
           icon: Search,
@@ -260,8 +260,8 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
           }}
         >
           {/* 装饰性背景光晕 */}
-          <div className='absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-green-400/5 via-blue-400/5 to-transparent pointer-events-none'></div>
-          <div className='absolute bottom-0 left-0 w-full h-48 bg-gradient-to-t from-purple-400/5 via-pink-400/5 to-transparent pointer-events-none'></div>
+          <div className='absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#d97757]/5 via-[#b85c38]/5 to-transparent pointer-events-none'></div>
+          <div className='absolute bottom-0 left-0 w-full h-48 bg-gradient-to-t from-[#b85c38]/5 via-[#e09a7a]/5 to-transparent pointer-events-none'></div>
 
           <div className='flex h-full flex-col relative z-10'>
             {/* 顶部 Logo 区域 */}
@@ -282,7 +282,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                 }`}
               >
                 {/* 渐变边框效果 */}
-                <div className='absolute inset-0 rounded-full bg-gradient-to-r from-green-400 via-blue-400 to-purple-400 opacity-0 group-hover/toggle:opacity-100 transition-opacity duration-300 animate-pulse'></div>
+                <div className='absolute inset-0 rounded-full bg-gradient-to-r from-[#d97757] via-[#b85c38] to-[#8f4329] opacity-0 group-hover/toggle:opacity-100 transition-opacity duration-300 animate-pulse'></div>
                 <div className='absolute inset-[2px] rounded-full bg-white dark:bg-gray-900 group-hover/toggle:bg-gray-50 dark:group-hover/toggle:bg-gray-800 transition-colors duration-300'></div>
 
                 <Menu className='h-4 w-4 relative z-10 transition-transform duration-300 group-hover/toggle:rotate-180' />
@@ -295,12 +295,12 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                 href='/'
                 onClick={() => setActive('/')}
                 data-active={active === '/'}
-                className={`group relative flex items-center rounded-lg px-2 py-2 pl-4 text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-600 data-[active=true]:bg-gradient-to-r data-[active=true]:from-green-500/20 data-[active=true]:to-emerald-500/20 data-[active=true]:text-green-700 font-medium transition-all duration-200 min-h-[40px] dark:text-gray-300 dark:hover:from-green-500/10 dark:hover:to-emerald-500/10 dark:hover:text-green-400 dark:data-[active=true]:from-green-500/15 dark:data-[active=true]:to-emerald-500/15 dark:data-[active=true]:text-green-400 ${
+                className={`group relative flex items-center rounded-lg px-2 py-2 pl-4 text-gray-700 hover:bg-gradient-to-r hover:from-[#f5f3eb] hover:to-[#faf9f5] hover:text-[#b85c38] data-[active=true]:bg-gradient-to-r data-[active=true]:from-[#ead8cf] data-[active=true]:to-[#f5e3d8] data-[active=true]:text-[#8f4329] font-medium transition-all duration-200 min-h-[40px] dark:text-gray-300 dark:hover:from-[#b85c38]/10 dark:hover:to-[#d97757]/10 dark:hover:text-[#f0b195] dark:data-[active=true]:from-[#b85c38]/20 dark:data-[active=true]:to-[#d97757]/15 dark:data-[active=true]:text-[#f0b195] ${
                   isCollapsed ? 'w-full max-w-none mx-0' : 'mx-0'
-                } gap-3 justify-start hover:shadow-md hover:shadow-green-500/10 data-[active=true]:shadow-lg data-[active=true]:shadow-green-500/20`}
+                } gap-3 justify-start hover:shadow-md hover:shadow-[#b85c38]/10 data-[active=true]:shadow-lg data-[active=true]:shadow-[#b85c38]/20`}
               >
                 <div className='w-4 h-4 flex items-center justify-center relative z-10'>
-                  <Home className='h-4 w-4 text-gray-500 group-hover:text-green-600 data-[active=true]:text-green-700 dark:text-gray-400 dark:group-hover:text-green-400 dark:data-[active=true]:text-green-400 transition-all duration-200 group-hover:scale-110' />
+                  <Home className='h-4 w-4 text-gray-500 group-hover:text-[#b85c38] data-[active=true]:text-[#b85c38] dark:text-gray-400 dark:group-hover:text-[#f0b195] dark:data-[active=true]:text-[#f0b195] transition-all duration-200 group-hover:scale-110' />
                 </div>
                 {!isCollapsed && (
                   <span className='whitespace-nowrap transition-opacity duration-200 opacity-100 relative z-10'>
@@ -309,7 +309,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                 )}
                 {/* 激活状态的左侧边框指示器 */}
                 <div
-                  className='absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-gradient-to-b from-green-500 to-emerald-500 rounded-r-full transition-all duration-200 data-[active=true]:h-8 opacity-0 data-[active=true]:opacity-100'
+                  className='absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-gradient-to-b from-[#b85c38] to-[#d97757] rounded-r-full transition-all duration-200 data-[active=true]:h-8 opacity-0 data-[active=true]:opacity-100'
                   data-active={active === '/'}
                 ></div>
               </Link>
@@ -321,12 +321,12 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                   setActive('/search');
                 }}
                 data-active={active === '/search'}
-                className={`group relative flex items-center rounded-lg px-2 py-2 pl-4 text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-cyan-50 hover:text-blue-600 data-[active=true]:bg-gradient-to-r data-[active=true]:from-blue-500/20 data-[active=true]:to-cyan-500/20 data-[active=true]:text-blue-700 font-medium transition-all duration-200 min-h-[40px] dark:text-gray-300 dark:hover:from-blue-500/10 dark:hover:to-cyan-500/10 dark:hover:text-blue-400 dark:data-[active=true]:from-blue-500/15 dark:data-[active=true]:to-cyan-500/15 dark:data-[active=true]:text-blue-400 ${
+                className={`group relative flex items-center rounded-lg px-2 py-2 pl-4 text-gray-700 hover:bg-gradient-to-r hover:from-[#f5f3eb] hover:to-[#faf9f5] hover:text-[#b85c38] data-[active=true]:bg-gradient-to-r data-[active=true]:from-[#ead8cf] data-[active=true]:to-[#f5e3d8] data-[active=true]:text-[#8f4329] font-medium transition-all duration-200 min-h-[40px] dark:text-gray-300 dark:hover:from-[#b85c38]/10 dark:hover:to-[#d97757]/10 dark:hover:text-[#f0b195] dark:data-[active=true]:from-[#b85c38]/20 dark:data-[active=true]:to-[#d97757]/15 dark:data-[active=true]:text-[#f0b195] ${
                   isCollapsed ? 'w-full max-w-none mx-0' : 'mx-0'
-                } gap-3 justify-start hover:shadow-md hover:shadow-blue-500/10 data-[active=true]:shadow-lg data-[active=true]:shadow-blue-500/20`}
+                } gap-3 justify-start hover:shadow-md hover:shadow-[#b85c38]/10 data-[active=true]:shadow-lg data-[active=true]:shadow-[#b85c38]/20`}
               >
                 <div className='w-4 h-4 flex items-center justify-center relative z-10'>
-                  <Search className='h-4 w-4 text-gray-500 group-hover:text-blue-600 data-[active=true]:text-blue-700 dark:text-gray-400 dark:group-hover:text-blue-400 dark:data-[active=true]:text-blue-400 transition-all duration-200 group-hover:scale-110' />
+                  <Search className='h-4 w-4 text-gray-500 group-hover:text-[#b85c38] data-[active=true]:text-[#b85c38] dark:text-gray-400 dark:group-hover:text-[#f0b195] dark:data-[active=true]:text-[#f0b195] transition-all duration-200 group-hover:scale-110' />
                 </div>
                 {!isCollapsed && (
                   <span className='whitespace-nowrap transition-opacity duration-200 opacity-100 relative z-10'>
@@ -335,7 +335,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                 )}
                 {/* 激活状态的左侧边框指示器 */}
                 <div
-                  className='absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-gradient-to-b from-blue-500 to-cyan-500 rounded-r-full transition-all duration-200 data-[active=true]:h-8 opacity-0 data-[active=true]:opacity-100'
+                  className='absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-gradient-to-b from-[#b85c38] to-[#d97757] rounded-r-full transition-all duration-200 data-[active=true]:h-8 opacity-0 data-[active=true]:opacity-100'
                   data-active={active === '/search'}
                 ></div>
               </Link>
@@ -358,110 +358,22 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
                       decodedActive.includes(`type=${typeMatch}`));
                   const Icon = item.icon;
 
-                  // 为每个菜单项定义独特的渐变色主题
+                  // 统一暖色主题：延续品牌 #b85c38 色系，克制优雅，各菜单仅靠图标形状区分
                   const colorThemes = [
                     {
                       hover:
-                        'hover:from-emerald-50 hover:to-green-50 dark:hover:from-emerald-500/10 dark:hover:to-green-500/10',
+                        'hover:from-[#f5f3eb] hover:to-[#faf9f5] dark:hover:from-[#b85c38]/10 dark:hover:to-[#d97757]/10',
                       active:
-                        'data-[active=true]:from-emerald-500/20 data-[active=true]:to-green-500/20 dark:data-[active=true]:from-emerald-500/15 dark:data-[active=true]:to-green-500/15',
-                      text: 'hover:text-emerald-600 data-[active=true]:text-emerald-700 dark:hover:text-emerald-400 dark:data-[active=true]:text-emerald-400',
-                      icon: 'group-hover:text-emerald-600 data-[active=true]:text-emerald-700 dark:group-hover:text-emerald-400 dark:data-[active=true]:text-emerald-400',
+                        'data-[active=true]:from-[#ead8cf] data-[active=true]:to-[#f5e3d8] dark:data-[active=true]:from-[#b85c38]/20 dark:data-[active=true]:to-[#d97757]/15',
+                      text: 'hover:text-[#b85c38] data-[active=true]:text-[#8f4329] dark:hover:text-[#f0b195] dark:data-[active=true]:text-[#f0b195]',
+                      icon: 'group-hover:text-[#b85c38] data-[active=true]:text-[#b85c38] dark:group-hover:text-[#f0b195] dark:data-[active=true]:text-[#f0b195]',
                       shadow:
-                        'hover:shadow-emerald-500/10 data-[active=true]:shadow-emerald-500/20',
-                      border: 'from-emerald-500 to-green-500',
-                    }, // 源浏览器
-                    {
-                      hover:
-                        'hover:from-red-50 hover:to-pink-50 dark:hover:from-red-500/10 dark:hover:to-pink-500/10',
-                      active:
-                        'data-[active=true]:from-red-500/20 data-[active=true]:to-pink-500/20 dark:data-[active=true]:from-red-500/15 dark:data-[active=true]:to-pink-500/15',
-                      text: 'hover:text-red-600 data-[active=true]:text-red-700 dark:hover:text-red-400 dark:data-[active=true]:text-red-400',
-                      icon: 'group-hover:text-red-600 data-[active=true]:text-red-700 dark:group-hover:text-red-400 dark:data-[active=true]:text-red-400',
-                      shadow:
-                        'hover:shadow-red-500/10 data-[active=true]:shadow-red-500/20',
-                      border: 'from-red-500 to-pink-500',
-                    }, // 电影
-                    {
-                      hover:
-                        'hover:from-blue-50 hover:to-indigo-50 dark:hover:from-blue-500/10 dark:hover:to-indigo-500/10',
-                      active:
-                        'data-[active=true]:from-blue-500/20 data-[active=true]:to-indigo-500/20 dark:data-[active=true]:from-blue-500/15 dark:data-[active=true]:to-indigo-500/15',
-                      text: 'hover:text-blue-600 data-[active=true]:text-blue-700 dark:hover:text-blue-400 dark:data-[active=true]:text-blue-400',
-                      icon: 'group-hover:text-blue-600 data-[active=true]:text-blue-700 dark:group-hover:text-blue-400 dark:data-[active=true]:text-blue-400',
-                      shadow:
-                        'hover:shadow-blue-500/10 data-[active=true]:shadow-blue-500/20',
-                      border: 'from-blue-500 to-indigo-500',
-                    }, // 剧集
-                    {
-                      hover:
-                        'hover:from-purple-50 hover:to-violet-50 dark:hover:from-purple-500/10 dark:hover:to-violet-500/10',
-                      active:
-                        'data-[active=true]:from-purple-500/20 data-[active=true]:to-violet-500/20 dark:data-[active=true]:from-purple-500/15 dark:data-[active=true]:to-violet-500/15',
-                      text: 'hover:text-purple-600 data-[active=true]:text-purple-700 dark:hover:text-purple-400 dark:data-[active=true]:text-purple-400',
-                      icon: 'group-hover:text-purple-600 data-[active=true]:text-purple-700 dark:group-hover:text-purple-400 dark:data-[active=true]:text-purple-400',
-                      shadow:
-                        'hover:shadow-purple-500/10 data-[active=true]:shadow-purple-500/20',
-                      border: 'from-purple-500 to-violet-500',
-                    }, // 短视频
-                    {
-                      hover:
-                        'hover:from-fuchsia-50 hover:to-purple-50 dark:hover:from-fuchsia-500/10 dark:hover:to-purple-500/10',
-                      active:
-                        'data-[active=true]:from-fuchsia-500/20 data-[active=true]:to-purple-500/20 dark:data-[active=true]:from-fuchsia-500/15 dark:data-[active=true]:to-purple-500/15',
-                      text: 'hover:text-fuchsia-600 data-[active=true]:text-fuchsia-700 dark:hover:text-fuchsia-400 dark:data-[active=true]:text-fuchsia-400',
-                      icon: 'group-hover:text-fuchsia-600 data-[active=true]:text-fuchsia-700 dark:group-hover:text-fuchsia-400 dark:data-[active=true]:text-fuchsia-400',
-                      shadow:
-                        'hover:shadow-fuchsia-500/10 data-[active=true]:shadow-fuchsia-500/20',
-                      border: 'from-fuchsia-500 to-purple-500',
-                    }, // 短视频
-                    {
-                      hover:
-                        'hover:from-pink-50 hover:to-rose-50 dark:hover:from-pink-500/10 dark:hover:to-rose-500/10',
-                      active:
-                        'data-[active=true]:from-pink-500/20 data-[active=true]:to-rose-500/20 dark:data-[active=true]:from-pink-500/15 dark:data-[active=true]:to-rose-500/15',
-                      text: 'hover:text-pink-600 data-[active=true]:text-pink-700 dark:hover:text-pink-400 dark:data-[active=true]:text-pink-400',
-                      icon: 'group-hover:text-pink-600 data-[active=true]:text-pink-700 dark:group-hover:text-pink-400 dark:data-[active=true]:text-pink-400',
-                      shadow:
-                        'hover:shadow-pink-500/10 data-[active=true]:shadow-pink-500/20',
-                      border: 'from-pink-500 to-rose-500',
-                    }, // 动漫
-                    {
-                      hover:
-                        'hover:from-orange-50 hover:to-amber-50 dark:hover:from-orange-500/10 dark:hover:to-amber-500/10',
-                      active:
-                        'data-[active=true]:from-orange-500/20 data-[active=true]:to-amber-500/20 dark:data-[active=true]:from-orange-500/15 dark:data-[active=true]:to-amber-500/15',
-                      text: 'hover:text-orange-600 data-[active=true]:text-orange-700 dark:hover:text-orange-400 dark:data-[active=true]:text-orange-400',
-                      icon: 'group-hover:text-orange-600 data-[active=true]:text-orange-700 dark:group-hover:text-orange-400 dark:data-[active=true]:text-orange-400',
-                      shadow:
-                        'hover:shadow-orange-500/10 data-[active=true]:shadow-orange-500/20',
-                      border: 'from-orange-500 to-amber-500',
-                    }, // 综艺
-                    {
-                      hover:
-                        'hover:from-teal-50 hover:to-cyan-50 dark:hover:from-teal-500/10 dark:hover:to-cyan-500/10',
-                      active:
-                        'data-[active=true]:from-teal-500/20 data-[active=true]:to-cyan-500/20 dark:data-[active=true]:from-teal-500/15 dark:data-[active=true]:to-cyan-500/15',
-                      text: 'hover:text-teal-600 data-[active=true]:text-teal-700 dark:hover:text-teal-400 dark:data-[active=true]:text-teal-400',
-                      icon: 'group-hover:text-teal-600 data-[active=true]:text-teal-700 dark:group-hover:text-teal-400 dark:data-[active=true]:text-teal-400',
-                      shadow:
-                        'hover:shadow-teal-500/10 data-[active=true]:shadow-teal-500/20',
-                      border: 'from-teal-500 to-cyan-500',
-                    }, // 直播
-                    {
-                      hover:
-                        'hover:from-yellow-50 hover:to-amber-50 dark:hover:from-yellow-500/10 dark:hover:to-amber-500/10',
-                      active:
-                        'data-[active=true]:from-yellow-500/20 data-[active=true]:to-amber-500/20 dark:data-[active=true]:from-yellow-500/15 dark:data-[active=true]:to-amber-500/15',
-                      text: 'hover:text-yellow-600 data-[active=true]:text-yellow-700 dark:hover:text-yellow-400 dark:data-[active=true]:text-yellow-400',
-                      icon: 'group-hover:text-yellow-600 data-[active=true]:text-yellow-700 dark:group-hover:text-yellow-400 dark:data-[active=true]:text-yellow-400',
-                      shadow:
-                        'hover:shadow-yellow-500/10 data-[active=true]:shadow-yellow-500/20',
-                      border: 'from-yellow-500 to-amber-500',
-                    }, // 自定义
+                        'hover:shadow-[#b85c38]/10 data-[active=true]:shadow-[#b85c38]/20',
+                      border: 'from-[#b85c38] to-[#d97757]',
+                    },
                   ];
 
-                  const theme = colorThemes[index] || colorThemes[0];
+                  const theme = colorThemes[0];
 
                   return (
                     <Link

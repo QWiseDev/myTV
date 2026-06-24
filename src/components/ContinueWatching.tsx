@@ -112,7 +112,10 @@ export default function ContinueWatching({
   // 计算播放进度百分比（限制在 0-100 范围内）
   const getProgress = (record: PlayRecord) => {
     if (record.total_time <= 0) return 0;
-    return Math.min(100, Math.round((record.play_time / record.total_time) * 100));
+    return Math.min(
+      100,
+      Math.round((record.play_time / record.total_time) * 100),
+    );
   };
 
   // 从 key 中解析 source 和 id
@@ -154,11 +157,7 @@ export default function ContinueWatching({
   return (
     <section className={`mb-8 ${className || ''}`}>
       <div className='mb-4 flex items-center justify-between'>
-        <SectionTitle
-          title='继续观看'
-          icon={Clock}
-          iconColor='text-green-500'
-        />
+        <SectionTitle title='继续观看' icon={Clock} />
         {!loading && recordsArray.length > 0 && (
           <button
             className='text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
