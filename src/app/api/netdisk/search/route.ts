@@ -46,15 +46,11 @@ export async function GET(request: NextRequest) {
   // 缓存key包含功能状态，确保功能开启/关闭时缓存隔离
   const cacheKey = `netdisk-search-enabled-${query}-${enabledCloudTypesStr}`;
 
-  console.log(`🔍 检查网盘搜索缓存: ${cacheKey}`);
 
   // 服务端直接调用数据库（不用ClientCache，避免HTTP循环调用）
   try {
     const cached = await db.getCache(cacheKey);
     if (cached) {
-      console.log(
-        `✅ 网盘搜索缓存命中(数据库): "${query}" (${enabledCloudTypesStr})`
-      );
       return NextResponse.json({
         ...cached,
         fromCache: true,
@@ -63,7 +59,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`❌ 网盘搜索缓存未命中: "${query}" (${enabledCloudTypesStr})`);
   } catch (cacheError) {
     console.warn('网盘搜索缓存读取失败:', cacheError);
     // 缓存失败不影响主流程，继续执行
@@ -125,16 +120,10 @@ export async function GET(request: NextRequest) {
     // 服务端直接保存到数据库（不用ClientCache，避免HTTP循环调用）
     try {
       await db.setCache(cacheKey, responseData, NETDISK_CACHE_TIME);
-      console.log(
-        `💾 网盘搜索结果已缓存(数据库): "${query}" - ${responseData.data.total} 个结果, TTL: ${NETDISK_CACHE_TIME}s`
-      );
     } catch (cacheError) {
       console.warn('网盘搜索缓存保存失败:', cacheError);
     }
 
-    console.log(
-      `✅ 网盘搜索完成: "${query}" - ${responseData.data.total} 个结果`
-    );
     return NextResponse.json(responseData);
   } catch (error) {
     console.error('网盘搜索失败:', error);

@@ -55,9 +55,6 @@ export function getHLSStreamInfo(
       const cached = smartCache.get(m3u8Url);
 
       if (cached?.levels && Array.isArray(cached.levels)) {
-        console.log(
-          `✓ 使用缓存的流信息: ${m3u8Url} (${cached.levels.length}个清晰度)`,
-        );
 
         const levels = cached.levels.map((level, index): StreamInfo => {
           const resolution = `${level.width}x${level.height}`;
@@ -218,13 +215,9 @@ export function switchHLSSLevel(
     if (level === -1) {
       // 切换到自动模式
       hlsInstance.currentLevel = -1;
-      console.log('切换到自动清晰度模式');
     } else if (level >= 0 && level < hlsInstance.levels.length) {
       // 切换到指定级别
       hlsInstance.currentLevel = level;
-      console.log(
-        `切换到清晰度级别 ${level}: ${hlsInstance.levels[level].width}x${hlsInstance.levels[level].height}`,
-      );
     } else {
       console.warn('无效的清晰度级别:', level);
       return false;

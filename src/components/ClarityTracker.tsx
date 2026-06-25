@@ -37,7 +37,6 @@ export function ClarityTracker({
           // 如果 Clarity 已经存在，初始化我们的 Analytics 并设置用户信息
           analytics.init();
           setClarityUserIdentifier();
-          console.log(`[Clarity] Already initialized, using existing with project ID: ${projectId}`);
           return;
         }
 
@@ -59,7 +58,6 @@ export function ClarityTracker({
             // 确保Analytics已初始化
             analytics.init();
             setClarityUserIdentifier();
-            console.log(`[Clarity] Initialized with project ID: ${projectId}`);
           } else {
             setTimeout(initAnalytics, 200); // 增加延迟时间
           }
@@ -126,12 +124,6 @@ export function ClarityTracker({
         window.clarity?.('set', 'emailDomain', emailUser);
       }
 
-      console.log('[Clarity] User identifier set:', {
-        userId: accountName || 'anonymous',
-        username: displayName || accountName || 'anonymous',
-        sessionType: sessionType || 'guest',
-        customTags: customTags || {}
-      });
 
     } catch (error) {
       console.error('[Clarity] Failed to set user identifier:', error);

@@ -21,11 +21,9 @@ const INIT_REF_DEFAULT =
     ? { playRecords: false, watchingUpdates: false }
     : { playRecords: false, watchingUpdates: false };
 
-// 开发环境日志：仅在非生产环境输出
-function debugLog(...args: unknown[]) {
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(...args);
-  }
+// 开发环境日志：调试输出已清理，保留为 no-op 避免改动调用处
+function debugLog(..._args: unknown[]) {
+  // no-op
 }
 
 function debugError(...args: unknown[]) {

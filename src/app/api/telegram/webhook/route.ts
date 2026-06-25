@@ -10,14 +10,12 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const update = await request.json();
-    console.log('[Webhook] Received update:', JSON.stringify(update, null, 2));
 
     // 获取管理员配置
     const config = await db.getAdminConfig();
     const telegramConfig = config?.TelegramAuthConfig;
 
     if (!telegramConfig?.enabled || !telegramConfig.botToken) {
-      console.log('[Webhook] Telegram not configured');
       return NextResponse.json({ ok: true });
     }
 
@@ -29,16 +27,11 @@ export async function POST(request: Request) {
       const chatId = update.message.chat.id;
       const token = update.message.text.split(' ')[1]; // 获取 token
 
-      console.log('[Webhook] Received /start with token:', token);
-      console.log('[Webhook] Chat ID:', chatId);
 
       // 从数据库验证 token
-      console.log('[Webhook] Attempting to retrieve token from database...');
       const tokenData = await getTelegramToken(token);
-      console.log('[Webhook] Token data retrieved:', tokenData);
 
       if (!tokenData) {
-        console.log('[Webhook] Token not found or expired');
         // 发送错误消息
         await sendTelegramMessage(
           telegramConfig.botToken,
@@ -58,7 +51,6 @@ export async function POST(request: Request) {
 
       await sendTelegramMessage(telegramConfig.botToken, chatId, message);
 
-      console.log('[Webhook] Login link sent successfully');
       return NextResponse.json({ ok: true });
     }
 
@@ -93,12 +85,6 @@ async function autoSetWebhook(
 
     // 如果 webhook URL 不匹配，自动更新
     if (info.ok && info.result.url !== currentWebhookUrl) {
-      console.log(
-        '[Webhook] Auto-updating webhook from',
-        info.result.url,
-        'to',
-        currentWebhookUrl
-      );
 
       await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST',
@@ -109,7 +95,6 @@ async function autoSetWebhook(
         }),
       });
 
-      console.log('[Webhook] Webhook auto-updated successfully');
     }
   } catch (error) {
     console.error('[Webhook] Auto-set webhook error:', error);

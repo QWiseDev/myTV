@@ -50,14 +50,12 @@ const keyStats = {
 // 清理过期缓存
 function cleanupExpiredCache() {
   const now = Date.now();
-  let cleanedCount = 0;
 
   // 使用 Array.from() 来避免迭代器问题
   const cacheEntries = Array.from(keyCache.entries());
   for (const [key, value] of cacheEntries) {
     if (now - value.timestamp > KEY_CACHE_TTL) {
       keyCache.delete(key);
-      cleanedCount++;
     }
   }
 
@@ -68,12 +66,8 @@ function cleanupExpiredCache() {
     );
     const toDelete = entries.slice(0, entries.length - MAX_CACHE_SIZE);
     toDelete.forEach(([key]) => keyCache.delete(key));
-    cleanedCount += toDelete.length;
   }
 
-  if (cleanedCount > 0 && process.env.NODE_ENV === 'development') {
-    console.log(`Cleaned ${cleanedCount} expired key cache entries`);
-  }
 }
 
 export async function GET(request: Request) {
@@ -129,9 +123,6 @@ export async function GET(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
   try {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Fetching key: ${decodedUrl}`);
-    }
 
     const isHttps = decodedUrl.startsWith('https:');
     const agent = isHttps ? httpsAgent : httpAgent;
@@ -255,16 +246,7 @@ export async function GET(request: Request) {
       keyStats.requests % 100 === 0 &&
       process.env.NODE_ENV === 'development'
     ) {
-      const hitRate = (keyStats.cacheHits / keyStats.requests) * 100;
-      console.log(
-        `Key Proxy Stats - Requests: ${keyStats.requests}, Cache Hits: ${
-          keyStats.cacheHits
-        } (${hitRate.toFixed(1)}%), Errors: ${
-          keyStats.errors
-        }, Avg Time: ${keyStats.avgResponseTime.toFixed(2)}ms, Cache Size: ${
-          keyCache.size
-        }, Total: ${(keyStats.totalBytes / 1024).toFixed(2)}KB`
-      );
+      const _hitRate = (keyStats.cacheHits / keyStats.requests) * 100;
     }
   }
 }

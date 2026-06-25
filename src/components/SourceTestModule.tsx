@@ -501,28 +501,18 @@ export default function SourceTestModule() {
         ([, result]) => result.status === 'success' && result.results.length > 0
       );
 
-      console.log('检查自动播放测试:', {
-        autoPlayTest,
-        testResultsSize: testResults.size,
-        successfulResults: successfulResults.length,
-        currentResults: currentResults.map(([key, result]) => ({ key, status: result.status, resultCount: result.results.length }))
-      });
 
       if (autoPlayTest && successfulResults.length > 0) {
-        console.log('触发自动视频测试，源数量:', successfulResults.length);
         // 确保在下一个事件循环中执行，避免状态更新冲突
         setTimeout(() => {
           handleAutoTestVideos(false); // 传入 false 表示不显示提示
         }, 100);
-      } else {
-        console.log('自动播放测试条件不满足:', { autoPlayTest, successfulResults: successfulResults.length });
       }
     }, 2000); // 延迟2秒后自动开始视频测试
   };
 
   // 自动测试视频播放功能
   const handleAutoTestVideos = async (showAlert = true) => {
-    console.log('handleAutoTestVideos 开始:', { showAlert, testResultsSize: testResults.size });
 
     if (!searchKeyword.trim()) {
       if (showAlert) alert('请输入搜索关键词');
@@ -543,11 +533,9 @@ export default function SourceTestModule() {
         ([, result]) => result.status === 'success' && result.results.length > 0
       );
 
-      console.log('准备测试的成功源数量:', successfulResults.length);
 
       for (const [sourceKey, result] of successfulResults) {
         try {
-          console.log('正在测试源:', sourceKey);
 
           // 更新状态为测试中
           updatePlayStatus(sourceKey, {
@@ -562,7 +550,6 @@ export default function SourceTestModule() {
             result.results
           );
 
-          console.log('视频测试结果:', sourceKey, videoTestResult);
 
           // 更新测试状态
           updatePlayStatus(sourceKey, {
@@ -581,7 +568,6 @@ export default function SourceTestModule() {
         }
       }
 
-      console.log('所有视频测试完成');
     } catch (error) {
       console.error('自动视频测试过程中发生错误:', error);
     } finally {
@@ -813,11 +799,9 @@ export default function SourceTestModule() {
 
         // 获取 HLS 流信息
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('HLS manifest 解析完成，获取流信息');
           const streamInfo = getHLSStreamInfo(hls);
 
           if (streamInfo) {
-            console.log('获取到 HLS 流信息:', streamInfo);
 
             // 获取当前流信息
             const currentStream = streamInfo.levels[streamInfo.currentLevel];

@@ -133,36 +133,3 @@ export const getDevicePerformance = (): 'high' | 'medium' | 'low' => {
   if (score > 0.4) return 'medium';
   return 'low';
 };
-
-/**
- * 打印设备检测结果（用于调试）
- */
-export function logDeviceInfo(deviceInfo: DeviceInfo): void {
-  console.log('🔍 设备检测结果:', {
-    userAgent: deviceInfo.userAgent,
-    设备类型: {
-      移动设备: deviceInfo.isMobile ? '✅' : '❌',
-      iOS: deviceInfo.isIOS ? '✅' : '❌',
-      'iOS 13+': deviceInfo.isIOS13 ? '✅' : '❌',
-      Android: deviceInfo.isAndroid ? '✅' : '❌',
-      平板: deviceInfo.isTablet ? '✅' : '❌',
-    },
-    浏览器类型: {
-      Safari: deviceInfo.isSafari ? '✅' : '❌',
-      Chrome: deviceInfo.isChrome ? '✅' : '❌',
-      WebKit: deviceInfo.isWebKit ? '✅' : '❌',
-      Edge: deviceInfo.isEdge ? '✅' : '❌',
-      Firefox: deviceInfo.isFirefox ? '✅' : '❌',
-    },
-    设备性能: deviceInfo.devicePerformance,
-    投屏支持: {
-      AirPlay: deviceInfo.supportsAirPlay ? '✅ 显示' : '❌ 隐藏',
-      Chromecast: deviceInfo.supportsChromecast ? '✅ 显示' : '❌ 隐藏',
-    },
-    投屏策略: deviceInfo.supportsAirPlay
-      ? '🍎 AirPlay (WebKit)'
-      : deviceInfo.supportsChromecast
-        ? '📺 Chromecast (Cast API)'
-        : '❌ 不支持投屏',
-  });
-}

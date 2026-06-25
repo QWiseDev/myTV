@@ -83,7 +83,6 @@ const PlayStatsPage = () => {
   const safeCheckWatchingUpdates = useCallback((force = false) => {
     // 如果正在检查中，等待检查完成
     if (isCheckingRef.current) {
-      console.log('watching-update 检查正在进行中，跳过重复调用');
       return;
     }
 
@@ -102,7 +101,6 @@ const PlayStatsPage = () => {
 
       try {
         isCheckingRef.current = true;
-        console.log(force ? '执行强制 update 检查...' : '执行 update 检查...');
         await checkWatchingUpdates(force);
         const details = getDetailedWatchingUpdates();
         setWatchingUpdates(details);

@@ -84,7 +84,6 @@ export function getOptimizedDanmakuConfig(
   const devicePerformance = getDevicePerformance(isMobile);
   const storageConfig = loadDanmakuConfigFromStorage();
 
-  console.log(`🎯 设备性能等级: ${devicePerformance.level}`);
 
   // ✅ 优化：根据性能等级调整弹幕密度
   const maxDanmakuCount =

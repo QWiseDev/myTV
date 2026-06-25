@@ -182,10 +182,6 @@ export async function GET(request: NextRequest) {
           username: user.username,
           tvboxEnabledSources: user.tvboxEnabledSources,
         };
-        console.log(
-          `[TVBox] 识别到用户 ${user.username}，源限制:`,
-          user.tvboxEnabledSources || '无限制'
-        );
       }
     }
 
@@ -317,9 +313,6 @@ export async function GET(request: NextRequest) {
       enabledSources = enabledSources.filter((source) =>
         allowedSourceKeys.has(source.key)
       );
-      console.log(
-        `[TVBox] 用户 ${currentUser.username} 限制后的源数量: ${enabledSources.length}`
-      );
     }
 
     // 跟踪全局 spider jar（从 detail 字段中提取）
@@ -395,9 +388,6 @@ export async function GET(request: NextRequest) {
                 // 🔑 关键修复：强制忽略 ext 字段
                 // 原因：很多源的 ext 是网站首页 URL（如 http://caiji.dyttzyapi.com）
                 // Box-main 会访问这个 URL 并把返回的 HTML 当作 extend 参数传给 API，导致无数据
-                // if (obj.ext !== undefined) {
-                //   siteExt = typeof obj.ext === 'string' ? obj.ext : JSON.stringify(obj.ext);
-                // }
                 if (obj.jar) {
                   siteJar = obj.jar;
                   if (!globalSpiderJar) globalSpiderJar = obj.jar;
@@ -405,7 +395,6 @@ export async function GET(request: NextRequest) {
               }
             } catch {
               // 非 JSON 时也不作为 ext 字符串
-              // siteExt = detail;
             }
           }
 
@@ -775,7 +764,6 @@ export async function GET(request: NextRequest) {
     if (jarInfo.success && jarInfo.source !== 'fallback') {
       // 成功获取远程 jar，直接使用远程 URL（公网地址，减轻服务器负载）
       finalSpiderUrl = `${jarInfo.source};md5;${jarInfo.md5}`;
-      console.log(`[Spider] 使用远程公网 jar: ${jarInfo.source}`);
     } else {
       // 远程失败，使用本地代理端点（确保100%可用）
       finalSpiderUrl = `${baseUrl}/api/proxy/spider.jar;md5;${jarInfo.md5}`;
@@ -793,7 +781,6 @@ export async function GET(request: NextRequest) {
         if (!isPrivateHost(jarUrl.hostname)) {
           // 用户自定义的公网 jar，直接使用
           finalSpiderUrl = globalSpiderJar;
-          console.log(`[Spider] 使用用户自定义 jar: ${globalSpiderJar}`);
         } else {
           console.warn(`[Spider] 用户配置的jar是私网地址，使用自动选择结果`);
         }

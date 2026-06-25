@@ -7,7 +7,6 @@ async function validateVideoUrl(videoUrl: string): Promise<boolean> {
   try {
     // 检查URL格式
     if (!videoUrl || !videoUrl.startsWith('http')) {
-      console.log('无效的URL格式:', videoUrl);
       return false;
     }
 
@@ -21,7 +20,6 @@ async function validateVideoUrl(videoUrl: string): Promise<boolean> {
     ];
     const urlLower = videoUrl.toLowerCase();
     if (errorKeywords.some((keyword) => urlLower.includes(keyword))) {
-      console.log('URL包含错误关键词:', videoUrl);
       return false;
     }
 
@@ -40,10 +38,6 @@ async function validateVideoUrl(videoUrl: string): Promise<boolean> {
         },
       });
     } catch (fetchError) {
-      console.log(
-        'HEAD请求失败，尝试GET请求:',
-        fetchError instanceof Error ? fetchError.message : 'Unknown error'
-      );
       // 如果HEAD请求失败，尝试GET请求（只获取前几个字节）
       response = await safeFetch(videoUrl, {
         method: 'GET',
@@ -61,7 +55,6 @@ async function validateVideoUrl(videoUrl: string): Promise<boolean> {
 
     // 检查响应状态
     if (!response.ok && response.status !== 206) {
-      console.log(`HTTP错误状态: ${response.status} ${response.statusText}`);
       return false;
     }
 
@@ -83,18 +76,13 @@ async function validateVideoUrl(videoUrl: string): Promise<boolean> {
 
     // 检查内容长度，避免0字节文件
     if (contentLength && parseInt(contentLength) === 0) {
-      console.log('视频文件为空');
       return false;
     }
 
     const isValid = isValidStatus && isVideoContent;
-    console.log(
-      `视频URL验证结果: ${isValid}, Content-Type: ${contentType}, Status: ${response.status}`
-    );
 
     return isValid;
   } catch (error) {
-    console.log('视频URL验证失败:', error);
     return false;
   }
 }
@@ -208,7 +196,6 @@ async function fetchVideoFromApi(apiUrl: string) {
           }
         );
       } else {
-        console.log(`第${attempts}次尝试获取的视频URL无效: ${videoUrl}`);
         if (attempts >= maxAttempts) {
           throw new Error(`已尝试${maxAttempts}次，无法获取有效的视频地址`);
         }
@@ -216,7 +203,6 @@ async function fetchVideoFromApi(apiUrl: string) {
         continue;
       }
     } catch (error) {
-      console.log(`第${attempts}次尝试获取视频失败:`, error);
       if (attempts >= maxAttempts) {
         throw error;
       }

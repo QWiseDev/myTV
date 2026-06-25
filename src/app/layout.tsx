@@ -2,7 +2,6 @@
 
 import type { Metadata, Viewport } from 'next';
 
-// import { Inter } from 'next/font/google'; // 暂时注释掉，避免网络问题
 import './globals.css';
 
 import { ClarityProvider } from '@/components/ClarityProvider';
@@ -12,12 +11,6 @@ import { SessionTracker } from '../components/SessionTracker';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
 
-// 暂时注释掉Google字体，使用系统字体
-// const inter = Inter({
-//   subsets: ['latin'],
-//   display: 'swap',
-//   fallback: ['system-ui', 'sans-serif'],
-// });
 export const dynamic = 'force-dynamic';
 
 // 动态生成 metadata，支持配置更新后的标题变化
@@ -42,7 +35,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // 🔥 构建时避免数据库调用，只使用环境变量默认值
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
+  const _storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   const siteName = process.env.NEXT_PUBLIC_SITE_NAME || '卡拉米影视';
   const announcement =

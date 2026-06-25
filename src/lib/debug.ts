@@ -12,10 +12,8 @@ export const debug = {
   /**
    * 普通日志
    */
-  log: (message: string, data?: unknown) => {
-    if (isDevelopment) {
-      console.log(message, data ?? '');
-    }
+  log: (_message: string, _data?: unknown) => {
+    // 调试日志已清理，保留为 no-op
   },
 
   /**

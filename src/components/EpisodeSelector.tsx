@@ -166,14 +166,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     const validPage = Math.max(0, Math.min(newPage, pageCount - 1));
 
     if (validPage !== currentPage) {
-      console.log('[EpisodeSelector] 当前集数变化，自动切换页面', {
-        episode: value,
-        oldPage: currentPage,
-        newPage: validPage,
-        episodesPerPage,
-        descending,
-        activeTab,
-      });
       setCurrentPage(validPage);
     }
   }, [value, episodesPerPage, pageCount]); // 移除currentPage依赖避免循环触发
@@ -515,7 +507,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   useEffect(() => {
     if (totalEpisodes <= 1 && activeTab === 'episodes') {
       // 如果只有1集且当前在选集tab，自动切换到换源tab
-      console.log('[EpisodeSelector] 单集视频，自动切换到换源tab');
       setActiveTab('sources');
     }
   }, [totalEpisodes]); // 只依赖totalEpisodes，避免与activeTab变化产生循环
@@ -601,7 +592,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 处理选集tab点击
   const handleEpisodeTabClick = useCallback(() => {
-    console.log('[EpisodeSelector] 选集tab被点击');
     setActiveTab('episodes');
   }, []);
 
@@ -640,7 +630,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 处理换源tab点击，只在点击时才搜索
   const handleSourceTabClick = useCallback(() => {
-    console.log('[EpisodeSelector] 换源tab被点击');
     setActiveTab('sources');
     requestSourceSearchIfNeeded();
   }, [requestSourceSearchIfNeeded]);
@@ -676,16 +665,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     currentStart + episodesPerPage - 1,
     totalEpisodes,
   );
-
-  // 调试信息
-  // 调试信息
-  // console.log('[EpisodeSelector] 渲染状态', {
-  //   totalEpisodes,
-  //   activeTab,
-  //   currentPage,
-  //   displayPage,
-  //   hasEpisodesTab: totalEpisodes > 1
-  // });
 
   return (
     <div className='md:ml-2 px-4 py-0 h-full max-h-[350px] md:max-h-[450px] lg:max-h-[520px] xl:max-h-[600px] 2xl:max-h-[700px] rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>

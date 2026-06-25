@@ -13,7 +13,6 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 // OrionTV 兼容接口
 export async function GET(request: NextRequest) {
-  console.log('request', request.url);
 
   // 添加用户认证检查
   const authInfo = getAuthInfoFromCookie(request);

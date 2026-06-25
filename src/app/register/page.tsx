@@ -53,7 +53,7 @@ function RegisterPageClient() {
           setBingWallpaper(data.url);
         }
       } catch (error) {
-        console.log('Failed to fetch Bing wallpaper:', error);
+        /* 忽略错误 */
       }
     };
 

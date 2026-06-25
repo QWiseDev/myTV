@@ -14,11 +14,6 @@ export async function GET(_req: NextRequest) {
     // 使用管理模块获取 jar（优先使用缓存）
     const jarInfo = await getSpiderJar(false);
 
-    console.log(
-      `[Spider Proxy] 提供 ${jarInfo.success ? '真实' : '降级'} jar: ${
-        jarInfo.source
-      }, 大小: ${jarInfo.size} bytes, 缓存: ${jarInfo.cached}`
-    );
 
     return new NextResponse(new Uint8Array(jarInfo.buffer), {
       headers: {

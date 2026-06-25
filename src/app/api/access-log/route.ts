@@ -64,26 +64,10 @@ export async function POST(request: NextRequest) {
       location: body.location || undefined
     };
 
-    console.log('[AccessLog] 收到访问日志:', {
-      username: accessLog.username,
-      action: accessLog.action,
-      ip: accessLog.ipAddress,
-      ipHeaders: {
-        cfConnectingIp,
-        xVercelForwardedFor,
-        xOriginalFor,
-        xClientIp,
-        forwardedFor,
-        realIp,
-        requestIp: request.ip
-      },
-      timestamp: new Date(accessLog.timestamp).toLocaleString()
-    });
 
     // 保存访问日志到数据库
     try {
       await db.saveAccessLog(accessLog);
-      console.log('[AccessLog] 访问日志已保存到数据库');
     } catch (dbError) {
       console.error('[AccessLog] 保存到数据库失败:', dbError);
       // 数据库保存失败时，仍返回成功（异步记录，不暴露给用户）
@@ -117,7 +101,6 @@ export async function GET(request: NextRequest) {
       const realIp = headersList.get('x-real-ip');
       const ip = forwardedFor?.split(',')[0]?.trim() || realIp || '';
 
-      console.log('[AccessLog-IP] 返回IP地址:', ip);
       return NextResponse.json({ ip }, { status: 200 });
 
     } catch (error) {
@@ -165,12 +148,10 @@ export async function GET(request: NextRequest) {
       action: action ? action.trim() : undefined,
     };
 
-    console.log(`[AccessLog] 查询条件:`, JSON.stringify(filters, null, 2));
 
     // 从数据库获取访问日志
     const accessLogs = await db.getAccessLogs(filters, limit, offset);
 
-    console.log(`[AccessLog] 查询用户${queryUsername}的访问日志: ${accessLogs.length}条`);
 
     return NextResponse.json({ accessLogs }, { status: 200 });
 
@@ -220,11 +201,9 @@ export async function DELETE(request: NextRequest) {
       targetUsername = username;
     }
 
-    console.log(`[AccessLog] 删除用户 ${targetUsername} 的访问日志`);
 
     try {
       const deletedCount = await db.deleteAccessLogs(targetUsername);
-      console.log(`[AccessLog] 成功删除 ${deletedCount} 条访问日志`);
 
       return NextResponse.json(
         {

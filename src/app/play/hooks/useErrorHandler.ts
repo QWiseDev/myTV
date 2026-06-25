@@ -113,9 +113,6 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
           // 如果还有重试机会，等待后重试
           if (i < maxRetries - 1) {
             const retryDelay = delay * (i + 1);
-            console.log(
-              `重试 ${i + 1}/${maxRetries - 1}，等待 ${retryDelay}ms...`
-            );
             await new Promise((resolve) => setTimeout(resolve, retryDelay));
           }
         }

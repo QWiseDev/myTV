@@ -26,7 +26,7 @@ export const FRUIT_POSITIONS = Array.from({ length: 24 }, (_, i) => {
 });
 
 // 投注按钮配置
-export const BETTING_BUTTONS = FRUIT_TYPES.map((fruit, index) => ({
+export const BETTING_BUTTONS = FRUIT_TYPES.map((fruit, _index) => ({
   ...fruit,
   maxBet: 999,
   defaultBet: 10

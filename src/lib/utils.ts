@@ -318,7 +318,6 @@ export async function getVideoResolutionFromM3u8(
 
     if (isIPad) {
       // iPad使用文本解析避免崩溃
-      console.log('iPad检测，使用文本解析避免崩溃');
 
       const startTime = performance.now();
       try {
@@ -395,14 +394,10 @@ export async function getVideoResolutionFromM3u8(
             success: true,
           });
 
-          console.log(
-            `✅ iPad 文本解析成功: ${quality} (${resolutions.length}个清晰度)`,
-          );
           return result;
         }
 
         // 没有找到分辨率信息，可能是媒体播放列表（非主列表）
-        console.log('⚠️ iPad: 未找到分辨率信息，可能是媒体播放列表');
         return {
           quality: '未知',
           loadSpeed: '未知',

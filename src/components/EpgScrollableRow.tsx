@@ -62,8 +62,8 @@ export default function EpgScrollableRow({
     const targetElement = programElements[currentPlayingIndex] as HTMLElement;
 
     if (targetElement) {
-      const containerRect = container.getBoundingClientRect();
-      const targetRect = targetElement.getBoundingClientRect();
+      const _containerRect = container.getBoundingClientRect();
+      const _targetRect = targetElement.getBoundingClientRect();
 
       // 计算目标元素相对于容器的位置
       const targetLeft = targetElement.offsetLeft;

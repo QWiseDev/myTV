@@ -91,14 +91,12 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
 
   // 触发内存清理
   const triggerMemoryCleanup = useCallback(() => {
-    console.log('🧹 触发内存清理...');
 
     // 强制垃圾回收（如果支持）
     try {
       const gc = (window as WindowWithGc).gc;
       if (gc) {
         gc();
-        console.log('✅ 触发了垃圾回收');
       }
     } catch (error) {
       // 忽略错误，因为大多数浏览器不支持
@@ -107,7 +105,6 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
     setAutoCleanupTriggered(true);
     setTimeout(() => setAutoCleanupTriggered(false), 3000);
 
-    console.log('✅ 内存清理完成');
   }, []);
 
   // 检查内存状态

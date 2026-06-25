@@ -165,7 +165,4 @@ const nextConfig = {
   },
 };
 
-// 暂时禁用PWA以解决缓存问题
-const withPWA = (config) => config;
-
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;

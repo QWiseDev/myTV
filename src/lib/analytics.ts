@@ -70,7 +70,6 @@ class ClarityAnalytics {
       this.setUserType(userType);
     }
 
-    console.log('[Analytics] Initialized');
   }
 
   /**
@@ -85,7 +84,6 @@ class ClarityAnalytics {
         window.clarity('identify', userId, this.userType);
         window.clarity('set', 'user_id', userId);
       }
-      console.log(`[Analytics] User ID set: ${userId}`);
     } catch (error) {
       console.error('[Analytics] Failed to set user ID:', error);
     }
@@ -102,7 +100,6 @@ class ClarityAnalytics {
       if (window.clarity) {
         window.clarity('set', 'user_type', userType);
       }
-      console.log(`[Analytics] User type set: ${userType}`);
     } catch (error) {
       console.error('[Analytics] Failed to set user type:', error);
     }
@@ -399,9 +396,6 @@ class ClarityAnalytics {
     }
 
     // 🔧 修复：减少控制台噪音，只在调试模式下输出
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Analytics] Event queued (not initialized): ${eventName}`);
-    }
 
     // 防抖：避免重复设置定时器
     if (this.queueProcessTimer) {
@@ -431,7 +425,6 @@ class ClarityAnalytics {
         this.sendEvent(eventName, { ...properties, queued: true, queueTimestamp: timestamp });
       });
 
-      console.log(`[Analytics] Processed ${events.length} queued events`);
     } else {
       // 增加重试计数
       this.retryCount++;
@@ -444,7 +437,6 @@ class ClarityAnalytics {
       } else {
         // 继续重试，但增加延迟时间
         const delay = 1000 * Math.pow(2, this.retryCount); // 指数退避
-        console.log(`[Analytics] Retry ${this.retryCount}/${this.maxRetries} in ${delay}ms`);
 
         this.queueProcessTimer = setTimeout(() => this.processEventQueue(), delay);
       }
@@ -469,7 +461,6 @@ class ClarityAnalytics {
       // 发送到 Clarity
       window.clarity?.('event', eventName, enrichedProperties);
 
-      console.log(`[Analytics] Event tracked: ${eventName}`, enrichedProperties);
     } catch (error) {
       console.error(`[Analytics] Failed to track event ${eventName}:`, error);
     }

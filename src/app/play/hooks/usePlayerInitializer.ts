@@ -225,10 +225,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       }
     };
 
-    const finishSourceSwitch = (reason: string) => {
+    const finishSourceSwitch = (_reason: string) => {
       if (!isSourceChangingRef.current) return;
       isSourceChangingRef.current = false;
-      console.log(`✅ 源切换状态已重置: ${reason}`);
     };
 
     const handleCurrentSourceFailure = (
@@ -249,7 +248,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
       if (allowAutoSwitch && nextSource) {
         finishSourceSwitch('当前源失败，允许自动换源');
-        console.log(`🔄 自动切换到下一个播放源: ${nextSource.source_name}`);
         handleSourceChange(nextSource.source, nextSource.id, nextSource.title);
         return;
       }
@@ -332,7 +330,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         setError('视频地址无效');
         return;
       }
-      console.log(videoUrl);
 
       const { isSafari, isIOS, isIOS13, isMobile, isWebKit, isChrome } =
         detectPlayerBrowserSupport({
@@ -342,22 +339,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           isMobile: isMobileGlobal,
         });
 
-      console.log('🔍 设备检测结果:', {
-        userAgent,
-        isIOS,
-        isSafari,
-        isMobile,
-        isWebKit,
-        isChrome,
-        AirPlay按钮: isIOS || isSafari ? '✅ 显示' : '❌ 隐藏',
-        Chromecast按钮: isChrome && !isIOS ? '✅ 显示' : '❌ 隐藏',
-        投屏策略:
-          isIOS || isSafari
-            ? '🍎 AirPlay (WebKit)'
-            : isChrome
-              ? '📺 Chromecast (Cast API)'
-              : '❌ 不支持投屏',
-      });
 
       const existingArt = artPlayerRef.current;
       if (existingArt && !loading) {
@@ -370,7 +351,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             isSourceChange,
           })
         ) {
-          console.log('🔄 换源时重建播放器，重置 HLS/MSE 媒体管线');
           cleanupPlayer();
         } else {
           try {
@@ -380,7 +360,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             }
 
             if (switchPromiseRef.current) {
-              console.log('⏸️ 取消前一个切换操作，开始新的切换');
               switchPromiseRef.current = null;
             }
 
@@ -397,13 +376,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               ? resumeTimeRef.current
               : resumeTimeRef.current || currentTime;
 
-            console.log(
-              isEpisodeChange
-                ? `🎯 开始切换集数: ${videoUrl} (重置播放时间到0)`
-                : `🎯 开始切换源: ${videoUrl} (重新装载媒体，恢复进度: ${(
-                    resumeTime || 0
-                  ).toFixed(2)}s)`,
-            );
 
             const switchPromise = switchPlayerMedia(existingArt, {
               videoUrl,
@@ -415,16 +387,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             })
               .then(() => {
                 if (switchPromiseRef.current === switchPromise) {
-                  console.log('✅ 源切换完成');
 
                   if (isEpisodeChange) {
                     if (!resumeTimeRef.current || resumeTimeRef.current <= 0) {
                       existingArt.currentTime = 0;
-                      console.log('🎯 集数切换完成，重置播放时间为 0');
-                    } else {
-                      console.log(
-                        `🎯 集数切换完成，检测到待恢复进度 ${resumeTimeRef.current}s，保留当前时间`,
-                      );
                     }
                     isEpisodeChangingRef.current = false;
                   }
@@ -450,7 +416,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               );
             }
 
-            console.log('使用switch方法成功切换视频');
             return;
           } catch (error) {
             console.warn('Switch方法失败，将重建播放器:', error);
@@ -517,14 +482,14 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         const chromecastConfig =
           isChrome && !isIOS
             ? artplayerPluginChromecast({
-                onStateChange: (state) => {
-                  console.log('Chromecast state changed:', state);
+                onStateChange: () => {
+                  /* no-op */
                 },
-                onCastAvailable: (available) => {
-                  console.log('Chromecast available:', available);
+                onCastAvailable: () => {
+                  /* no-op */
                 },
                 onCastStart: () => {
-                  console.log('Chromecast started');
+                  /* no-op */
                 },
                 onError: (error) => {
                   console.error('Chromecast error:', error);
@@ -665,14 +630,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           if ((isIOS || isSafari) && artPlayer.muted) {
-            console.log('iOS设备静音自动播放，准备在播放开始后恢复音量');
 
             const handleFirstPlay = () => {
               setTimeout(() => {
                 if (artPlayerRef.current === artPlayer && artPlayer.muted) {
                   artPlayer.muted = false;
                   artPlayer.volume = lastVolumeRef.current || 0.7;
-                  console.log('iOS设备已恢复音量:', artPlayer.volume);
                 }
               }, 500);
 
@@ -709,12 +672,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           artPlayer.on('artplayerPluginDanmuku:show', () => {
             localStorage.setItem('danmaku_visible', 'true');
-            console.log('弹幕显示状态已保存');
           });
 
           artPlayer.on('artplayerPluginDanmuku:hide', () => {
             localStorage.setItem('danmaku_visible', 'false');
-            console.log('弹幕隐藏状态已保存');
           });
 
           artPlayer.on(
@@ -736,7 +697,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 if (typeof option.speed !== 'undefined') {
                   localStorage.setItem('danmaku_speed', String(option.speed));
                 }
-                console.log('弹幕配置已保存:', option);
               } catch (error) {
                 console.warn('保存弹幕配置失败:', error);
               }
@@ -782,12 +742,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('video:canplay', () => {
-          console.log('🎬 video:canplay 事件触发', {
-            resumeTime: resumeTimeRef.current,
-            isRestoring: isRestoringFromRecordRef.current,
-            duration: artPlayer.duration,
-            currentTime: artPlayer.currentTime,
-          });
 
           setIsVideoLoading(false);
           finishSourceSwitch('视频可播放');
@@ -806,31 +760,20 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 }
               }
 
-              console.log('🎯 video:canplay 恢复进度', {
-                stored: resumeTimeRef.current,
-                target,
-                duration: duration || '未知',
-              });
 
               const videoElement = artPlayer.video || artPlayer.$video;
               if (videoElement) {
                 videoElement.currentTime = target;
-                console.log('✅ 已设置视频元素的 currentTime:', target);
               }
               artPlayer.currentTime = target;
               resetDanmakuTimeline(artPlayer);
 
-              console.log('✅ 成功恢复播放进度到:', target);
               resumeTimeRef.current = null;
               restoredFromRecord = true;
             } catch (err) {
               console.error('❌ 恢复播放进度失败:', err);
               resumeTimeRef.current = null;
             }
-          } else if (resumeTimeRef.current === null) {
-            console.log('✅ 无需恢复进度（resumeTimeRef 为 null）');
-          } else {
-            console.log('⚠️ resumeTimeRef 值无效:', resumeTimeRef.current);
           }
 
           if (restoredFromRecord || !resumeTimeRef.current) {
@@ -838,7 +781,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           if ((isIOS || isSafari) && artPlayer.paused) {
-            console.log('iOS设备检测到视频未自动播放，准备交互触发机制');
 
             const tryAutoPlay = async () => {
               try {
@@ -847,19 +789,13 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
                 const attemptPlay = async (): Promise<boolean> => {
                   playAttempts++;
-                  console.log(`iOS自动播放尝试 ${playAttempts}/${maxAttempts}`);
 
                   try {
                     await artPlayer.play();
-                    console.log('iOS设备自动播放成功');
                     return true;
                   } catch (playError: unknown) {
                     const playErrorName =
                       playError instanceof Error ? playError.name : '';
-                    console.log(
-                      `播放尝试 ${playAttempts} 失败:`,
-                      playErrorName,
-                    );
 
                     if (playErrorName === 'NotAllowedError') {
                       if (playAttempts < maxAttempts) {
@@ -886,9 +822,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 const success = await attemptPlay();
 
                 if (!success) {
-                  console.log(
-                    'iOS设备需要用户交互才能播放，这是正常的浏览器行为',
-                  );
                   if (artPlayerRef.current === artPlayer) {
                     artPlayer.notice.show = '轻触播放按钮开始观看';
 
@@ -952,7 +885,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           if (isEpisodeChangingRef.current) {
             isEpisodeChangingRef.current = false;
-            console.log('🎯 播放器创建完成，重置集数切换标识');
           }
         });
 

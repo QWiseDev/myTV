@@ -85,13 +85,11 @@ export async function preferBestSource(
 
   // 如果是iPad或iOS13+（包括新iPad在桌面模式下），使用轻量级测速策略
   if (isIOS13) {
-    console.log('检测到iPad/iOS13+设备，使用轻量级测速优选策略');
     return await iPadLightweightPreference(sources, setSpeedTestProgress);
   }
 
   // 移动设备使用轻量级测速（仅ping，不创建HLS）
   if (isMobile) {
-    console.log('移动设备使用轻量级优选');
     return await lightweightPreference(sources, setSpeedTestProgress);
   }
 
@@ -110,9 +108,6 @@ export async function lightweightPreference(
   const maxTestCount = 5; // 从8减少到5，只测试最快的5个源
   const sourcesToTest = sources.slice(0, maxTestCount);
 
-  console.log(
-    `开始轻量级测速: 共${sources.length}个源，将测试前${sourcesToTest.length}个`,
-  );
 
   const results = await Promise.all(
     sourcesToTest.map(async (source, index) => {
@@ -187,10 +182,6 @@ export async function lightweightPreference(
     return sources[0];
   }
 
-  console.log(
-    '轻量级优选结果:',
-    sortedResults.map((r) => `${r.source.source_name}: ${r.pingTime}ms`),
-  );
 
   // 清除测速进度状态
   setSpeedTestProgress(null);
@@ -232,13 +223,9 @@ async function progressiveSpeedTest(
   const maxTestCount = 8; // 增加测试数量，因为使用增量策略
   const sourcesToTest = sources.slice(0, maxTestCount);
 
-  console.log(
-    `开始增量测速: 共${sources.length}个源，将测试前${sourcesToTest.length}个`,
-  );
 
   // 第一阶段：快速测试前3个最可靠的源
   const firstBatchSources = sourcesToTest.slice(0, 3);
-  console.log('第一阶段：快速测试前3个最可靠源');
 
   const firstBatchResults = await testSourceBatch(
     firstBatchSources,
@@ -262,7 +249,6 @@ async function progressiveSpeedTest(
   });
 
   if (hasGoodSource && firstBatchResults.length > 0) {
-    console.log('✓ 第一阶段发现优质源，停止继续测试');
 
     // 计算评分并返回最佳源
     const successfulResults = firstBatchResults.filter(Boolean) as Array<{
@@ -293,7 +279,6 @@ async function progressiveSpeedTest(
     return selectBestSource(successfulResults);
   }
 
-  console.log(`第二阶段：测试剩余${remainingSources.length}个源`);
   const secondBatchResults = await testSourceBatch(
     remainingSources,
     3, // 偏移量
@@ -448,17 +433,6 @@ function selectBestSource(
   // 按综合评分排序，选择最佳播放源
   resultsWithScore.sort((a, b) => b.score - a.score);
 
-  console.log('播放源评分排序结果:');
-  resultsWithScore.forEach((result, index) => {
-    console.log(
-      `${index + 1}. ${
-        result.source.source_name
-      } - 评分: ${result.score.toFixed(2)} (${result.testResult.quality}, ${
-        result.testResult.loadSpeed
-      }, ${result.testResult.pingTime}ms)`,
-    );
-  });
-
   return resultsWithScore[0].source;
 }
 
@@ -475,9 +449,6 @@ async function iPadLightweightPreference(
   const maxTestCount = 6; // 测试前6个源，平衡速度和可靠性
   const sourcesToTest = sources.slice(0, maxTestCount);
 
-  console.log(
-    `开始iPad轻量级测速: 共${sources.length}个源，将测试前${sourcesToTest.length}个`,
-  );
 
   const results = await Promise.allSettled(
     sourcesToTest.map(async (source, index) => {
@@ -583,23 +554,12 @@ async function iPadLightweightPreference(
       return 0;
     });
 
-    console.log(
-      'iPad降级优选结果:',
-      sortedSources.map((s) => s.source_name),
-    );
     return sortedSources[0];
   }
 
   // 按评分排序，选择最佳源
   validResults.sort((a, b) => b.score - a.score);
 
-  console.log(
-    'iPad轻量级优选结果:',
-    validResults.map(
-      (r) =>
-        `${r.source.source_name}: ${r.pingTime}ms (评分: ${r.score.toFixed(1)})`,
-    ),
-  );
 
   // 清除测速进度状态
   setSpeedTestProgress(null);

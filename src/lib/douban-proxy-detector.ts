@@ -111,7 +111,7 @@ async function probeEndpoint(
   const startTime = performance.now();
 
   try {
-    const response = await fetch(url, {
+    const _response = await fetch(url, {
       method: 'HEAD',
       mode: 'no-cors', // 允许跨域探测
       signal: controller.signal,
@@ -200,9 +200,6 @@ export async function probeDataProxies(): Promise<{
     if (available.length > 0) {
       // 按延迟排序，返回最快的
       available.sort((a, b) => a.latency - b.latency);
-      console.log(
-        `[豆瓣数据代理] 使用缓存结果: ${available[0].type} (${available[0].latency}ms)`
-      );
       return {
         best: available[0].type as DoubanDataProxyType,
         results: cached,
@@ -210,7 +207,6 @@ export async function probeDataProxies(): Promise<{
     }
   }
 
-  console.log('[豆瓣数据代理] 开始探测...');
   const results: ProbeResult[] = [];
 
   // 并行探测所有端点
@@ -222,11 +218,6 @@ export async function probeDataProxies(): Promise<{
       available,
       timestamp: Date.now(),
     };
-    console.log(
-      `[豆瓣数据代理] ${endpoint.name}: ${
-        available ? `${latency}ms` : '不可用'
-      }`
-    );
     return result;
   });
 
@@ -241,14 +232,10 @@ export async function probeDataProxies(): Promise<{
   if (available.length > 0) {
     // 按延迟排序
     available.sort((a, b) => a.latency - b.latency);
-    console.log(
-      `[豆瓣数据代理] 最优选择: ${available[0].type} (${available[0].latency}ms)`
-    );
     return { best: available[0].type as DoubanDataProxyType, results };
   }
 
   // 所有代理都不可用，回退到直连
-  console.log('[豆瓣数据代理] 所有CDN不可用，回退到直连');
   return { best: 'direct', results };
 }
 
@@ -267,9 +254,6 @@ export async function probeImageProxies(): Promise<{
       const bestType = pickBestImageProxy(
         available.map((r) => r.type as DoubanImageProxyType)
       );
-      console.log(
-        `[豆瓣图片代理] 使用缓存结果: ${bestType}`
-      );
       return {
         best: bestType,
         results: cached,
@@ -277,7 +261,6 @@ export async function probeImageProxies(): Promise<{
     }
   }
 
-  console.log('[豆瓣图片代理] 开始探测...');
   const results: ProbeResult[] = [];
 
   // 并行探测所有端点
@@ -289,11 +272,6 @@ export async function probeImageProxies(): Promise<{
       available,
       timestamp: Date.now(),
     };
-    console.log(
-      `[豆瓣图片代理] ${endpoint.name}: ${
-        available ? `${latency}ms` : '不可用'
-      }`
-    );
     return result;
   });
 
@@ -309,14 +287,10 @@ export async function probeImageProxies(): Promise<{
     const bestType = pickBestImageProxy(
       available.map((r) => r.type as DoubanImageProxyType)
     );
-    console.log(
-      `[豆瓣图片代理] 最优选择: ${bestType}`
-    );
     return { best: bestType, results };
   }
 
   // 所有代理都不可用，回退到直连
-  console.log('[豆瓣图片代理] 所有CDN不可用，回退到直连');
   return { best: 'direct', results };
 }
 
@@ -465,7 +439,6 @@ export function clearProbeCache(): void {
   localStorage.removeItem(CACHE_KEY_IMAGE);
   currentBestDataProxy = null;
   currentBestImageProxy = null;
-  console.log('[豆瓣代理] 探测缓存已清除');
 }
 
 /**
@@ -479,7 +452,6 @@ export async function initProxyDetection(): Promise<void> {
     ([dataResult, imageResult]) => {
       currentBestDataProxy = dataResult.best;
       currentBestImageProxy = imageResult.best;
-      console.log('[豆瓣代理] 初始化探测完成');
     }
   );
 }

@@ -20,7 +20,7 @@ const FRUIT_ICONS = {
 };
 
 // 投注按钮图标映射
-const BUTTON_ICONS = {
+const _BUTTON_ICONS = {
   1: '🍎', // 苹果
   2: '🍊', // 橙子
   3: '🍋', // 柠檬
@@ -37,7 +37,7 @@ interface OriginalFruitMachineProps {
   onClose: () => void;
 }
 
-export default function OriginalFruitMachine({ coins, onCoinsChange, onClose }: OriginalFruitMachineProps) {
+export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _onClose }: OriginalFruitMachineProps) {
   const router = useRouter();
 
   // 音效管理器
@@ -334,7 +334,7 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose }: 
   }, [activeAuto, isRunning, isBigOrSmallRunning, startGame]);
 
   // 大小按钮和收分闪动
-  const setBigOrSmallBtnTimer = useCallback(() => {
+  const _setBigOrSmallBtnTimer = useCallback(() => {
     setIsBigOrSmallBtnSwitch(true);
     bigOrSmallBtnTimer.current = setInterval(() => {
       setIsBigOrSmallBtnSwitch(prev => !prev);

@@ -65,20 +65,12 @@ function LoginPageClient() {
   useEffect(() => {
     const fetchTelegramConfig = async () => {
       try {
-        console.log('[Login] Fetching server config...');
         const response = await fetch('/api/server-config');
         const data = await response.json();
-        console.log('[Login] Server config received:', data);
-        console.log('[Login] TelegramAuthConfig:', data.TelegramAuthConfig);
         if (data.TelegramAuthConfig?.enabled) {
-          console.log('[Login] Telegram is enabled!');
           setTelegramEnabled(true);
-        } else {
-          console.log('[Login] Telegram is NOT enabled');
         }
-      } catch (error) {
-        console.log('Failed to fetch Telegram config:', error);
-      }
+      } catch (error) { /* 忽略错误 */ }
     };
 
     fetchTelegramConfig();
@@ -110,7 +102,6 @@ function LoginPageClient() {
             body: JSON.stringify({ loginTime: Date.now() }),
           });
         } catch (error) {
-          console.log('记录登入时间失败:', error);
           // 登入时间记录失败不影响正常登录流程
         }
 
@@ -132,7 +123,6 @@ function LoginPageClient() {
 
   // 生成 Telegram 登录链接
   const handleTelegramLogin = async () => {
-    console.log('[Frontend] Telegram login clicked');
     setError(null);
 
     // 验证 Telegram 用户名
@@ -144,10 +134,6 @@ function LoginPageClient() {
     setTelegramLoading(true);
 
     try {
-      console.log(
-        '[Frontend] Generating deep link for user:',
-        telegramUsername
-      );
       const res = await fetch('/api/telegram/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,11 +141,6 @@ function LoginPageClient() {
       });
 
       const data = await res.json();
-      console.log('[Frontend] API response:', {
-        ok: res.ok,
-        status: res.status,
-        data,
-      });
 
       if (res.ok && data.deepLink) {
         setTelegramDeepLink(data.deepLink);

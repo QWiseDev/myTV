@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
       ? apiUrl
       : `${apiUrl.replace(/\/$/, '')}/chat/completions`;
 
-    console.log('Testing AI API:', testUrl);
 
     const response = await fetch(testUrl, {
       method: 'POST',

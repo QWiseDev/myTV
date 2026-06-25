@@ -273,15 +273,6 @@ export async function GET(request: Request) {
     }
 
     // 定期打印统计信息
-    if (stats.requests % 100 === 0 && process.env.NODE_ENV === 'development') {
-      console.log(
-        `M3U8 Proxy Stats - Requests: ${stats.requests}, Errors: ${
-          stats.errors
-        }, Avg Response Time: ${stats.avgResponseTime.toFixed(
-          2
-        )}ms, Total Bytes: ${(stats.totalBytes / 1024 / 1024).toFixed(2)}MB`
-      );
-    }
   }
 }
 

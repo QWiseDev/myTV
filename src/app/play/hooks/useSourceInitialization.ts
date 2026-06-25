@@ -158,7 +158,6 @@ export function useSourceInitialization({
         try {
           const query = videoTitle || detailData.title;
           if (query && query.trim()) {
-            console.log(`🔍 为自动切换源搜索其他播放源: ${query}`);
             const maxVariants = 2;
             const limitedVariants = generateSearchVariants(query.trim()).slice(
               0,
@@ -206,7 +205,6 @@ export function useSourceInitialization({
               const combined = [detailData, ...bestResults];
               const uniqueSources = dedupeSources(combined);
 
-              console.log(`✅ 找到 ${uniqueSources.length - 1} 个其他播放源`);
               return uniqueSources;
             }
           }
@@ -233,19 +231,14 @@ export function useSourceInitialization({
     ): Promise<SearchResult[]> => {
       const silent = options?.silent === true;
       try {
-        console.log('开始智能搜索，原始查询:', query);
         const searchVariants = generateSearchVariants(query.trim());
         const maxVariants = 2;
         const limitedVariants = searchVariants.slice(0, maxVariants);
-        console.log(
-          `生成的搜索变体: ${searchVariants.length}个，将使用前${limitedVariants.length}个`,
-        );
 
         const allResults: SearchResult[] = [];
         let bestResults: SearchResult[] = [];
 
         for (const variant of limitedVariants) {
-          console.log('尝试搜索变体:', variant);
 
           const data = await cachedGet<SearchApiResponse>('/api/search', {
             q: variant,
@@ -288,12 +281,8 @@ export function useSourceInitialization({
             );
 
             if (filteredResults.length > 0) {
-              console.log(
-                `变体 "${variant}" 找到 ${filteredResults.length} 个精确匹配结果`,
-              );
               bestResults = filteredResults;
               if (filteredResults.length >= 5) {
-                console.log('✓ 已找到足够多的精确匹配结果，停止搜索');
                 break;
               }
             }
@@ -310,16 +299,10 @@ export function useSourceInitialization({
             .length;
           const isEnglishQuery = englishChars > chineseChars;
 
-          console.log(
-            `搜索语言检测: ${
-              isEnglishQuery ? '英文' : '中文'
-            } - "${queryTitle}"`,
-          );
 
           let relevantMatches: SearchResult[] = [];
 
           if (isEnglishQuery) {
-            console.log('使用英文词汇匹配策略');
 
             const queryWords = queryTitle
               .toLowerCase()
@@ -345,7 +328,6 @@ export function useSourceInitialization({
                   ].includes(word),
               );
 
-            console.log('英文关键词:', queryWords);
 
             relevantMatches = allCandidates.filter((result) => {
               const title = result.title.toLowerCase();
@@ -367,15 +349,11 @@ export function useSourceInitialization({
 
               const wordMatchRatio = matchedWords.length / queryWords.length;
               if (wordMatchRatio >= 0.5) {
-                console.log(
-                  `英文词汇匹配 (${matchedWords.length}/${queryWords.length}): "${result.title}"`,
-                );
                 return true;
               }
               return false;
             });
           } else {
-            console.log('使用中文宽松匹配策略');
             relevantMatches = allCandidates.filter((result) => {
               const title = result.title.toLowerCase();
               const normalizedQuery = queryTitle.replace(
@@ -388,7 +366,6 @@ export function useSourceInitialization({
                 normalizedTitle.includes(normalizedQuery) ||
                 normalizedQuery.includes(normalizedTitle)
               ) {
-                console.log(`中文包含匹配: "${result.title}"`);
                 return true;
               }
 
@@ -397,20 +374,12 @@ export function useSourceInitialization({
               ).length;
               const similarity = commonChars / normalizedQuery.length;
               if (similarity >= 0.5) {
-                console.log(
-                  `中文相似匹配 (${(similarity * 100).toFixed(1)}%): "${
-                    result.title
-                  }"`,
-                );
                 return true;
               }
               return false;
             });
           }
 
-          console.log(
-            `匹配结果: ${relevantMatches.length}/${allCandidates.length}`,
-          );
 
           const maxResults = isEnglishQuery ? 5 : 20;
           if (
@@ -426,12 +395,10 @@ export function useSourceInitialization({
               ).values(),
             );
           } else {
-            console.log('没有找到合理的匹配，返回空结果');
             finalResults = [];
           }
         }
 
-        console.log(`智能搜索完成，最终返回 ${finalResults.length} 个结果`);
         return finalResults;
       } catch (err) {
         if (isActive() && !silent) {
@@ -627,7 +594,6 @@ export function useSourceInitialization({
           setAvailableSources(sourcesInfo);
         }
 
-        console.log(detailData.source, detailData.id);
 
         setNeedPrefer(false);
         setCurrentSource(detailData.source);

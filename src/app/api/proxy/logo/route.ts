@@ -50,14 +50,12 @@ const logoStats = {
 // 清理过期缓存
 function cleanupExpiredCache() {
   const now = Date.now();
-  let cleanedCount = 0;
 
   // 使用 Array.from() 来避免迭代器问题
   const cacheEntries = Array.from(logoCache.entries());
   for (const [key, value] of cacheEntries) {
     if (now - value.timestamp > LOGO_CACHE_TTL) {
       logoCache.delete(key);
-      cleanedCount++;
     }
   }
 
@@ -68,12 +66,8 @@ function cleanupExpiredCache() {
     );
     const toDelete = entries.slice(0, entries.length - MAX_CACHE_SIZE);
     toDelete.forEach(([key]) => logoCache.delete(key));
-    cleanedCount += toDelete.length;
   }
 
-  if (cleanedCount > 0 && process.env.NODE_ENV === 'development') {
-    console.log(`Cleaned ${cleanedCount} expired logo cache entries`);
-  }
 }
 
 // 检测图片格式和大小
@@ -321,16 +315,7 @@ export async function GET(request: Request) {
       logoStats.requests % 200 === 0 &&
       process.env.NODE_ENV === 'development'
     ) {
-      const hitRate = (logoStats.cacheHits / logoStats.requests) * 100;
-      console.log(
-        `Logo Proxy Stats - Requests: ${logoStats.requests}, Cache Hits: ${
-          logoStats.cacheHits
-        } (${hitRate.toFixed(1)}%), Errors: ${
-          logoStats.errors
-        }, Avg Time: ${logoStats.avgResponseTime.toFixed(2)}ms, Cache Size: ${
-          logoCache.size
-        }, Total: ${(logoStats.totalBytes / 1024 / 1024).toFixed(2)}MB`
-      );
+      const _hitRate = (logoStats.cacheHits / logoStats.requests) * 100;
     }
   }
 }

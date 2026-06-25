@@ -97,9 +97,8 @@ const WATCHING_UPDATES_DEBUG =
   process.env.NODE_ENV !== 'production' &&
   process.env.NEXT_PUBLIC_DEBUG_WATCHING_UPDATES === 'true';
 
-function debugLog(...args: unknown[]): void {
+function debugLog(..._args: unknown[]): void {
   if (!WATCHING_UPDATES_DEBUG) return;
-  console.log(...args);
 }
 
 function dispatchWatchingUpdatesEvent(

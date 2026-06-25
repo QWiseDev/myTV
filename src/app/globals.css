@@ -58,15 +58,6 @@
 :root {
   --foreground-rgb: 20, 20, 19;
   --claude-bg: #faf9f5;
-  --claude-bg-soft: #f5f3eb;
-  --claude-surface: #ffffff;
-  --claude-surface-muted: #f0eee6;
-  --claude-border: #e8e6dc;
-  --claude-text: #141413;
-  --claude-muted: #5e5d59;
-  --claude-accent: #d97757;
-  --claude-accent-strong: #b85c38;
-  --claude-accent-soft: #ead8cf;
 }
 
 html,
@@ -97,15 +88,6 @@ html:not(.dark) body {
 html.dark {
   --foreground-rgb: 248, 246, 240;
   --claude-bg: #191817;
-  --claude-bg-soft: #201f1d;
-  --claude-surface: #24221f;
-  --claude-surface-muted: #302d29;
-  --claude-border: #3d3934;
-  --claude-text: #f8f6f0;
-  --claude-muted: #b7b1a8;
-  --claude-accent: #e09a7a;
-  --claude-accent-strong: #f0b195;
-  --claude-accent-soft: #4a332a;
 }
 
 html.dark body {
@@ -221,12 +203,6 @@ html.dark::view-transition-new(root) {
 /* 从深色到浅色：新内容（浅色）从底部滑入 */
 html:not(.dark)::view-transition-new(root) {
   animation-name: slide-from-bottom;
-}
-
-/* 强制播放器内部的 video 元素高度为 100%，并保持内容完整显示 */
-div[data-media-provider] video {
-  height: 100%;
-  object-fit: contain;
 }
 
 .art-poster {

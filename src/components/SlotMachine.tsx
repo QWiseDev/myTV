@@ -25,7 +25,7 @@ const SYMBOLS = SLOT_SYMBOLS.map(symbol => ({
 }));
 
 // 前端专用的中奖组合配置（包含颜色信息）
-const WIN_COMBINATIONS = {
+const _WIN_COMBINATIONS = {
   // 超级大奖
   jiniTaimei: { ...BASE_WINNING_COMBINATIONS.jiniTaimei, color: 'from-purple-600 to-purple-400' },
   basketballAmbassador: { ...BASE_WINNING_COMBINATIONS.basketballAmbassador, color: 'from-orange-600 to-orange-400' },
@@ -50,7 +50,7 @@ const WIN_COMBINATIONS = {
 };
 
 // 律师函惩罚配置（前端使用）
-const PUNISHMENTS = BASE_PUNISHMENTS;
+const _PUNISHMENTS = BASE_PUNISHMENTS;
 
 // 投注金额限制配置
 const BET_CONFIG = {
@@ -60,7 +60,7 @@ const BET_CONFIG = {
 };
 
 // 计算在不同倍率下允许的最大基础投注
-const getMaxBetForMultiplier = (multiplier: number) => {
+const _getMaxBetForMultiplier = (multiplier: number) => {
   return Math.floor(BET_CONFIG.MAX_BET_AMOUNT / multiplier);
 };
 
@@ -99,7 +99,7 @@ export default function SlotMachine({ initialCoins = 10000, showTitle = true, co
   const [jackpotReductionAmount, setJackpotReductionAmount] = useState(0);
   const [showXqCard, setShowXqCard] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false);
-  const [loseStreak, setLoseStreak] = useState(0);
+  const [_loseStreak, setLoseStreak] = useState(0);
   const [chestCount, setChestCount] = useState(0);
   const [showLuckyWheel, setShowLuckyWheel] = useState(false);
   const [luckyWheelReward, setLuckyWheelReward] = useState<{type: string; value: number; name: string; betRefund?: number} | null>(null);
@@ -113,8 +113,8 @@ export default function SlotMachine({ initialCoins = 10000, showTitle = true, co
   const [showHouZongVideo, setShowHouZongVideo] = useState(false);
   const [showJackpotDouble, setShowJackpotDouble] = useState(false);
   const [jackpotDoubleAmount, setJackpotDoubleAmount] = useState(0);
-  const [isHouZongBonus, setIsHouZongBonus] = useState(false);
-  const [houZongVideoSrc, setHouZongVideoSrc] = useState(HOUZONG_VIDEO_PATH);
+  const [_isHouZongBonus, setIsHouZongBonus] = useState(false);
+  const [houZongVideoSrc] = useState(HOUZONG_VIDEO_PATH);
 
   // 律师函gif播放状态
   const [showLawyerGif, setShowLawyerGif] = useState(false);
@@ -833,7 +833,7 @@ export default function SlotMachine({ initialCoins = 10000, showTitle = true, co
   }, [playSound]);
 
   // 新的复杂中奖计算函数
-  const calculateWin = (symbols: typeof SYMBOLS[0][], betAmount: number) => {
+  const _calculateWin = (symbols: typeof SYMBOLS[0][], betAmount: number) => {
     let totalWinAmount = 0;
     let winType: string | null = null;
     let isPunishment = false;
@@ -1063,7 +1063,7 @@ export default function SlotMachine({ initialCoins = 10000, showTitle = true, co
   }, [bgMusicEnabled, bgMusicTracks]);
 
   // 使用共享的动态权重计算函数
-  const getDynamicSymbolsCallback = useCallback(() => {
+  const _getDynamicSymbolsCallback = useCallback(() => {
     return getDynamicSymbols(SYMBOLS, coins);
   }, [coins]);
 
@@ -1176,13 +1176,7 @@ export default function SlotMachine({ initialCoins = 10000, showTitle = true, co
       const monitorPerformance = () => {
         const memInfo = (performance as any).memory;
         if (memInfo) {
-          // console.log('🔥 Performance Monitor:', { // 减少控制台噪音
-          //   used: `${(memInfo.usedJSHeapSize / 1048576).toFixed(2)} MB`,
-          //   total: `${(memInfo.totalJSHeapSize / 1048576).toFixed(2)} MB`,
-          //   limit: `${(memInfo.jsHeapSizeLimit / 1048576).toFixed(2)} MB`,
-          //   spinning: spinning.some(s => s),
-          //   showSuperPenalty: showSuperPenaltyMode
-          // });
+          // 性能监控日志已移除，减少控制台噪音
         }
       };
 

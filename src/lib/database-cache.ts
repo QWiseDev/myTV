@@ -15,7 +15,6 @@ function formatBytes(bytes: number): string {
 export class DatabaseCacheManager {
   // 获取Redis兼容数据库中的缓存统计（支持KVRocks、Upstash、Redis）
   static async getKVRocksCacheStats() {
-    console.log('🔍 开始获取Redis存储实例...');
 
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
@@ -27,14 +26,9 @@ export class DatabaseCacheManager {
     };
 
     try {
-      console.log('📊 开始从Redis兼容数据库读取缓存统计...');
 
       const allCacheKeys = await db.keys('cache:*');
 
-      console.log(
-        `📊 数据库中找到 ${allCacheKeys.length} 个缓存键:`,
-        allCacheKeys.slice(0, 5)
-      );
 
       if (allCacheKeys.length === 0) {
         return stats;
@@ -98,11 +92,6 @@ export class DatabaseCacheManager {
         stats.total.size += size;
       });
 
-      console.log(
-        `✅ Redis缓存统计完成: 总计 ${stats.total.count} 项, ${formatBytes(
-          stats.total.size
-        )}`
-      );
       return stats;
     } catch (error) {
       console.error('Redis缓存统计失败:', error);
@@ -112,7 +101,6 @@ export class DatabaseCacheManager {
 
   // 获取缓存统计信息（支持KVRocks/Upstash/Redis，localStorage作为备用）
   static async getSimpleCacheStats() {
-    console.log('📊 开始获取缓存统计信息...');
 
     // 从 Redis兼容数据库 获取统计（支持KVRocks、Upstash、Redis）
     const redisStats = await DatabaseCacheManager.getKVRocksCacheStats();
@@ -157,7 +145,6 @@ export class DatabaseCacheManager {
           key === 'lunatv_danmu_cache'
       );
 
-      console.log(`📊 localStorage中找到 ${keys.length} 个相关缓存键`);
 
       keys.forEach((key) => {
         const data = localStorage.getItem(key);
@@ -223,7 +210,6 @@ export class DatabaseCacheManager {
       switch (type) {
         case 'douban':
           await db.clearExpiredCache('douban-');
-          console.log('🗑️ 豆瓣缓存清理完成');
           break;
         case 'tmdb':
           await db.clearExpiredCache('tmdb-');
@@ -236,13 +222,10 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(`🗑️ localStorage中清理了 ${keys.length} 个TMDB缓存项`);
           }
-          console.log('🗑️ TMDB缓存清理完成');
           break;
         case 'danmu':
           await db.clearExpiredCache('danmu-cache');
-          console.log('🗑️ 弹幕缓存清理完成');
           break;
         case 'netdisk':
           await db.clearExpiredCache('netdisk-search');
@@ -255,11 +238,7 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(
-              `🗑️ localStorage中清理了 ${keys.length} 个网盘搜索缓存项`
-            );
           }
-          console.log('🗑️ 网盘搜索缓存清理完成');
           break;
         case 'youtube':
           await db.clearExpiredCache('youtube-search');
@@ -272,11 +251,7 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(
-              `🗑️ localStorage中清理了 ${keys.length} 个YouTube搜索缓存项`
-            );
           }
-          console.log('🗑️ YouTube搜索缓存清理完成');
           break;
       }
 
@@ -293,7 +268,6 @@ export class DatabaseCacheManager {
   static async clearExpiredCache(): Promise<number> {
     try {
       await db.clearExpiredCache();
-      console.log('🗑️ 所有过期缓存清理完成');
       return 1; // 标记操作已执行
     } catch (error) {
       console.error('清理过期缓存失败:', error);

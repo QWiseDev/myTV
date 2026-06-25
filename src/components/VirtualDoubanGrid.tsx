@@ -78,16 +78,8 @@ export const VirtualDoubanGrid: React.FC<VirtualDoubanGridProps> = ({
   useEffect(() => {
     const checkContainer = () => {
       const element = containerRef.current;
-      const actualWidth = element?.offsetWidth || 0;
+      const _actualWidth = element?.offsetWidth || 0;
 
-      console.log('VirtualDoubanGrid container debug:', {
-        actualWidth,
-        containerWidth,
-        offsetWidth: element?.offsetWidth,
-        clientWidth: element?.clientWidth,
-        scrollWidth: element?.scrollWidth,
-        element: !!element,
-      });
     };
 
     checkContainer();
@@ -183,7 +175,7 @@ export const VirtualDoubanGrid: React.FC<VirtualDoubanGridProps> = ({
       style,
       displayData: cellDisplayData,
       type: cellType,
-      primarySelection: cellPrimarySelection,
+      primarySelection: _cellPrimarySelection,
       isBangumi: cellIsBangumi,
       columnCount: cellColumnCount,
       displayItemCount: cellDisplayItemCount,

@@ -11,11 +11,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET(request: NextRequest) {
-  console.log('server-config called: ', request.url);
+export async function GET(_request: NextRequest) {
 
   const config = await getConfig();
-  console.log('TelegramAuthConfig:', config.TelegramAuthConfig);
 
   const result: Record<string, unknown> = {
     SiteName: config.SiteConfig.SiteName,
@@ -31,7 +29,6 @@ export async function GET(request: NextRequest) {
 
   // 添加 Telegram 登录配置（仅公开必要信息）
   if (config.TelegramAuthConfig?.enabled) {
-    console.log('Telegram config is enabled, adding to result');
     result.TelegramAuthConfig = {
       enabled: true,
       botUsername: config.TelegramAuthConfig.botUsername,
@@ -40,8 +37,6 @@ export async function GET(request: NextRequest) {
       requestWriteAccess: config.TelegramAuthConfig.requestWriteAccess ?? false,
       // 注意：不返回 botToken，保护敏感信息
     };
-  } else {
-    console.log('Telegram config is NOT enabled or missing');
   }
 
   return NextResponse.json(result);

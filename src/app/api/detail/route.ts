@@ -48,9 +48,6 @@ export async function GET(request: NextRequest) {
     const cached = detailCache.get(cacheKey);
     if (cached && now - cached.timestamp < DETAIL_CACHE_DURATION) {
       const remainingTime = DETAIL_CACHE_DURATION - (now - cached.timestamp);
-      console.log(
-        `📦 缓存命中: ${apiSite.name} - ${id}，剩余时间: ${Math.floor(remainingTime / 1000)}秒`
-      );
       // 🎯 返回缓存数据，并设置浏览器和CDN缓存头
       return NextResponse.json(cached.data, {
         headers: {
@@ -68,9 +65,6 @@ export async function GET(request: NextRequest) {
       data: result,
       timestamp: now
     });
-    console.log(
-      `✅ 视频详情已缓存: ${apiSite.name} - ${id}，有效期${DETAIL_CACHE_DURATION / 1000 / 60}分钟`
-    );
 
     // 定期清理过期缓存（避免内存泄漏）
     if (detailCache.size > 1000) {
@@ -79,7 +73,6 @@ export async function GET(request: NextRequest) {
           detailCache.delete(key);
         }
       }
-      console.log(`🧹 清理过期缓存，当前缓存数量: ${detailCache.size}`);
     }
 
     // 🎯 返回新数据，并设置浏览器和CDN缓存头

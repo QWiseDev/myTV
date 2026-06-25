@@ -9,8 +9,7 @@ export const revalidate = 0;
 
 let isRunning = false;
 
-export async function GET(request: NextRequest) {
-  console.log(request.url);
+export async function GET(_request: NextRequest) {
 
   if (isRunning) {
     return NextResponse.json({

@@ -721,12 +721,6 @@ export async function deleteAllVideoSources(): Promise<{
     'utf-8'
   );
 
-  console.log(`💾 已备份 ${sourcesToDelete.length} 个视频源到: ${backupPath}`);
-  console.log('📋 即将删除的视频源:');
-  sourcesToDelete.forEach((source, index) => {
-    console.log(`   ${index + 1}. ${source.name} (${source.key})`);
-  });
-
   // 清空视频源
   config.SourceConfig = [];
 

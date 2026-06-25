@@ -134,7 +134,6 @@ class SmartCache {
     const now = Date.now();
 
     if (now - cached.timestamp < ttl) {
-      console.log(`✓ 智能缓存命中: ${cacheKey} (TTL: ${Math.round(ttl / 1000 / 60)}分钟)`);
       return cached;
     }
 
@@ -161,7 +160,6 @@ class SmartCache {
         this.cache.delete(key);
       });
 
-      console.log(`🧹 智能缓存清理: 删除了 ${oldestKeys.length} 个最旧的缓存条目`);
     }
 
     // 清理可靠性数据
@@ -178,7 +176,6 @@ class SmartCache {
         this.reliability.delete(key);
       });
 
-      console.log(`🧹 智能缓存清理: 删除了 ${oldestReliabilityKeys.length} 个最旧的可靠性条目`);
     }
   }
 
@@ -231,8 +228,7 @@ class SmartCache {
 
     this.reliability.set(cacheKey, reliability);
 
-    const ttl = this.getCacheTTL(reliability);
-    console.log(`✓ 智能缓存更新: ${cacheKey} (稳定性: ${(reliability.stability * 100).toFixed(1)}%, TTL: ${Math.round(ttl / 1000 / 60)}分钟)`);
+    const _ttl = this.getCacheTTL(reliability);
   }
 
   /**
@@ -276,7 +272,6 @@ class SmartCache {
    */
   cleanup(): void {
     const now = Date.now();
-    let cleanedCount = 0;
 
     this.cache.forEach((cached, key) => {
       const reliability = this.reliability.get(key);
@@ -285,13 +280,9 @@ class SmartCache {
       const ttl = this.getCacheTTL(reliability);
       if (now - cached.timestamp >= ttl) {
         this.cache.delete(key);
-        cleanedCount++;
       }
     });
 
-    if (cleanedCount > 0) {
-      console.log(`✓ 智能缓存清理: 删除了 ${cleanedCount} 个过期条目`);
-    }
   }
 
   /**
@@ -340,7 +331,6 @@ class SmartCache {
     for (const [key, reliability] of Object.entries(data)) {
       this.reliability.set(key, { ...reliability });
     }
-    console.log(`✓ 导入了 ${Object.keys(data).length} 个源的可靠性数据`);
   }
 }
 

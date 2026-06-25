@@ -121,15 +121,9 @@ function PlayPageClient() {
     useMemoryMonitor({
       checkInterval: 30000, // ✅ 从 15s 改为 30s，减少检查频率降低 CPU 占用
       enableAutoCleanup: true,
-      onPressureChange: (pressure, info) => {
-        console.log(
-          `🧠 内存压力变化: ${pressure} (${(info.usage * 100).toFixed(1)}%)`,
-        );
+      onPressureChange: (_pressure, _info) => {
 
         // 根据内存压力调整弹幕配置
-        if (pressure === 'high' || pressure === 'critical') {
-          console.log('🚨 高内存压力：建议减少弹幕密度或关闭弹幕');
-        }
       },
     });
 
@@ -461,33 +455,21 @@ function PlayPageClient() {
   // 加载豆瓣短评
   useEffect(() => {
     const loadComments = async () => {
-      console.log(
-        '[Comments] useEffect triggered, videoDoubanId:',
-        videoDoubanId,
-        'loadedRef:',
-        commentsLoadedRef.current,
-        'isLoading:',
-        isLoadingCommentsRef.current,
-      );
 
       if (!videoDoubanId || videoDoubanId === 0) {
-        console.log('[Comments] Skipping: no videoDoubanId');
         return;
       }
 
       // 如果已经为当前豆瓣ID加载过短评，不重复加载
       if (commentsLoadedRef.current === videoDoubanId) {
-        console.log('[Comments] Skipping: already loaded for this ID');
         return;
       }
 
       // 如果正在加载中，不重复请求
       if (isLoadingCommentsRef.current) {
-        console.log('[Comments] Skipping: already loading');
         return;
       }
 
-      console.log('[Comments] Starting to load comments for:', videoDoubanId);
       isLoadingCommentsRef.current = true;
       commentsLoadedRef.current = videoDoubanId;
       setLoadingComments(true);
@@ -501,10 +483,6 @@ function PlayPageClient() {
         });
 
         if (response.code === 200 && response.data) {
-          console.log(
-            '[Comments] Loaded successfully, count:',
-            response.data.comments?.length,
-          );
           setMovieComments(response.data.comments);
         } else {
           setCommentsError(response.message);
@@ -788,7 +766,6 @@ function PlayPageClient() {
       const wakeLock = (navigator as WakeLockNavigator).wakeLock;
       if (wakeLock) {
         wakeLockRef.current = await wakeLock.request('screen');
-        console.log('Wake Lock 已启用');
       }
     } catch (err) {
       console.warn('Wake Lock 请求失败:', err);
@@ -800,7 +777,6 @@ function PlayPageClient() {
       if (wakeLockRef.current) {
         await wakeLockRef.current.release();
         wakeLockRef.current = null;
-        console.log('Wake Lock 已释放');
       }
     } catch (err) {
       console.warn('Wake Lock 释放失败:', err);
@@ -852,7 +828,6 @@ function PlayPageClient() {
             typeof danmukuPlugin.worker.terminate === 'function'
           ) {
             danmukuPlugin.worker.terminate();
-            console.log('弹幕WebWorker已清理');
           }
 
           // 清空弹幕数据
@@ -864,14 +839,12 @@ function PlayPageClient() {
         // 2. 销毁HLS实例
         if (artPlayerRef.current.video.hls) {
           artPlayerRef.current.video.hls.destroy();
-          console.log('HLS实例已销毁');
         }
 
         // 3. 销毁ArtPlayer实例 (使用false参数避免DOM清理冲突)
         artPlayerRef.current.destroy(false);
         artPlayerRef.current = null;
 
-        console.log('播放器资源已清理');
       } catch (err) {
         console.warn('清理播放器资源时出错:', err);
         // 即使出错也要确保引用被清空
@@ -987,11 +960,6 @@ function PlayPageClient() {
     (offset: number) => {
       setDanmuEpisodeOffset((prev) => prev + offset);
       danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
-      console.log(
-        `🎯 弹幕集数偏移调整: ${offset > 0 ? '+' : ''}${offset}, 新弹幕集数: ${
-          danmuEpisodeNum + offset
-        }`,
-      );
     },
     [danmuEpisodeNum],
   );

@@ -32,13 +32,6 @@ export function useMemoryCleanup({ isMobile }: UseMemoryCleanupOptions) {
           const heapLimit = memInfo.jsHeapSizeLimit;
           const memoryUsageRatio = usedJSHeapSize / heapLimit;
 
-          console.log(
-            `内存使用情况: ${(memoryUsageRatio * 100).toFixed(2)}% (${(
-              usedJSHeapSize /
-              1024 /
-              1024
-            ).toFixed(2)}MB / ${(heapLimit / 1024 / 1024).toFixed(2)}MB)`,
-          );
 
           if (memoryUsageRatio > 0.75) {
             console.warn('内存使用过高，清理缓存...');
@@ -47,7 +40,6 @@ export function useMemoryCleanup({ isMobile }: UseMemoryCleanupOptions) {
               await ClientCache.clearExpired('danmu-cache');
               const oldCacheKey = 'lunatv_danmu_cache';
               localStorage.removeItem(oldCacheKey);
-              console.log('弹幕缓存已清理');
             } catch (e) {
               console.warn('清理弹幕缓存失败:', e);
             }
@@ -55,7 +47,6 @@ export function useMemoryCleanup({ isMobile }: UseMemoryCleanupOptions) {
             const gc = (window as WindowWithGc).gc;
             if (typeof gc === 'function') {
               gc();
-              console.log('已触发垃圾回收');
             }
           }
         } catch (error) {

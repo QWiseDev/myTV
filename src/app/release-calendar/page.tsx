@@ -77,7 +77,6 @@ export default function ReleaseCalendarPage() {
       if (age >= CACHE_DURATION) {
         localStorage.removeItem('release_calendar_all_data');
         localStorage.removeItem(cacheTimeKey);
-        console.log('已清理过期的发布日历缓存');
       }
     }
 
@@ -96,7 +95,6 @@ export default function ReleaseCalendarPage() {
             const dataKey = key.replace('_time', '');
             localStorage.removeItem(dataKey);
             localStorage.removeItem(key);
-            console.log(`已清理过期缓存: ${dataKey}`);
           }
         }
       }
@@ -113,7 +111,6 @@ export default function ReleaseCalendarPage() {
       cleanExpiredCache();
 
       // 🌐 直接从API获取数据（API有数据库缓存，全局共享，24小时有效）
-      console.log('🌐 正在从API获取发布日历数据...');
       const apiUrl = reset
         ? '/api/release-calendar?refresh=true'
         : '/api/release-calendar';
@@ -124,7 +121,6 @@ export default function ReleaseCalendarPage() {
       }
 
       const result: ReleaseCalendarResult = await response.json();
-      console.log(`📊 获取到 ${result.items.length} 条上映数据`);
 
       // 前端过滤（无需缓存，API数据库缓存已处理）
       const filteredData = applyClientSideFilters(result);
@@ -211,17 +207,14 @@ export default function ReleaseCalendarPage() {
 
   // 处理刷新按钮点击（简化版，清除数据库缓存并刷新）
   const handleRefreshClick = async () => {
-    console.log('📅 刷新上映日程数据...');
 
     try {
       // 清除遗留的localStorage缓存（兼容性清理）
       localStorage.removeItem('release_calendar_all_data');
       localStorage.removeItem('release_calendar_all_data_time');
-      console.log('✅ 已清除遗留的localStorage缓存');
 
       // 🔄 强制刷新（API会清除数据库缓存并重新获取）
       await fetchData(true);
-      console.log('🎉 上映日程数据刷新成功！');
     } catch (error) {
       console.error('❌ 刷新上映日程数据失败:', error);
     }
@@ -781,7 +774,7 @@ export default function ReleaseCalendarPage() {
                             currentMonth,
                             1
                           );
-                          const lastDay = new Date(
+                          const _lastDay = new Date(
                             currentYear,
                             currentMonth + 1,
                             0
@@ -1117,7 +1110,7 @@ export default function ReleaseCalendarPage() {
                       }, {} as Record<string, ReleaseCalendarItem[]>)
                     )
                       .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([date, items], index) => {
+                      .map(([date, items], _index) => {
                         const today = new Date();
                         const currentDate = new Date(date);
                         const todayStr = `${today.getFullYear()}-${String(

@@ -36,9 +36,9 @@ export const VersionPanel: React.FC<VersionPanelProps> = ({
   onClose,
 }) => {
   const [mounted, setMounted] = useState(false);
-  const [remoteChangelog, setRemoteChangelog] = useState<ChangelogEntry[]>([]);
-  const [hasUpdate, setIsHasUpdate] = useState(false);
-  const [latestVersion, setLatestVersion] = useState<string>('');
+  const [remoteChangelog] = useState<ChangelogEntry[]>([]);
+  const [hasUpdate] = useState(false);
+  const [latestVersion] = useState<string>('');
   const [showRemoteContent, setShowRemoteContent] = useState(false);
 
   // 确保组件已挂载
@@ -78,7 +78,7 @@ export const VersionPanel: React.FC<VersionPanelProps> = ({
   }, [isOpen]);
 
   // 获取远程变更日志 - 已禁用网络请求
-  const fetchRemoteChangelog = async () => {
+  const _fetchRemoteChangelog = async () => {
     // 🔧 优化：禁用远程变更日志获取，避免网络请求
     return;
 
@@ -114,7 +114,7 @@ export const VersionPanel: React.FC<VersionPanelProps> = ({
   };
 
   // 解析变更日志格式
-  const parseChangelog = (content: string): RemoteChangelogEntry[] => {
+  const _parseChangelog = (content: string): RemoteChangelogEntry[] => {
     const lines = content.split('\n');
     const versions: RemoteChangelogEntry[] = [];
     let currentVersion: RemoteChangelogEntry | null = null;

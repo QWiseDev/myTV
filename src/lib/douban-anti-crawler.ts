@@ -80,7 +80,6 @@ export async function getDoubanCookie(url: string): Promise<string> {
         throw new Error('Unexpected redirect location');
       }
 
-      console.log('Detected anti-crawler verification, processing...');
 
       // Step 2: 获取验证页面
       const verifyResponse = await fetch(location, { headers });
@@ -98,12 +97,10 @@ export async function getDoubanCookie(url: string): Promise<string> {
         throw new Error('Failed to parse verification page');
       }
 
-      console.log('Calculating proof of work...');
 
       // Step 4: 计算工作量证明
       const sol = proofOfWork(formData.cha, 4);
 
-      console.log('Proof of work calculated:', sol);
 
       // Step 5: 提交验证表单
       const formBody = new URLSearchParams({
@@ -129,7 +126,6 @@ export async function getDoubanCookie(url: string): Promise<string> {
         throw new Error('No cookie received after verification');
       }
 
-      console.log('Successfully obtained douban cookie');
       return setCookieHeader;
     }
 
@@ -170,7 +166,6 @@ export async function fetchDoubanWithVerification(
     if (response.status === 302) {
       const location = response.headers.get('location');
       if (location && location.includes('sec.douban.com')) {
-        console.log('Anti-crawler detected, obtaining cookie...');
 
         const cookie = await getDoubanCookie(url);
 

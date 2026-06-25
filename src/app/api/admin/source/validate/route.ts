@@ -187,7 +187,6 @@ export async function GET(request: NextRequest) {
 
     cancel() {
       streamClosed = true;
-      console.log('Client disconnected, cancelling validation stream');
     },
   });
 

@@ -53,7 +53,7 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
   );
 
   // 游戏历史
-  const [gameHistory, setGameHistory] = useState<GameRecord[]>([]);
+  const [_gameHistory, setGameHistory] = useState<GameRecord[]>([]);
   const [showResult, setShowResult] = useState(false);
   const [lastWinResult, setLastWinResult] = useState<WinResult | null>(null);
 

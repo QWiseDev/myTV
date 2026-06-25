@@ -297,12 +297,8 @@ ${
     if (useMaxCompletionTokens) {
       requestBody.max_completion_tokens = tokenLimit;
       // 推理模型不支持这些参数
-      console.log(
-        `使用推理模型 ${requestModel}，max_completion_tokens: ${tokenLimit}`
-      );
     } else {
       requestBody.max_tokens = tokenLimit;
-      console.log(`使用标准模型 ${requestModel}，max_tokens: ${tokenLimit}`);
     }
 
     // 调用AI API

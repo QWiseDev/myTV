@@ -149,7 +149,6 @@ export async function GET(request: NextRequest) {
 
     // 检测网络环境
     const networkEnv = detectNetworkEnvironment(request);
-    console.log('[SmartHealth] 网络环境:', networkEnv);
 
     // 获取当前Spider状态
     const spiderStatus = getSpiderStatus();

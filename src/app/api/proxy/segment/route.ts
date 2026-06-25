@@ -307,23 +307,5 @@ export async function GET(request: Request) {
     );
   } finally {
     clearTimeout(timeoutId);
-
-    // 定期打印统计信息
-    if (
-      segmentStats.requests % 500 === 0 &&
-      process.env.NODE_ENV === 'development'
-    ) {
-      console.log(
-        `Segment Proxy Stats - Requests: ${segmentStats.requests}, Active: ${
-          segmentStats.activeStreams
-        }, Errors: ${
-          segmentStats.errors
-        }, Avg Time: ${segmentStats.avgResponseTime.toFixed(2)}ms, Total: ${(
-          segmentStats.totalBytes /
-          1024 /
-          1024
-        ).toFixed(2)}MB`
-      );
-    }
   }
 }

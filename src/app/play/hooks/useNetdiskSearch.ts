@@ -35,9 +35,6 @@ export const useNetdiskSearch = (): UseNetdiskSearchReturn => {
       if (data.success) {
         setNetdiskResults(data.data.merged_by_type || {});
         setNetdiskTotal(data.data.total || 0);
-        console.log(
-          `网盘搜索完成: "${query}" - ${data.data.total || 0} 个结果`,
-        );
       } else {
         setNetdiskError(data.error || '网盘搜索失败');
       }

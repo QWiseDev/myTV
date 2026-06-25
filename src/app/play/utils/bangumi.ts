@@ -75,7 +75,6 @@ export const fetchBangumiDetailsWithCache = async (
 ): Promise<BangumiDetails | null> => {
   const cached = await getBangumiCache(bangumiId);
   if (cached) {
-    console.log(`Bangumi 详情缓存命中: ${bangumiId}`);
     return cached;
   }
 
@@ -84,11 +83,10 @@ export const fetchBangumiDetailsWithCache = async (
     if (response.ok) {
       const bangumiData = (await response.json()) as BangumiDetails;
       await setBangumiCache(bangumiId, bangumiData);
-      console.log(`Bangumi 详情已缓存: ${bangumiId}`);
       return bangumiData;
     }
   } catch (error) {
-    console.log('请求 Bangumi 详情失败:', error);
+    /* 忽略错误 */
   }
 
   return null;

@@ -249,22 +249,16 @@ export async function scrapeTVReleases(): Promise<ReleaseCalendarItem[]> {
  */
 export async function scrapeAllReleases(): Promise<ReleaseCalendarItem[]> {
   try {
-    console.log('开始抓取发布日历数据...');
 
     // 避免并发请求导致的失败，改为顺序执行
-    console.log('抓取电影数据...');
     const movies = await scrapeMovieReleases();
-    console.log(`电影数据抓取完成: ${movies.length} 部`);
 
     // 添加延迟避免请求过于频繁
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    console.log('抓取电视剧数据...');
     const tvShows = await scrapeTVReleases();
-    console.log(`电视剧数据抓取完成: ${tvShows.length} 部`);
 
     const allItems = [...movies, ...tvShows];
-    console.log(`总共抓取到 ${allItems.length} 条发布数据`);
 
     return allItems;
   } catch (error) {

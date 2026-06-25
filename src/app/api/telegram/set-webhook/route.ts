@@ -27,7 +27,6 @@ export async function POST(request: Request) {
       (host.includes('localhost') ? 'http' : 'https');
     const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
 
-    console.log('[Set Webhook] Setting webhook to:', webhookUrl);
 
     // 调用 Telegram API 设置 webhook
     const response = await fetch(
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
-    console.log('[Set Webhook] Response:', result);
 
     if (result.ok) {
       return NextResponse.json({

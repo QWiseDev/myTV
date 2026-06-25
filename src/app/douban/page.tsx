@@ -230,7 +230,7 @@ function DoubanPageClient() {
   }, [type, customCategories]);
 
   // 参数快照比较函数
-  const isSnapshotEqual = useCallback(
+  const _isSnapshotEqual = useCallback(
     (
       snapshot1: {
         type: string;
@@ -414,8 +414,6 @@ function DoubanPageClient() {
           setDoubanData(data.list);
           setHasMore(data.list.length !== 0);
           setLoading(false);
-        } else {
-          console.log('关键参数不一致，不执行任何操作，避免设置过期数据');
         }
         // 如果参数不一致，不执行任何操作，避免设置过期数据
       } else {
@@ -585,8 +583,6 @@ function DoubanPageClient() {
             if (keyParamsMatch) {
               setDoubanData((prev) => [...prev, ...data.list]);
               setHasMore(data.list.length !== 0);
-            } else {
-              console.log('关键参数不一致，不执行任何操作，避免设置过期数据');
             }
           } else {
             throw new Error(data.message || '获取数据失败');

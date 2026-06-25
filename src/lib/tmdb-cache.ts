@@ -59,11 +59,9 @@ async function setCache(
   expireSeconds: number
 ): Promise<void> {
   try {
-    console.log(`🔄 TMDB缓存设置: ${key}`);
 
     // 主要存储：统一存储
     await ClientCache.set(key, data, expireSeconds);
-    console.log(`✅ TMDB缓存已存储到数据库: ${key}`);
 
     // 兜底存储：localStorage（兼容性，短期缓存）
     if (typeof localStorage !== 'undefined') {
@@ -74,7 +72,6 @@ async function setCache(
           created: Date.now(),
         };
         localStorage.setItem(key, JSON.stringify(cacheData));
-        console.log(`✅ TMDB缓存已存储到localStorage: ${key}`);
       } catch (e) {
         console.warn(`⚠️ TMDB缓存localStorage存储失败: ${key}`, e);
         // localStorage可能满了，忽略错误
@@ -112,11 +109,6 @@ async function cleanExpiredCache(): Promise<void> {
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key));
 
-      if (keysToRemove.length > 0) {
-        console.log(
-          `LocalStorage 清理了 ${keysToRemove.length} 个过期的TMDB缓存项`
-        );
-      }
     }
   } catch (e) {
     console.warn('清理TMDB过期缓存失败:', e);
@@ -164,7 +156,6 @@ export function clearTMDBCache(): void {
     key.startsWith('tmdb-')
   );
   keys.forEach((key) => localStorage.removeItem(key));
-  console.log(`清理了 ${keys.length} 个TMDB缓存项`);
 }
 
 // 初始化缓存系统
@@ -175,7 +166,6 @@ async function initTMDBCache(): Promise<void> {
   // 每10分钟清理一次过期缓存
   setInterval(() => cleanExpiredCache(), 10 * 60 * 1000);
 
-  console.log('TMDB缓存系统已初始化');
 }
 
 // 在模块加载时初始化缓存系统

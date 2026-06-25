@@ -54,9 +54,6 @@ async function withRetry<T>(
         err.name === 'UpstashError';
 
       if (isConnectionError && !isLastAttempt) {
-        console.log(
-          `Upstash Redis operation failed, retrying... (${i + 1}/${maxRetries})`
-        );
         console.error('Error:', err.message);
 
         // 等待一段时间后重试
@@ -488,7 +485,6 @@ export class UpstashRedisStorage implements IStorage {
       // 删除管理员配置
       await withRetry(() => this.client.del(this.adminConfigKey()));
 
-      console.log('所有数据已清空');
     } catch (error) {
       console.error('清空数据失败:', error);
       throw new Error('清空数据失败');
@@ -559,9 +555,6 @@ export class UpstashRedisStorage implements IStorage {
 
     if (keys.length > 0) {
       await withRetry(() => this.client.del(...keys));
-      console.log(
-        `Cleared ${keys.length} cache entries with pattern: ${pattern}`
-      );
     }
   }
 
@@ -910,7 +903,6 @@ export class UpstashRedisStorage implements IStorage {
     const now = Date.now();
     const cached = this.userStatsCache.get(userName);
     if (cached && now - cached.timestamp < this.userStatsCacheTTL) {
-      console.log(`[Upstash] 用户 ${userName} 统计数据从缓存获取`);
       return cached.data;
     }
 
@@ -1183,7 +1175,6 @@ export class UpstashRedisStorage implements IStorage {
         })
       );
 
-      console.log(`用户 ${userName} 登入统计已更新:`, loginStats);
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
       throw error;
@@ -1193,7 +1184,7 @@ export class UpstashRedisStorage implements IStorage {
   // ---------- 访问日志相关 ----------
   // 已禁用：访问日志会产生大量 Redis 调用，导致 Upstash 费用过高
   async saveAccessLog(_accessLog: AccessLog): Promise<void> {
-    console.log('[Upstash] 访问日志功能已禁用以节省 Upstash 调用次数');
+    // no-op（已禁用，见上方说明）
   }
 
   async getAccessLogs(
@@ -1206,12 +1197,10 @@ export class UpstashRedisStorage implements IStorage {
     _limit = 50,
     _offset = 0
   ): Promise<AccessLog[]> {
-    console.log('[Upstash] 访问日志功能已禁用，返回空数组');
     return [];
   }
 
   async deleteAccessLogs(_username?: string): Promise<number> {
-    console.log('[Upstash] 访问日志功能已禁用，跳过删除操作');
     return 0;
   }
 }
@@ -1243,7 +1232,6 @@ function getUpstashRedisClient(): Redis {
       },
     });
 
-    console.log('Upstash Redis client created successfully');
 
     (global as any)[globalKey] = client;
   }

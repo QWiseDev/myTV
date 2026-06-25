@@ -68,7 +68,6 @@ export default function AIRecommendModal({
           return; // 有缓存就不显示欢迎消息
         } else {
           // 🔥 修复Bug #2: 超过30分钟时真正删除localStorage中的过期数据
-          console.log('AI聊天记录已超过30分钟，自动清除缓存');
           localStorage.removeItem('ai-recommend-messages');
         }
       }

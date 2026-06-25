@@ -176,7 +176,6 @@ const VideoSourceConfig = ({
 
       // 如果配置变更了，清除 /api/sources 的缓存
       if (configChangedHeader === 'true' || data.configChanged === true) {
-        console.log('配置已变更，清除站点列表缓存');
         clearCacheForUrl('/api/sources');
       }
 
@@ -293,7 +292,6 @@ const VideoSourceConfig = ({
 
             switch (data.type) {
               case 'start':
-                console.log(`开始检测 ${data.totalSources} 个视频源`);
                 break;
 
               case 'source_result':
@@ -343,9 +341,6 @@ const VideoSourceConfig = ({
                 break;
 
               case 'complete':
-                console.log(
-                  `检测完成，共检测 ${data.completedSources} 个视频源`
-                );
                 eventSource.close();
                 setIsValidating(false);
                 break;

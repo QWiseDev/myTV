@@ -38,7 +38,6 @@ export function SessionTracker() {
           now - parseInt(lastRecordedLogin) > sessionTimeout;
 
         if (shouldRecordLogin) {
-          console.log('检测到新会话，记录登入时间');
 
           // 记录新的登入时间
           const response = await fetch('/api/user/my-stats', {
@@ -49,7 +48,6 @@ export function SessionTracker() {
 
           if (response.ok) {
             localStorage.setItem('lastRecordedLogin', now.toString());
-            console.log('会话恢复登入时间记录成功');
           } else {
             console.warn('会话恢复登入时间记录失败:', response.status);
           }

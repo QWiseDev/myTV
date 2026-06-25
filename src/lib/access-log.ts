@@ -109,7 +109,6 @@ export class AccessLogService {
         ...extraData
       };
 
-      console.log(`[AccessLog] 记录访问: ${action}`, accessLog);
 
       // 异步发送到后端，不阻塞主流程
       this.sendLogToServer(accessLog).catch((error) => {
@@ -231,7 +230,6 @@ export class AccessLogService {
         throw new Error(`批量发送失败: HTTP ${response.status}`);
       }
 
-      console.log(`[AccessLog] 批量发送了 ${logs.length} 条日志`);
     } catch (error) {
       console.error('[AccessLog] 批量发送日志失败:', error);
     }

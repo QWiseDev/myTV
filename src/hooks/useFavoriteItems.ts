@@ -19,7 +19,6 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
   const updateFavoriteItems = useCallback(
     async (allFavorites: Record<string, Favorite>) => {
       if (isUpdatingFavoriteRef.current) {
-        console.log('Favorite items 更新正在进行中，跳过重复调用');
         return;
       }
 
@@ -34,7 +33,6 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
 
         try {
           isUpdatingFavoriteRef.current = true;
-          console.log('加载播放记录以匹配收藏项...');
           const { getAllPlayRecords } = await import('@/lib/db.client');
           const allPlayRecords = await getAllPlayRecords();
 

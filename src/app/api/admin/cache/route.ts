@@ -26,11 +26,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // 添加调试信息
-    console.log('🔍 开始获取缓存统计...');
 
     // 检查存储类型
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-    console.log('🔍 存储类型:', storageType);
 
     const stats = await getCacheStats();
     return NextResponse.json({
@@ -147,7 +145,6 @@ export async function DELETE(request: NextRequest) {
 
 // 获取缓存统计信息
 async function getCacheStats() {
-  console.log('📊 开始获取缓存统计信息...');
 
   // 直接使用数据库统计（支持KVRocks/Upstash/Redis）
   const dbStats = await DatabaseCacheManager.getSimpleCacheStats();
@@ -179,7 +176,6 @@ async function getCacheStats() {
     };
   }
 
-  console.log(`✅ 缓存统计获取完成: 总计 ${dbStats.total.count} 项`);
   return dbStats;
 }
 
@@ -200,7 +196,6 @@ async function clearDoubanCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个豆瓣缓存项`);
   }
 
   return clearedCount;
@@ -223,7 +218,6 @@ async function clearTmdbCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个TMDB缓存项`);
   }
 
   return clearedCount;
@@ -246,7 +240,6 @@ async function clearDanmuCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个弹幕缓存项`);
   }
 
   return clearedCount;
@@ -269,7 +262,6 @@ async function clearYouTubeCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个YouTube搜索缓存项`);
   }
 
   return clearedCount;
@@ -292,7 +284,6 @@ async function clearNetdiskCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个网盘搜索缓存项`);
   }
 
   return clearedCount;
@@ -306,7 +297,6 @@ async function clearSearchCache(): Promise<number> {
     // 直接清理数据库中的search-和cache-前缀缓存
     await db.clearExpiredCache('search-');
     await db.clearExpiredCache('cache-');
-    console.log('🗑️ 搜索缓存清理完成');
     clearedCount = 1; // 标记操作已执行
   } catch (error) {
     console.error('清理搜索缓存失败:', error);
@@ -321,7 +311,6 @@ async function clearSearchCache(): Promise<number> {
       localStorage.removeItem(key);
       clearedCount++;
     });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个搜索缓存项`);
   }
 
   return clearedCount;
@@ -365,9 +354,6 @@ async function clearExpiredCache(): Promise<number> {
       }
     });
 
-    console.log(
-      `🗑️ localStorage中清理了 ${clearedCount - dbCleared} 个过期缓存项`
-    );
   }
 
   return clearedCount;

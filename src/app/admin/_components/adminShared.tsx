@@ -194,8 +194,6 @@ export const showSuccess = (
 ) => {
   if (showAlert) {
     showAlert({ type: 'success', title: '成功', message, timer: 2000 });
-  } else {
-    console.log(message);
   }
 };
 

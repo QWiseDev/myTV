@@ -164,9 +164,6 @@ export async function searchFromApi(
     let pageCountFromFirst = 0;
 
     // 调试：输出搜索变体
-    if (searchVariants.length > 1) {
-      console.log(`[DEBUG] 搜索变体 for "${query}":`, searchVariants);
-    }
 
     // 尝试所有搜索变体，收集所有结果，然后选择最相关的
     const allVariantResults: Array<{
@@ -179,7 +176,6 @@ export async function searchFromApi(
       const apiUrl =
         apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(variant);
 
-      console.log(`[DEBUG] 尝试搜索变体: "${variant}" on ${apiSite.name}`);
 
       try {
         // 使用新的缓存搜索函数处理第一页
@@ -198,21 +194,14 @@ export async function searchFromApi(
             variant,
             firstPageResult.results
           );
-          console.log(
-            `[DEBUG] 变体 "${variant}" 找到 ${firstPageResult.results.length} 个结果, 相关性分数: ${relevanceScore}`
-          );
 
           allVariantResults.push({
             variant,
             results: firstPageResult.results,
             relevanceScore,
           });
-        } else {
-          console.log(`[DEBUG] 变体 "${variant}" 无结果`);
         }
-      } catch (error) {
-        console.log(`[DEBUG] 变体 "${variant}" 搜索失败:`, error);
-      }
+      } catch (error) { /* 忽略错误 */ }
     }
 
     // 如果没有任何结果，返回空数组
@@ -225,9 +214,6 @@ export async function searchFromApi(
       current.relevanceScore > best.relevanceScore ? current : best
     );
 
-    console.log(
-      `[DEBUG] 选择最佳变体: "${bestResult.variant}", 分数: ${bestResult.relevanceScore}`
-    );
 
     results = bestResult.results;
     query = bestResult.variant; // 用于后续分页
@@ -394,12 +380,6 @@ function generateSearchVariants(originalQuery: string): string[] {
   });
 
   // 3. 移除数字变体生成（优化性能，依赖页面智能匹配逻辑处理数字差异）
-  // const numberVariants = generateNumberVariants(trimmed);
-  // numberVariants.forEach(variant => {
-  //   if (!variants.includes(variant)) {
-  //     variants.push(variant);
-  //   }
-  // });
 
   // 如果包含空格，生成额外变体
   if (trimmed.includes(' ')) {

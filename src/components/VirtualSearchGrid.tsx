@@ -78,16 +78,8 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
   useEffect(() => {
     const checkContainer = () => {
       const element = containerRef.current;
-      const actualWidth = element?.offsetWidth || 0;
+      const _actualWidth = element?.offsetWidth || 0;
 
-      console.log('VirtualSearchGrid container debug:', {
-        actualWidth,
-        containerWidth,
-        offsetWidth: element?.offsetWidth,
-        clientWidth: element?.clientWidth,
-        scrollWidth: element?.scrollWidth,
-        element: !!element,
-      });
     };
 
     checkContainer();

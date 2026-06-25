@@ -160,9 +160,6 @@ async function fetchRemote(
         continue;
       }
 
-      console.log(
-        `[SpiderJar] Successfully fetched ${url}: ${ab.byteLength} bytes`
-      );
       return Buffer.from(ab);
     } catch (error: unknown) {
       _lastError = error instanceof Error ? error.message : 'fetch error';

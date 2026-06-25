@@ -291,7 +291,6 @@ function LivePageClient() {
 
     setIsRefreshingSource(true);
     try {
-      console.log('开始刷新直播源...');
 
       // 调用后端刷新API
       const response = await fetch('/api/admin/live/refresh', {
@@ -310,7 +309,6 @@ function LivePageClient() {
         throw new Error(result.error || '刷新直播源失败');
       }
 
-      console.log('直播源刷新成功');
 
       // 重新获取直播源列表
       await fetchLiveSources();
@@ -333,13 +331,9 @@ function LivePageClient() {
     if (autoRefreshEnabled) {
       const intervalMs = autoRefreshInterval * 60 * 1000; // 转换为毫秒
       autoRefreshTimerRef.current = setInterval(() => {
-        console.log(`自动刷新直播源 (间隔: ${autoRefreshInterval}分钟)`);
         refreshLiveSources();
       }, intervalMs);
 
-      console.log(`自动刷新已启用，间隔: ${autoRefreshInterval}分钟`);
-    } else {
-      console.log('自动刷新已禁用');
     }
   };
 
@@ -1206,7 +1200,6 @@ function LivePageClient() {
 
       // hls.js 1.6.x 增强：处理片段解析错误（针对initPTS修复）
       if (hlsRuntime.isRecoverableFragmentParsingError(data)) {
-        console.log('直播片段解析错误，尝试重新加载...');
         try {
           hls.startLoad();
         } catch (e) {
@@ -1217,7 +1210,6 @@ function LivePageClient() {
 
       // hls.js 1.6.x 增强：处理直播中的时间戳错误（直播回搜修复）
       if (hlsRuntime.isRecoverableTimestampAppendError(data)) {
-        console.log('直播时间戳错误，清理缓冲区并重新加载...');
         try {
           // 对于直播，直接重新开始加载最新片段
           hls.trigger(Hls.Events.BUFFER_RESET, undefined);
@@ -1241,11 +1233,9 @@ function LivePageClient() {
       if (data.fatal) {
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            console.log('Network error, attempting to recover...');
 
             // 根据具体的网络错误类型进行处理
             if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
-              console.log('Manifest load error, attempting reload...');
               setTimeout(() => {
                 try {
                   hls.loadSource(url);
@@ -1263,7 +1253,6 @@ function LivePageClient() {
             break;
 
           case Hls.ErrorTypes.MEDIA_ERROR:
-            console.log('Media error, attempting to recover...');
             try {
               hls.recoverMediaError();
             } catch (e) {
@@ -1284,7 +1273,6 @@ function LivePageClient() {
             break;
 
           default:
-            console.log('Fatal error, destroying HLS instance');
             setUnsupportedType('fatal-error');
             setIsVideoLoading(false);
             hls.destroy();
@@ -1304,14 +1292,7 @@ function LivePageClient() {
           data.frag.stats.loading.end - data.frag.stats.loading.start;
         if (loadTime > 0 && data.frag.stats.loaded > 0) {
           const throughputBps = (data.frag.stats.loaded * 8 * 1000) / loadTime; // bits per second
-          const throughputMbps = throughputBps / 1000000;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(
-              `Fragment loaded: ${loadTime.toFixed(2)}ms, size: ${
-                data.frag.stats.loaded
-              }B, throughput: ${throughputMbps.toFixed(2)} Mbps`
-            );
-          }
+          const _throughputMbps = throughputBps / 1000000;
         }
       }
     });
@@ -1327,17 +1308,6 @@ function LivePageClient() {
       }
     });
 
-    // 监听质量切换
-    hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`Quality switched to level ${data.level}`);
-      }
-    });
-
-    // 监听缓冲区清理事件
-    hls.on(Hls.Events.BUFFER_FLUSHED, (event, data) => {
-      console.log('Buffer flushed:', data);
-    });
   }
 
   // 播放器初始化
@@ -1348,7 +1318,6 @@ function LivePageClient() {
         return;
       }
 
-      console.log('视频URL:', videoUrl);
 
       // 销毁之前的播放器实例并创建新的
       if (artPlayerRef.current) {

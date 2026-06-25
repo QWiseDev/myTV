@@ -98,108 +98,9 @@ const CATEGORIES: Category[] = [
 ];
 
 // 播放器池配置 - 简化配置，减少复杂度
-const PLAYER_POOL_SIZE = 1; // 简化为单个播放器
+const _PLAYER_POOL_SIZE = 1; // 简化为单个播放器
 const PRELOAD_COUNT = 3; // 预加载视频数量
 
-// 播放器实例接口
-interface PlayerInstance {
-  id: number;
-  videoId: string | null;
-  url: string | null;
-}
-
-// 播放器实例组件
-interface VideoPlayerProps {
-  playerId: number;
-  videoId: string | null;
-  url: string | null;
-  isActive: boolean;
-  muted: boolean;
-  onEnded?: () => void;
-  onError?: () => void;
-  onClick?: () => void;
-}
-
-const VideoPlayer: React.FC<VideoPlayerProps> = ({
-  playerId,
-  videoId,
-  url,
-  isActive,
-  muted,
-  onEnded,
-  onError,
-  onClick,
-}) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const prevUrlRef = useRef<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const element = videoRef.current;
-    if (!element || !url) return;
-
-    // URL变化时重新加载
-    if (prevUrlRef.current !== url) {
-      setIsLoaded(false);
-      element.src = url;
-      element.load();
-      prevUrlRef.current = url;
-    }
-
-    if (isActive && isLoaded) {
-      element.currentTime = 0;
-      element.play().catch((error) => {
-        console.log('视频播放失败:', error);
-        // 静默处理播放失败
-      });
-    } else {
-      element.pause();
-    }
-  }, [url, isActive, isLoaded]);
-
-  // 视频加载完成处理
-  const handleLoadedData = useCallback(() => {
-    setIsLoaded(true);
-    if (isActive && videoRef.current) {
-      videoRef.current.play().catch((error) => {
-        console.log('视频播放失败:', error);
-      });
-    }
-  }, [isActive]);
-
-  // 视频加载错误处理
-  const handleError = useCallback(() => {
-    console.log('视频加载错误，播放器ID:', playerId, '视频ID:', videoId);
-    setIsLoaded(false);
-    if (onError && isActive) {
-      onError();
-    }
-  }, [onError, isActive, playerId, videoId]);
-
-  if (!url) return null;
-
-  return (
-    <video
-      ref={videoRef}
-      className='absolute inset-0 w-full h-full object-contain'
-      playsInline
-      muted={muted}
-      preload='auto'
-      onLoadedData={handleLoadedData}
-      onEnded={onEnded}
-      onClick={onClick}
-      onError={handleError}
-      data-player-id={playerId}
-      data-video-id={videoId}
-      style={{
-        opacity: isActive && isLoaded ? 1 : 0,
-        transition: 'opacity 0.3s',
-        zIndex: isActive ? 10 : 1,
-        display: isActive && isLoaded ? 'block' : 'none',
-      }}
-    />
-  );
-};
 
 export default function ShortVideoPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -227,7 +128,7 @@ export default function ShortVideoPage() {
     if (videoElement) {
       if (videoElement.paused) {
         videoElement.play().catch(() => {
-          console.log('视频播放失败');
+          /* 忽略自动播放被阻止 */
         });
       } else {
         videoElement.pause();
@@ -514,7 +415,6 @@ export default function ShortVideoPage() {
 
   // 处理视频加载错误，自动跳过失效视频
   const handleVideoError = useCallback(async () => {
-    console.log('视频加载失败，尝试获取新视频并自动跳过');
 
     // 静默获取新视频，不设置全局错误状态
     try {
@@ -536,7 +436,6 @@ export default function ShortVideoPage() {
         }, 500); // 延迟500ms跳过，给新视频一点加载时间
       }
     } catch (error) {
-      console.log('自动获取新视频失败:', error);
       // 即使获取新视频失败，也继续播放下一个
       if (autoPlay) {
         setTimeout(() => {

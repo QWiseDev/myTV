@@ -219,13 +219,6 @@ export function usePlayProgress({
       );
 
       lastSaveTimeRef.current = Date.now();
-      console.log('播放进度已保存:', {
-        title: payload.record.title,
-        episode: payload.record.index,
-        year: payload.record.year,
-        douban_id: payload.record.douban_id,
-        progress: `${payload.record.play_time}/${payload.record.total_time}`,
-      });
     } catch (err) {
       console.error('保存播放进度失败:', err);
     }

@@ -528,9 +528,6 @@ export class DbManager {
     const storage = await this.getStorage();
     if (typeof (storage as any).saveAccessLog === 'function') {
       await (storage as any).saveAccessLog(accessLog);
-      console.log(
-        `[DbManager] 保存访问日志: ${accessLog.username} -> ${accessLog.action}`,
-      );
     } else {
       console.warn('[DbManager] 后端存储不支持访问日志');
     }
@@ -544,7 +541,6 @@ export class DbManager {
     const storage = await this.getStorage();
     if (typeof (storage as any).getAccessLogs === 'function') {
       const logs = await (storage as any).getAccessLogs(filters, limit, offset);
-      console.log(`[DbManager] 获取访问日志: ${limit}条 (offset=${offset})`);
       return logs;
     }
     console.warn('[DbManager] 后端存储不支持访问日志查询');
@@ -555,9 +551,6 @@ export class DbManager {
     const storage = await this.getStorage();
     if (typeof (storage as any).deleteAccessLogs === 'function') {
       const deletedCount = await (storage as any).deleteAccessLogs(username);
-      console.log(
-        `[DbManager] 删除访问日志: ${deletedCount}条 (username=${username || 'all'})`,
-      );
       return deletedCount;
     }
     console.warn('[DbManager] 后端存储不支持访问日志删除');

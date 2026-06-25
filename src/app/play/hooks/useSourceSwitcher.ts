@@ -81,7 +81,6 @@ export function useSourceSwitcher({
     async (newSource: string, newId: string, newTitle: string) => {
       try {
         if (isSourceChangingRef.current) {
-          console.log('⏸️ 正在换源中，忽略重复点击');
           return;
         }
 
@@ -112,7 +111,6 @@ export function useSourceSwitcher({
               currentSourceRef.current,
               currentIdRef.current,
             );
-            console.log('已清除前一个播放记录');
           } catch (err) {
             console.error('清除播放记录失败:', err);
           }

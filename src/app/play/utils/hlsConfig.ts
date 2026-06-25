@@ -406,14 +406,12 @@ export function handleHlsError(
 
   // hls.js 1.6.x 增强：处理片段解析错误（针对initPTS修复）
   if (isRecoverableFragmentParsingError(data)) {
-    console.log('片段解析错误，尝试重新加载...');
     hls.startLoad();
     return;
   }
 
   // hls.js 1.6.x 增强：处理时间戳相关错误（直播回搜修复）
   if (isRecoverableTimestampAppendError(data)) {
-    console.log('时间戳错误，清理缓冲区并重新加载...');
     try {
       const currentTime = video.currentTime;
       hls.trigger(Hls.Events.BUFFER_RESET, undefined);
@@ -448,7 +446,6 @@ export function handleHlsError(
           return;
         }
 
-        console.log('网络错误，尝试恢复...');
         hls.startLoad();
 
         // 获取详细错误信息并传递给回调
@@ -468,7 +465,6 @@ export function handleHlsError(
         break;
       }
       case Hls.ErrorTypes.MEDIA_ERROR:
-        console.log('媒体错误，尝试恢复...', data);
 
         // 尝试恢复媒体错误
         try {
@@ -479,7 +475,6 @@ export function handleHlsError(
             data.details === Hls.ErrorDetails.MSE_ERROR ||
             data.details === Hls.ErrorDetails.MSE_UNSUPPORTED_CODEC
           ) {
-            console.log('检测到编码兼容性问题，尝试降级处理...');
 
             // 尝试重新加载更低码率的级别
             setTimeout(() => {
@@ -504,7 +499,6 @@ export function handleHlsError(
         }
         break;
       default:
-        console.log('无法恢复的错误');
         hls.destroy();
         if (onFatalError) {
           onFatalError(errorMessage);
@@ -544,14 +538,6 @@ export function initAdaptiveHls(
     : getOptimizedHlsConfig(options);
 
   // 内存压力日志
-  if (memoryPressure && memoryPressure !== 'low') {
-    console.log(`🧠 HLS配置自适应: 内存压力=${memoryPressure}`);
-    console.log('📊 缓冲配置:', {
-      maxBufferLength: hlsConfig.maxBufferLength,
-      backBufferLength: hlsConfig.backBufferLength,
-      maxBufferSize: hlsConfig.maxBufferSize,
-    });
-  }
 
   // 创建新的 HLS 实例
   const hls = new Hls(hlsConfig as Partial<HlsConfig>) as HlsRuntimeInstance;

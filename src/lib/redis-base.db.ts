@@ -63,11 +63,6 @@ function createRetryWrapper(
           err.code === 'EPIPE';
 
         if (isConnectionError && !isLastAttempt) {
-          console.log(
-            `${clientName} operation failed, retrying... (${
-              i + 1
-            }/${maxRetries})`,
-          );
           console.error('Error:', err.message);
 
           // 等待一段时间后重试
@@ -112,9 +107,6 @@ export function createRedisClient(
       socket: {
         // 重连策略：指数退避，最大30秒
         reconnectStrategy: (retries: number) => {
-          console.log(
-            `${config.clientName} reconnection attempt ${retries + 1}`,
-          );
           if (retries > 10) {
             console.error(
               `${config.clientName} max reconnection attempts exceeded`,
@@ -139,25 +131,23 @@ export function createRedisClient(
     });
 
     client.on('connect', () => {
-      console.log(`${config.clientName} connected`);
+      /* no-op */
     });
 
     client.on('reconnecting', () => {
-      console.log(`${config.clientName} reconnecting...`);
+      /* no-op */
     });
 
     client.on('ready', () => {
-      console.log(`${config.clientName} ready`);
+      /* no-op */
     });
 
     // 初始连接，带重试机制
     const connectWithRetry = async () => {
       try {
         await client!.connect();
-        console.log(`${config.clientName} connected successfully`);
       } catch (err) {
         console.error(`${config.clientName} initial connection failed:`, err);
-        console.log('Will retry in 5 seconds...');
         setTimeout(connectWithRetry, 5000);
       }
     };
@@ -608,7 +598,6 @@ export abstract class BaseRedisStorage implements IStorage {
       // 删除管理员配置
       await this.withRetry(() => this.client.del(this.adminConfigKey()));
 
-      console.log('所有数据已清空');
     } catch (error) {
       console.error('清空数据失败:', error);
       throw new Error('清空数据失败');
@@ -629,9 +618,7 @@ export abstract class BaseRedisStorage implements IStorage {
       if (!val && process.env.NODE_ENV === 'development') {
         const ttl = await this.withRetry(() => this.client.ttl(cacheKey));
         if (ttl === -2) {
-          console.log(
-            `${this.config.clientName} getCache: Key ${key} does not exist (TTL: -2)`,
-          );
+          /* key 不存在 */
         } else if (ttl === -1) {
           console.warn(
             `${this.config.clientName} getCache: Key ${key} exists but has no expiration (TTL: -1)`,
@@ -648,10 +635,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
       // 调试：显示剩余 TTL
       if (process.env.NODE_ENV === 'development') {
-        const ttl = await this.withRetry(() => this.client.ttl(cacheKey));
-        console.log(
-          `${this.config.clientName} getCache: key=${key}, remaining TTL=${ttl}s`,
-        );
+        const _ttl = await this.withRetry(() => this.client.ttl(cacheKey));
       }
 
       // 智能处理返回值：兼容不同Redis客户端的行为
@@ -717,17 +701,11 @@ export abstract class BaseRedisStorage implements IStorage {
           );
         }
 
-        console.log(
-          `${this.config.clientName} setCache with TTL: key=${key}, ttl=${ttl}s`,
-        );
         await this.withRetry(() => this.client.setEx(cacheKey, ttl, value));
 
         // 验证是否成功设置（可选，仅在调试模式下）
         if (process.env.NODE_ENV === 'development') {
           const setTtl = await this.withRetry(() => this.client.ttl(cacheKey));
-          console.log(
-            `${this.config.clientName} Verified TTL for ${key}: ${setTtl}s (expected: ${ttl}s)`,
-          );
 
           if (setTtl < 0) {
             console.warn(
@@ -736,9 +714,6 @@ export abstract class BaseRedisStorage implements IStorage {
           }
         }
       } else {
-        console.log(
-          `${this.config.clientName} setCache without TTL: key=${key}`,
-        );
         await this.withRetry(() => this.client.set(cacheKey, value));
       }
     } catch (error) {
@@ -774,9 +749,6 @@ export abstract class BaseRedisStorage implements IStorage {
 
     if (keys.length > 0) {
       await this.withRetry(() => this.client.del(keys));
-      console.log(
-        `Cleared ${keys.length} cache entries with pattern: ${pattern}`,
-      );
     }
   }
 
@@ -1387,7 +1359,6 @@ export abstract class BaseRedisStorage implements IStorage {
         }),
       );
 
-      console.log(`用户 ${userName} 登入统计已更新:`, loginStats);
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
       throw error;
@@ -1433,9 +1404,6 @@ export abstract class BaseRedisStorage implements IStorage {
       // 设置日志记录过期时间（保留30天）
       await this.withRetry(() => this.client.expire(logKey, 30 * 24 * 60 * 60));
 
-      console.log(
-        `[${this.config.clientName}] 访问日志已保存: ${accessLog.username} -> ${accessLog.action}`,
-      );
     } catch (error) {
       console.error(`[${this.config.clientName}] 保存访问日志失败:`, error);
       throw error;
@@ -1569,9 +1537,6 @@ export abstract class BaseRedisStorage implements IStorage {
         }
       }
 
-      console.log(
-        `[${this.config.clientName}] 删除访问日志完成: ${deletedCount}条 (username=${username || 'all'})`,
-      );
       return deletedCount;
     } catch (error) {
       console.error(`[${this.config.clientName}] 删除访问日志失败:`, error);

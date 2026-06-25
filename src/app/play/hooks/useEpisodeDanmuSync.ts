@@ -62,13 +62,11 @@ export function useEpisodeDanmuSync({
       isEpisodeChangingRef.current = true;
       isSkipControllerTriggeredRef.current = false;
       videoEndedHandledRef.current = false;
-      console.log('🔄 开始切换集数，重置自动跳过标志');
     }
 
     updateVideoUrl(detail, currentEpisodeIndex);
 
     if (isSourceChangingRef.current) {
-      console.log('⏭️ 正在换源，跳过弹幕处理');
       return;
     }
 

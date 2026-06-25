@@ -63,14 +63,10 @@ export async function GET(request: Request) {
   });
 
   try {
-    console.log(`[豆瓣分类] 请求URL: ${target}`);
 
     // 调用豆瓣 API
     const doubanData = await fetchDoubanData<DoubanRecentHotResponse>(target);
 
-    console.log(
-      `[豆瓣分类] 成功获取数据，项目数: ${doubanData.items?.length || 0}`
-    );
 
     // 转换数据格式
     const list = mapDoubanRecentHotItems(doubanData);

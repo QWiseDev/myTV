@@ -204,9 +204,6 @@ export async function GET(request: NextRequest) {
         ...allSources.domestic.map((url) => ({ url, name: '国内CDN' })),
       ];
 
-  console.log(
-    `🔍 开始 JAR 源诊断测试，环境: ${env.isDomestic ? '国内' : '国际'}`
-  );
 
   // 并发测试所有源（但限制并发数）
   const concurrency = 5;
@@ -219,7 +216,6 @@ export async function GET(request: NextRequest) {
     );
     results.push(...batchResults);
 
-    console.log(`✅ 完成批次 ${Math.floor(i / concurrency) + 1}`);
   }
 
   // 分析结果

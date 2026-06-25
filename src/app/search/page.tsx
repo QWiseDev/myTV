@@ -896,7 +896,6 @@ function SearchPageClient() {
   ) => {
     if (!query.trim()) return;
 
-    console.log(`🚀 [前端TMDB] 开始搜索: ${query}, type=${type}`);
 
     setTmdbActorLoading(true);
     setTmdbActorError(null);
@@ -1097,7 +1096,7 @@ function SearchPageClient() {
                     // 📊 分析埋点：搜索类型切换
                     analytics.handleFilterChange('search_type', 'youtube');
 
-                    const wasAlreadyYoutube = searchType === 'youtube';
+                    const _wasAlreadyYoutube = searchType === 'youtube';
                     setSearchType('youtube');
                     // 清除之前的YouTube搜索状态，确保重新开始
                     setYoutubeError(null);

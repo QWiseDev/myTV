@@ -107,20 +107,12 @@ export const usePlayRecordSync = ({
       const targetIndex = record.index - 1;
       const targetTime = record.play_time;
 
-      console.log('[PlayRecordSync] 收到播放记录', {
-        key,
-        targetIndex,
-        targetTime,
-        totalEpisodes,
-        currentEpisodeIndex: currentEpisodeIndexRef.current,
-      });
 
       if (
         targetIndex >= 0 &&
         targetIndex < totalEpisodes &&
         targetIndex !== currentEpisodeIndexRef.current
       ) {
-        console.log('[PlayRecordSync] 更新当前集数到记录值', targetIndex + 1);
         isRestoringFromRecordRef.current = true;
         setCurrentEpisodeIndex(targetIndex);
       }
@@ -143,7 +135,6 @@ export const usePlayRecordSync = ({
       });
 
       if (shouldRestoreTime) {
-        console.log('[PlayRecordSync] 写入待恢复进度', targetTime);
         resumeTimeRef.current = targetTime;
         isRestoringFromRecordRef.current = true;
 
@@ -171,18 +162,11 @@ export const usePlayRecordSync = ({
             }
 
             try {
-              console.log('[PlayRecordSync] 即时恢复尝试', {
-                duration: duration || '未知',
-                target,
-                videoElement: player.video || player.$video,
-                readyState: (player.video || player.$video)?.readyState,
-              });
 
               // 🔥 直接设置 video 元素的 currentTime，更可靠
               const videoElement = player.video || player.$video;
               if (videoElement) {
                 videoElement.currentTime = target;
-                console.log('✅ 已设置视频元素的 currentTime:', target);
               }
 
               // 同时也设置播放器的 currentTime（双重保障）
@@ -194,23 +178,12 @@ export const usePlayRecordSync = ({
               if (readyState >= 2) {
                 resumeTimeRef.current = null;
                 isRestoringFromRecordRef.current = false;
-                console.log('✅ 即时恢复播放进度成功:', targetTime);
-              } else {
-                console.log(
-                  '⏳ 视频尚未准备好，保留 resumeTimeRef 等待 canplay 事件',
-                );
               }
             } catch (error) {
               console.warn('即时恢复播放进度失败，将等待播放器事件:', error);
               // 保留 resumeTimeRef，等待 video:canplay 事件再次恢复
             }
-          } else {
-            console.log(
-              '⏳ 播放器视频元素尚未创建，保留 resumeTimeRef 等待 canplay 事件',
-            );
           }
-        } else {
-          console.log('⏳ 播放器尚未初始化，保留 resumeTimeRef 等待播放器就绪');
         }
       }
 
@@ -220,7 +193,6 @@ export const usePlayRecordSync = ({
         targetIndex < totalEpisodes &&
         targetIndex !== currentEpisodeIndexRef.current
       ) {
-        console.log('[PlayRecordSync] 检测到集数变化，重置恢复标记');
         isRestoringFromRecordRef.current = false; // 确保用户手动操作时重置恢复标记
       }
 

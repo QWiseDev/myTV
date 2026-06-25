@@ -69,10 +69,6 @@ export const useResponsiveGrid = (
   );
 
   useLayoutEffect(() => {
-    console.log(
-      'useResponsiveGrid effect - containerRef.current:',
-      !!containerRef?.current
-    );
 
     // 使用递归重试机制
     let cleanup: (() => void) | null = null;
@@ -84,12 +80,8 @@ export const useResponsiveGrid = (
 
       if (!containerRef?.current) {
         if (retryCount < maxRetries) {
-          console.log(
-            `containerRef not ready, retry ${retryCount}/${maxRetries}...`
-          );
           setTimeout(setupObserver, 10);
         } else {
-          console.log('Max retries reached, using fallback');
           calculateDimensions();
         }
         return;
@@ -97,35 +89,23 @@ export const useResponsiveGrid = (
 
       const element = containerRef.current;
 
-      console.log('useResponsiveGrid element info:', {
-        offsetWidth: element.offsetWidth,
-        clientWidth: element.clientWidth,
-        scrollWidth: element.scrollWidth,
-        getBoundingClientRect: element.getBoundingClientRect().width,
-      });
 
       // 如果宽度为0，延迟重试
       if (element.offsetWidth === 0) {
         if (retryCount < maxRetries) {
-          console.log(
-            `Element width is 0, retry ${retryCount}/${maxRetries}...`
-          );
           setTimeout(setupObserver, 10);
         } else {
-          console.log('Max retries reached for width, using fallback');
           calculateDimensions();
         }
         return;
       }
 
-      console.log('Setting up ResizeObserver with width:', element.offsetWidth);
       calculateDimensions(element.offsetWidth);
 
       // 使用ResizeObserver监听尺寸变化
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const { width } = entry.contentRect;
-          console.log('ResizeObserver triggered, width:', width);
           calculateDimensions(width);
         }
       });

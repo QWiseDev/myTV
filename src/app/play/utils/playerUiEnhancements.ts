@@ -282,7 +282,6 @@ export function addMobileDanmakuToggle(
       panelElement.style.right = '';
       panelElement.style.transform = '';
 
-      console.log('弹幕面板：使用CSS默认定位，自动适配屏幕方向');
     } catch (error) {
       console.warn('弹幕面板位置调整失败:', error);
     }
@@ -298,23 +297,19 @@ export function addMobileDanmakuToggle(
     if (isConfigVisible) {
       (configPanel as HTMLElement).style.display = 'block';
       resizeTimer = setTimeout(adjustPanelPosition, 10);
-      console.log('移动端弹幕配置面板：显示');
     } else {
       (configPanel as HTMLElement).style.display = 'none';
-      console.log('移动端弹幕配置面板：隐藏');
     }
   };
 
   const handleArtResize = () => {
     if (isConfigVisible) {
-      console.log('检测到ArtPlayer resize事件，重新调整弹幕面板位置');
       resizeTimer = setTimeout(adjustPanelPosition, 50);
     }
   };
 
   const handleOrientationChange = () => {
     if (isConfigVisible) {
-      console.log('检测到屏幕方向变化，重新调整弹幕面板位置');
       resizeTimer = setTimeout(adjustPanelPosition, 100);
     }
   };
@@ -350,17 +345,14 @@ export function addMobileDanmakuToggle(
       return;
     }
 
-    console.log('设备类型:', isMobile ? '移动端' : '桌面端');
 
     // 桌面端：简化处理，依赖 CSS hover，移除复杂的 JavaScript 事件
     if (!isMobile) {
-      console.log('桌面端：使用CSS原生hover，避免JavaScript事件冲突');
       return;
     }
 
     if (isMobile) {
       // 移动端：添加点击切换支持 + 持久位置修正
-      console.log('为移动端添加弹幕配置按钮点击切换功能');
 
       configButton.addEventListener('click', handleConfigClick);
 
@@ -368,14 +360,12 @@ export function addMobileDanmakuToggle(
       const art = getArtPlayer(artPlayerRef);
       if (art?.on) {
         art.on('resize', handleArtResize);
-        console.log('已监听ArtPlayer resize事件，实现自动适配');
       }
 
       window.addEventListener('orientationchange', handleOrientationChange);
       window.addEventListener('resize', handleOrientationChange);
       document.addEventListener('click', handleDocumentClick);
 
-      console.log('移动端弹幕配置切换功能已激活');
     }
   }, 2000); // 延迟2秒确保弹幕插件完全初始化
 
@@ -543,7 +533,6 @@ export function addResolutionDisplay(
             resolutionEl.style.opacity = '0.3';
           }, 3000);
 
-          console.log(`📺 分辨率显示更新: ${resolution} (${bitrate}Mbps)`);
         }
       } catch (error) {
         console.warn('⚠️ 更新分辨率显示失败:', error);
@@ -579,9 +568,6 @@ export function addResolutionDisplay(
                 resolutionEl.style.opacity = '0.3';
               }, 3000);
 
-              console.log(
-                `📺 分辨率显示（缓存）: ${resolution} (${bitrate}Mbps)`,
-              );
             }
           })
           .catch((error) => {
@@ -606,7 +592,6 @@ export function addResolutionDisplay(
     art.template?.$player.addEventListener('mouseenter', handleMouseEnter);
     art.template?.$player.addEventListener('mouseleave', handleMouseLeave);
 
-    console.log('✅ 分辨率显示组件已添加');
 
     // 返回清理函数
     return () => {
@@ -623,7 +608,6 @@ export function addResolutionDisplay(
       art.template?.$player.removeEventListener('mouseleave', handleMouseLeave);
 
       resolutionEl.remove();
-      console.log('🧹 分辨率显示组件已清理');
     };
   } catch (error) {
     console.error('❌ 添加分辨率显示失败:', error);
