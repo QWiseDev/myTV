@@ -39,13 +39,16 @@ function smartRandomDelay(url: string): Promise<void> {
  * @param url 请求的URL
  * @returns Promise<T> 返回指定类型的数据
  */
-export async function fetchDoubanData<T>(url: string): Promise<T> {
+export async function fetchDoubanData<T>(
+  url: string,
+  signal?: AbortSignal,
+): Promise<T> {
   // 请求限流：确保请求间隔
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
     await new Promise((resolve) =>
-      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest),
     );
   }
   lastRequestTime = Date.now();
@@ -56,6 +59,8 @@ export async function fetchDoubanData<T>(url: string): Promise<T> {
   // 添加超时控制
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 优化到10秒
+  const abortFromParent = () => controller.abort();
+  signal?.addEventListener('abort', abortFromParent, { once: true });
 
   // 设置请求选项
   const fetchOptions = {
@@ -81,6 +86,8 @@ export async function fetchDoubanData<T>(url: string): Promise<T> {
   } catch (error) {
     clearTimeout(timeoutId);
     throw error;
+  } finally {
+    signal?.removeEventListener('abort', abortFromParent);
   }
 }
 
@@ -95,7 +102,7 @@ export async function fetchDoubanHtml(url: string): Promise<string> {
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
     await new Promise((resolve) =>
-      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest),
     );
   }
   lastRequestTime = Date.now();

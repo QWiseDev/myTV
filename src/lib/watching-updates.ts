@@ -1,6 +1,11 @@
 'use client';
 
-import { generateStorageKey, getAllPlayRecords, PlayRecord } from './db.client';
+import {
+  generateStorageKey,
+  getAllPlayRecords,
+  parseStorageKey,
+  PlayRecord,
+} from './db.client';
 
 // 缓存键
 const WATCHING_UPDATES_CACHE_KEY = 'moontv_watching_updates';
@@ -290,8 +295,16 @@ export async function checkWatchingUpdates(
     const updatedSeries: WatchingUpdate['updatedSeries'] = [];
 
     const handleSingleRecord = async (record: PlayRecordWithId) => {
+      const parsedKey = parseStorageKey(record.id);
+      if (!parsedKey) {
+        console.warn(`跳过无效的播放记录键: ${record.id}`);
+        return;
+      }
+
+      const sourceName = parsedKey.source;
+      const videoId = parsedKey.id;
+
       try {
-        const [sourceName, videoId] = record.id.split('+');
         const sourceKey = sourceKeyMap.get(sourceName) || sourceName;
 
         const updateInfo = await checkSingleRecordUpdate(
@@ -338,7 +351,6 @@ export async function checkWatchingUpdates(
         );
       } catch (error) {
         console.error(`检查 ${record.title} 更新失败:`, error);
-        const [sourceName, videoId] = record.id.split('+');
         const seriesInfo = {
           title: record.title,
           source_name: record.source_name,

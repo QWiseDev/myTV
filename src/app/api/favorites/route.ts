@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { parseStorageKey } from '@/lib/storage-key';
 import { Favorite } from '@/lib/types';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
@@ -38,14 +38,18 @@ export async function GET(request: NextRequest) {
 
     // 查询单条收藏
     if (key) {
-      const [source, id] = key.split('+');
-      if (!source || !id) {
+      const parsedKey = parseStorageKey(key);
+      if (!parsedKey) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
-      const fav = await db.getFavorite(authInfo.username, source, id);
+      const fav = await db.getFavorite(
+        authInfo.username,
+        parsedKey.source,
+        parsedKey.id,
+      );
       return NextResponse.json(fav, { status: 200 });
     }
 
@@ -56,7 +60,7 @@ export async function GET(request: NextRequest) {
     console.error('获取收藏失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
     if (!key || !favorite) {
       return NextResponse.json(
         { error: 'Missing key or favorite' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -92,15 +96,15 @@ export async function POST(request: NextRequest) {
     if (!favorite.title || !favorite.source_name) {
       return NextResponse.json(
         { error: 'Invalid favorite data' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const [source, id] = key.split('+');
-    if (!source || !id) {
+    const parsedKey = parseStorageKey(key);
+    if (!parsedKey) {
       return NextResponse.json(
         { error: 'Invalid key format' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -109,14 +113,19 @@ export async function POST(request: NextRequest) {
       save_time: favorite.save_time ?? Date.now(),
     } as Favorite;
 
-    await db.saveFavorite(authInfo.username, source, id, finalFavorite);
+    await db.saveFavorite(
+      authInfo.username,
+      parsedKey.source,
+      parsedKey.id,
+      finalFavorite,
+    );
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error('保存收藏失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -146,22 +155,24 @@ export async function DELETE(request: NextRequest) {
 
     if (key) {
       // 删除单条
-      const [source, id] = key.split('+');
-      if (!source || !id) {
+      const parsedKey = parseStorageKey(key);
+      if (!parsedKey) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
-      await db.deleteFavorite(username, source, id);
+      await db.deleteFavorite(username, parsedKey.source, parsedKey.id);
     } else {
       // 清空全部
       const all = await db.getAllFavorites(username);
       await Promise.all(
         Object.keys(all).map(async (k) => {
-          const [s, i] = k.split('+');
-          if (s && i) await db.deleteFavorite(username, s, i);
-        })
+          const parsedKey = parseStorageKey(k);
+          if (parsedKey) {
+            await db.deleteFavorite(username, parsedKey.source, parsedKey.id);
+          }
+        }),
       );
     }
 
@@ -170,7 +181,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除收藏失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

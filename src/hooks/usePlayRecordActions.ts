@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 
+import { parseStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
 
 type SetPlayRecords = (
@@ -39,9 +40,13 @@ export function usePlayRecordActions({
           return nextRecords;
         });
 
-        const [source, id] = key.split('+');
+        const parsedKey = parseStorageKey(key);
+        if (!parsedKey) {
+          throw new Error('Invalid play record key');
+        }
+
         const db = await import('@/lib/db.client');
-        await db.deletePlayRecord(source, id);
+        await db.deletePlayRecord(parsedKey.source, parsedKey.id);
         await refreshPlayRecords();
       } catch (error) {
         setPlayRecords((currentRecords) => {

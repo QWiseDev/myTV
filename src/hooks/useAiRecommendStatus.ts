@@ -40,7 +40,7 @@ function cacheAiStatus(enabled: boolean) {
 }
 
 export function useAiRecommendStatus() {
-  const [aiEnabled, setAiEnabled] = useState<boolean | null>(true);
+  const [aiEnabled, setAiEnabled] = useState(false);
   const aiCheckTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -56,15 +56,16 @@ export function useAiRecommendStatus() {
     const checkAIStatus = async () => {
       try {
         const response = await fetch('/api/ai-recommend/status');
-        const data = await response.json().catch(() => ({ enabled: true }));
-        const enabled = response.ok
-          ? Boolean(data.enabled)
-          : response.status !== 403;
+        const data = response.ok
+          ? await response.json().catch(() => ({ enabled: false }))
+          : { enabled: false };
+        const enabled = response.ok ? Boolean(data.enabled) : false;
         setAiEnabled(enabled);
-        cacheAiStatus(enabled);
+        if (response.ok || response.status === 401 || response.status === 403) {
+          cacheAiStatus(enabled);
+        }
       } catch {
-        setAiEnabled(true);
-        cacheAiStatus(true);
+        setAiEnabled(false);
       } finally {
         aiCheckTriggeredRef.current = true;
       }

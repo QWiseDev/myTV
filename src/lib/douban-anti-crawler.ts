@@ -51,7 +51,10 @@ function parseVerificationPage(html: string): {
  * @param url 要访问的豆瓣 URL
  * @returns cookie 字符串
  */
-export async function getDoubanCookie(url: string): Promise<string> {
+export async function getDoubanCookie(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -65,6 +68,7 @@ export async function getDoubanCookie(url: string): Promise<string> {
     const firstResponse = await fetch(url, {
       headers,
       redirect: 'manual',
+      signal,
     });
 
     if (firstResponse.status === 200) {
@@ -80,12 +84,11 @@ export async function getDoubanCookie(url: string): Promise<string> {
         throw new Error('Unexpected redirect location');
       }
 
-
       // Step 2: 获取验证页面
-      const verifyResponse = await fetch(location, { headers });
+      const verifyResponse = await fetch(location, { headers, signal });
       if (!verifyResponse.ok) {
         throw new Error(
-          `Failed to fetch verification page: ${verifyResponse.status}`
+          `Failed to fetch verification page: ${verifyResponse.status}`,
         );
       }
 
@@ -97,10 +100,8 @@ export async function getDoubanCookie(url: string): Promise<string> {
         throw new Error('Failed to parse verification page');
       }
 
-
       // Step 4: 计算工作量证明
       const sol = proofOfWork(formData.cha, 4);
-
 
       // Step 5: 提交验证表单
       const formBody = new URLSearchParams({
@@ -118,6 +119,7 @@ export async function getDoubanCookie(url: string): Promise<string> {
         },
         body: formBody.toString(),
         redirect: 'manual',
+        signal,
       });
 
       // Step 6: 提取 cookie
@@ -143,7 +145,7 @@ export async function getDoubanCookie(url: string): Promise<string> {
  */
 export async function fetchDoubanWithVerification(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   const headers = {
     'User-Agent':
@@ -166,8 +168,7 @@ export async function fetchDoubanWithVerification(
     if (response.status === 302) {
       const location = response.headers.get('location');
       if (location && location.includes('sec.douban.com')) {
-
-        const cookie = await getDoubanCookie(url);
+        const cookie = await getDoubanCookie(url, options.signal ?? undefined);
 
         // 使用 cookie 重新请求
         response = await fetch(url, {

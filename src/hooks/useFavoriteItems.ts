@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DELAYS } from '@/lib/constants/home';
 import type { Favorite } from '@/lib/db.client';
+import { parseStorageKey } from '@/lib/storage-key';
 import type { FavoriteItem } from '@/lib/types';
 
 /**
@@ -38,26 +39,29 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
 
           const sorted = Object.entries(allFavorites)
             .sort(([, a], [, b]) => b.save_time - a.save_time)
-            .map(([key, fav]) => {
-              const plusIndex = key.indexOf('+');
-              const source = key.slice(0, plusIndex);
-              const id = key.slice(plusIndex + 1);
+            .flatMap(([key, fav]) => {
+              const parsedKey = parseStorageKey(key);
+              if (!parsedKey) {
+                return [];
+              }
 
               const playRecord = allPlayRecords?.[key];
               const currentEpisode = playRecord?.index;
 
-              return {
-                id,
-                source,
-                title: fav.title,
-                year: fav.year,
-                poster: fav.cover,
-                episodes: fav.total_episodes,
-                source_name: fav.source_name,
-                currentEpisode,
-                search_title: fav?.search_title,
-                origin: fav?.origin,
-              } as FavoriteItem;
+              return [
+                {
+                  id: parsedKey.id,
+                  source: parsedKey.source,
+                  title: fav.title,
+                  year: fav.year,
+                  poster: fav.cover,
+                  episodes: fav.total_episodes,
+                  source_name: fav.source_name,
+                  currentEpisode,
+                  search_title: fav?.search_title,
+                  origin: fav?.origin,
+                } as FavoriteItem,
+              ];
             });
           setFavoriteItems(sorted);
         } catch (error) {
@@ -67,7 +71,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
         }
       }, DELAYS.FAVORITE_UPDATE_DEBOUNCE);
     },
-    []
+    [],
   );
 
   // 加载收藏夹数据
@@ -78,9 +82,8 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
     let cancelled = false;
 
     const loadFavorites = async () => {
-      const { getAllFavorites, subscribeToDataUpdates } = await import(
-        '@/lib/db.client'
-      );
+      const { getAllFavorites, subscribeToDataUpdates } =
+        await import('@/lib/db.client');
 
       if (cancelled) return;
 
@@ -93,7 +96,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
         'favoritesUpdated',
         (newFavorites: Record<string, Favorite>) => {
           updateFavoriteItems(newFavorites);
-        }
+        },
       );
     };
 

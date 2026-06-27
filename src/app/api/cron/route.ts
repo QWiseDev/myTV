@@ -7,6 +7,7 @@ import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshEnabledLiveChannels } from '@/lib/live';
+import { parseStorageKey } from '@/lib/storage-key';
 import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
 import {
   buildWatchingUpdatesFromRecordsWithDetails,
@@ -24,7 +25,6 @@ export const revalidate = 0;
 let isRunning = false;
 
 export async function GET(_request: NextRequest) {
-
   if (isRunning) {
     return NextResponse.json({
       success: false,
@@ -61,7 +61,6 @@ export async function GET(_request: NextRequest) {
 }
 
 async function cronJob() {
-
   // 优先执行用户清理任务，避免被其他任务阻塞
   try {
     await cleanupInactiveUsers();
@@ -86,7 +85,6 @@ async function cronJob() {
   } catch (err) {
     console.error('❌ 播放记录、收藏和追更提醒缓存刷新失败:', err);
   }
-
 }
 
 async function refreshAllLiveChannels() {
@@ -104,7 +102,6 @@ async function refreshConfig() {
     config.ConfigSubscribtion.AutoUpdate
   ) {
     try {
-
       const decodedContent = await fetchDecodedConfigSubscription(
         config.ConfigSubscribtion.URL,
       );
@@ -212,7 +209,6 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
     const failedUsers: string[] = [];
 
     for (const user of users) {
-
       // 检查用户是否真的存在
       const userExists = await db.checkUserExist(user);
       if (!userExists) {
@@ -230,11 +226,12 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
 
         for (const [key, record] of Object.entries(playRecords)) {
           try {
-            const [source, id] = key.split('+');
-            if (!source || !id) {
+            const parsedKey = parseStorageKey(key);
+            if (!parsedKey) {
               console.warn(`跳过无效的播放记录键: ${key}`);
               continue;
             }
+            const { source, id } = parsedKey;
 
             const detail = await getDetail(source, id, record.title);
             if (!detail) {
@@ -248,13 +245,11 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
             if (nextRecord !== record) {
               await db.savePlayRecord(user, source, id, nextRecord);
             }
-
           } catch (err) {
             console.error(`处理播放记录失败 (${key}):`, err);
             // 继续处理下一个记录
           }
         }
-
       } catch (err) {
         console.error(`获取用户播放记录失败 (${user}):`, err);
       }
@@ -285,11 +280,12 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
 
         for (const [key, fav] of Object.entries(favorites)) {
           try {
-            const [source, id] = key.split('+');
-            if (!source || !id) {
+            const parsedKey = parseStorageKey(key);
+            if (!parsedKey) {
               console.warn(`跳过无效的收藏键: ${key}`);
               continue;
             }
+            const { source, id } = parsedKey;
 
             const favDetail = await getDetail(source, id, fav.title);
             if (!favDetail) {
@@ -302,18 +298,15 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
             if (nextFavorite !== fav) {
               await db.saveFavorite(user, source, id, nextFavorite);
             }
-
           } catch (err) {
             console.error(`处理收藏失败 (${key}):`, err);
             // 继续处理下一个收藏
           }
         }
-
       } catch (err) {
         console.error(`获取用户收藏失败 (${user}):`, err);
       }
     }
-
   } catch (err) {
     console.error('刷新播放记录/收藏/追更提醒缓存任务启动失败', err);
   }
@@ -338,11 +331,9 @@ async function cleanupInactiveUsers() {
       config.UserConfig?.AutoCleanupInactiveUsers ?? false;
     const inactiveUserDays = config.UserConfig?.InactiveUserDays ?? 7;
 
-
     if (!autoCleanupEnabled) {
       return;
     }
-
 
     const allUsers = config.UserConfig.Users;
 
@@ -352,10 +343,8 @@ async function cleanupInactiveUsers() {
 
     let deletedCount = 0;
 
-
     for (const user of allUsers) {
       try {
-
         // 跳过管理员和owner用户
         if (user.role === 'admin' || user.role === 'owner') {
           continue;

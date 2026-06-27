@@ -3,6 +3,7 @@
 import { createClient, RedisClientType } from 'redis';
 
 import { AdminConfig } from './admin.types';
+import { parseStorageKey } from './storage-key';
 import {
   AccessLog,
   ContentStat,
@@ -303,7 +304,11 @@ export abstract class BaseRedisStorage implements IStorage {
     favorite: Favorite,
   ): Promise<void> {
     await this.withRetry(() =>
-      this.client.hSet(this.favHashKey(userName), key, JSON.stringify(favorite)),
+      this.client.hSet(
+        this.favHashKey(userName),
+        key,
+        JSON.stringify(favorite),
+      ),
     );
   }
 
@@ -323,7 +328,9 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async deleteFavorite(userName: string, key: string): Promise<void> {
-    await this.withRetry(() => this.client.hDel(this.favHashKey(userName), key));
+    await this.withRetry(() =>
+      this.client.hDel(this.favHashKey(userName), key),
+    );
   }
 
   // ---------- 用户注册 / 登录 ----------
@@ -597,7 +604,6 @@ export abstract class BaseRedisStorage implements IStorage {
 
       // 删除管理员配置
       await this.withRetry(() => this.client.del(this.adminConfigKey()));
-
     } catch (error) {
       console.error('清空数据失败:', error);
       throw new Error('清空数据失败');
@@ -828,7 +834,9 @@ export abstract class BaseRedisStorage implements IStorage {
     expireSeconds = 86400 * 30,
   ): Promise<void> {
     const key = this.slotUserKey(userName);
-    await this.withRetry(() => this.client.hSet(key, this.encodeHashObject(data)));
+    await this.withRetry(() =>
+      this.client.hSet(key, this.encodeHashObject(data)),
+    );
     await this.withRetry(() => this.client.expire(key, expireSeconds));
     await this.withRetry(() =>
       this.client.sendCommand(['SADD', this.slotUsersKey(), userName]),
@@ -877,7 +885,10 @@ export abstract class BaseRedisStorage implements IStorage {
     return result;
   }
 
-  async incrementRateLimit(key: string, expireSeconds: number): Promise<number> {
+  async incrementRateLimit(
+    key: string,
+    expireSeconds: number,
+  ): Promise<number> {
     const count = Number(
       await this.withRetry(() => this.client.sendCommand(['INCR', key])),
     );
@@ -1281,7 +1292,7 @@ export abstract class BaseRedisStorage implements IStorage {
       // 转换为ContentStat数组并排序
       const contentStats: ContentStat[] = Array.from(contentMap.entries())
         .map(([key, data]) => {
-          const [source, id] = key.split('+');
+          const { source, id } = parseStorageKey(key) || { source: '', id: '' };
           return {
             source,
             id,
@@ -1358,7 +1369,6 @@ export abstract class BaseRedisStorage implements IStorage {
           lastLoginDate: String(loginStats.lastLoginDate),
         }),
       );
-
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
       throw error;
@@ -1403,7 +1413,6 @@ export abstract class BaseRedisStorage implements IStorage {
 
       // 设置日志记录过期时间（保留30天）
       await this.withRetry(() => this.client.expire(logKey, 30 * 24 * 60 * 60));
-
     } catch (error) {
       console.error(`[${this.config.clientName}] 保存访问日志失败:`, error);
       throw error;

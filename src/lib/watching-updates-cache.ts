@@ -1,5 +1,6 @@
 import { db } from './db';
 import { fetchVideoDetail } from './fetchVideoDetail';
+import { parseStorageKey } from './storage-key';
 import { SearchResult } from './types';
 import { PlayRecord } from './types';
 
@@ -52,11 +53,7 @@ function parsePositiveNumber(value: unknown, fallback = 0): number {
 }
 
 function parseRecordKey(recordKey: string): { source: string; id: string } {
-  const [source, id] = recordKey.split('+');
-  return {
-    source: source || '',
-    id: id || '',
-  };
+  return parseStorageKey(recordKey) || { source: '', id: '' };
 }
 
 function delay(ms: number): Promise<void> {

@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { parseStorageKey } from '@/lib/storage-key';
 import { PlayRecord } from '@/lib/types';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     console.error('获取播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -85,16 +85,13 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     } catch (parseError) {
       console.error('保存播放记录失败，解析请求体时出错', parseError);
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
     if (!body || typeof body !== 'object') {
       return NextResponse.json(
         { error: 'Invalid request body' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -106,7 +103,7 @@ export async function POST(request: NextRequest) {
     if (!key || !record) {
       return NextResponse.json(
         { error: 'Missing key or record' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -114,24 +111,25 @@ export async function POST(request: NextRequest) {
     if (!record.title || !record.source_name || record.index < 1) {
       return NextResponse.json(
         { error: 'Invalid record data' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 从key中解析source和id
-    const [source, id] = key.split('+');
-    if (!source || !id) {
+    const parsedKey = parseStorageKey(key);
+    if (!parsedKey) {
       return NextResponse.json(
         { error: 'Invalid key format' },
-        { status: 400 }
+        { status: 400 },
       );
     }
+    const { source, id } = parsedKey;
 
     // 获取现有播放记录以保持原始集数
     const existingRecord = await db.getPlayRecord(
       authInfo.username,
       source,
-      id
+      id,
     );
 
     // 🔑 关键修复：信任客户端传来的 original_episodes（已经过 checkShouldUpdateOriginalEpisodes 验证）
@@ -174,13 +172,13 @@ export async function POST(request: NextRequest) {
           Pragma: 'no-cache',
           Expires: '0',
         },
-      }
+      },
     );
   } catch (err) {
     console.error('保存播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -204,15 +202,15 @@ export async function DELETE(request: NextRequest) {
 
     if (key) {
       // 如果提供了 key，删除单条播放记录
-      const [source, id] = key.split('+');
-      if (!source || !id) {
+      const parsedKey = parseStorageKey(key);
+      if (!parsedKey) {
         return NextResponse.json(
           { error: 'Invalid key format' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
-      await db.deletePlayRecord(username, source, id);
+      await db.deletePlayRecord(username, parsedKey.source, parsedKey.id);
     } else {
       // 未提供 key，则清空全部播放记录
       await db.clearAllPlayRecords(username);
@@ -230,13 +228,13 @@ export async function DELETE(request: NextRequest) {
           Pragma: 'no-cache',
           Expires: '0',
         },
-      }
+      },
     );
   } catch (err) {
     console.error('删除播放记录失败', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

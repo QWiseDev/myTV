@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { parseStorageKey } from '@/lib/storage-key';
 import { EpisodeSkipConfig } from '@/lib/types';
 
 // 配置 Node.js Runtime
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
@@ -38,12 +38,16 @@ export async function POST(request: NextRequest) {
         }
 
         // 解析 key 为 source 和 id (格式: source+id)
-        const [source, id] = key.split('+');
-        if (!source || !id) {
+        const parsedKey = parseStorageKey(key);
+        if (!parsedKey) {
           return NextResponse.json({ error: '无效的key格式' }, { status: 400 });
         }
 
-        const skipConfig = await db.getSkipConfig(finalUsername, source, id);
+        const skipConfig = await db.getSkipConfig(
+          finalUsername,
+          parsedKey.source,
+          parsedKey.id,
+        );
         return NextResponse.json({ config: skipConfig });
       }
 
@@ -51,13 +55,13 @@ export async function POST(request: NextRequest) {
         if (!key || !config) {
           return NextResponse.json(
             { error: '缺少配置键或配置数据' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
         // 解析 key 为 source 和 id (格式: source+id)
-        const [source, id] = key.split('+');
-        if (!source || !id) {
+        const parsedKey = parseStorageKey(key);
+        if (!parsedKey) {
           return NextResponse.json({ error: '无效的key格式' }, { status: 400 });
         }
 
@@ -70,7 +74,7 @@ export async function POST(request: NextRequest) {
         ) {
           return NextResponse.json(
             { error: '配置数据格式错误' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -84,16 +88,16 @@ export async function POST(request: NextRequest) {
           ) {
             return NextResponse.json(
               { error: '片段数据格式错误' },
-              { status: 400 }
+              { status: 400 },
             );
           }
         }
 
         await db.setSkipConfig(
           finalUsername,
-          source,
-          id,
-          config as EpisodeSkipConfig
+          parsedKey.source,
+          parsedKey.id,
+          config as EpisodeSkipConfig,
         );
         return NextResponse.json({ success: true });
       }
@@ -109,19 +113,23 @@ export async function POST(request: NextRequest) {
         }
 
         // 解析 key 为 source 和 id (格式: source+id)
-        const [source, id] = key.split('+');
-        if (!source || !id) {
+        const parsedKey = parseStorageKey(key);
+        if (!parsedKey) {
           return NextResponse.json({ error: '无效的key格式' }, { status: 400 });
         }
 
-        await db.deleteSkipConfig(finalUsername, source, id);
+        await db.deleteSkipConfig(
+          finalUsername,
+          parsedKey.source,
+          parsedKey.id,
+        );
         return NextResponse.json({ success: true });
       }
 
       default:
         return NextResponse.json(
           { error: '不支持的操作类型' },
-          { status: 400 }
+          { status: 400 },
         );
     }
   } catch (error) {

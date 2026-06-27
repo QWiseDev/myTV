@@ -19,8 +19,8 @@ import PageLayout from '@/components/PageLayout';
 import { useSite } from '@/components/SiteProvider';
 
 import {
-  PlayPageProvider,
-  usePlayPageInternal,
+  PlaybackDataProvider,
+  usePlaybackData,
 } from '@/contexts/PlayPageContext';
 
 const AIRecommendModal = lazy(() => import('@/components/AIRecommendModal'));
@@ -57,7 +57,7 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     loadingWatchingUpdates,
     refreshPlayRecords,
     refreshWatchingUpdates,
-  } = usePlayPageInternal();
+  } = usePlaybackData();
 
   const { favoriteItems, clearFavorites } = useFavoriteItems(activeTab);
   const {
@@ -150,12 +150,14 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
         onClose={closeAnnouncement}
       />
 
-      <Suspense>
-        <AIRecommendModal
-          isOpen={showAIRecommendModal}
-          onClose={() => setShowAIRecommendModal(false)}
-        />
-      </Suspense>
+      {showAIRecommendModal && (
+        <Suspense fallback={null}>
+          <AIRecommendModal
+            isOpen={showAIRecommendModal}
+            onClose={() => setShowAIRecommendModal(false)}
+          />
+        </Suspense>
+      )}
 
       <Suspense fallback={null}>
         <SlotMachineFloatButton />
@@ -171,9 +173,9 @@ export default function HomeClient({
 }) {
   return (
     <Suspense fallback={null}>
-      <PlayPageProvider>
+      <PlaybackDataProvider>
         <HomeContent initialHomeData={initialHomeData} />
-      </PlayPageProvider>
+      </PlaybackDataProvider>
     </Suspense>
   );
 }

@@ -8,9 +8,9 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { configSelfCheck, setCachedConfig } from '@/lib/config';
 import { SimpleCrypto } from '@/lib/crypto';
 import { db } from '@/lib/db';
+import { parseStorageKey } from '@/lib/storage-key';
 
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (storageType === 'localstorage') {
       return NextResponse.json(
         { error: '不支持本地存储进行数据迁移' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (authInfo.username !== process.env.USERNAME) {
       return NextResponse.json(
         { error: '权限不足，只有站长可以导入数据' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       return NextResponse.json(
         { error: '解密失败，请检查密码是否正确' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -134,9 +134,14 @@ export async function POST(req: NextRequest) {
       // 导入跳过片头片尾配置
       if (user.skipConfigs) {
         for (const [key, skipConfig] of Object.entries(user.skipConfigs)) {
-          const [source, id] = key.split('+');
-          if (source && id) {
-            await db.setSkipConfig(username, source, id, skipConfig as any);
+          const parsedKey = parseStorageKey(key);
+          if (parsedKey) {
+            await db.setSkipConfig(
+              username,
+              parsedKey.source,
+              parsedKey.id,
+              skipConfig as any,
+            );
           }
         }
       }
@@ -155,7 +160,7 @@ export async function POST(req: NextRequest) {
     console.error('数据导入失败:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '导入失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

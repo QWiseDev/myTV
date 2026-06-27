@@ -22,8 +22,8 @@ import PlayDetailsSection from '@/components/play/PlayDetailsSection';
 import PlayerAndEpisodeSection from '@/components/play/PlayerAndEpisodeSection';
 
 import {
-  PlayPageProvider,
-  usePlayPageInternal,
+  PlaybackDataProvider,
+  usePlaybackData,
 } from '@/contexts/PlayPageContext';
 
 import { useBackToTopController } from './hooks/useBackToTopController';
@@ -113,8 +113,8 @@ function PlayPageClient() {
     return pref === null ? true : pref;
   }, []);
 
-  // 使用PlayPageContext - 避免重复请求
-  const { playRecords } = usePlayPageInternal();
+  // 使用播放数据上下文，避免重复请求
+  const { playRecords } = usePlaybackData();
 
   // 🚀 内存监控 - 集成性能优化
   const { pressure: memoryPressure }: { pressure: MemoryPressure } =
@@ -122,7 +122,6 @@ function PlayPageClient() {
       checkInterval: 30000, // ✅ 从 15s 改为 30s，减少检查频率降低 CPU 占用
       enableAutoCleanup: true,
       onPressureChange: (_pressure, _info) => {
-
         // 根据内存压力调整弹幕配置
       },
     });
@@ -455,7 +454,6 @@ function PlayPageClient() {
   // 加载豆瓣短评
   useEffect(() => {
     const loadComments = async () => {
-
       if (!videoDoubanId || videoDoubanId === 0) {
         return;
       }
@@ -844,7 +842,6 @@ function PlayPageClient() {
         // 3. 销毁ArtPlayer实例 (使用false参数避免DOM清理冲突)
         artPlayerRef.current.destroy(false);
         artPlayerRef.current = null;
-
       } catch (err) {
         console.warn('清理播放器资源时出错:', err);
         // 即使出错也要确保引用被清空
@@ -1151,9 +1148,9 @@ function PlayPageClient() {
 export default function PlayPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <PlayPageProvider>
+      <PlaybackDataProvider>
         <PlayPageClient />
-      </PlayPageProvider>
+      </PlaybackDataProvider>
     </Suspense>
   );
 }

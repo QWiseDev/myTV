@@ -7,6 +7,7 @@ import {
   limitHomeRecords,
   sortHomeContinueWatchingRecords,
 } from '@/lib/home-display';
+import { parseStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
@@ -120,8 +121,7 @@ export default function ContinueWatching({
 
   // 从 key 中解析 source 和 id
   const parseKey = (key: string) => {
-    const [source, id] = key.split('+');
-    return { source, id };
+    return parseStorageKey(key) || { source: '', id: '' };
   };
 
   // 检查播放记录是否有新集数更新

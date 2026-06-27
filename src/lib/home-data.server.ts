@@ -10,7 +10,6 @@ import {
   buildDoubanCategoryUrl,
   mapDoubanRecentHotItems,
 } from '@/lib/douban-shared';
-import { withTimeout } from '@/lib/promise-timeout';
 import type { DoubanItem } from '@/lib/types';
 
 import { EMPTY_HOME_DATA, HomeData } from './home-data-types';
@@ -19,17 +18,24 @@ async function getDoubanCategory(params: {
   kind: 'movie' | 'tv';
   category: string;
   type: string;
+  signal?: AbortSignal;
 }): Promise<DoubanItem[]> {
   const target = buildDoubanCategoryUrl(params);
-  const data = await fetchDoubanData<DoubanRecentHotResponse>(target);
+  const data = await fetchDoubanData<DoubanRecentHotResponse>(
+    target,
+    params.signal,
+  );
 
   return mapDoubanRecentHotItems(data);
 }
 
-async function getBangumiCalendar(): Promise<BangumiCalendarData[]> {
+async function getBangumiCalendar(
+  signal?: AbortSignal,
+): Promise<BangumiCalendarData[]> {
   const response = await fetch(BANGUMI_CALENDAR_ENDPOINT, {
     headers: { Accept: 'application/json' },
     next: { revalidate: 30 * 60 },
+    signal,
   });
 
   if (!response.ok) {
@@ -40,28 +46,63 @@ async function getBangumiCalendar(): Promise<BangumiCalendarData[]> {
   return normalizeBangumiCalendar(data);
 }
 
+async function withAbortableTimeout<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  fallback: T,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await task(controller.signal);
+  } catch {
+    return fallback;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function getServerHomeData(): Promise<HomeData> {
   const [movies, tvShows, varietyShows, bangumiCalendarData] =
     await Promise.all([
-      withTimeout(
-        getDoubanCategory({ kind: 'movie', category: '热门', type: '全部' }),
+      withAbortableTimeout(
+        (signal) =>
+          getDoubanCategory({
+            kind: 'movie',
+            category: '热门',
+            type: '全部',
+            signal,
+          }),
         DATA_FETCH_TIMEOUTS.CRITICAL,
-        EMPTY_HOME_DATA.hotMovies
+        EMPTY_HOME_DATA.hotMovies,
       ),
-      withTimeout(
-        getDoubanCategory({ kind: 'tv', category: 'tv', type: 'tv' }),
+      withAbortableTimeout(
+        (signal) =>
+          getDoubanCategory({
+            kind: 'tv',
+            category: 'tv',
+            type: 'tv',
+            signal,
+          }),
         DATA_FETCH_TIMEOUTS.SECONDARY,
-        EMPTY_HOME_DATA.hotTvShows
+        EMPTY_HOME_DATA.hotTvShows,
       ),
-      withTimeout(
-        getDoubanCategory({ kind: 'tv', category: 'show', type: 'show' }),
+      withAbortableTimeout(
+        (signal) =>
+          getDoubanCategory({
+            kind: 'tv',
+            category: 'show',
+            type: 'show',
+            signal,
+          }),
         DATA_FETCH_TIMEOUTS.SECONDARY,
-        EMPTY_HOME_DATA.hotVarietyShows
+        EMPTY_HOME_DATA.hotVarietyShows,
       ),
-      withTimeout(
-        getBangumiCalendar(),
+      withAbortableTimeout(
+        (signal) => getBangumiCalendar(signal),
         DATA_FETCH_TIMEOUTS.TERTIARY,
-        EMPTY_HOME_DATA.bangumiCalendarData
+        EMPTY_HOME_DATA.bangumiCalendarData,
       ),
     ]);
 

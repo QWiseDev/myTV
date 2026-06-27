@@ -3,6 +3,7 @@
 import { AdminConfig } from './admin.types';
 import { KvrocksStorage } from './kvrocks.db';
 import { RedisStorage } from './redis.db';
+import { generateStorageKey } from './storage-key';
 import {
   AccessLog,
   ContentStat,
@@ -14,6 +15,8 @@ import {
   UserPlayStat,
 } from './types';
 import { UpstashRedisStorage } from './upstash.db';
+
+export { generateStorageKey, parseStorageKey } from './storage-key';
 
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
@@ -63,10 +66,6 @@ async function getStorage(): Promise<IStorage> {
     storageInstance = await createStorage();
   }
   return storageInstance;
-}
-
-export function generateStorageKey(source: string, id: string): string {
-  return `${source}+${id}`;
 }
 
 export class DbManager {
