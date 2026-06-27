@@ -1,6 +1,7 @@
 import {
   buildPlayUrl,
   buildVideoCardSubjectUrl,
+  canToggleVideoCardFavorite,
   getVideoCardEntryPoster,
   getVideoCardSearchType,
   shouldCheckSearchFavoriteStatus,
@@ -238,6 +239,49 @@ describe('shouldLoadVideoCardFavoriteStatus', () => {
     expect(
       shouldLoadVideoCardFavoriteStatus({
         from: 'playrecord',
+        source: 'source-a',
+        id: undefined,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('canToggleVideoCardFavorite', () => {
+  it('allows source-backed non-douban cards including search results', () => {
+    expect(
+      canToggleVideoCardFavorite({
+        from: 'search',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(true);
+    expect(
+      canToggleVideoCardFavorite({
+        from: 'playrecord',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(true);
+  });
+
+  it('skips douban and incomplete cards', () => {
+    expect(
+      canToggleVideoCardFavorite({
+        from: 'douban',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(false);
+    expect(
+      canToggleVideoCardFavorite({
+        from: 'search',
+        source: '',
+        id: 'video-a',
+      }),
+    ).toBe(false);
+    expect(
+      canToggleVideoCardFavorite({
+        from: 'search',
         source: 'source-a',
         id: undefined,
       }),

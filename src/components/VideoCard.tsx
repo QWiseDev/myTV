@@ -25,6 +25,7 @@ import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import {
   buildPlayUrl,
   buildVideoCardSubjectUrl,
+  canToggleVideoCardFavorite,
   cardContainerStyle,
   getVideoCardEntryPoster,
   getVideoCardConfig,
@@ -294,7 +295,16 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (from === 'douban' || !actualSource || !actualId) return;
+        const favoriteToggleParams = {
+          from,
+          source: actualSource,
+          id: actualId,
+        };
+
+        if (!canToggleVideoCardFavorite(favoriteToggleParams)) {
+          return;
+        }
+        const { source: favoriteSource, id: favoriteId } = favoriteToggleParams;
 
         try {
           // 确定当前收藏状态
@@ -303,7 +313,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
           if (currentFavorited) {
             // 如果已收藏，删除收藏
-            await deleteFavorite(actualSource, actualId);
+            await deleteFavorite(favoriteSource, favoriteId);
             if (from === 'search') {
               setSearchFavorited(false);
             } else {
@@ -311,7 +321,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             }
           } else {
             // 如果未收藏，添加收藏
-            await saveFavorite(actualSource, actualId, {
+            await saveFavorite(favoriteSource, favoriteId, {
               title: actualTitle,
               source_name: source_name || '',
               year: actualYear || '',

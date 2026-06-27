@@ -124,6 +124,18 @@ export function shouldLoadVideoCardFavoriteStatus(
   );
 }
 
+export interface FavoriteToggleParams {
+  from: string;
+  source?: string;
+  id?: string;
+}
+
+export function canToggleVideoCardFavorite(
+  params: FavoriteToggleParams,
+): params is FavoriteToggleParams & { source: string; id: string } {
+  return params.from !== 'douban' && Boolean(params.source) && Boolean(params.id);
+}
+
 /**
  * 构建播放页面 URL
  */
