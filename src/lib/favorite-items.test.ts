@@ -1,9 +1,26 @@
-import { buildFavoriteItems, type FavoriteRecord } from './favorite-items';
-import type { PlayRecord } from './types';
+import {
+  buildFavoriteItems,
+  buildUserMenuFavoriteRecords,
+  type FavoriteRecord,
+} from './favorite-items';
+import type { Favorite, PlayRecord } from './types';
 
 function createFavorite(
   overrides: Partial<FavoriteRecord> = {},
 ): FavoriteRecord {
+  return {
+    title: '收藏影片',
+    source_name: '测试源',
+    year: '2026',
+    cover: '/poster.jpg',
+    total_episodes: 12,
+    save_time: 100,
+    search_title: '收藏影片',
+    ...overrides,
+  };
+}
+
+function createUserMenuFavorite(overrides: Partial<Favorite> = {}): Favorite {
   return {
     title: '收藏影片',
     source_name: '测试源',
@@ -89,5 +106,36 @@ describe('buildFavoriteItems', () => {
         title: '合法收藏',
       }),
     ]);
+  });
+});
+
+describe('buildUserMenuFavoriteRecords', () => {
+  it('keeps original keys while sorting by save time', () => {
+    const records = buildUserMenuFavoriteRecords({
+      'source+old': createUserMenuFavorite({
+        save_time: 100,
+        title: '旧收藏',
+      }),
+      invalid: createUserMenuFavorite({
+        save_time: 300,
+        title: '非法 key 收藏',
+      }),
+      'source+new': createUserMenuFavorite({
+        save_time: 200,
+        title: '新收藏',
+      }),
+    });
+
+    expect(records.map((record) => record.key)).toEqual([
+      'invalid',
+      'source+new',
+      'source+old',
+    ]);
+    expect(records[0]).toEqual(
+      expect.objectContaining({
+        key: 'invalid',
+        title: '非法 key 收藏',
+      }),
+    );
   });
 });

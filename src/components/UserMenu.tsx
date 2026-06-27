@@ -26,6 +26,10 @@ import { createPortal } from 'react-dom';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { getAllPlayRecords } from '@/lib/db.client';
 import { debug } from '@/lib/debug';
+import {
+  buildUserMenuFavoriteRecords,
+  type UserMenuFavoriteRecord,
+} from '@/lib/favorite-items';
 import { parseStorageKey } from '@/lib/storage-key';
 import type { Favorite, PlayRecord } from '@/lib/types';
 import {
@@ -78,9 +82,7 @@ export const UserMenu: React.FC = () => {
   const [playRecords, setPlayRecords] = useState<
     UserMenuContinueWatchingRecord[]
   >([]);
-  const [favorites, setFavorites] = useState<(Favorite & { key: string })[]>(
-    [],
-  );
+  const [favorites, setFavorites] = useState<UserMenuFavoriteRecord[]>([]);
   const [hasUnreadUpdates, setHasUnreadUpdates] = useState(false);
 
   // Body 滚动锁定 - 使用 overflow 方式避免布局问题
@@ -502,17 +504,7 @@ export const UserMenu: React.FC = () => {
         >;
         if (!isActive) return;
 
-        const favoritesArray = Object.entries(favoritesData).map(
-          ([key, favorite]) => ({
-            ...(favorite as Favorite),
-            key,
-          }),
-        );
-        // 按保存时间降序排列
-        const sortedFavorites = favoritesArray.sort(
-          (a, b) => b.save_time - a.save_time,
-        );
-        setFavorites(sortedFavorites);
+        setFavorites(buildUserMenuFavoriteRecords(favoritesData));
       } catch (error) {
         debug.error('加载收藏失败:', error);
       }

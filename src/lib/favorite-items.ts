@@ -1,5 +1,5 @@
 import { parseStorageKey } from './storage-key';
-import type { FavoriteItem, PlayRecord } from './types';
+import type { Favorite, FavoriteItem, PlayRecord } from './types';
 
 export interface FavoriteRecord {
   title: string;
@@ -10,6 +10,19 @@ export interface FavoriteRecord {
   save_time: number;
   search_title?: string;
   origin?: 'vod' | 'live';
+}
+
+export type UserMenuFavoriteRecord = Favorite & { key: string };
+
+export function buildUserMenuFavoriteRecords(
+  allFavorites: Record<string, Favorite>,
+): UserMenuFavoriteRecord[] {
+  return Object.entries(allFavorites)
+    .map(([key, favorite]) => ({
+      ...favorite,
+      key,
+    }))
+    .sort((left, right) => right.save_time - left.save_time);
 }
 
 export function buildFavoriteItems(
