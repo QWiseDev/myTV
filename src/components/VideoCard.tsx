@@ -499,6 +499,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     });
 
     const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
+    const isLiveCard = origin === 'live';
 
     // 移动端操作菜单配置
     const mobileActions = useMobileActions({
@@ -530,7 +531,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           {/* 海报容器 */}
           <div
             className={`relative aspect-[2/3] overflow-hidden rounded-lg ${
-              origin === 'live'
+              isLiveCard
                 ? 'ring-1 ring-[#d8d3c7] dark:ring-[#4a463f]'
                 : ''
             } border border-[#e8e6dc] bg-[#f0eee6] shadow-sm transition-all duration-300 group-hover:border-[#d8c0b4] group-hover:shadow-[0_18px_45px_rgba(48,48,46,0.16)] dark:border-[#3d3934] dark:bg-[#302d29] dark:group-hover:border-[#6a5044] dark:group-hover:shadow-[0_18px_45px_rgba(0,0,0,0.34)]`}
@@ -556,7 +557,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               alt={actualTitle}
               fill
               className={`${
-                origin === 'live' ? 'object-contain' : 'object-cover'
+                isLiveCard ? 'object-contain' : 'object-cover'
               } transition-all duration-700 ease-out ${
                 imageLoaded
                   ? 'opacity-100 blur-0 scale-100'
@@ -770,7 +771,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
                   {/* 左侧装饰点 */}
                   <span className='relative w-1.5 h-1.5 rounded-full bg-[#a7a199] dark:bg-[#6f685f] group-hover:bg-[#d97757] dark:group-hover:bg-[#e09a7a] transition-all duration-300'></span>
 
-                  {origin === 'live' && (
+                  {isLiveCard && (
                     <Radio
                       size={12}
                       className='relative inline-block transition-all duration-300 group-hover:text-[#d97757] dark:group-hover:text-[#e09a7a]'
