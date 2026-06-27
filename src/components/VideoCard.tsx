@@ -411,26 +411,20 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       }
     }, [from, isAggregate, actualSource, actualId, searchFavorited]);
 
-    // 长按操作
-    const handleLongPress = useCallback(() => {
-      if (!showMobileActions) {
-        // 防止重复触发
-        // 立即显示菜单，避免等待数据加载导致动画卡顿
-        setShowMobileActions(true);
+    const openMobileActions = useCallback(() => {
+      setShowMobileActions(true);
 
-        // 异步检查收藏状态，不阻塞菜单显示
-        if (
-          from === 'search' &&
-          !isAggregate &&
-          actualSource &&
-          actualId &&
-          searchFavorited === null
-        ) {
-          checkSearchFavoriteStatus();
-        }
+      // 异步检查收藏状态，不阻塞菜单显示
+      if (
+        from === 'search' &&
+        !isAggregate &&
+        actualSource &&
+        actualId &&
+        searchFavorited === null
+      ) {
+        checkSearchFavoriteStatus();
       }
     }, [
-      showMobileActions,
       from,
       isAggregate,
       actualSource,
@@ -438,6 +432,29 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       searchFavorited,
       checkSearchFavoriteStatus,
     ]);
+
+    // 长按操作
+    const handleLongPress = useCallback(() => {
+      if (!showMobileActions) {
+        // 防止重复触发
+        // 立即显示菜单，避免等待数据加载导致动画卡顿
+        openMobileActions();
+      }
+    }, [showMobileActions, openMobileActions]);
+
+    const handleContextMenu = useCallback(
+      (e: React.MouseEvent) => {
+        // 阻止默认右键菜单
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 右键弹出操作菜单
+        openMobileActions();
+
+        return false;
+      },
+      [openMobileActions],
+    );
 
     // 长按手势hook
     const longPressProps = useLongPress({
@@ -472,27 +489,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           onClick={handleClick}
           {...longPressProps}
           style={cardContainerStyle}
-          onContextMenu={(e) => {
-            // 阻止默认右键菜单
-            e.preventDefault();
-            e.stopPropagation();
-
-            // 右键弹出操作菜单
-            setShowMobileActions(true);
-
-            // 异步检查收藏状态，不阻塞菜单显示
-            if (
-              from === 'search' &&
-              !isAggregate &&
-              actualSource &&
-              actualId &&
-              searchFavorited === null
-            ) {
-              checkSearchFavoriteStatus();
-            }
-
-            return false;
-          }}
+          onContextMenu={handleContextMenu}
           onDragStart={preventDragStart}
         >
           {/* 海报容器 */}
