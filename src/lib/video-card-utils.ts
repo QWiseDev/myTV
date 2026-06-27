@@ -69,6 +69,31 @@ export function shouldCheckSearchFavoriteStatus({
   );
 }
 
+export interface VideoCardSearchTypeParams {
+  isAggregate?: boolean;
+  episodes?: number;
+  type?: string;
+}
+
+export function getVideoCardSearchType({
+  isAggregate,
+  episodes,
+  type = '',
+}: VideoCardSearchTypeParams): string {
+  if (!isAggregate) {
+    return type;
+  }
+
+  return episodes === 1 ? 'movie' : 'tv';
+}
+
+export function getVideoCardEntryPoster(
+  from: string,
+  poster: string,
+): string | undefined {
+  return from === 'douban' || from === 'search' ? poster : undefined;
+}
+
 /**
  * 构建播放页面 URL
  */

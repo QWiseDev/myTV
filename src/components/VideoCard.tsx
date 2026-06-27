@@ -25,7 +25,9 @@ import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import {
   buildPlayUrl,
   cardContainerStyle,
+  getVideoCardEntryPoster,
   getVideoCardConfig,
+  getVideoCardSearchType,
   noPointerStyle,
   noSelectStyle,
   preventContextMenu,
@@ -153,13 +155,12 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     const actualEpisodes = dynamicEpisodes;
     const actualYear = year;
     const actualQuery = query || '';
-    const actualSearchType = isAggregate
-      ? actualEpisodes && actualEpisodes === 1
-        ? 'movie'
-        : 'tv'
-      : type;
-    const entryPoster =
-      from === 'douban' || from === 'search' ? actualPoster : undefined;
+    const actualSearchType = getVideoCardSearchType({
+      isAggregate,
+      episodes: actualEpisodes,
+      type,
+    });
+    const entryPoster = getVideoCardEntryPoster(from, actualPoster);
     const imageFallbackUrls = useMemo(
       () => getImageFallbackUrls(actualPoster),
       [actualPoster, imageProxyVersion],

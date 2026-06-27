@@ -1,5 +1,7 @@
 import {
   buildPlayUrl,
+  getVideoCardEntryPoster,
+  getVideoCardSearchType,
   shouldCheckSearchFavoriteStatus,
   shouldUseUnoptimizedImage,
 } from './video-card-utils';
@@ -125,5 +127,52 @@ describe('shouldCheckSearchFavoriteStatus', () => {
         searchFavorited: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe('getVideoCardSearchType', () => {
+  it('keeps explicit type for non-aggregate cards', () => {
+    expect(
+      getVideoCardSearchType({
+        isAggregate: false,
+        episodes: 1,
+        type: 'show',
+      }),
+    ).toBe('show');
+  });
+
+  it('infers aggregate movie cards from a single episode', () => {
+    expect(
+      getVideoCardSearchType({
+        isAggregate: true,
+        episodes: 1,
+        type: 'show',
+      }),
+    ).toBe('movie');
+  });
+
+  it('infers aggregate tv cards when episodes are missing or more than one', () => {
+    expect(
+      getVideoCardSearchType({
+        isAggregate: true,
+        type: 'movie',
+      }),
+    ).toBe('tv');
+    expect(
+      getVideoCardSearchType({
+        isAggregate: true,
+        episodes: 12,
+        type: 'movie',
+      }),
+    ).toBe('tv');
+  });
+});
+
+describe('getVideoCardEntryPoster', () => {
+  it('keeps poster metadata only for douban and search entries', () => {
+    expect(getVideoCardEntryPoster('douban', 'poster-a')).toBe('poster-a');
+    expect(getVideoCardEntryPoster('search', 'poster-a')).toBe('poster-a');
+    expect(getVideoCardEntryPoster('playrecord', 'poster-a')).toBeUndefined();
+    expect(getVideoCardEntryPoster('favorite', 'poster-a')).toBeUndefined();
   });
 });
