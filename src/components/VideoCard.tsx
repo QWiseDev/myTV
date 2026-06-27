@@ -264,6 +264,57 @@ function useVideoCardSearchFavoriteStatus({
   };
 }
 
+function useVideoCardImageState(poster: string) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFallbackIndex, setImageFallbackIndex] = useState(0);
+  const imageProxyVersion = useImageProxyVersion();
+  const imageFallbackUrls = useMemo(
+    () => getImageFallbackUrls(poster),
+    [poster, imageProxyVersion],
+  );
+  const imageSrc =
+    imageFallbackUrls[imageFallbackIndex] || processImageUrl(poster);
+  // 影视聚合站封面来自大量第三方域名，服务端图片优化容易触发限流、
+  // 超时或请求放大；外部 http(s) 图改由浏览器直连并保留 fallback。
+  const useUnoptimizedImage = shouldUseUnoptimizedImage(imageSrc);
+
+  useEffect(() => {
+    setImageFallbackIndex(0);
+    setImageLoaded(false);
+    setIsLoading(false);
+  }, [poster, imageProxyVersion]);
+
+  const handleImageLoad = useCallback(() => {
+    setIsLoading(true);
+    setImageLoaded(true);
+  }, []);
+
+  const handleImageError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      e.currentTarget.dataset.failedSrc = imageSrc;
+      if (imageFallbackIndex < imageFallbackUrls.length - 1) {
+        setImageLoaded(false);
+        setImageFallbackIndex((index) => index + 1);
+        return;
+      }
+
+      setIsLoading(true);
+      setImageLoaded(true);
+    },
+    [imageFallbackIndex, imageFallbackUrls.length, imageSrc],
+  );
+
+  return {
+    isLoading,
+    imageLoaded,
+    imageSrc,
+    useUnoptimizedImage,
+    handleImageLoad,
+    handleImageError,
+  };
+}
+
 const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   function VideoCard(
     {
@@ -293,10 +344,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ref,
   ) {
     const router = useRouter();
-    const [isLoading, setIsLoading] = useState(false);
-    const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
-    const [imageFallbackIndex, setImageFallbackIndex] = useState(0);
-    const imageProxyVersion = useImageProxyVersion();
     const [showMobileActions, setShowMobileActions] = useState(false);
 
     // 可外部修改的可控字段
@@ -326,45 +373,14 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       type,
     });
     const entryPoster = getVideoCardEntryPoster(from, actualPoster);
-    const imageFallbackUrls = useMemo(
-      () => getImageFallbackUrls(actualPoster),
-      [actualPoster, imageProxyVersion],
-    );
-    const imageSrc =
-      imageFallbackUrls[imageFallbackIndex] || processImageUrl(actualPoster);
-    // 影视聚合站封面来自大量第三方域名（豆瓣官方 / 各视频源 CDN）。
-    // Next 服务端图片优化器会逐张 fetch 外链并重编码，存在三个问题：
-    // 1) 服务端 fetch 豆瓣官方域名不带 Referer，被 418 限流，onError 后连环触发 /_next/image 请求暴增
-    // 2) 服务端 fetch 视频源域名常超时/403，导致继续观看封面空白且无 fallback
-    // 3) 大量外链优化拖垮服务器
-    // 因此对所有外部 http(s) 图禁用 Next 优化，改由浏览器直连（no-referrer + CDN fallback / 视频源直连）。
-    const useUnoptimizedImage = shouldUseUnoptimizedImage(imageSrc);
-
-    useEffect(() => {
-      setImageFallbackIndex(0);
-      setImageLoaded(false);
-      setIsLoading(false);
-    }, [actualPoster, imageProxyVersion]);
-
-    const handleImageLoad = useCallback(() => {
-      setIsLoading(true);
-      setImageLoaded(true);
-    }, []);
-
-    const handleImageError = useCallback(
-      (e: React.SyntheticEvent<HTMLImageElement>) => {
-        e.currentTarget.dataset.failedSrc = imageSrc;
-        if (imageFallbackIndex < imageFallbackUrls.length - 1) {
-          setImageLoaded(false);
-          setImageFallbackIndex((index) => index + 1);
-          return;
-        }
-
-        setIsLoading(true);
-        setImageLoaded(true);
-      },
-      [imageFallbackIndex, imageFallbackUrls.length, imageSrc],
-    );
+    const {
+      isLoading,
+      imageLoaded,
+      imageSrc,
+      useUnoptimizedImage,
+      handleImageLoad,
+      handleImageError,
+    } = useVideoCardImageState(actualPoster);
 
     const [favorited, setFavorited] = useVideoCardFavoriteStatus({
       from,
