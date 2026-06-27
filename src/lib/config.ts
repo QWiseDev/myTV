@@ -72,7 +72,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 合并文件中的源信息
   const apiSitesFromFile = Object.entries(fileConfig.api_site || []);
   const currentApiSites = new Map(
-    (adminConfig.SourceConfig || []).map((s) => [s.key, s])
+    (adminConfig.SourceConfig || []).map((s) => [s.key, s]),
   );
 
   apiSitesFromFile.forEach(([key, site]) => {
@@ -110,7 +110,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 覆盖 CustomCategories
   const customCategoriesFromFile = fileConfig.custom_category || [];
   const currentCustomCategories = new Map(
-    (adminConfig.CustomCategories || []).map((c) => [c.query + c.type, c])
+    (adminConfig.CustomCategories || []).map((c) => [c.query + c.type, c]),
   );
 
   customCategoriesFromFile.forEach((category) => {
@@ -134,7 +134,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 
   // 检查现有 CustomCategories 是否在 fileConfig.custom_category 中，如果不在则标记为 custom
   const customCategoriesFromFileKeys = new Set(
-    customCategoriesFromFile.map((c) => c.query + c.type)
+    customCategoriesFromFile.map((c) => c.query + c.type),
   );
   currentCustomCategories.forEach((category) => {
     if (!customCategoriesFromFileKeys.has(category.query + category.type)) {
@@ -147,7 +147,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
 
   const livesFromFile = Object.entries(fileConfig.lives || []);
   const currentLives = new Map(
-    (adminConfig.LiveConfig || []).map((l) => [l.key, l])
+    (adminConfig.LiveConfig || []).map((l) => [l.key, l]),
   );
 
   livesFromFile.forEach(([key, site]) => {
@@ -196,7 +196,7 @@ async function getInitConfig(
     URL: '',
     AutoUpdate: false,
     LastCheck: '',
-  }
+  },
 ): Promise<AdminConfig> {
   let cfgFile: ConfigFileStruct;
   try {
@@ -223,6 +223,8 @@ async function getInitConfig(
       DisableYellowFilter:
         process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
       FluidSearch: process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
+      CustomAdFilterCode: '',
+      CustomAdFilterVersion: 0,
       // TMDB配置默认值
       TMDBApiKey: process.env.TMDB_API_KEY || '',
       TMDBLanguage: 'zh-CN',
@@ -369,7 +371,7 @@ export function clearConfigCache(): void {
 }
 
 export async function configSelfCheck(
-  adminConfig: AdminConfig
+  adminConfig: AdminConfig,
 ): Promise<AdminConfig> {
   // 确保必要的属性存在和初始化
   if (!adminConfig.UserConfig) {
@@ -391,7 +393,7 @@ export async function configSelfCheck(
     const updatedUsers = dbUsers.map((username) => {
       // 查找现有配置中是否有这个用户
       const existingUserConfig = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username
+        (u) => u.username === username,
       );
 
       if (existingUserConfig) {
@@ -428,6 +430,12 @@ export async function configSelfCheck(
   }
   if (!adminConfig.LiveConfig || !Array.isArray(adminConfig.LiveConfig)) {
     adminConfig.LiveConfig = [];
+  }
+  if (typeof adminConfig.SiteConfig.CustomAdFilterCode !== 'string') {
+    adminConfig.SiteConfig.CustomAdFilterCode = '';
+  }
+  if (typeof adminConfig.SiteConfig.CustomAdFilterVersion !== 'number') {
+    adminConfig.SiteConfig.CustomAdFilterVersion = 0;
   }
 
   // 确保网盘搜索配置有默认值
@@ -490,10 +498,10 @@ export async function configSelfCheck(
   });
   // 过滤站长
   const originOwnerCfg = adminConfig.UserConfig.Users.find(
-    (u) => u.username === ownerUser
+    (u) => u.username === ownerUser,
   );
   adminConfig.UserConfig.Users = adminConfig.UserConfig.Users.filter(
-    (user) => user.username !== ownerUser
+    (user) => user.username !== ownerUser,
   );
   // 其他用户不得拥有 owner 权限
   adminConfig.UserConfig.Users.forEach((user) => {
@@ -529,7 +537,7 @@ export async function configSelfCheck(
       }
       seenCustomCategoryKeys.add(category.query + category.type);
       return true;
-    }
+    },
   );
 
   // 直播源去重
@@ -558,7 +566,7 @@ export async function resetConfig() {
   }
   const adminConfig = await getInitConfig(
     originConfig.ConfigFile,
-    originConfig.ConfigSubscribtion
+    originConfig.ConfigSubscribtion,
   );
   cachedConfig = adminConfig;
   await db.saveAdminConfig(adminConfig);
@@ -606,7 +614,7 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
       const tagConfig = config.UserConfig.Tags?.find((t) => t.name === tagName);
       if (tagConfig && tagConfig.enabledApis) {
         tagConfig.enabledApis.forEach((apiKey) =>
-          enabledApisFromTags.add(apiKey)
+          enabledApisFromTags.add(apiKey),
         );
       }
     });
@@ -635,7 +643,7 @@ export async function setCachedConfig(config: AdminConfig) {
 export async function hasSpecialFeaturePermission(
   username: string,
   feature: 'ai-recommend' | 'youtube-search',
-  providedConfig?: AdminConfig
+  providedConfig?: AdminConfig,
 ): Promise<boolean> {
   try {
     // 站长默认拥有所有权限
@@ -646,7 +654,7 @@ export async function hasSpecialFeaturePermission(
     // 使用提供的配置或获取新配置
     const config = providedConfig || (await getConfig());
     const userConfig = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
 
     // 如果用户不在配置中，检查是否是新注册用户
@@ -675,7 +683,7 @@ export async function hasSpecialFeaturePermission(
     ) {
       for (const tagName of userConfig.tags) {
         const tagConfig = config.UserConfig.Tags.find(
-          (t) => t.name === tagName
+          (t) => t.name === tagName,
         );
         if (
           tagConfig &&
@@ -718,7 +726,7 @@ export async function deleteAllVideoSources(): Promise<{
   fs.writeFileSync(
     backupPath,
     JSON.stringify(sourcesToDelete, null, 2),
-    'utf-8'
+    'utf-8',
   );
 
   // 清空视频源
@@ -740,7 +748,7 @@ export async function deleteAllVideoSources(): Promise<{
  * @returns 返回恢复的视频源数量
  */
 export async function restoreVideoSources(
-  backupPath: string
+  backupPath: string,
 ): Promise<{ restoredCount: number }> {
   if (!fs.existsSync(backupPath)) {
     throw new Error(`备份文件不存在: ${backupPath}`);

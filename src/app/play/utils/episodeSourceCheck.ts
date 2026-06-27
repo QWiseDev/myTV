@@ -2,6 +2,8 @@ import type { SearchResult } from '@/lib/types';
 
 import { filterAdsFromM3U8 } from './helpers';
 
+const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
+
 type HlsLoaderContext = {
   type?: string;
 };
@@ -358,6 +360,15 @@ export async function probePlayableMediaUrl(
             }
             return true;
           })();
+          const customAdFilterCode = (() => {
+            try {
+              return (
+                localStorage.getItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY) || ''
+              );
+            } catch {
+              return '';
+            }
+          })();
 
           const BaseLoader = HlsCtor.DefaultConfig
             .loader as HlsLoaderConstructor;
@@ -384,7 +395,9 @@ export async function probePlayableMediaUrl(
                         context.type === 'level') &&
                       typeof response?.data === 'string'
                     ) {
-                      response.data = filterAdsFromM3U8(response.data);
+                      response.data = filterAdsFromM3U8(response.data, {
+                        customCode: customAdFilterCode,
+                      });
                     }
                     return originalOnSuccess(
                       response,

@@ -8,7 +8,6 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -19,7 +18,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -43,6 +42,8 @@ export async function POST(request: NextRequest) {
       DoubanImageProxy,
       DisableYellowFilter,
       FluidSearch,
+      CustomAdFilterCode,
+      CustomAdFilterVersion,
       TMDBApiKey,
       TMDBLanguage,
       EnableTMDBActorSearch,
@@ -57,6 +58,8 @@ export async function POST(request: NextRequest) {
       DoubanImageProxy: string;
       DisableYellowFilter: boolean;
       FluidSearch: boolean;
+      CustomAdFilterCode?: string;
+      CustomAdFilterVersion?: number;
       TMDBApiKey?: string;
       TMDBLanguage?: string;
       EnableTMDBActorSearch?: boolean;
@@ -84,12 +87,17 @@ export async function POST(request: NextRequest) {
     if (username !== process.env.USERNAME) {
       // 管理员
       const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username
+        (u) => u.username === username,
       );
       if (!user || user.role !== 'admin' || user.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }
     }
+
+    const currentCustomAdFilterCode =
+      adminConfig.SiteConfig.CustomAdFilterCode || '';
+    const currentCustomAdFilterVersion =
+      adminConfig.SiteConfig.CustomAdFilterVersion || 0;
 
     // 更新缓存中的站点设置
     adminConfig.SiteConfig = {
@@ -103,6 +111,14 @@ export async function POST(request: NextRequest) {
       DoubanImageProxy,
       DisableYellowFilter,
       FluidSearch,
+      CustomAdFilterCode:
+        typeof CustomAdFilterCode === 'string'
+          ? CustomAdFilterCode
+          : currentCustomAdFilterCode,
+      CustomAdFilterVersion:
+        typeof CustomAdFilterVersion === 'number'
+          ? CustomAdFilterVersion
+          : currentCustomAdFilterVersion,
       TMDBApiKey: TMDBApiKey || '',
       TMDBLanguage: TMDBLanguage || 'zh-CN',
       EnableTMDBActorSearch: EnableTMDBActorSearch || false,
@@ -120,7 +136,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store', // 不缓存结果
         },
-      }
+      },
     );
   } catch (error) {
     console.error('更新站点配置失败:', error);
@@ -129,7 +145,7 @@ export async function POST(request: NextRequest) {
         error: '更新站点配置失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -91,12 +91,12 @@ const UserConfigPanel = dynamic(() => import('./_components/UserConfigPanel'), {
 
 const VideoSourceConfigPanel = dynamic(
   () => import('./_components/VideoSourceConfigPanel'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const CategoryConfigPanel = dynamic(
   () => import('./_components/CategoryConfigPanel'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const ConfigFilePanel = dynamic(() => import('./_components/ConfigFilePanel'), {
@@ -109,19 +109,24 @@ const SiteConfigPanel = dynamic(() => import('./_components/SiteConfigPanel'), {
   ssr: false,
 });
 
+const CustomAdFilterConfigPanel = dynamic(
+  () => import('./_components/CustomAdFilterConfigPanel'),
+  { loading: () => <SectionSkeleton />, ssr: false },
+);
+
 const LiveSourceConfigPanel = dynamic(
   () => import('./_components/LiveSourceConfigPanel'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const NetDiskConfigPanel = dynamic(
   () => import('./_components/NetDiskConfigPanel'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const AIRecommendConfigPanel = dynamic(
   () => import('@/components/AIRecommendConfig'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const CacheManagerPanel = dynamic(() => import('@/components/CacheManager'), {
@@ -136,20 +141,20 @@ const DataMigrationPanel = dynamic(() => import('@/components/DataMigration'), {
 
 const SourceTestModule = dynamic(
   () => import('@/components/SourceTestModule'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const TelegramAuthConfigPanel = dynamic(
   () =>
     import('@/components/TelegramAuthConfig').then(
-      (mod) => mod.TelegramAuthConfig
+      (mod) => mod.TelegramAuthConfig,
     ),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const TVBoxSecurityConfigPanel = dynamic(
   () => import('@/components/TVBoxSecurityConfig'),
-  { loading: () => <SectionSkeleton />, ssr: false }
+  { loading: () => <SectionSkeleton />, ssr: false },
 );
 
 const YouTubeConfigPanel = dynamic(() => import('@/components/YouTubeConfig'), {
@@ -187,6 +192,7 @@ function AdminPageClient() {
     sourceTest: false,
     liveSource: false,
     siteConfig: false,
+    customAdFilter: false,
     categoryConfig: false,
     netdiskConfig: false,
     aiRecommendConfig: false,
@@ -343,6 +349,23 @@ function AdminPageClient() {
             onToggle={() => toggleTab('siteConfig')}
           >
             <SiteConfigPanel config={config} refreshConfig={fetchConfig} />
+          </CollapsibleTab>
+
+          <CollapsibleTab
+            title='自定义去广告'
+            icon={
+              <Settings
+                size={20}
+                className='text-gray-600 dark:text-gray-400'
+              />
+            }
+            isExpanded={expandedTabs.customAdFilter}
+            onToggle={() => toggleTab('customAdFilter')}
+          >
+            <CustomAdFilterConfigPanel
+              config={config}
+              refreshConfig={fetchConfig}
+            />
           </CollapsibleTab>
 
           <div className='space-y-4'>
@@ -711,7 +734,7 @@ function AdminPageClient() {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </PageLayout>
   );

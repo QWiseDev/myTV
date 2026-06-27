@@ -25,6 +25,8 @@ export interface AdminConfig {
     DoubanImageProxy: string;
     DisableYellowFilter: boolean;
     FluidSearch: boolean;
+    CustomAdFilterCode?: string;
+    CustomAdFilterVersion?: number;
     // TMDB配置
     TMDBApiKey?: string;
     TMDBLanguage?: string;

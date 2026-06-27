@@ -10,6 +10,7 @@ import {
   useRef,
 } from 'react';
 
+import { filterAdsFromM3U8 } from '@/lib/ad-filter';
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
 import { SearchResult } from '@/lib/types';
 
@@ -29,7 +30,6 @@ import {
   resetDanmakuTimeline,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
-import { filterAdsFromM3U8 } from '../utils/helpers';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
 import { stripMpegTsPrefix } from '../utils/mpegTs';
 import { detectPlayerBrowserSupport } from '../utils/playerBrowserSupport';
@@ -45,6 +45,8 @@ import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
+const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
+const CUSTOM_AD_FILTER_VERSION_CACHE_KEY = 'custom_ad_filter_version_cache';
 
 type AnalyticsHandlers = {
   handlePlay: (position?: number, quality?: string) => void;
@@ -162,8 +164,90 @@ interface UsePlayerInitializerParams {
 export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
+  const customAdFilterCodeRef = useRef('');
 
   const { videoUrl, loading, currentEpisodeIndex, artRef } = params;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCustomAdFilterCode = async () => {
+      try {
+        const cachedCode = localStorage.getItem(
+          CUSTOM_AD_FILTER_CODE_CACHE_KEY,
+        );
+        const cachedVersion = localStorage.getItem(
+          CUSTOM_AD_FILTER_VERSION_CACHE_KEY,
+        );
+
+        if (cachedCode) {
+          customAdFilterCodeRef.current = cachedCode;
+        }
+
+        const versionResponse = await fetch('/api/ad-filter');
+        if (!versionResponse.ok) {
+          return;
+        }
+
+        const versionPayload = (await versionResponse.json()) as {
+          version?: unknown;
+        };
+        const version =
+          typeof versionPayload.version === 'number'
+            ? versionPayload.version
+            : Number(versionPayload.version) || 0;
+
+        if (cancelled) return;
+
+        if (version <= 0) {
+          localStorage.removeItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY);
+          localStorage.removeItem(CUSTOM_AD_FILTER_VERSION_CACHE_KEY);
+          customAdFilterCodeRef.current = '';
+          return;
+        }
+
+        if (cachedCode && cachedVersion === String(version)) {
+          return;
+        }
+
+        const fullResponse = await fetch('/api/ad-filter?full=true');
+        if (!fullResponse.ok) {
+          return;
+        }
+
+        const fullPayload = (await fullResponse.json()) as {
+          code?: unknown;
+        };
+        const code =
+          typeof fullPayload.code === 'string' ? fullPayload.code : '';
+
+        if (cancelled) return;
+
+        if (code) {
+          localStorage.setItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY, code);
+          localStorage.setItem(
+            CUSTOM_AD_FILTER_VERSION_CACHE_KEY,
+            String(version),
+          );
+          customAdFilterCodeRef.current = code;
+        } else {
+          localStorage.removeItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY);
+          localStorage.removeItem(CUSTOM_AD_FILTER_VERSION_CACHE_KEY);
+          customAdFilterCodeRef.current = '';
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('加载自定义去广告代码失败:', error);
+        }
+      }
+    };
+
+    void loadCustomAdFilterCode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const {
@@ -293,7 +377,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                     response.data &&
                     typeof response.data === 'string'
                   ) {
-                    response.data = filterAdsFromM3U8(response.data);
+                    response.data = filterAdsFromM3U8(response.data, {
+                      type: currentSource,
+                      customCode: customAdFilterCodeRef.current,
+                      onCustomError: (error) => {
+                        console.error(
+                          '执行自定义去广告代码失败，使用默认规则:',
+                          error,
+                        );
+                      },
+                    });
                   }
                   return onSuccess(response, stats, ctx, null);
                 };
@@ -339,7 +432,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           isMobile: isMobileGlobal,
         });
 
-
       const existingArt = artPlayerRef.current;
       if (existingArt && !loading) {
         const isEpisodeChange = isEpisodeChangingRef.current;
@@ -376,7 +468,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               ? resumeTimeRef.current
               : resumeTimeRef.current || currentTime;
 
-
             const switchPromise = switchPlayerMedia(existingArt, {
               videoUrl,
               title: videoTitle,
@@ -387,7 +478,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             })
               .then(() => {
                 if (switchPromiseRef.current === switchPromise) {
-
                   if (isEpisodeChange) {
                     if (!resumeTimeRef.current || resumeTimeRef.current <= 0) {
                       existingArt.currentTime = 0;
@@ -630,7 +720,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           if ((isIOS || isSafari) && artPlayer.muted) {
-
             const handleFirstPlay = () => {
               setTimeout(() => {
                 if (artPlayerRef.current === artPlayer && artPlayer.muted) {
@@ -742,7 +831,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('video:canplay', () => {
-
           setIsVideoLoading(false);
           finishSourceSwitch('视频可播放');
           videoEndedHandledRef.current = false;
@@ -759,7 +847,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                   target = Math.max(0, duration - 5);
                 }
               }
-
 
               const videoElement = artPlayer.video || artPlayer.$video;
               if (videoElement) {
@@ -781,7 +868,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           if ((isIOS || isSafari) && artPlayer.paused) {
-
             const tryAutoPlay = async () => {
               try {
                 let playAttempts = 0;
