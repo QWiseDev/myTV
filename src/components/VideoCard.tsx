@@ -79,6 +79,18 @@ export type VideoCardHandle = {
   setDoubanId: (id?: number) => void;
 };
 
+function useSyncedState<T>(
+  value: T,
+): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [state, setState] = useState(value);
+
+  useEffect(() => {
+    setState(value);
+  }, [value]);
+
+  return [state, setState];
+}
+
 const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   function VideoCard(
     {
@@ -119,27 +131,10 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ); // 搜索结果的收藏状态
 
     // 可外部修改的可控字段
-    const [dynamicEpisodes, setDynamicEpisodes] = useState<number | undefined>(
-      episodes,
-    );
-    const [dynamicSourceNames, setDynamicSourceNames] = useState<
-      string[] | undefined
-    >(source_names);
-    const [dynamicDoubanId, setDynamicDoubanId] = useState<number | undefined>(
-      douban_id,
-    );
-
-    useEffect(() => {
-      setDynamicEpisodes(episodes);
-    }, [episodes]);
-
-    useEffect(() => {
-      setDynamicSourceNames(source_names);
-    }, [source_names]);
-
-    useEffect(() => {
-      setDynamicDoubanId(douban_id);
-    }, [douban_id]);
+    const [dynamicEpisodes, setDynamicEpisodes] = useSyncedState(episodes);
+    const [dynamicSourceNames, setDynamicSourceNames] =
+      useSyncedState(source_names);
+    const [dynamicDoubanId, setDynamicDoubanId] = useSyncedState(douban_id);
 
     useImperativeHandle(ref, () => ({
       setEpisodes: (eps?: number) => setDynamicEpisodes(eps),
