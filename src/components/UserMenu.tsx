@@ -24,10 +24,15 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import { type PlayRecord, getAllPlayRecords } from '@/lib/db.client';
+import { getAllPlayRecords } from '@/lib/db.client';
 import { debug } from '@/lib/debug';
 import { parseStorageKey } from '@/lib/storage-key';
-import type { Favorite } from '@/lib/types';
+import type { Favorite, PlayRecord } from '@/lib/types';
+import {
+  buildUserMenuContinueWatchingRecords,
+  calculatePlayRecordProgress,
+  type UserMenuContinueWatchingRecord,
+} from '@/lib/user-menu-continue-watching';
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 import {
@@ -67,7 +72,7 @@ export const UserMenu: React.FC = () => {
     null,
   );
   const [playRecords, setPlayRecords] = useState<
-    (PlayRecord & { key: string })[]
+    UserMenuContinueWatchingRecord[]
   >([]);
   const [favorites, setFavorites] = useState<(Favorite & { key: string })[]>(
     [],
@@ -395,38 +400,24 @@ export const UserMenu: React.FC = () => {
     let isActive = true;
     let refreshTimer: NodeJS.Timeout | null = null;
 
+    const updateContinueWatchingRecords = (
+      records: Record<string, PlayRecord>,
+    ) => {
+      setPlayRecords(
+        buildUserMenuContinueWatchingRecords(records, {
+          enableProgressFilter: enableContinueWatchingFilter,
+          maxProgress: continueWatchingMaxProgress,
+          minProgress: continueWatchingMinProgress,
+        }),
+      );
+    };
+
     const loadPlayRecords = async () => {
       try {
         const records = await getAllPlayRecords();
         if (!isActive) return;
 
-        const recordsArray = Object.entries(records).map(([key, record]) => ({
-          ...record,
-          key,
-        }));
-
-        // 筛选真正需要继续观看的记录
-        const validPlayRecords = recordsArray.filter((record) => {
-          const progress = getProgress(record);
-
-          // 播放时间必须超过2分钟
-          if (record.play_time < 120) return false;
-
-          // 如果禁用了进度筛选，则显示所有播放时间超过2分钟的记录
-          if (!enableContinueWatchingFilter) return true;
-
-          // 根据用户自定义的进度范围筛选
-          return (
-            progress >= continueWatchingMinProgress &&
-            progress <= continueWatchingMaxProgress
-          );
-        });
-
-        // 按最后播放时间降序排列
-        const sortedRecords = validPlayRecords.sort(
-          (a, b) => b.save_time - a.save_time,
-        );
-        setPlayRecords(sortedRecords.slice(0, 12)); // 只取最近的12个
+        updateContinueWatchingRecords(records);
       } catch (error) {
         debug.error('加载播放记录失败:', error);
       }
@@ -461,25 +452,7 @@ export const UserMenu: React.FC = () => {
           const freshRecords = await getAllPlayRecords();
           if (!isActive) return;
 
-          const recordsArray = Object.entries(freshRecords).map(
-            ([key, record]) => ({
-              ...record,
-              key,
-            }),
-          );
-          const validPlayRecords = recordsArray.filter((record) => {
-            const progress = getProgress(record);
-            if (record.play_time < 120) return false;
-            if (!enableContinueWatchingFilter) return true;
-            return (
-              progress >= continueWatchingMinProgress &&
-              progress <= continueWatchingMaxProgress
-            );
-          });
-          const sortedRecords = validPlayRecords.sort(
-            (a, b) => b.save_time - a.save_time,
-          );
-          setPlayRecords(sortedRecords.slice(0, 12));
+          updateContinueWatchingRecords(freshRecords);
         }, 100);
       }
     });
@@ -682,14 +655,11 @@ export const UserMenu: React.FC = () => {
     parseStorageKey(key) || { source: '', id: '' };
 
   // 计算播放进度百分比
-  const getProgress = (record: PlayRecord) => {
-    if (record.total_time === 0) return 0;
-    return (record.play_time / record.total_time) * 100;
-  };
+  const getProgress = calculatePlayRecordProgress;
 
   // 检查播放记录是否有新集数更新
   const getNewEpisodesCount = (
-    record: PlayRecord & { key: string },
+    record: UserMenuContinueWatchingRecord,
   ): number => {
     if (!watchingUpdates || !watchingUpdates.updatedSeries) return 0;
 
