@@ -281,4 +281,22 @@ describe('VideoCard behavior', () => {
 
     expect(await screen.findByText('取消收藏')).not.toBeNull();
   });
+
+  it('deduplicates aggregate sources in the action sheet', async () => {
+    render(
+      <VideoCard
+        from='search'
+        isAggregate
+        poster='https://cdn.example/poster.jpg'
+        source_names={['源 A', '源 A', '源 B']}
+        title='测试影片'
+      />,
+    );
+
+    openActionSheet();
+
+    expect(await screen.findByText('共 2 个播放源')).not.toBeNull();
+    expect(screen.getAllByText('源 A').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('源 B').length).toBeGreaterThan(0);
+  });
 });

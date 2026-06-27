@@ -519,6 +519,10 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       [openMobileActions],
     );
 
+    const closeMobileActions = useCallback(() => {
+      setShowMobileActions(false);
+    }, []);
+
     // 长按手势hook
     const longPressProps = useLongPress({
       onLongPress: handleLongPress,
@@ -528,6 +532,17 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
     const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
     const isLiveCard = origin === 'live';
+    const actionSheetPoster = useMemo(
+      () => processImageUrl(actualPoster),
+      [actualPoster],
+    );
+    const actionSheetSources = useMemo(
+      () =>
+        isAggregate && dynamicSourceNames
+          ? Array.from(new Set(dynamicSourceNames))
+          : undefined,
+      [isAggregate, dynamicSourceNames],
+    );
 
     // 移动端操作菜单配置
     const mobileActions = useMobileActions({
@@ -806,15 +821,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         {/* 操作菜单 - 支持右键和长按触发 */}
         <MobileActionSheet
           isOpen={showMobileActions}
-          onClose={() => setShowMobileActions(false)}
+          onClose={closeMobileActions}
           title={actualTitle}
-          poster={processImageUrl(actualPoster)}
+          poster={actionSheetPoster}
           actions={mobileActions}
-          sources={
-            isAggregate && dynamicSourceNames
-              ? Array.from(new Set(dynamicSourceNames))
-              : undefined
-          }
+          sources={actionSheetSources}
           isAggregate={isAggregate}
           sourceName={source_name}
           currentEpisode={currentEpisode}
