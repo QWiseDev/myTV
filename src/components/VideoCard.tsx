@@ -94,6 +94,47 @@ function useSyncedState<T>(
   return [state, setState];
 }
 
+function scheduleFavoriteStatusFetch(fetchFavoriteStatus: () => void) {
+  let delayTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleCallbackId: number | null = null;
+
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    idleCallbackId = (
+      window as Window & {
+        requestIdleCallback: (
+          callback: IdleRequestCallback,
+          options?: IdleRequestOptions,
+        ) => number;
+      }
+    ).requestIdleCallback(
+      () => {
+        delayTimer = setTimeout(fetchFavoriteStatus, 300);
+      },
+      { timeout: 1200 },
+    );
+  } else {
+    delayTimer = setTimeout(fetchFavoriteStatus, 400);
+  }
+
+  return () => {
+    if (delayTimer) {
+      clearTimeout(delayTimer);
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      idleCallbackId !== null &&
+      'cancelIdleCallback' in window
+    ) {
+      (
+        window as Window & {
+          cancelIdleCallback: (handle: number) => void;
+        }
+      ).cancelIdleCallback(idleCallbackId);
+    }
+  };
+}
+
 const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   function VideoCard(
     {
@@ -241,8 +282,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       const { source: favoriteSource, id: favoriteId } = favoriteStatusParams;
 
       let cancelled = false;
-      let delayTimer: ReturnType<typeof setTimeout> | null = null;
-      let idleCallbackId: number | null = null;
 
       const fetchFavoriteStatus = async () => {
         try {
@@ -257,27 +296,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         }
       };
 
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleCallbackId = (
-          window as Window & {
-            requestIdleCallback: (
-              callback: IdleRequestCallback,
-              options?: IdleRequestOptions,
-            ) => number;
-          }
-        ).requestIdleCallback(
-          () => {
-            delayTimer = setTimeout(() => {
-              void fetchFavoriteStatus();
-            }, 300);
-          },
-          { timeout: 1200 },
-        );
-      } else {
-        delayTimer = setTimeout(() => {
-          void fetchFavoriteStatus();
-        }, 400);
-      }
+      const cancelFavoriteStatusFetch = scheduleFavoriteStatusFetch(() => {
+        void fetchFavoriteStatus();
+      });
 
       const storageKey = generateStorageKey(favoriteSource, favoriteId);
       const unsubscribe = subscribeToDataUpdates(
@@ -290,23 +311,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
       return () => {
         cancelled = true;
-
-        if (delayTimer) {
-          clearTimeout(delayTimer);
-        }
-
-        if (
-          typeof window !== 'undefined' &&
-          idleCallbackId !== null &&
-          'cancelIdleCallback' in window
-        ) {
-          (
-            window as Window & {
-              cancelIdleCallback: (handle: number) => void;
-            }
-          ).cancelIdleCallback(idleCallbackId);
-        }
-
+        cancelFavoriteStatusFetch();
         unsubscribe();
       };
     }, [from, actualSource, actualId]);

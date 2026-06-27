@@ -208,6 +208,22 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('cancels the delayed favorite status check after unmount', async () => {
+    jest.useFakeTimers();
+    Reflect.deleteProperty(window, 'requestIdleCallback');
+    mockIsFavorited.mockResolvedValue(true);
+
+    const { unmount } = renderSourceBackedCard();
+    unmount();
+
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+      await flushAsyncWork();
+    });
+
+    expect(mockIsFavorited).not.toHaveBeenCalled();
+  });
+
   it('checks search favorite status when opening the action sheet', async () => {
     let resolveFavoriteStatus: (favorited: boolean) => void = () => undefined;
     mockIsFavorited.mockReturnValue(
