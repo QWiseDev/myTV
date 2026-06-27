@@ -50,14 +50,13 @@ function toHomeRecords(
 }
 
 function buildWatchingUpdateIndexes(watchingUpdates?: WatchingUpdatesCache | null) {
-  const seriesList = (watchingUpdates?.updatedSeries || []).filter((series) =>
-    Boolean(series.videoId),
-  );
+  const updatedSeries = watchingUpdates?.updatedSeries || [];
+  const seriesList = updatedSeries.filter((series) => Boolean(series.videoId));
 
   const watchingUpdatesMap = new Map<string, WatchingUpdateSeries>();
   const latestTotalEpisodesByKey = new Map<string, number>();
 
-  watchingUpdates?.updatedSeries?.forEach((series) => {
+  updatedSeries.forEach((series) => {
     const key = generateStorageKey(series.sourceKey, series.videoId);
     watchingUpdatesMap.set(key, series);
     if (series.totalEpisodes > 0) {
