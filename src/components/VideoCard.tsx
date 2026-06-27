@@ -180,6 +180,26 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       setIsLoading(false);
     }, [actualPoster, imageProxyVersion]);
 
+    const handleImageLoad = useCallback(() => {
+      setIsLoading(true);
+      setImageLoaded(true);
+    }, []);
+
+    const handleImageError = useCallback(
+      (e: React.SyntheticEvent<HTMLImageElement>) => {
+        e.currentTarget.dataset.failedSrc = imageSrc;
+        if (imageFallbackIndex < imageFallbackUrls.length - 1) {
+          setImageLoaded(false);
+          setImageFallbackIndex((index) => index + 1);
+          return;
+        }
+
+        setIsLoading(true);
+        setImageLoaded(true);
+      },
+      [imageFallbackIndex, imageFallbackUrls.length, imageSrc],
+    );
+
     useEffect(() => {
       const handleImageProxyChange = () => {
         setImageProxyVersion((version) => version + 1);
@@ -568,21 +588,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               priority={priority}
               unoptimized={useUnoptimizedImage}
               sizes={sizes || '(max-width: 640px) 96px, 180px'}
-              onLoad={() => {
-                setIsLoading(true);
-                setImageLoaded(true);
-              }}
-              onError={(e) => {
-                e.currentTarget.dataset.failedSrc = imageSrc;
-                if (imageFallbackIndex < imageFallbackUrls.length - 1) {
-                  setImageLoaded(false);
-                  setImageFallbackIndex((index) => index + 1);
-                  return;
-                }
-
-                setIsLoading(true);
-                setImageLoaded(true);
-              }}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
               style={noPointerStyle}
               onContextMenu={preventContextMenu}
               onDragStart={preventDragStart}

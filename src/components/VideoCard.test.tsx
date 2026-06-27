@@ -156,6 +156,25 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('marks the poster as loaded after the image load event', async () => {
+    render(
+      <VideoCard
+        from='douban'
+        poster='https://cdn.example/poster.jpg'
+        title='测试影片'
+      />,
+    );
+
+    const image = screen.getByAltText('测试影片');
+    expect(image.className).toContain('opacity-0');
+
+    fireEvent.load(image);
+
+    await waitFor(() => {
+      expect(image.className).toContain('opacity-100');
+    });
+  });
+
   it('loads favorite status after the fallback delay and follows favorite updates', async () => {
     jest.useFakeTimers();
     Reflect.deleteProperty(window, 'requestIdleCallback');
