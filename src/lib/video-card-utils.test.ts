@@ -4,6 +4,7 @@ import {
   canToggleVideoCardFavorite,
   getVideoCardEntryPoster,
   getVideoCardSearchType,
+  navigateVideoCardPlayUrl,
   shouldCheckSearchFavoriteStatus,
   shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
@@ -177,6 +178,28 @@ describe('getVideoCardEntryPoster', () => {
     expect(getVideoCardEntryPoster('search', 'poster-a')).toBe('poster-a');
     expect(getVideoCardEntryPoster('playrecord', 'poster-a')).toBeUndefined();
     expect(getVideoCardEntryPoster('favorite', 'poster-a')).toBeUndefined();
+  });
+});
+
+describe('navigateVideoCardPlayUrl', () => {
+  it('uses document navigation for video playback links', () => {
+    const location = {
+      assign: jest.fn(),
+    };
+
+    navigateVideoCardPlayUrl('/play?title=test', location);
+
+    expect(location.assign).toHaveBeenCalledWith('/play?title=test');
+  });
+
+  it('skips empty playback links', () => {
+    const location = {
+      assign: jest.fn(),
+    };
+
+    navigateVideoCardPlayUrl('', location);
+
+    expect(location.assign).not.toHaveBeenCalled();
   });
 });
 

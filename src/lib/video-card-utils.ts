@@ -94,6 +94,21 @@ export function getVideoCardEntryPoster(
   return from === 'douban' || from === 'search' ? poster : undefined;
 }
 
+export interface VideoCardLocation {
+  assign(url: string): void;
+}
+
+export function navigateVideoCardPlayUrl(
+  playUrl: string,
+  location: VideoCardLocation = window.location,
+): void {
+  if (!playUrl) {
+    return;
+  }
+
+  location.assign(playUrl);
+}
+
 export function buildVideoCardSubjectUrl(
   doubanId: number | undefined,
   isBangumi: boolean,

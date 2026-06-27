@@ -2,7 +2,6 @@
 
 import { Heart, Link, PlayCircleIcon, Radio, Trash2 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import React, {
   forwardRef,
   memo,
@@ -30,6 +29,7 @@ import {
   getVideoCardEntryPoster,
   getVideoCardConfig,
   getVideoCardSearchType,
+  navigateVideoCardPlayUrl,
   noPointerStyle,
   noSelectStyle,
   preventContextMenu,
@@ -343,7 +343,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     }: VideoCardProps,
     ref,
   ) {
-    const router = useRouter();
     const [showMobileActions, setShowMobileActions] = useState(false);
 
     // 可外部修改的可控字段
@@ -514,8 +513,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     );
 
     const handleClick = useCallback(() => {
-      if (playUrl) router.push(playUrl);
-    }, [playUrl, router]);
+      navigateVideoCardPlayUrl(playUrl);
+    }, [playUrl]);
 
     // 新标签页播放处理函数
     const handlePlayInNewTab = useCallback(() => {
