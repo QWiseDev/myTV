@@ -94,6 +94,19 @@ export function getVideoCardEntryPoster(
   return from === 'douban' || from === 'search' ? poster : undefined;
 }
 
+export function buildVideoCardSubjectUrl(
+  doubanId: number | undefined,
+  isBangumi: boolean,
+): string | undefined {
+  if (!doubanId || doubanId === 0) {
+    return undefined;
+  }
+
+  return isBangumi
+    ? `https://bgm.tv/subject/${doubanId.toString()}`
+    : `https://movie.douban.com/subject/${doubanId.toString()}`;
+}
+
 /**
  * 构建播放页面 URL
  */

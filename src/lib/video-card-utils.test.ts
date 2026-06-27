@@ -1,5 +1,6 @@
 import {
   buildPlayUrl,
+  buildVideoCardSubjectUrl,
   getVideoCardEntryPoster,
   getVideoCardSearchType,
   shouldCheckSearchFavoriteStatus,
@@ -174,5 +175,21 @@ describe('getVideoCardEntryPoster', () => {
     expect(getVideoCardEntryPoster('search', 'poster-a')).toBe('poster-a');
     expect(getVideoCardEntryPoster('playrecord', 'poster-a')).toBeUndefined();
     expect(getVideoCardEntryPoster('favorite', 'poster-a')).toBeUndefined();
+  });
+});
+
+describe('buildVideoCardSubjectUrl', () => {
+  it('builds Bangumi and Douban subject URLs', () => {
+    expect(buildVideoCardSubjectUrl(12345, true)).toBe(
+      'https://bgm.tv/subject/12345',
+    );
+    expect(buildVideoCardSubjectUrl(12345, false)).toBe(
+      'https://movie.douban.com/subject/12345',
+    );
+  });
+
+  it('skips missing and zero ids', () => {
+    expect(buildVideoCardSubjectUrl(undefined, false)).toBeUndefined();
+    expect(buildVideoCardSubjectUrl(0, false)).toBeUndefined();
   });
 });

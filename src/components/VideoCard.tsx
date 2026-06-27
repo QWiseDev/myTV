@@ -24,6 +24,7 @@ import {
 import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import {
   buildPlayUrl,
+  buildVideoCardSubjectUrl,
   cardContainerStyle,
   getVideoCardEntryPoster,
   getVideoCardConfig,
@@ -150,6 +151,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     const actualEpisodes = dynamicEpisodes;
     const actualYear = year;
     const actualQuery = query || '';
+    const subjectUrl = buildVideoCardSubjectUrl(actualDoubanId, isBangumi);
     const actualSearchType = getVideoCardSearchType({
       isAggregate,
       episodes: actualEpisodes,
@@ -638,31 +640,25 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             {config.showRating && rate && <RatingBadge rate={rate} />}
 
             {/* 豆瓣链接 */}
-            {config.showDoubanLink &&
-              actualDoubanId &&
-              actualDoubanId !== 0 && (
-                <a
-                  href={
-                    isBangumi
-                      ? `https://bgm.tv/subject/${actualDoubanId.toString()}`
-                      : `https://movie.douban.com/subject/${actualDoubanId.toString()}`
-                  }
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  onClick={(e) => e.stopPropagation()}
-                  className='absolute top-2 left-2 opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:opacity-100 sm:group-hover:translate-x-0'
+            {config.showDoubanLink && subjectUrl && (
+              <a
+                href={subjectUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                onClick={(e) => e.stopPropagation()}
+                className='absolute top-2 left-2 opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:opacity-100 sm:group-hover:translate-x-0'
+                style={noSelectStyle}
+                onContextMenu={preventContextMenu}
+              >
+                <div
+                  className='bg-[#d97757] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#b85c38] hover:scale-[1.1] transition-all duration-300 ease-out'
                   style={noSelectStyle}
                   onContextMenu={preventContextMenu}
                 >
-                  <div
-                    className='bg-[#d97757] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#b85c38] hover:scale-[1.1] transition-all duration-300 ease-out'
-                    style={noSelectStyle}
-                    onContextMenu={preventContextMenu}
-                  >
-                    <Link size={16} style={noPointerStyle} />
-                  </div>
-                </a>
-              )}
+                  <Link size={16} style={noPointerStyle} />
+                </div>
+              </a>
+            )}
 
             {/* 聚合播放源指示器 */}
             {isAggregate &&
