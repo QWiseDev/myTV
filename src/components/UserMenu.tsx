@@ -112,6 +112,34 @@ function getThanksInfo(dataSource: string) {
   }
 }
 
+function isAdminRole(role?: string) {
+  return role === 'owner' || role === 'admin';
+}
+
+function getRoleText(role?: string) {
+  switch (role || 'user') {
+    case 'owner':
+      return '站长';
+    case 'admin':
+      return '管理员';
+    case 'user':
+      return '用户';
+    default:
+      return '';
+  }
+}
+
+function getRoleBadgeClassName(role?: string) {
+  switch (role || 'user') {
+    case 'owner':
+      return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
+    case 'admin':
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    default:
+      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+  }
+}
+
 function preventPanelBackdropScroll(
   event: React.TouchEvent<HTMLDivElement> | React.WheelEvent<HTMLDivElement>,
 ) {
@@ -800,13 +828,14 @@ export const UserMenu: React.FC = () => {
     }
   };
 
+  const currentRole = authInfo?.role || 'user';
+  const isAdminUser = isAdminRole(authInfo?.role);
+
   // 检查是否显示管理面板按钮
-  const showAdminPanel =
-    authInfo?.role === 'owner' || authInfo?.role === 'admin';
+  const showAdminPanel = isAdminUser;
 
   // 检查是否显示源检测按钮（管理员功能）
-  const showSourceTest =
-    authInfo?.role === 'owner' || authInfo?.role === 'admin';
+  const showSourceTest = isAdminUser;
 
   // 检查是否显示修改密码按钮
   const showChangePassword =
@@ -867,20 +896,6 @@ export const UserMenu: React.FC = () => {
     watchingUpdates?.updatedSeries,
   ]);
 
-  // 角色中文映射
-  const getRoleText = (role?: string) => {
-    switch (role) {
-      case 'owner':
-        return '站长';
-      case 'admin':
-        return '管理员';
-      case 'user':
-        return '用户';
-      default:
-        return '';
-    }
-  };
-
   // 菜单面板内容
   const menuPanel = (
     <>
@@ -901,14 +916,10 @@ export const UserMenu: React.FC = () => {
               </span>
               <span
                 className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                  (authInfo?.role || 'user') === 'owner'
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                    : (authInfo?.role || 'user') === 'admin'
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                      : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                  getRoleBadgeClassName(currentRole)
                 }`}
               >
-                {getRoleText(authInfo?.role || 'user')}
+                {getRoleText(currentRole)}
               </span>
             </div>
             <div className='flex items-center justify-between'>
@@ -1014,9 +1025,7 @@ export const UserMenu: React.FC = () => {
             >
               <BarChart3 className='w-4 h-4 text-gray-500 dark:text-gray-400' />
               <span className='font-medium'>
-                {authInfo?.role === 'owner' || authInfo?.role === 'admin'
-                  ? '播放统计'
-                  : '个人统计'}
+                {isAdminUser ? '播放统计' : '个人统计'}
               </span>
             </button>
           )}
