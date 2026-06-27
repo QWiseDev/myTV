@@ -602,30 +602,7 @@ async function getOriginalEpisodes(
  * 获取缓存的更新信息
  */
 export function getCachedWatchingUpdates(): boolean {
-  try {
-    const cacheDuration =
-      STORAGE_TYPE === 'localstorage' ? CACHE_DURATION : SERVER_CACHE_DURATION;
-
-    // 🔧 优化：非 localStorage 模式使用内存缓存
-    if (STORAGE_TYPE !== 'localstorage') {
-      if (!memoryWatchingUpdatesCache) return false;
-      const isExpired =
-        Date.now() - memoryWatchingUpdatesCache.timestamp > cacheDuration;
-      return isExpired ? false : memoryWatchingUpdatesCache.hasUpdates;
-    }
-
-    // localStorage 模式
-    const cached = localStorage.getItem(WATCHING_UPDATES_CACHE_KEY);
-    if (!cached) return false;
-
-    const data: WatchingUpdatesCache = JSON.parse(cached);
-    const isExpired = Date.now() - data.timestamp > cacheDuration;
-
-    return isExpired ? false : data.hasUpdates;
-  } catch (error) {
-    console.error('读取更新缓存失败:', error);
-    return false;
-  }
+  return Boolean(readWatchingUpdatesCache('读取更新缓存失败:')?.hasUpdates);
 }
 
 /**
@@ -654,20 +631,6 @@ function cacheWatchingUpdates(data: WatchingUpdate): void {
 }
 
 /**
- * 订阅更新通知
- */
-export function subscribeToWatchingUpdates(
-  callback: (hasUpdates: boolean) => void,
-): () => void {
-  updateListeners.add(callback);
-
-  // 返回取消订阅函数
-  return () => {
-    updateListeners.delete(callback);
-  };
-}
-
-/**
  * 通知所有监听器
  */
 function notifyListeners(hasUpdates: boolean): void {
@@ -680,76 +643,26 @@ function notifyListeners(hasUpdates: boolean): void {
   });
 }
 
-/**
- * 设置定期检查
- * @param intervalMinutes 检查间隔（分钟）
- */
-export function setupPeriodicUpdateCheck(intervalMinutes = 30): () => void {
-  debugLog(`设置定期更新检查，间隔: ${intervalMinutes} 分钟`);
-
-  checkWatchingUpdates();
-
-  const intervalId = setInterval(
-    () => {
-      checkWatchingUpdates();
-    },
-    intervalMinutes * 60 * 1000,
-  );
-
-  return () => {
-    clearInterval(intervalId);
-  };
+function getWatchingUpdatesCacheDuration(): number {
+  return STORAGE_TYPE === 'localstorage'
+    ? CACHE_DURATION
+    : SERVER_CACHE_DURATION;
 }
 
-/**
- * 页面可见性变化时自动检查更新
- */
-export function setupVisibilityChangeCheck(): () => void {
-  if (typeof window === 'undefined') {
-    // 服务器端渲染时返回空操作函数
-    return () => void 0;
-  }
-
-  const handleVisibilityChange = () => {
-    if (!document.hidden) {
-      // 页面变为可见时检查更新
-      checkWatchingUpdates();
-    }
-  };
-
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-
-  return () => {
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-  };
+function isWatchingUpdatesCacheExpired(data: WatchingUpdatesCache): boolean {
+  return Date.now() - data.timestamp > getWatchingUpdatesCacheDuration();
 }
 
-/**
- * 获取详细的更新信息
- */
-export function getDetailedWatchingUpdates(): WatchingUpdate | null {
+function readWatchingUpdatesCache(errorMessage: string): WatchingUpdatesCache | null {
   try {
-    const cacheDuration =
-      STORAGE_TYPE === 'localstorage' ? CACHE_DURATION : SERVER_CACHE_DURATION;
-
     if (STORAGE_TYPE !== 'localstorage') {
       if (!memoryWatchingUpdatesCache) {
         return null;
       }
 
-      const isExpired =
-        Date.now() - memoryWatchingUpdatesCache.timestamp > cacheDuration;
-      if (isExpired) {
-        return null;
-      }
-
-      return {
-        hasUpdates: memoryWatchingUpdatesCache.hasUpdates,
-        timestamp: memoryWatchingUpdatesCache.timestamp,
-        updatedCount: memoryWatchingUpdatesCache.updatedCount,
-        continueWatchingCount: memoryWatchingUpdatesCache.continueWatchingCount,
-        updatedSeries: memoryWatchingUpdatesCache.updatedSeries,
-      };
+      return isWatchingUpdatesCacheExpired(memoryWatchingUpdatesCache)
+        ? null
+        : memoryWatchingUpdatesCache;
     }
 
     const cached = localStorage.getItem(WATCHING_UPDATES_CACHE_KEY);
@@ -758,12 +671,20 @@ export function getDetailedWatchingUpdates(): WatchingUpdate | null {
     }
 
     const data: WatchingUpdatesCache = JSON.parse(cached);
-    const isExpired = Date.now() - data.timestamp > cacheDuration;
+    return isWatchingUpdatesCacheExpired(data) ? null : data;
+  } catch (error) {
+    console.error(errorMessage, error);
+    return null;
+  }
+}
 
-    if (isExpired) {
-      return null;
-    }
+/**
+ * 获取详细的更新信息
+ */
+export function getDetailedWatchingUpdates(): WatchingUpdate | null {
+  const data = readWatchingUpdatesCache('读取详细更新信息失败:');
 
+  if (data) {
     return {
       hasUpdates: data.hasUpdates,
       timestamp: data.timestamp,
@@ -771,10 +692,9 @@ export function getDetailedWatchingUpdates(): WatchingUpdate | null {
       continueWatchingCount: data.continueWatchingCount,
       updatedSeries: data.updatedSeries,
     };
-  } catch (error) {
-    console.error('读取详细更新信息失败:', error);
-    return null;
   }
+
+  return null;
 }
 
 /**
@@ -799,28 +719,6 @@ export function markUpdatesAsViewed(): void {
     }
   } catch (error) {
     console.error('标记更新为已查看失败:', error);
-  }
-}
-
-/**
- * 清除新集数更新状态（来自Alpha版本）
- */
-export function clearWatchingUpdates(): void {
-  try {
-    // 🔧 优化：非 localStorage 模式清除内存缓存
-    if (STORAGE_TYPE !== 'localstorage') {
-      memoryWatchingUpdatesCache = null;
-      memoryLastCheckTime = 0;
-    } else {
-      localStorage.removeItem(WATCHING_UPDATES_CACHE_KEY);
-      localStorage.removeItem(LAST_CHECK_TIME_KEY);
-    }
-
-    // 通知监听器
-    notifyListeners(false);
-    dispatchWatchingUpdatesEvent(false, 0);
-  } catch (error) {
-    console.error('清除新集数更新状态失败:', error);
   }
 }
 
