@@ -89,6 +89,21 @@ function useCloseDropdownOnOutsideMouseDown(
   }, [dropdownSelector, isOpen, setOpen]);
 }
 
+function persistUserMenuSetting(
+  key: string,
+  value: string,
+  eventName?: string,
+) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(key, value);
+  if (eventName) {
+    window.dispatchEvent(new Event(eventName));
+  }
+}
+
 export const UserMenu: React.FC = () => {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -639,102 +654,86 @@ export const UserMenu: React.FC = () => {
   // 设置相关的处理函数
   const handleAggregateToggle = (value: boolean) => {
     setDefaultAggregateSearch(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('defaultAggregateSearch', JSON.stringify(value));
-    }
+    persistUserMenuSetting('defaultAggregateSearch', JSON.stringify(value));
   };
 
   const handleDoubanProxyUrlChange = (value: string) => {
     setDoubanProxyUrl(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('doubanProxyUrl', value);
-    }
+    persistUserMenuSetting('doubanProxyUrl', value);
   };
 
   const handleOptimizationToggle = (value: boolean) => {
     setEnableOptimization(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('enableOptimization', JSON.stringify(value));
-    }
+    persistUserMenuSetting('enableOptimization', JSON.stringify(value));
   };
 
   const handleFluidSearchToggle = (value: boolean) => {
     setFluidSearch(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('fluidSearch', JSON.stringify(value));
-    }
+    persistUserMenuSetting('fluidSearch', JSON.stringify(value));
   };
 
   const handleLiveDirectConnectToggle = (value: boolean) => {
     setLiveDirectConnect(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('liveDirectConnect', JSON.stringify(value));
-    }
+    persistUserMenuSetting('liveDirectConnect', JSON.stringify(value));
   };
 
   const handleContinueWatchingMinProgressChange = (value: number) => {
     setContinueWatchingMinProgress(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('continueWatchingMinProgress', value.toString());
-    }
+    persistUserMenuSetting('continueWatchingMinProgress', value.toString());
   };
 
   const handleContinueWatchingMaxProgressChange = (value: number) => {
     setContinueWatchingMaxProgress(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('continueWatchingMaxProgress', value.toString());
-    }
+    persistUserMenuSetting('continueWatchingMaxProgress', value.toString());
   };
 
   const handleEnableContinueWatchingFilterToggle = (value: boolean) => {
     setEnableContinueWatchingFilter(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        'enableContinueWatchingFilter',
-        JSON.stringify(value),
-      );
-    }
+    persistUserMenuSetting(
+      'enableContinueWatchingFilter',
+      JSON.stringify(value),
+    );
   };
 
   const handleEnableAutoSkipToggle = (value: boolean) => {
     setEnableAutoSkip(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('enableAutoSkip', JSON.stringify(value));
-      // 🔑 通知 SkipController localStorage 已更新
-      window.dispatchEvent(new Event('localStorageChanged'));
-    }
+    persistUserMenuSetting(
+      'enableAutoSkip',
+      JSON.stringify(value),
+      'localStorageChanged',
+    );
   };
 
   const handleEnableAutoNextEpisodeToggle = (value: boolean) => {
     setEnableAutoNextEpisode(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('enableAutoNextEpisode', JSON.stringify(value));
-      // 🔑 通知 SkipController localStorage 已更新
-      window.dispatchEvent(new Event('localStorageChanged'));
-    }
+    persistUserMenuSetting(
+      'enableAutoNextEpisode',
+      JSON.stringify(value),
+      'localStorageChanged',
+    );
   };
 
   const handleDoubanDataSourceChange = (value: string) => {
     setDoubanDataSource(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('doubanDataSource', value);
-    }
+    persistUserMenuSetting('doubanDataSource', value);
   };
 
   const handleDoubanImageProxyTypeChange = (value: string) => {
     setDoubanImageProxyType(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('doubanImageProxyType', value);
-      window.dispatchEvent(new Event('doubanImageProxyChanged'));
-    }
+    persistUserMenuSetting(
+      'doubanImageProxyType',
+      value,
+      'doubanImageProxyChanged',
+    );
   };
 
   const handleDoubanImageProxyUrlChange = (value: string) => {
     setDoubanImageProxyUrl(value);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('doubanImageProxyUrl', value);
-      window.dispatchEvent(new Event('doubanImageProxyChanged'));
-    }
+    persistUserMenuSetting(
+      'doubanImageProxyUrl',
+      value,
+      'doubanImageProxyChanged',
+    );
   };
 
   // 获取感谢信息
