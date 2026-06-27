@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
@@ -33,6 +33,10 @@ import {
   calculatePlayRecordProgress,
   type UserMenuContinueWatchingRecord,
 } from '@/lib/user-menu-continue-watching';
+import {
+  buildUserMenuWatchingUpdatesState,
+  getUserMenuNewEpisodesCount,
+} from '@/lib/user-menu-watching-updates';
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 import {
@@ -657,25 +661,6 @@ export const UserMenu: React.FC = () => {
   // 计算播放进度百分比
   const getProgress = calculatePlayRecordProgress;
 
-  // 检查播放记录是否有新集数更新
-  const getNewEpisodesCount = (
-    record: UserMenuContinueWatchingRecord,
-  ): number => {
-    if (!watchingUpdates || !watchingUpdates.updatedSeries) return 0;
-
-    const { source, id } = parseKey(record.key);
-
-    // 在watchingUpdates中查找匹配的剧集
-    const matchedSeries = watchingUpdates.updatedSeries.find(
-      (series) =>
-        series.sourceKey === source &&
-        series.videoId === id &&
-        series.hasNewEpisode,
-    );
-
-    return matchedSeries ? matchedSeries.newEpisodes || 0 : 0;
-  };
-
   const handleChangePassword = () => {
     setIsOpen(false);
     setIsChangePasswordOpen(true);
@@ -924,12 +909,16 @@ export const UserMenu: React.FC = () => {
   const showWatchingUpdates =
     authInfo?.username && storageType !== 'localstorage';
 
+  const watchingUpdatesState = useMemo(
+    () => buildUserMenuWatchingUpdatesState(watchingUpdates),
+    [watchingUpdates],
+  );
+
   // 检查是否有实际更新（用于显示红点）- 只检查新剧集更新
-  const hasActualUpdates =
-    watchingUpdates && (watchingUpdates.updatedCount || 0) > 0;
+  const hasActualUpdates = watchingUpdatesState.hasActualUpdates;
 
   // 计算更新数量（只统计新剧集更新）
-  const totalUpdates = watchingUpdates?.updatedCount || 0;
+  const totalUpdates = watchingUpdatesState.totalUpdates;
 
   // 🔧 优化：减少调试日志输出频率，只在关键状态变化时输出
   const debugLoggedRef = useRef<string>('');
@@ -1883,10 +1872,10 @@ export const UserMenu: React.FC = () => {
                 更新提醒
               </h3>
               <div className='flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400'>
-                {watchingUpdates && watchingUpdates.updatedCount > 0 && (
+                {totalUpdates > 0 && (
                   <span className='inline-flex items-center gap-1'>
                     <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
-                    {watchingUpdates.updatedCount}部有新集
+                    {totalUpdates}部有新集
                   </span>
                 )}
               </div>
@@ -1914,61 +1903,54 @@ export const UserMenu: React.FC = () => {
               </div>
             )}
             {/* 有新集数的剧集 */}
-            {watchingUpdates &&
-              watchingUpdates.updatedSeries.filter(
-                (series) => series.hasNewEpisode,
-              ).length > 0 && (
-                <div>
-                  <div className='flex items-center gap-2 mb-4'>
-                    <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
-                      新集更新
-                    </h4>
-                    <div className='flex items-center gap-1'>
-                      <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
-                      <span className='text-sm text-red-500 font-medium'>
-                        {
-                          watchingUpdates.updatedSeries.filter(
-                            (series) => series.hasNewEpisode,
-                          ).length
-                        }
-                        部剧集有更新
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
-                    {watchingUpdates.updatedSeries
-                      .filter((series) => series.hasNewEpisode)
-                      .map((series, index) => (
-                        <div
-                          key={`new-${series.title}_${series.year}_${index}`}
-                          className='relative group/card'
-                        >
-                          <div className='relative group-hover/card:z-[500] transition-all duration-300'>
-                            <VideoCard
-                              title={series.title}
-                              poster={series.cover}
-                              year={series.year}
-                              douban_id={series.douban_id}
-                              source={series.sourceKey}
-                              source_name={series.source_name}
-                              episodes={series.totalEpisodes}
-                              currentEpisode={series.currentEpisode}
-                              id={series.videoId}
-                              onDelete={undefined}
-                              type={series.totalEpisodes > 1 ? 'tv' : ''}
-                              from='playrecord'
-                            />
-                          </div>
-                          {/* 新集数徽章 */}
-                          <div className='absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-[502]'>
-                            +{series.newEpisodes}集
-                          </div>
-                        </div>
-                      ))}
+            {watchingUpdatesState.newEpisodeSeries.length > 0 && (
+              <div>
+                <div className='flex items-center gap-2 mb-4'>
+                  <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
+                    新集更新
+                  </h4>
+                  <div className='flex items-center gap-1'>
+                    <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
+                    <span className='text-sm text-red-500 font-medium'>
+                      {watchingUpdatesState.newEpisodeSeries.length}
+                      部剧集有更新
+                    </span>
                   </div>
                 </div>
-              )}
+
+                <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
+                  {watchingUpdatesState.newEpisodeSeries.map(
+                    (series, index) => (
+                      <div
+                        key={`new-${series.title}_${series.year}_${index}`}
+                        className='relative group/card'
+                      >
+                        <div className='relative group-hover/card:z-[500] transition-all duration-300'>
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover}
+                            year={series.year}
+                            douban_id={series.douban_id}
+                            source={series.sourceKey}
+                            source_name={series.source_name}
+                            episodes={series.totalEpisodes}
+                            currentEpisode={series.currentEpisode}
+                            id={series.videoId}
+                            onDelete={undefined}
+                            type={series.totalEpisodes > 1 ? 'tv' : ''}
+                            from='playrecord'
+                          />
+                        </div>
+                        {/* 新集数徽章 */}
+                        <div className='absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-[502]'>
+                          +{series.newEpisodes}集
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 底部说明 */}
@@ -2023,7 +2005,10 @@ export const UserMenu: React.FC = () => {
           <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
             {playRecords.map((record) => {
               const { source, id } = parseKey(record.key);
-              const newEpisodesCount = getNewEpisodesCount(record);
+              const newEpisodesCount = getUserMenuNewEpisodesCount(
+                watchingUpdatesState,
+                record.key,
+              );
               return (
                 <div key={record.key} className='relative group/card'>
                   <div className='relative group-hover/card:z-[500] transition-all duration-300'>
