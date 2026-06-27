@@ -38,6 +38,7 @@ import {
   shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
   type FavoriteStatusLoadParams,
+  type SearchFavoriteStatusParams,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
 import { useMobileActions } from '@/hooks/useMobileActions';
@@ -223,6 +224,46 @@ function useVideoCardFavoriteStatus({
   return [favorited, setFavorited];
 }
 
+function useVideoCardSearchFavoriteStatus({
+  from,
+  isAggregate,
+  source,
+  id,
+}: Omit<SearchFavoriteStatusParams, 'searchFavorited'>) {
+  const [searchFavorited, setSearchFavorited] = useState<boolean | null>(null);
+
+  const checkSearchFavoriteStatus = useCallback(async () => {
+    const searchFavoriteStatusParams = {
+      from,
+      isAggregate,
+      source,
+      id,
+      searchFavorited,
+    };
+
+    if (!shouldCheckSearchFavoriteStatus(searchFavoriteStatusParams)) {
+      return;
+    }
+
+    if (!source || !id) {
+      return;
+    }
+
+    try {
+      const fav = await isFavorited(source, id);
+      setSearchFavorited(fav);
+    } catch (err) {
+      setSearchFavorited(false);
+    }
+  }, [from, isAggregate, source, id, searchFavorited]);
+
+  return {
+    searchFavorited,
+    setSearchFavorited,
+    checkSearchFavoriteStatus,
+  };
+}
+
 const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   function VideoCard(
     {
@@ -257,9 +298,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     const [imageFallbackIndex, setImageFallbackIndex] = useState(0);
     const imageProxyVersion = useImageProxyVersion();
     const [showMobileActions, setShowMobileActions] = useState(false);
-    const [searchFavorited, setSearchFavorited] = useState<boolean | null>(
-      null,
-    ); // 搜索结果的收藏状态
 
     // 可外部修改的可控字段
     const [dynamicEpisodes, setDynamicEpisodes] = useSyncedState(episodes);
@@ -330,6 +368,16 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
     const [favorited, setFavorited] = useVideoCardFavoriteStatus({
       from,
+      source: actualSource,
+      id: actualId,
+    });
+    const {
+      searchFavorited,
+      setSearchFavorited,
+      checkSearchFavoriteStatus,
+    } = useVideoCardSearchFavoriteStatus({
+      from,
+      isAggregate,
       source: actualSource,
       id: actualId,
     });
@@ -458,58 +506,12 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       if (playUrl) window.open(playUrl, '_blank');
     }, [playUrl]);
 
-    // 检查搜索结果的收藏状态
-    const checkSearchFavoriteStatus = useCallback(async () => {
-      const sourceForFavorite = actualSource;
-      const idForFavorite = actualId;
-
-      if (
-        !shouldCheckSearchFavoriteStatus({
-          from,
-          isAggregate,
-          source: sourceForFavorite,
-          id: idForFavorite,
-          searchFavorited,
-        })
-      ) {
-        return;
-      }
-
-      if (!sourceForFavorite || !idForFavorite) {
-        return;
-      }
-
-      try {
-        const fav = await isFavorited(sourceForFavorite, idForFavorite);
-        setSearchFavorited(fav);
-      } catch (err) {
-        setSearchFavorited(false);
-      }
-    }, [from, isAggregate, actualSource, actualId, searchFavorited]);
-
     const openMobileActions = useCallback(() => {
       setShowMobileActions(true);
 
       // 异步检查收藏状态，不阻塞菜单显示
-      if (
-        shouldCheckSearchFavoriteStatus({
-          from,
-          isAggregate,
-          source: actualSource,
-          id: actualId,
-          searchFavorited,
-        })
-      ) {
-        checkSearchFavoriteStatus();
-      }
-    }, [
-      from,
-      isAggregate,
-      actualSource,
-      actualId,
-      searchFavorited,
-      checkSearchFavoriteStatus,
-    ]);
+      void checkSearchFavoriteStatus();
+    }, [checkSearchFavoriteStatus]);
 
     // 长按操作
     const handleLongPress = useCallback(() => {
