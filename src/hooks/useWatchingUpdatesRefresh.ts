@@ -8,10 +8,25 @@ interface UseWatchingUpdatesRefreshOptions {
   refreshWatchingUpdates: () => void;
 }
 
+const VISIBILITY_CHECK_THROTTLE_MS = 15_000;
+
 function reportWatchingUpdatesError(message: string, error: unknown) {
   if (process.env.NODE_ENV !== 'production') {
     console.error(message, error);
   }
+}
+
+function canCheckWatchingUpdates(
+  activeTab: UseWatchingUpdatesRefreshOptions['activeTab'],
+) {
+  return (
+    activeTab === 'home' &&
+    !(typeof document !== 'undefined' && document.hidden)
+  );
+}
+
+function shouldThrottleVisibilityCheck(lastCheckAt: number, now: number) {
+  return now - lastCheckAt < VISIBILITY_CHECK_THROTTLE_MS;
 }
 
 export function useWatchingUpdatesRefresh({
@@ -28,8 +43,7 @@ export function useWatchingUpdatesRefresh({
 
   const checkWatchingUpdates = useCallback(async () => {
     if (isCheckingRef.current) return;
-    if (activeTabRef.current !== 'home') return;
-    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!canCheckWatchingUpdates(activeTabRef.current)) return;
 
     try {
       isCheckingRef.current = true;
@@ -47,7 +61,7 @@ export function useWatchingUpdatesRefresh({
     if (typeof window === 'undefined') return;
 
     const runCheck = () => {
-      if (document.hidden || activeTabRef.current !== 'home') return;
+      if (!canCheckWatchingUpdates(activeTabRef.current)) return;
       void checkWatchingUpdates();
     };
 
@@ -84,10 +98,10 @@ export function useWatchingUpdatesRefresh({
     if (typeof window === 'undefined') return;
 
     const handleVisibilityChange = () => {
-      if (document.hidden || activeTabRef.current !== 'home') return;
+      if (!canCheckWatchingUpdates(activeTabRef.current)) return;
 
       const now = Date.now();
-      if (now - visibilityCheckThrottleRef.current < 15_000) {
+      if (shouldThrottleVisibilityCheck(visibilityCheckThrottleRef.current, now)) {
         return;
       }
 
