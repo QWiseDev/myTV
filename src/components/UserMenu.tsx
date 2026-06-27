@@ -64,6 +64,31 @@ interface AuthInfo {
   role?: 'owner' | 'admin' | 'user';
 }
 
+function useCloseDropdownOnOutsideMouseDown(
+  isOpen: boolean,
+  dropdownSelector: string,
+  setOpen: (open: boolean) => void,
+) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest(dropdownSelector)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownSelector, isOpen, setOpen]);
+}
+
 export const UserMenu: React.FC = () => {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -441,39 +466,16 @@ export const UserMenu: React.FC = () => {
   }, [authInfo, storageType, isFavoritesOpen]);
 
   // 点击外部区域关闭下拉框
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isDoubanDropdownOpen) {
-        const target = event.target as Element;
-        if (!target.closest('[data-dropdown="douban-datasource"]')) {
-          setIsDoubanDropdownOpen(false);
-        }
-      }
-    };
-
-    if (isDoubanDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () =>
-        document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isDoubanDropdownOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isDoubanImageProxyDropdownOpen) {
-        const target = event.target as Element;
-        if (!target.closest('[data-dropdown="douban-image-proxy"]')) {
-          setIsDoubanImageProxyDropdownOpen(false);
-        }
-      }
-    };
-
-    if (isDoubanImageProxyDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () =>
-        document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isDoubanImageProxyDropdownOpen]);
+  useCloseDropdownOnOutsideMouseDown(
+    isDoubanDropdownOpen,
+    '[data-dropdown="douban-datasource"]',
+    setIsDoubanDropdownOpen,
+  );
+  useCloseDropdownOnOutsideMouseDown(
+    isDoubanImageProxyDropdownOpen,
+    '[data-dropdown="douban-image-proxy"]',
+    setIsDoubanImageProxyDropdownOpen,
+  );
 
   const handleMenuClick = async () => {
     const willOpen = !isOpen;
