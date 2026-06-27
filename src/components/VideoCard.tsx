@@ -291,6 +291,17 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       };
     }, [from, actualSource, actualId]);
 
+    const setCurrentFavoriteState = useCallback(
+      (nextFavorited: boolean) => {
+        if (from === 'search') {
+          setSearchFavorited(nextFavorited);
+        } else {
+          setFavorited(nextFavorited);
+        }
+      },
+      [from],
+    );
+
     const handleToggleFavorite = useCallback(
       async (e: React.MouseEvent) => {
         e.preventDefault();
@@ -314,11 +325,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           if (currentFavorited) {
             // 如果已收藏，删除收藏
             await deleteFavorite(favoriteSource, favoriteId);
-            if (from === 'search') {
-              setSearchFavorited(false);
-            } else {
-              setFavorited(false);
-            }
+            setCurrentFavoriteState(false);
           } else {
             // 如果未收藏，添加收藏
             await saveFavorite(favoriteSource, favoriteId, {
@@ -329,11 +336,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               total_episodes: actualEpisodes ?? 1,
               save_time: Date.now(),
             });
-            if (from === 'search') {
-              setSearchFavorited(true);
-            } else {
-              setFavorited(true);
-            }
+            setCurrentFavoriteState(true);
           }
         } catch (err) {
           throw new Error('切换收藏状态失败');
@@ -350,6 +353,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         actualEpisodes,
         favorited,
         searchFavorited,
+        setCurrentFavoriteState,
       ],
     );
 
