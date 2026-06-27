@@ -38,6 +38,12 @@ import {
   type UserMenuContinueWatchingRecord,
 } from '@/lib/user-menu-continue-watching';
 import {
+  buildDefaultUserMenuSettings,
+  readUserMenuSettings,
+  type UserMenuSettingsSnapshot,
+  writeUserMenuSettings,
+} from '@/lib/user-menu-settings';
+import {
   buildUserMenuWatchingUpdatesState,
   getUserMenuNewEpisodesCount,
 } from '@/lib/user-menu-watching-updates';
@@ -176,6 +182,22 @@ export const UserMenu: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isChecking, setIsChecking] = useState(true);
 
+  const applySettingsSnapshot = (settings: UserMenuSettingsSnapshot) => {
+    setDefaultAggregateSearch(settings.defaultAggregateSearch);
+    setDoubanDataSource(settings.doubanDataSource);
+    setDoubanProxyUrl(settings.doubanProxyUrl);
+    setDoubanImageProxyType(settings.doubanImageProxyType);
+    setDoubanImageProxyUrl(settings.doubanImageProxyUrl);
+    setEnableOptimization(settings.enableOptimization);
+    setFluidSearch(settings.fluidSearch);
+    setLiveDirectConnect(settings.liveDirectConnect);
+    setContinueWatchingMinProgress(settings.continueWatchingMinProgress);
+    setContinueWatchingMaxProgress(settings.continueWatchingMaxProgress);
+    setEnableContinueWatchingFilter(settings.enableContinueWatchingFilter);
+    setEnableAutoSkip(settings.enableAutoSkip);
+    setEnableAutoNextEpisode(settings.enableAutoNextEpisode);
+  };
+
   // 确保组件已挂载
   useEffect(() => {
     setMounted(true);
@@ -192,112 +214,12 @@ export const UserMenu: React.FC = () => {
   // 从 localStorage 读取设置
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedAggregateSearch = localStorage.getItem(
-        'defaultAggregateSearch',
+      applySettingsSnapshot(
+        readUserMenuSettings(
+          localStorage,
+          (window as any).RUNTIME_CONFIG || {},
+        ),
       );
-      if (savedAggregateSearch !== null) {
-        setDefaultAggregateSearch(JSON.parse(savedAggregateSearch));
-      }
-
-      const savedDoubanDataSource = localStorage.getItem('doubanDataSource');
-      const defaultDoubanProxyType =
-        (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY_TYPE || 'direct';
-      if (savedDoubanDataSource !== null) {
-        setDoubanDataSource(savedDoubanDataSource);
-      } else if (defaultDoubanProxyType) {
-        setDoubanDataSource(defaultDoubanProxyType);
-      }
-
-      const savedDoubanProxyUrl = localStorage.getItem('doubanProxyUrl');
-      const defaultDoubanProxy =
-        (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY || '';
-      if (savedDoubanProxyUrl !== null) {
-        setDoubanProxyUrl(savedDoubanProxyUrl);
-      } else if (defaultDoubanProxy) {
-        setDoubanProxyUrl(defaultDoubanProxy);
-      }
-
-      const savedDoubanImageProxyType = localStorage.getItem(
-        'doubanImageProxyType',
-      );
-      const defaultDoubanImageProxyType =
-        (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY_TYPE || 'direct';
-      if (savedDoubanImageProxyType !== null) {
-        setDoubanImageProxyType(savedDoubanImageProxyType);
-      } else if (defaultDoubanImageProxyType) {
-        setDoubanImageProxyType(defaultDoubanImageProxyType);
-      }
-
-      const savedDoubanImageProxyUrl = localStorage.getItem(
-        'doubanImageProxyUrl',
-      );
-      const defaultDoubanImageProxyUrl =
-        (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY || '';
-      if (savedDoubanImageProxyUrl !== null) {
-        setDoubanImageProxyUrl(savedDoubanImageProxyUrl);
-      } else if (defaultDoubanImageProxyUrl) {
-        setDoubanImageProxyUrl(defaultDoubanImageProxyUrl);
-      }
-
-      const savedEnableOptimization =
-        localStorage.getItem('enableOptimization');
-      if (savedEnableOptimization !== null) {
-        setEnableOptimization(JSON.parse(savedEnableOptimization));
-      }
-
-      const savedFluidSearch = localStorage.getItem('fluidSearch');
-      const defaultFluidSearch =
-        (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
-      if (savedFluidSearch !== null) {
-        setFluidSearch(JSON.parse(savedFluidSearch));
-      } else if (defaultFluidSearch !== undefined) {
-        setFluidSearch(defaultFluidSearch);
-      }
-
-      const savedLiveDirectConnect = localStorage.getItem('liveDirectConnect');
-      if (savedLiveDirectConnect !== null) {
-        setLiveDirectConnect(JSON.parse(savedLiveDirectConnect));
-      }
-
-      const savedContinueWatchingMinProgress = localStorage.getItem(
-        'continueWatchingMinProgress',
-      );
-      if (savedContinueWatchingMinProgress !== null) {
-        setContinueWatchingMinProgress(
-          parseInt(savedContinueWatchingMinProgress),
-        );
-      }
-
-      const savedContinueWatchingMaxProgress = localStorage.getItem(
-        'continueWatchingMaxProgress',
-      );
-      if (savedContinueWatchingMaxProgress !== null) {
-        setContinueWatchingMaxProgress(
-          parseInt(savedContinueWatchingMaxProgress),
-        );
-      }
-
-      const savedEnableContinueWatchingFilter = localStorage.getItem(
-        'enableContinueWatchingFilter',
-      );
-      if (savedEnableContinueWatchingFilter !== null) {
-        setEnableContinueWatchingFilter(
-          JSON.parse(savedEnableContinueWatchingFilter),
-        );
-      }
-
-      // 读取跳过片头片尾设置（默认开启）
-      const savedEnableAutoSkip = localStorage.getItem('enableAutoSkip');
-      if (savedEnableAutoSkip !== null) {
-        setEnableAutoSkip(JSON.parse(savedEnableAutoSkip));
-      }
-
-      const savedEnableAutoNextEpisode = localStorage.getItem(
-        'enableAutoNextEpisode',
-      );
-      if (savedEnableAutoNextEpisode !== null) {
-        setEnableAutoNextEpisode(JSON.parse(savedEnableAutoNextEpisode));
-      }
     }
   }, []);
 
@@ -836,49 +758,17 @@ export const UserMenu: React.FC = () => {
   };
 
   const handleResetSettings = () => {
-    const defaultDoubanProxyType =
-      (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY_TYPE || 'direct';
-    const defaultDoubanProxy =
-      (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY || '';
-    const defaultDoubanImageProxyType =
-      (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY_TYPE || 'direct';
-    const defaultDoubanImageProxyUrl =
-      (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY || '';
-    const defaultFluidSearch =
-      (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
+    const settings = buildDefaultUserMenuSettings(
+      typeof window !== 'undefined'
+        ? (window as any).RUNTIME_CONFIG || {}
+        : {},
+    );
 
-    setDefaultAggregateSearch(true);
-    setEnableOptimization(false);
-    setFluidSearch(defaultFluidSearch);
-    setLiveDirectConnect(false);
-    setDoubanProxyUrl(defaultDoubanProxy);
-    setDoubanDataSource(defaultDoubanProxyType);
-    setDoubanImageProxyType(defaultDoubanImageProxyType);
-    setDoubanImageProxyUrl(defaultDoubanImageProxyUrl);
-    setContinueWatchingMinProgress(5);
-    setContinueWatchingMaxProgress(100);
-    setEnableContinueWatchingFilter(false);
-    setEnableAutoSkip(false);
-    setEnableAutoNextEpisode(true);
+    applySettingsSnapshot(settings);
 
     if (typeof window !== 'undefined') {
-      localStorage.setItem('defaultAggregateSearch', JSON.stringify(true));
-      localStorage.setItem('enableOptimization', JSON.stringify(false));
-      localStorage.setItem('fluidSearch', JSON.stringify(defaultFluidSearch));
-      localStorage.setItem('liveDirectConnect', JSON.stringify(false));
-      localStorage.setItem('doubanProxyUrl', defaultDoubanProxy);
-      localStorage.setItem('doubanDataSource', defaultDoubanProxyType);
-      localStorage.setItem('doubanImageProxyType', defaultDoubanImageProxyType);
-      localStorage.setItem('doubanImageProxyUrl', defaultDoubanImageProxyUrl);
+      writeUserMenuSettings(localStorage, settings);
       window.dispatchEvent(new Event('doubanImageProxyChanged'));
-      localStorage.setItem('continueWatchingMinProgress', '5');
-      localStorage.setItem('continueWatchingMaxProgress', '100');
-      localStorage.setItem(
-        'enableContinueWatchingFilter',
-        JSON.stringify(false),
-      );
-      localStorage.setItem('enableAutoSkip', JSON.stringify(false));
-      localStorage.setItem('enableAutoNextEpisode', JSON.stringify(true));
     }
   };
 
