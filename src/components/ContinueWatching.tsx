@@ -38,9 +38,13 @@ export default function ContinueWatching({
     () => buildContinueWatchingDisplayState(playRecords, watchingUpdates),
     [playRecords, watchingUpdates],
   );
+  const hasRecords = records.length > 0;
+  const hasNewEpisodeSeries = newEpisodeSeries.length > 0;
+  const hasContinueWatchingSeries = continueWatchingSeries.length > 0;
+  const showSummaryBadges = hasNewEpisodeSeries || hasContinueWatchingSeries;
 
   // 如果没有播放记录，则不渲染组件
-  if (!loading && records.length === 0) {
+  if (!loading && !hasRecords) {
     return null;
   }
 
@@ -48,7 +52,7 @@ export default function ContinueWatching({
     <section className={`mb-8 ${className || ''}`}>
       <div className='mb-4 flex items-center justify-between'>
         <SectionTitle title='继续观看' icon={Clock} />
-        {!loading && records.length > 0 && (
+        {!loading && hasRecords && (
           <button
             className='text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
             onClick={onClearAll}
@@ -58,16 +62,16 @@ export default function ContinueWatching({
         )}
       </div>
 
-      {(newEpisodeSeries.length > 0 || continueWatchingSeries.length > 0) && (
+      {showSummaryBadges && (
         <div className='mb-4 flex flex-wrap gap-2'>
-          {newEpisodeSeries.length > 0 && (
+          {hasNewEpisodeSeries && (
             <div className='inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-3 py-1 shadow-lg shadow-red-500/30'>
               <span className='w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse'></span>
               新剧集 {newEpisodeSeries.length}
             </div>
           )}
 
-          {continueWatchingSeries.length > 0 && (
+          {hasContinueWatchingSeries && (
             <div className='inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-3 py-1 shadow-lg shadow-blue-500/30'>
               <span className='w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse'></span>
               继续观看 {continueWatchingSeries.length}
