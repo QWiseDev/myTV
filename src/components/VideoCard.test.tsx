@@ -156,6 +156,29 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('resets image fallback after the image proxy config changes', async () => {
+    render(
+      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
+    );
+
+    const image = screen.getByAltText('测试影片');
+    fireEvent.error(image);
+
+    await waitFor(() => {
+      expect(image.getAttribute('src')).toBe('/logo.svg');
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('doubanImageProxyChanged'));
+    });
+
+    await waitFor(() => {
+      expect(image.getAttribute('src')).toBe(
+        `/api/image-proxy?url=${encodeURIComponent(bangumiPoster)}`,
+      );
+    });
+  });
+
   it('marks the poster as loaded after the image load event', async () => {
     render(
       <VideoCard

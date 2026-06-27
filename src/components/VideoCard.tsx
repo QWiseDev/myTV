@@ -94,6 +94,36 @@ function useSyncedState<T>(
   return [state, setState];
 }
 
+function useImageProxyVersion() {
+  const [imageProxyVersion, setImageProxyVersion] = useState(0);
+
+  useEffect(() => {
+    const handleImageProxyChange = () => {
+      setImageProxyVersion((version) => version + 1);
+    };
+    const handleStorageChange = (event: StorageEvent) => {
+      if (
+        event.key === 'doubanImageProxyType' ||
+        event.key === 'doubanImageProxyUrl'
+      ) {
+        handleImageProxyChange();
+      }
+    };
+
+    window.addEventListener('doubanImageProxyChanged', handleImageProxyChange);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener(
+        'doubanImageProxyChanged',
+        handleImageProxyChange,
+      );
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  return imageProxyVersion;
+}
+
 function scheduleFavoriteStatusFetch(fetchFavoriteStatus: () => void) {
   let delayTimer: ReturnType<typeof setTimeout> | null = null;
   let idleCallbackId: number | null = null;
@@ -168,7 +198,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     const [isLoading, setIsLoading] = useState(false);
     const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
     const [imageFallbackIndex, setImageFallbackIndex] = useState(0);
-    const [imageProxyVersion, setImageProxyVersion] = useState(0);
+    const imageProxyVersion = useImageProxyVersion();
     const [showMobileActions, setShowMobileActions] = useState(false);
     const [searchFavorited, setSearchFavorited] = useState<boolean | null>(
       null,
@@ -240,33 +270,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       },
       [imageFallbackIndex, imageFallbackUrls.length, imageSrc],
     );
-
-    useEffect(() => {
-      const handleImageProxyChange = () => {
-        setImageProxyVersion((version) => version + 1);
-      };
-      const handleStorageChange = (event: StorageEvent) => {
-        if (
-          event.key === 'doubanImageProxyType' ||
-          event.key === 'doubanImageProxyUrl'
-        ) {
-          handleImageProxyChange();
-        }
-      };
-
-      window.addEventListener(
-        'doubanImageProxyChanged',
-        handleImageProxyChange,
-      );
-      window.addEventListener('storage', handleStorageChange);
-      return () => {
-        window.removeEventListener(
-          'doubanImageProxyChanged',
-          handleImageProxyChange,
-        );
-        window.removeEventListener('storage', handleStorageChange);
-      };
-    }, []);
 
     // 获取收藏状态（搜索结果页面不检查）
     useEffect(() => {
