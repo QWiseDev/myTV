@@ -15,6 +15,8 @@ import SectionSkeleton from './SectionSkeleton';
 const ContinueWatching = lazy(() => import('./ContinueWatching'));
 const VideoCard = lazy(() => import('./VideoCard'));
 
+const HOME_VIDEO_CARD_SIZES = '(max-width: 640px) 96px, 180px';
+
 interface HomeTabContentProps {
   // 播放记录相关
   playRecords: Record<string, PlayRecord>;
@@ -85,7 +87,7 @@ export default function HomeTabContent({
               year={movie.year}
               type='movie'
               priority={!hasContinueWatching && index < 3}
-              sizes='(max-width: 640px) 96px, 180px'
+              sizes={HOME_VIDEO_CARD_SIZES}
             />
           )}
         />
@@ -108,7 +110,7 @@ export default function HomeTabContent({
               douban_id={Number(show.id)}
               rate={show.rate}
               year={show.year}
-              sizes='(max-width: 640px) 96px, 180px'
+              sizes={HOME_VIDEO_CARD_SIZES}
             />
           )}
         />
@@ -139,7 +141,7 @@ export default function HomeTabContent({
               douban_id={Number(show.id)}
               rate={show.rate}
               year={show.year}
-              sizes='(max-width: 640px) 96px, 180px'
+              sizes={HOME_VIDEO_CARD_SIZES}
             />
           )}
         />
