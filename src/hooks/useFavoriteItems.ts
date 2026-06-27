@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DELAYS } from '@/lib/constants/home';
 import type { Favorite } from '@/lib/db.client';
-import { parseStorageKey } from '@/lib/storage-key';
+import { buildFavoriteItems } from '@/lib/favorite-items';
 import type { FavoriteItem } from '@/lib/types';
 
 /**
@@ -37,33 +37,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
           const { getAllPlayRecords } = await import('@/lib/db.client');
           const allPlayRecords = await getAllPlayRecords();
 
-          const sorted = Object.entries(allFavorites)
-            .sort(([, a], [, b]) => b.save_time - a.save_time)
-            .flatMap(([key, fav]) => {
-              const parsedKey = parseStorageKey(key);
-              if (!parsedKey) {
-                return [];
-              }
-
-              const playRecord = allPlayRecords?.[key];
-              const currentEpisode = playRecord?.index;
-
-              return [
-                {
-                  id: parsedKey.id,
-                  source: parsedKey.source,
-                  title: fav.title,
-                  year: fav.year,
-                  poster: fav.cover,
-                  episodes: fav.total_episodes,
-                  source_name: fav.source_name,
-                  currentEpisode,
-                  search_title: fav?.search_title,
-                  origin: fav?.origin,
-                } as FavoriteItem,
-              ];
-            });
-          setFavoriteItems(sorted);
+          setFavoriteItems(buildFavoriteItems(allFavorites, allPlayRecords));
         } catch (error) {
           console.error('更新收藏项失败:', error);
         } finally {
