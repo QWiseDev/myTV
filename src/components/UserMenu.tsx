@@ -291,14 +291,6 @@ export const UserMenu: React.FC = () => {
       updateWatchingUpdates();
     }
 
-    // 🚀 优化：页面初始化时不主动检查追番更新
-    // 只从缓存获取数据，避免对所有播放记录调用 /api/detail
-    // 追番更新检查只在首页进行
-    const timeoutId = setTimeout(() => {
-      // 不主动调用 executeUpdateCheck，只更新UI
-      debug.log('UserMenu: 初始化时不主动检查追番更新');
-    }, 500);
-
     // 订阅更新事件
     const unsubscribe = subscribeToWatchingUpdatesEvent(() => {
       debug.log('收到 watching-updates 事件，更新数据...');
@@ -309,7 +301,6 @@ export const UserMenu: React.FC = () => {
 
     // 清理函数
     return () => {
-      clearTimeout(timeoutId);
       unsubscribe();
     };
   }, [authInfo, storageType]);
