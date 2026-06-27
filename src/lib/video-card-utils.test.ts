@@ -4,6 +4,7 @@ import {
   getVideoCardEntryPoster,
   getVideoCardSearchType,
   shouldCheckSearchFavoriteStatus,
+  shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
 } from './video-card-utils';
 
@@ -191,5 +192,55 @@ describe('buildVideoCardSubjectUrl', () => {
   it('skips missing and zero ids', () => {
     expect(buildVideoCardSubjectUrl(undefined, false)).toBeUndefined();
     expect(buildVideoCardSubjectUrl(0, false)).toBeUndefined();
+  });
+});
+
+describe('shouldLoadVideoCardFavoriteStatus', () => {
+  it('loads favorite status only for source-backed non-search cards', () => {
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'playrecord',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(true);
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'favorite',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(true);
+  });
+
+  it('skips douban, search, and incomplete cards', () => {
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'douban',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(false);
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'search',
+        source: 'source-a',
+        id: 'video-a',
+      }),
+    ).toBe(false);
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'playrecord',
+        source: '',
+        id: 'video-a',
+      }),
+    ).toBe(false);
+    expect(
+      shouldLoadVideoCardFavoriteStatus({
+        from: 'playrecord',
+        source: 'source-a',
+        id: undefined,
+      }),
+    ).toBe(false);
   });
 });

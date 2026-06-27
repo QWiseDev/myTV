@@ -34,6 +34,7 @@ import {
   preventContextMenu,
   preventDragStart,
   shouldCheckSearchFavoriteStatus,
+  shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -207,8 +208,16 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
     // 获取收藏状态（搜索结果页面不检查）
     useEffect(() => {
-      if (from === 'douban' || from === 'search' || !actualSource || !actualId)
+      const favoriteStatusParams = {
+        from,
+        source: actualSource,
+        id: actualId,
+      };
+
+      if (!shouldLoadVideoCardFavoriteStatus(favoriteStatusParams)) {
         return;
+      }
+      const { source: favoriteSource, id: favoriteId } = favoriteStatusParams;
 
       let cancelled = false;
       let delayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -216,7 +225,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
       const fetchFavoriteStatus = async () => {
         try {
-          const fav = await isFavorited(actualSource, actualId);
+          const fav = await isFavorited(favoriteSource, favoriteId);
           if (!cancelled) {
             setFavorited(fav);
           }
@@ -249,7 +258,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         }, 400);
       }
 
-      const storageKey = generateStorageKey(actualSource, actualId);
+      const storageKey = generateStorageKey(favoriteSource, favoriteId);
       const unsubscribe = subscribeToDataUpdates(
         'favoritesUpdated',
         (newFavorites: Record<string, any>) => {

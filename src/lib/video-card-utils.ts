@@ -107,6 +107,23 @@ export function buildVideoCardSubjectUrl(
     : `https://movie.douban.com/subject/${doubanId.toString()}`;
 }
 
+export interface FavoriteStatusLoadParams {
+  from: string;
+  source?: string;
+  id?: string;
+}
+
+export function shouldLoadVideoCardFavoriteStatus(
+  params: FavoriteStatusLoadParams,
+): params is FavoriteStatusLoadParams & { source: string; id: string } {
+  return (
+    params.from !== 'douban' &&
+    params.from !== 'search' &&
+    Boolean(params.source) &&
+    Boolean(params.id)
+  );
+}
+
 /**
  * 构建播放页面 URL
  */
