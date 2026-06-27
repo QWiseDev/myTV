@@ -37,6 +37,14 @@ export const preventDragStart = (e: React.DragEvent) => {
   return false;
 };
 
+export function shouldUseUnoptimizedImage(src: string): boolean {
+  return (
+    src.startsWith('http://') ||
+    src.startsWith('https://') ||
+    src.startsWith('/api/image-proxy')
+  );
+}
+
 /**
  * 构建播放页面 URL
  */

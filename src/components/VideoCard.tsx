@@ -24,11 +24,13 @@ import {
 import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import {
   buildPlayUrl,
+  cardContainerStyle,
   getVideoCardConfig,
   noPointerStyle,
   noSelectStyle,
   preventContextMenu,
   preventDragStart,
+  shouldUseUnoptimizedImage,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
 import { useMobileActions } from '@/hooks/useMobileActions';
@@ -169,10 +171,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     // 2) 服务端 fetch 视频源域名常超时/403，导致继续观看封面空白且无 fallback
     // 3) 大量外链优化拖垮服务器
     // 因此对所有外部 http(s) 图禁用 Next 优化，改由浏览器直连（no-referrer + CDN fallback / 视频源直连）。
-    const shouldUseUnoptimizedImage =
-      imageSrc.startsWith('http://') ||
-      imageSrc.startsWith('https://') ||
-      imageSrc.startsWith('/api/image-proxy');
+    const useUnoptimizedImage = shouldUseUnoptimizedImage(imageSrc);
 
     useEffect(() => {
       setImageFallbackIndex(0);
@@ -493,18 +492,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-[500]'
           onClick={handleClick}
           {...longPressProps}
-          style={
-            {
-              // 禁用所有默认的长按和选择效果
-              WebkitUserSelect: 'none',
-              userSelect: 'none',
-              WebkitTouchCallout: 'none',
-              WebkitTapHighlightColor: 'transparent',
-              touchAction: 'manipulation',
-              // 禁用右键菜单和长按菜单
-              pointerEvents: 'auto',
-            } as React.CSSProperties
-          }
+          style={cardContainerStyle}
           onContextMenu={(e) => {
             // 阻止默认右键菜单
             e.preventDefault();
@@ -526,11 +514,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
             return false;
           }}
-          onDragStart={(e) => {
-            // 阻止拖拽
-            e.preventDefault();
-            return false;
-          }}
+          onDragStart={preventDragStart}
         >
           {/* 海报容器 */}
           <div
@@ -570,7 +554,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               referrerPolicy='no-referrer'
               loading={priority ? undefined : 'lazy'}
               priority={priority}
-              unoptimized={shouldUseUnoptimizedImage}
+              unoptimized={useUnoptimizedImage}
               sizes={sizes || '(max-width: 640px) 96px, 180px'}
               onLoad={() => {
                 setIsLoading(true);

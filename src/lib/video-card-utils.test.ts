@@ -1,4 +1,4 @@
-import { buildPlayUrl } from './video-card-utils';
+import { buildPlayUrl, shouldUseUnoptimizedImage } from './video-card-utils';
 
 describe('buildPlayUrl', () => {
   it('keeps metadata in play record links for danmu lookup', () => {
@@ -51,5 +51,22 @@ describe('buildPlayUrl', () => {
         poster,
       )}&stype=tv`,
     );
+  });
+});
+
+describe('shouldUseUnoptimizedImage', () => {
+  it('disables Next image optimization for external and proxy images', () => {
+    expect(shouldUseUnoptimizedImage('http://example.com/poster.jpg')).toBe(
+      true,
+    );
+    expect(shouldUseUnoptimizedImage('https://example.com/poster.jpg')).toBe(
+      true,
+    );
+    expect(shouldUseUnoptimizedImage('/api/image-proxy?url=poster')).toBe(true);
+  });
+
+  it('keeps optimization for local image paths', () => {
+    expect(shouldUseUnoptimizedImage('/poster.jpg')).toBe(false);
+    expect(shouldUseUnoptimizedImage('poster.jpg')).toBe(false);
   });
 });
