@@ -3,16 +3,17 @@ import { useEffect, useState } from 'react';
 import { BangumiCalendarData } from '@/lib/bangumi.client';
 import { scheduleIdleTask } from '@/lib/browser-scheduler';
 import {
+  createHomeDataSnapshot,
+  createHomeLoadingState,
+  mergeHomeData,
+} from '@/lib/home-data-client';
+import {
   loadCriticalData,
   loadHomeDataFromApi,
   loadSecondaryData,
   loadTertiaryData,
 } from '@/lib/home-data-loader';
-import {
-  getHomeDataAvailability,
-  hasHomeData,
-  HomeData,
-} from '@/lib/home-data-types';
+import { getHomeDataAvailability, hasHomeData, HomeData } from '@/lib/home-data-types';
 import { DoubanItem } from '@/lib/types';
 import { useWatchingUpdatesRefresh } from '@/hooks/useWatchingUpdatesRefresh';
 
@@ -30,38 +31,12 @@ function reportHomeDataError(message: string, error: unknown) {
   }
 }
 
-function createEmptyHomeData(initialData?: HomeData): HomeData {
-  return {
-    hotMovies: initialData?.hotMovies || [],
-    hotTvShows: initialData?.hotTvShows || [],
-    hotVarietyShows: initialData?.hotVarietyShows || [],
-    bangumiCalendarData: initialData?.bangumiCalendarData || [],
-  };
-}
-
-function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
-  return {
-    hotMovies: incoming.hotMovies.length
-      ? incoming.hotMovies
-      : current.hotMovies,
-    hotTvShows: incoming.hotTvShows.length
-      ? incoming.hotTvShows
-      : current.hotTvShows,
-    hotVarietyShows: incoming.hotVarietyShows.length
-      ? incoming.hotVarietyShows
-      : current.hotVarietyShows,
-    bangumiCalendarData: incoming.bangumiCalendarData.length
-      ? incoming.bangumiCalendarData
-      : current.bangumiCalendarData,
-  };
-}
-
 export function useHomeData({
   activeTab,
   refreshWatchingUpdates,
   initialData,
 }: UseHomeDataOptions) {
-  const initialAvailability = getHomeDataAvailability(initialData);
+  const initialLoadingState = createHomeLoadingState(initialData);
   const [hotMovies, setHotMovies] = useState<DoubanItem[]>(
     initialData?.hotMovies || [],
   );
@@ -76,13 +51,13 @@ export function useHomeData({
   >(initialData?.bangumiCalendarData || []);
 
   const [criticalLoading, setCriticalLoading] = useState(
-    !initialAvailability.hasCriticalData,
+    initialLoadingState.criticalLoading,
   );
   const [secondaryLoading, setSecondaryLoading] = useState(
-    !initialAvailability.hasSecondaryData,
+    initialLoadingState.secondaryLoading,
   );
   const [tertiaryLoading, setTertiaryLoading] = useState(
-    !initialAvailability.hasTertiaryData,
+    initialLoadingState.tertiaryLoading,
   );
 
   const { scheduleWatchingUpdatesCheck } = useWatchingUpdatesRefresh({
@@ -186,7 +161,7 @@ export function useHomeData({
     };
 
     const loadAllData = async () => {
-      let homeData = createEmptyHomeData(initialData);
+      let homeData = createHomeDataSnapshot(initialData);
       let availability = getHomeDataAvailability(homeData);
 
       if (availability.isComplete) {
