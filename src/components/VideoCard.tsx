@@ -37,6 +37,7 @@ import {
   shouldCheckSearchFavoriteStatus,
   shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
+  type FavoriteStatusLoadParams,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
 import { useMobileActions } from '@/hooks/useMobileActions';
@@ -165,6 +166,63 @@ function scheduleFavoriteStatusFetch(fetchFavoriteStatus: () => void) {
   };
 }
 
+function useVideoCardFavoriteStatus({
+  from,
+  source,
+  id,
+}: FavoriteStatusLoadParams): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+  const [favorited, setFavorited] = useState(false);
+
+  useEffect(() => {
+    const favoriteStatusParams = {
+      from,
+      source,
+      id,
+    };
+
+    if (!shouldLoadVideoCardFavoriteStatus(favoriteStatusParams)) {
+      return;
+    }
+    const { source: favoriteSource, id: favoriteId } = favoriteStatusParams;
+
+    let cancelled = false;
+
+    const fetchFavoriteStatus = async () => {
+      try {
+        const fav = await isFavorited(favoriteSource, favoriteId);
+        if (!cancelled) {
+          setFavorited(fav);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('检查收藏状态失败:', err);
+        }
+      }
+    };
+
+    const cancelFavoriteStatusFetch = scheduleFavoriteStatusFetch(() => {
+      void fetchFavoriteStatus();
+    });
+
+    const storageKey = generateStorageKey(favoriteSource, favoriteId);
+    const unsubscribe = subscribeToDataUpdates(
+      'favoritesUpdated',
+      (newFavorites: Record<string, any>) => {
+        const isNowFavorited = !!newFavorites[storageKey];
+        setFavorited(isNowFavorited);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      cancelFavoriteStatusFetch();
+      unsubscribe();
+    };
+  }, [from, source, id]);
+
+  return [favorited, setFavorited];
+}
+
 const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   function VideoCard(
     {
@@ -194,7 +252,6 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ref,
   ) {
     const router = useRouter();
-    const [favorited, setFavorited] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
     const [imageFallbackIndex, setImageFallbackIndex] = useState(0);
@@ -271,53 +328,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       [imageFallbackIndex, imageFallbackUrls.length, imageSrc],
     );
 
-    // 获取收藏状态（搜索结果页面不检查）
-    useEffect(() => {
-      const favoriteStatusParams = {
-        from,
-        source: actualSource,
-        id: actualId,
-      };
-
-      if (!shouldLoadVideoCardFavoriteStatus(favoriteStatusParams)) {
-        return;
-      }
-      const { source: favoriteSource, id: favoriteId } = favoriteStatusParams;
-
-      let cancelled = false;
-
-      const fetchFavoriteStatus = async () => {
-        try {
-          const fav = await isFavorited(favoriteSource, favoriteId);
-          if (!cancelled) {
-            setFavorited(fav);
-          }
-        } catch (err) {
-          if (!cancelled) {
-            console.error('检查收藏状态失败:', err);
-          }
-        }
-      };
-
-      const cancelFavoriteStatusFetch = scheduleFavoriteStatusFetch(() => {
-        void fetchFavoriteStatus();
-      });
-
-      const storageKey = generateStorageKey(favoriteSource, favoriteId);
-      const unsubscribe = subscribeToDataUpdates(
-        'favoritesUpdated',
-        (newFavorites: Record<string, any>) => {
-          const isNowFavorited = !!newFavorites[storageKey];
-          setFavorited(isNowFavorited);
-        },
-      );
-
-      return () => {
-        cancelled = true;
-        cancelFavoriteStatusFetch();
-        unsubscribe();
-      };
-    }, [from, actualSource, actualId]);
+    const [favorited, setFavorited] = useVideoCardFavoriteStatus({
+      from,
+      source: actualSource,
+      id: actualId,
+    });
 
     const setCurrentFavoriteState = useCallback(
       (nextFavorited: boolean) => {
