@@ -354,65 +354,44 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       [from, actualSource, actualId, onDelete],
     );
 
-    const handleClick = useCallback(() => {
-      const url = buildPlayUrl({
+    const playUrl = useMemo(
+      () =>
+        buildPlayUrl({
+          origin,
+          from,
+          source: actualSource,
+          id: actualId,
+          title: actualTitle,
+          year: actualYear,
+          doubanId: actualDoubanId,
+          searchType: actualSearchType,
+          isAggregate,
+          query: actualQuery,
+          poster: entryPoster,
+        }),
+      [
         origin,
         from,
-        source: actualSource,
-        id: actualId,
-        title: actualTitle,
-        year: actualYear,
-        doubanId: actualDoubanId,
-        searchType: actualSearchType,
         isAggregate,
-        query: actualQuery,
-        poster: entryPoster,
-      });
-      if (url) router.push(url);
-    }, [
-      origin,
-      from,
-      actualSource,
-      actualId,
-      router,
-      actualTitle,
-      actualYear,
-      isAggregate,
-      actualQuery,
-      actualSearchType,
-      actualDoubanId,
-      entryPoster,
-    ]);
+        actualSource,
+        actualId,
+        actualTitle,
+        actualYear,
+        actualSearchType,
+        actualQuery,
+        actualDoubanId,
+        entryPoster,
+      ],
+    );
+
+    const handleClick = useCallback(() => {
+      if (playUrl) router.push(playUrl);
+    }, [playUrl, router]);
 
     // 新标签页播放处理函数
     const handlePlayInNewTab = useCallback(() => {
-      const url = buildPlayUrl({
-        origin,
-        from,
-        source: actualSource,
-        id: actualId,
-        title: actualTitle,
-        year: actualYear,
-        doubanId: actualDoubanId,
-        searchType: actualSearchType,
-        isAggregate,
-        query: actualQuery,
-        poster: entryPoster,
-      });
-      if (url) window.open(url, '_blank');
-    }, [
-      origin,
-      from,
-      actualSource,
-      actualId,
-      actualTitle,
-      actualYear,
-      isAggregate,
-      actualQuery,
-      actualSearchType,
-      actualDoubanId,
-      entryPoster,
-    ]);
+      if (playUrl) window.open(playUrl, '_blank');
+    }, [playUrl]);
 
     // 检查搜索结果的收藏状态
     const checkSearchFavoriteStatus = useCallback(async () => {
