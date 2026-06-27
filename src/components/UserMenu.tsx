@@ -87,6 +87,19 @@ const DOUBAN_IMAGE_PROXY_TYPE_OPTIONS = [
   { value: 'custom', label: '自定义代理' },
 ];
 
+const PANEL_BACKDROP_STYLE = {
+  touchAction: 'none',
+} as const;
+
+const SCROLLABLE_PANEL_STYLE = {
+  touchAction: 'pan-y',
+  overscrollBehavior: 'contain',
+} as const;
+
+const CHANGE_PASSWORD_PANEL_CONTENT_STYLE = {
+  touchAction: 'auto',
+} as const;
+
 function getThanksInfo(dataSource: string) {
   switch (dataSource) {
     case 'cors-proxy-zwei':
@@ -97,6 +110,32 @@ function getThanksInfo(dataSource: string) {
     default:
       return null;
   }
+}
+
+function preventPanelBackdropScroll(
+  event: React.TouchEvent<HTMLDivElement> | React.WheelEvent<HTMLDivElement>,
+) {
+  event.preventDefault();
+}
+
+function stopPanelClickPropagation(event: React.MouseEvent<HTMLDivElement>) {
+  event.stopPropagation();
+}
+
+function stopPanelTouchPropagation(event: React.TouchEvent<HTMLDivElement>) {
+  event.stopPropagation();
+}
+
+function PanelBackdrop({ onClick }: { onClick: () => void }) {
+  return (
+    <div
+      className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
+      onClick={onClick}
+      onTouchMove={preventPanelBackdropScroll}
+      onWheel={preventPanelBackdropScroll}
+      style={PANEL_BACKDROP_STYLE}
+    />
+  );
 }
 
 function useCloseDropdownOnOutsideMouseDown(
@@ -1060,21 +1099,7 @@ export const UserMenu: React.FC = () => {
   const settingsPanel = (
     <>
       {/* 背景遮罩 */}
-      <div
-        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-        onClick={handleCloseSettings}
-        onTouchMove={(e) => {
-          // 只阻止滚动，允许其他触摸事件
-          e.preventDefault();
-        }}
-        onWheel={(e) => {
-          // 阻止滚轮滚动
-          e.preventDefault();
-        }}
-        style={{
-          touchAction: 'none',
-        }}
-      />
+      <PanelBackdrop onClick={handleCloseSettings} />
 
       {/* 设置面板 */}
       <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] flex flex-col'>
@@ -1082,10 +1107,7 @@ export const UserMenu: React.FC = () => {
         <div
           className='flex-1 p-6 overflow-y-auto'
           data-panel-content
-          style={{
-            touchAction: 'pan-y', // 只允许垂直滚动
-            overscrollBehavior: 'contain', // 防止滚动冒泡
-          }}
+          style={SCROLLABLE_PANEL_STYLE}
         >
           {/* 标题栏 */}
           <div className='flex items-center justify-between mb-6'>
@@ -1594,21 +1616,7 @@ export const UserMenu: React.FC = () => {
   const changePasswordPanel = (
     <>
       {/* 背景遮罩 */}
-      <div
-        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-        onClick={handleCloseChangePassword}
-        onTouchMove={(e) => {
-          // 只阻止滚动，允许其他触摸事件
-          e.preventDefault();
-        }}
-        onWheel={(e) => {
-          // 阻止滚轮滚动
-          e.preventDefault();
-        }}
-        style={{
-          touchAction: 'none',
-        }}
-      />
+      <PanelBackdrop onClick={handleCloseChangePassword} />
 
       {/* 修改密码面板 */}
       <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] overflow-hidden'>
@@ -1616,13 +1624,8 @@ export const UserMenu: React.FC = () => {
         <div
           className='h-full p-6'
           data-panel-content
-          onTouchMove={(e) => {
-            // 阻止事件冒泡到遮罩层，但允许内部滚动
-            e.stopPropagation();
-          }}
-          style={{
-            touchAction: 'auto', // 允许所有触摸操作
-          }}
+          onTouchMove={stopPanelTouchPropagation}
+          style={CHANGE_PASSWORD_PANEL_CONTENT_STYLE}
         >
           {/* 标题栏 */}
           <div className='flex items-center justify-between mb-6'>
@@ -1711,19 +1714,7 @@ export const UserMenu: React.FC = () => {
   const watchingUpdatesPanel = (
     <>
       {/* 背景遮罩 */}
-      <div
-        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-        onClick={handleCloseWatchingUpdates}
-        onTouchMove={(e) => {
-          e.preventDefault();
-        }}
-        onWheel={(e) => {
-          e.preventDefault();
-        }}
-        style={{
-          touchAction: 'none',
-        }}
-      />
+      <PanelBackdrop onClick={handleCloseWatchingUpdates} />
 
       {/* 更新弹窗 */}
       <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl shadow-xl z-[1001] flex flex-col'>
@@ -1731,10 +1722,7 @@ export const UserMenu: React.FC = () => {
         <div
           className='flex-1 p-6 overflow-y-auto'
           data-panel-content
-          style={{
-            touchAction: 'pan-y',
-            overscrollBehavior: 'contain',
-          }}
+          style={SCROLLABLE_PANEL_STYLE}
         >
           {/* 标题栏 */}
           <div className='flex items-center justify-between mb-6'>
@@ -1839,24 +1827,12 @@ export const UserMenu: React.FC = () => {
   const continueWatchingPanel = (
     <>
       {/* 背景遮罩 */}
-      <div
-        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-        onClick={handleCloseContinueWatching}
-        onTouchMove={(e) => {
-          e.preventDefault();
-        }}
-        onWheel={(e) => {
-          e.preventDefault();
-        }}
-        style={{
-          touchAction: 'none',
-        }}
-      />
+      <PanelBackdrop onClick={handleCloseContinueWatching} />
 
       {/* 继续观看弹窗 */}
       <div
         className='fixed inset-x-4 top-1/2 transform -translate-y-1/2 max-w-4xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-[1001] max-h-[80vh] overflow-y-auto'
-        onClick={(e) => e.stopPropagation()}
+        onClick={stopPanelClickPropagation}
       >
         <div className='p-6'>
           <div className='flex items-center justify-between mb-4'>
@@ -1959,24 +1935,12 @@ export const UserMenu: React.FC = () => {
   const favoritesPanel = (
     <>
       {/* 背景遮罩 */}
-      <div
-        className='fixed inset-0 bg-black/50 backdrop-blur-sm z-[1000]'
-        onClick={handleCloseFavorites}
-        onTouchMove={(e) => {
-          e.preventDefault();
-        }}
-        onWheel={(e) => {
-          e.preventDefault();
-        }}
-        style={{
-          touchAction: 'none',
-        }}
-      />
+      <PanelBackdrop onClick={handleCloseFavorites} />
 
       {/* 收藏弹窗 */}
       <div
         className='fixed inset-x-4 top-1/2 transform -translate-y-1/2 max-w-4xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-[1001] max-h-[80vh] overflow-y-auto'
-        onClick={(e) => e.stopPropagation()}
+        onClick={stopPanelClickPropagation}
       >
         <div className='p-6'>
           <div className='flex items-center justify-between mb-4'>
