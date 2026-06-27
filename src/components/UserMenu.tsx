@@ -64,6 +64,41 @@ interface AuthInfo {
   role?: 'owner' | 'admin' | 'user';
 }
 
+const DOUBAN_DATA_SOURCE_OPTIONS = [
+  { value: 'direct', label: '直连（服务器直接请求豆瓣）' },
+  { value: 'cors-proxy-zwei', label: 'Cors Proxy By Zwei' },
+  {
+    value: 'cmliussss-cdn-tencent',
+    label: '豆瓣 CDN By CMLiussss（腾讯云）',
+  },
+  { value: 'cmliussss-cdn-ali', label: '豆瓣 CDN By CMLiussss（阿里云）' },
+  { value: 'custom', label: '自定义代理' },
+];
+
+const DOUBAN_IMAGE_PROXY_TYPE_OPTIONS = [
+  { value: 'direct', label: '直连（浏览器直接请求豆瓣）' },
+  { value: 'server', label: '服务器代理（由服务器代理请求豆瓣）' },
+  { value: 'img3', label: '豆瓣官方精品 CDN（阿里云）' },
+  {
+    value: 'cmliussss-cdn-tencent',
+    label: '豆瓣 CDN By CMLiussss（腾讯云）',
+  },
+  { value: 'cmliussss-cdn-ali', label: '豆瓣 CDN By CMLiussss（阿里云）' },
+  { value: 'custom', label: '自定义代理' },
+];
+
+function getThanksInfo(dataSource: string) {
+  switch (dataSource) {
+    case 'cors-proxy-zwei':
+      return '感谢 @Zwei 提供豆瓣代理服务';
+    case 'cmliussss-cdn-tencent':
+    case 'cmliussss-cdn-ali':
+      return '感谢 @CMLiussss 提供豆瓣 CDN 支持';
+    default:
+      return null;
+  }
+}
+
 function useCloseDropdownOnOutsideMouseDown(
   isOpen: boolean,
   dropdownSelector: string,
@@ -186,31 +221,6 @@ export const UserMenu: React.FC = () => {
   // 跳过片头片尾相关设置
   const [enableAutoSkip, setEnableAutoSkip] = useState(false);
   const [enableAutoNextEpisode, setEnableAutoNextEpisode] = useState(true);
-
-  // 豆瓣数据源选项
-  const doubanDataSourceOptions = [
-    { value: 'direct', label: '直连（服务器直接请求豆瓣）' },
-    { value: 'cors-proxy-zwei', label: 'Cors Proxy By Zwei' },
-    {
-      value: 'cmliussss-cdn-tencent',
-      label: '豆瓣 CDN By CMLiussss（腾讯云）',
-    },
-    { value: 'cmliussss-cdn-ali', label: '豆瓣 CDN By CMLiussss（阿里云）' },
-    { value: 'custom', label: '自定义代理' },
-  ];
-
-  // 豆瓣图片代理选项
-  const doubanImageProxyTypeOptions = [
-    { value: 'direct', label: '直连（浏览器直接请求豆瓣）' },
-    { value: 'server', label: '服务器代理（由服务器代理请求豆瓣）' },
-    { value: 'img3', label: '豆瓣官方精品 CDN（阿里云）' },
-    {
-      value: 'cmliussss-cdn-tencent',
-      label: '豆瓣 CDN By CMLiussss（腾讯云）',
-    },
-    { value: 'cmliussss-cdn-ali', label: '豆瓣 CDN By CMLiussss（阿里云）' },
-    { value: 'custom', label: '自定义代理' },
-  ];
 
   // 修改密码相关状态
   const [newPassword, setNewPassword] = useState('');
@@ -736,19 +746,6 @@ export const UserMenu: React.FC = () => {
     );
   };
 
-  // 获取感谢信息
-  const getThanksInfo = (dataSource: string) => {
-    switch (dataSource) {
-      case 'cors-proxy-zwei':
-        return '感谢 @Zwei 提供豆瓣代理服务';
-      case 'cmliussss-cdn-tencent':
-      case 'cmliussss-cdn-ali':
-        return '感谢 @CMLiussss 提供豆瓣 CDN 支持';
-      default:
-        return null;
-    }
-  };
-
   const handleResetSettings = () => {
     const settings = buildDefaultUserMenuSettings(
       typeof window !== 'undefined'
@@ -1133,7 +1130,7 @@ export const UserMenu: React.FC = () => {
                   className='w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm hover:border-gray-400 dark:hover:border-gray-500 text-left'
                 >
                   {
-                    doubanDataSourceOptions.find(
+                    DOUBAN_DATA_SOURCE_OPTIONS.find(
                       (option) => option.value === doubanDataSource,
                     )?.label
                   }
@@ -1151,7 +1148,7 @@ export const UserMenu: React.FC = () => {
                 {/* 下拉选项列表 */}
                 {isDoubanDropdownOpen && (
                   <div className='absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto'>
-                    {doubanDataSourceOptions.map((option) => (
+                    {DOUBAN_DATA_SOURCE_OPTIONS.map((option) => (
                       <button
                         key={option.value}
                         type='button'
@@ -1231,7 +1228,7 @@ export const UserMenu: React.FC = () => {
                   className='w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm hover:border-gray-400 dark:hover:border-gray-500 text-left'
                 >
                   {
-                    doubanImageProxyTypeOptions.find(
+                    DOUBAN_IMAGE_PROXY_TYPE_OPTIONS.find(
                       (option) => option.value === doubanImageProxyType,
                     )?.label
                   }
@@ -1249,7 +1246,7 @@ export const UserMenu: React.FC = () => {
                 {/* 下拉选项列表 */}
                 {isDoubanImageProxyDropdownOpen && (
                   <div className='absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto'>
-                    {doubanImageProxyTypeOptions.map((option) => (
+                    {DOUBAN_IMAGE_PROXY_TYPE_OPTIONS.map((option) => (
                       <button
                         key={option.value}
                         type='button'
