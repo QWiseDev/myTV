@@ -10,6 +10,10 @@ export interface HomeLoadingState {
   tertiaryLoading: boolean;
 }
 
+function preferNonEmptyArray<T>(incoming: T[], current: T[]): T[] {
+  return incoming.length ? incoming : current;
+}
+
 export function createHomeDataSnapshot(initialData?: HomeData): HomeData {
   return {
     hotMovies: initialData?.hotMovies || EMPTY_HOME_DATA.hotMovies,
@@ -35,17 +39,15 @@ export function createHomeLoadingState(
 
 export function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
   return {
-    hotMovies: incoming.hotMovies.length
-      ? incoming.hotMovies
-      : current.hotMovies,
-    hotTvShows: incoming.hotTvShows.length
-      ? incoming.hotTvShows
-      : current.hotTvShows,
-    hotVarietyShows: incoming.hotVarietyShows.length
-      ? incoming.hotVarietyShows
-      : current.hotVarietyShows,
-    bangumiCalendarData: incoming.bangumiCalendarData.length
-      ? incoming.bangumiCalendarData
-      : current.bangumiCalendarData,
+    hotMovies: preferNonEmptyArray(incoming.hotMovies, current.hotMovies),
+    hotTvShows: preferNonEmptyArray(incoming.hotTvShows, current.hotTvShows),
+    hotVarietyShows: preferNonEmptyArray(
+      incoming.hotVarietyShows,
+      current.hotVarietyShows,
+    ),
+    bangumiCalendarData: preferNonEmptyArray(
+      incoming.bangumiCalendarData,
+      current.bangumiCalendarData,
+    ),
   };
 }
