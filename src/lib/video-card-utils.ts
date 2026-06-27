@@ -45,6 +45,30 @@ export function shouldUseUnoptimizedImage(src: string): boolean {
   );
 }
 
+export interface SearchFavoriteStatusParams {
+  from: string;
+  isAggregate?: boolean;
+  source?: string;
+  id?: string;
+  searchFavorited: boolean | null;
+}
+
+export function shouldCheckSearchFavoriteStatus({
+  from,
+  isAggregate,
+  source,
+  id,
+  searchFavorited,
+}: SearchFavoriteStatusParams): boolean {
+  return (
+    from === 'search' &&
+    !isAggregate &&
+    Boolean(source) &&
+    Boolean(id) &&
+    searchFavorited === null
+  );
+}
+
 /**
  * 构建播放页面 URL
  */

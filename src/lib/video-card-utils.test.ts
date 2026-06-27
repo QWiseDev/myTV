@@ -1,4 +1,8 @@
-import { buildPlayUrl, shouldUseUnoptimizedImage } from './video-card-utils';
+import {
+  buildPlayUrl,
+  shouldCheckSearchFavoriteStatus,
+  shouldUseUnoptimizedImage,
+} from './video-card-utils';
 
 describe('buildPlayUrl', () => {
   it('keeps metadata in play record links for danmu lookup', () => {
@@ -68,5 +72,58 @@ describe('shouldUseUnoptimizedImage', () => {
   it('keeps optimization for local image paths', () => {
     expect(shouldUseUnoptimizedImage('/poster.jpg')).toBe(false);
     expect(shouldUseUnoptimizedImage('poster.jpg')).toBe(false);
+  });
+});
+
+describe('shouldCheckSearchFavoriteStatus', () => {
+  it('checks only unresolved non-aggregate search cards with source and id', () => {
+    expect(
+      shouldCheckSearchFavoriteStatus({
+        from: 'search',
+        isAggregate: false,
+        source: 'source-a',
+        id: 'video-a',
+        searchFavorited: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('skips aggregate, resolved, and incomplete cards', () => {
+    expect(
+      shouldCheckSearchFavoriteStatus({
+        from: 'search',
+        isAggregate: true,
+        source: 'source-a',
+        id: 'video-a',
+        searchFavorited: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCheckSearchFavoriteStatus({
+        from: 'search',
+        isAggregate: false,
+        source: 'source-a',
+        id: 'video-a',
+        searchFavorited: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCheckSearchFavoriteStatus({
+        from: 'douban',
+        isAggregate: false,
+        source: 'source-a',
+        id: 'video-a',
+        searchFavorited: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCheckSearchFavoriteStatus({
+        from: 'search',
+        isAggregate: false,
+        source: '',
+        id: 'video-a',
+        searchFavorited: null,
+      }),
+    ).toBe(false);
   });
 });

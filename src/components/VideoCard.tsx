@@ -30,6 +30,7 @@ import {
   noSelectStyle,
   preventContextMenu,
   preventDragStart,
+  shouldCheckSearchFavoriteStatus,
   shouldUseUnoptimizedImage,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -395,19 +396,30 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
     // 检查搜索结果的收藏状态
     const checkSearchFavoriteStatus = useCallback(async () => {
+      const sourceForFavorite = actualSource;
+      const idForFavorite = actualId;
+
       if (
-        from === 'search' &&
-        !isAggregate &&
-        actualSource &&
-        actualId &&
-        searchFavorited === null
+        !shouldCheckSearchFavoriteStatus({
+          from,
+          isAggregate,
+          source: sourceForFavorite,
+          id: idForFavorite,
+          searchFavorited,
+        })
       ) {
-        try {
-          const fav = await isFavorited(actualSource, actualId);
-          setSearchFavorited(fav);
-        } catch (err) {
-          setSearchFavorited(false);
-        }
+        return;
+      }
+
+      if (!sourceForFavorite || !idForFavorite) {
+        return;
+      }
+
+      try {
+        const fav = await isFavorited(sourceForFavorite, idForFavorite);
+        setSearchFavorited(fav);
+      } catch (err) {
+        setSearchFavorited(false);
       }
     }, [from, isAggregate, actualSource, actualId, searchFavorited]);
 
@@ -416,11 +428,13 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
       // 异步检查收藏状态，不阻塞菜单显示
       if (
-        from === 'search' &&
-        !isAggregate &&
-        actualSource &&
-        actualId &&
-        searchFavorited === null
+        shouldCheckSearchFavoriteStatus({
+          from,
+          isAggregate,
+          source: actualSource,
+          id: actualId,
+          searchFavorited,
+        })
       ) {
         checkSearchFavoriteStatus();
       }
