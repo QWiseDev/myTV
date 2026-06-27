@@ -602,24 +602,25 @@ export const UserMenu: React.FC = () => {
     router.push('/admin');
   };
 
-  const handlePlayStats = () => {
+  const navigateFromMenu = (path: string) => {
     setIsOpen(false);
-    router.push('/play-stats');
+    router.push(path);
+  };
+
+  const handlePlayStats = () => {
+    navigateFromMenu('/play-stats');
   };
 
   const handleTVBoxConfig = () => {
-    setIsOpen(false);
-    router.push('/tvbox');
+    navigateFromMenu('/tvbox');
   };
 
   const handleSourceTest = () => {
-    setIsOpen(false);
-    router.push('/source-test');
+    navigateFromMenu('/source-test');
   };
 
   const handleReleaseCalendar = () => {
-    setIsOpen(false);
-    router.push('/release-calendar');
+    navigateFromMenu('/release-calendar');
   };
 
   const handleWatchingUpdates = () => {
@@ -660,19 +661,21 @@ export const UserMenu: React.FC = () => {
   // 计算播放进度百分比
   const getProgress = calculatePlayRecordProgress;
 
-  const handleChangePassword = () => {
-    setIsOpen(false);
-    setIsChangePasswordOpen(true);
+  const resetPasswordForm = () => {
     setNewPassword('');
     setConfirmPassword('');
     setPasswordError('');
   };
 
+  const handleChangePassword = () => {
+    setIsOpen(false);
+    setIsChangePasswordOpen(true);
+    resetPasswordForm();
+  };
+
   const handleCloseChangePassword = () => {
     setIsChangePasswordOpen(false);
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordError('');
+    resetPasswordForm();
   };
 
   const handleSubmitChangePassword = async () => {
