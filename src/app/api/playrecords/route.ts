@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { normalizePlayRecordsPageSize } from '@/lib/play-records-pagination';
 import { parseStorageKey } from '@/lib/storage-key';
 import { PlayRecord } from '@/lib/types';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
@@ -13,6 +14,13 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+const PLAY_RECORDS_NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 export async function GET(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
@@ -26,37 +34,42 @@ export async function GET(request: NextRequest) {
       return guardResult.response;
     }
 
-    const records = await db.getAllPlayRecords(authInfo.username);
-
-    // ?limit=N 支持：按 save_time 倒序取最近 N 条，用于首页继续观看等场景
     const { searchParams } = new URL(request.url);
+    const cursor = searchParams.get('cursor');
+    const pageSizeParam = searchParams.get('pageSize');
+    if (cursor !== null || pageSizeParam !== null) {
+      const page = await db.getPlayRecordsPage(authInfo.username, {
+        cursor,
+        includeKeys: searchParams.getAll('includeKey'),
+        pageSize: normalizePlayRecordsPageSize(pageSizeParam),
+      });
+
+      return NextResponse.json(page, {
+        status: 200,
+        headers: PLAY_RECORDS_NO_CACHE_HEADERS,
+      });
+    }
+
+    // ?limit=N 兼容旧调用：返回最近 N 条记录的 map，不返回分页元数据。
     const limitParam = searchParams.get('limit');
     const limit = limitParam ? parseInt(limitParam, 10) : 0;
 
     if (limit > 0) {
-      const entries = Object.entries(records)
-        .sort(([, a], [, b]) => (b.save_time || 0) - (a.save_time || 0))
-        .slice(0, limit);
-      const limited = Object.fromEntries(entries);
+      const page = await db.getPlayRecordsPage(authInfo.username, {
+        pageSize: limit,
+      });
 
-      return NextResponse.json(limited, {
+      return NextResponse.json(page.records, {
         status: 200,
-        headers: {
-          'Cache-Control':
-            'public, max-age=30, s-maxage=30, stale-while-revalidate=30',
-          Vary: 'Cookie',
-        },
+        headers: PLAY_RECORDS_NO_CACHE_HEADERS,
       });
     }
 
+    const records = await db.getAllPlayRecords(authInfo.username);
+
     return NextResponse.json(records, {
       status: 200,
-      headers: {
-        // 缓存 30 秒，便于浏览器与 CDN 复用结果，同时区分不同 Cookie 避免串号
-        'Cache-Control':
-          'public, max-age=30, s-maxage=30, stale-while-revalidate=30',
-        Vary: 'Cookie',
-      },
+      headers: PLAY_RECORDS_NO_CACHE_HEADERS,
     });
   } catch (err) {
     console.error('获取播放记录失败', err);

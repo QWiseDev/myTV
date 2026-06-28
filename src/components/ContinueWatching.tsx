@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock } from 'lucide-react';
+import { ChevronRight, Clock, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { buildContinueWatchingDisplayState } from '@/lib/continue-watching-display';
@@ -17,8 +17,11 @@ interface ContinueWatchingProps {
   playRecords: Record<string, PlayRecord> | null;
   watchingUpdates?: WatchingUpdatesCache | null;
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
+  onLoadMore: () => Promise<void>;
 }
 
 export default function ContinueWatching({
@@ -26,18 +29,17 @@ export default function ContinueWatching({
   playRecords,
   watchingUpdates,
   loading,
+  loadingMore,
+  hasMore,
   onDeleteRecord,
   onClearAll,
+  onLoadMore,
 }: ContinueWatchingProps) {
-  const {
-    newEpisodeSeries,
-    continueWatchingSeries,
-    displayItems,
-    records,
-  } = useMemo(
-    () => buildContinueWatchingDisplayState(playRecords, watchingUpdates),
-    [playRecords, watchingUpdates],
-  );
+  const { newEpisodeSeries, continueWatchingSeries, displayItems, records } =
+    useMemo(
+      () => buildContinueWatchingDisplayState(playRecords, watchingUpdates),
+      [playRecords, watchingUpdates],
+    );
   const hasRecords = records.length > 0;
   const hasNewEpisodeSeries = newEpisodeSeries.length > 0;
   const hasContinueWatchingSeries = continueWatchingSeries.length > 0;
@@ -146,6 +148,26 @@ export default function ContinueWatching({
                 </div>
               );
             })}
+        {!loading && hasMore && (
+          <button
+            type='button'
+            onClick={() => {
+              void onLoadMore();
+            }}
+            disabled={loadingMore}
+            className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44 aspect-[2/3] rounded-lg border border-dashed border-gray-300 bg-white/60 text-gray-600 transition-colors hover:border-gray-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:bg-gray-800/70 flex flex-col items-center justify-center gap-2'
+            aria-label='加载更多继续观看'
+          >
+            {loadingMore ? (
+              <Loader2 className='h-5 w-5 animate-spin' />
+            ) : (
+              <ChevronRight className='h-5 w-5' />
+            )}
+            <span className='text-xs sm:text-sm font-medium'>
+              {loadingMore ? '加载中' : '更多'}
+            </span>
+          </button>
+        )}
       </ScrollableRow>
     </section>
   );

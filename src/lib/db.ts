@@ -2,6 +2,7 @@
 
 import { AdminConfig } from './admin.types';
 import { KvrocksStorage } from './kvrocks.db';
+import { paginatePlayRecords } from './play-records-pagination';
 import { RedisStorage } from './redis.db';
 import { generateStorageKey } from './storage-key';
 import {
@@ -11,6 +12,8 @@ import {
   Favorite,
   IStorage,
   PlayRecord,
+  PlayRecordsPage,
+  PlayRecordsPageOptions,
   PlayStatsResult,
   UserPlayStat,
 } from './types';
@@ -105,6 +108,19 @@ export class DbManager {
   }> {
     const storage = await this.getStorage();
     return storage.getAllPlayRecords(userName);
+  }
+
+  async getPlayRecordsPage(
+    userName: string,
+    options: PlayRecordsPageOptions = {},
+  ): Promise<PlayRecordsPage> {
+    const storage = await this.getStorage();
+    if (typeof storage.getPlayRecordsPage === 'function') {
+      return storage.getPlayRecordsPage(userName, options);
+    }
+
+    const records = await storage.getAllPlayRecords(userName);
+    return paginatePlayRecords(records, options);
   }
 
   async clearAllPlayRecords(userName: string): Promise<void> {

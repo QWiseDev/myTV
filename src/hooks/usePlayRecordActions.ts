@@ -10,8 +10,9 @@ type SetPlayRecords = (
 ) => void;
 
 interface UsePlayRecordActionsOptions {
-  refreshPlayRecords: () => Promise<void> | void;
   setPlayRecords: SetPlayRecords;
+  markPlayRecordDeleted?: (key: string) => void;
+  markAllPlayRecordsDeleted?: () => void;
 }
 
 function reportPlayRecordError(message: string, error: unknown) {
@@ -21,7 +22,8 @@ function reportPlayRecordError(message: string, error: unknown) {
 }
 
 export function usePlayRecordActions({
-  refreshPlayRecords,
+  markAllPlayRecordsDeleted,
+  markPlayRecordDeleted,
   setPlayRecords,
 }: UsePlayRecordActionsOptions) {
   const deletePlayRecord = useCallback(
@@ -47,7 +49,7 @@ export function usePlayRecordActions({
 
         const db = await import('@/lib/db.client');
         await db.deletePlayRecord(parsedKey.source, parsedKey.id);
-        await refreshPlayRecords();
+        markPlayRecordDeleted?.(key);
       } catch (error) {
         setPlayRecords((currentRecords) => {
           if (!deletedRecord || currentRecords?.[key]) {
@@ -62,18 +64,25 @@ export function usePlayRecordActions({
         reportPlayRecordError('删除播放记录失败:', error);
       }
     },
-    [refreshPlayRecords, setPlayRecords],
+    [markPlayRecordDeleted, setPlayRecords],
   );
 
   const clearAllPlayRecords = useCallback(async () => {
+    let previousRecords: Record<string, PlayRecord> | null = null;
     try {
+      setPlayRecords((currentRecords) => {
+        previousRecords = currentRecords;
+        return {};
+      });
+
       const db = await import('@/lib/db.client');
       await db.clearAllPlayRecords();
-      await refreshPlayRecords();
+      markAllPlayRecordsDeleted?.();
     } catch (error) {
+      setPlayRecords(() => previousRecords);
       reportPlayRecordError('清空播放记录失败:', error);
     }
-  }, [refreshPlayRecords]);
+  }, [markAllPlayRecordsDeleted, setPlayRecords]);
 
   return {
     deletePlayRecord,

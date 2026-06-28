@@ -53,9 +53,13 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     playRecords,
     setPlayRecords,
     watchingUpdates,
+    hasMorePlayRecords,
+    loadingMorePlayRecords,
     loadingPlayRecords,
     loadingWatchingUpdates,
-    refreshPlayRecords,
+    loadMorePlayRecords,
+    markAllPlayRecordsDeleted,
+    markPlayRecordDeleted,
     refreshWatchingUpdates,
   } = usePlaybackData();
 
@@ -79,7 +83,8 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     useAnnouncementVisibility(announcement);
   const aiEnabled = useAiRecommendStatus();
   const { deletePlayRecord, clearAllPlayRecords } = usePlayRecordActions({
-    refreshPlayRecords,
+    markAllPlayRecordsDeleted,
+    markPlayRecordDeleted,
     setPlayRecords,
   });
 
@@ -129,9 +134,12 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
               playRecords={playRecords ?? {}}
               watchingUpdates={watchingUpdates ?? null}
               loadingPlayRecords={loadingPlayRecords}
+              loadingMorePlayRecords={loadingMorePlayRecords}
+              hasMorePlayRecords={hasMorePlayRecords}
               loadingWatchingUpdates={loadingWatchingUpdates}
               onDeleteRecord={deletePlayRecord}
               onClearAll={clearAllPlayRecords}
+              onLoadMorePlayRecords={loadMorePlayRecords}
               hotMovies={hotMovies}
               hotTvShows={hotTvShows}
               hotVarietyShows={hotVarietyShows}

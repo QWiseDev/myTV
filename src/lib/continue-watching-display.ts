@@ -1,7 +1,6 @@
 import {
-  limitHomeRecords,
-  sortHomeContinueWatchingRecords,
   type HomePlayRecord,
+  sortHomeContinueWatchingRecords,
 } from './home-display';
 import { generateStorageKey, parseStorageKey } from './storage-key';
 import type { PlayRecord } from './types';
@@ -45,20 +44,27 @@ function toHomeRecords(
           key,
         }))
         .sort((a, b) => b.save_time - a.save_time)
-        .slice(0, 60)
     : [];
 }
 
-function buildWatchingUpdateIndexes(watchingUpdates?: WatchingUpdatesCache | null) {
+function buildWatchingUpdateIndexes(
+  watchingUpdates?: WatchingUpdatesCache | null,
+) {
   const updatedSeries = watchingUpdates?.updatedSeries || [];
   const seriesList = updatedSeries.filter((series) => Boolean(series.videoId));
 
   const watchingUpdatesMap = new Map<string, WatchingUpdateSeries>();
   const latestTotalEpisodesByKey = new Map<string, number>();
+  const priorityByKey = new Map<string, number>();
 
   updatedSeries.forEach((series) => {
     const key = generateStorageKey(series.sourceKey, series.videoId);
     watchingUpdatesMap.set(key, series);
+    if (series.hasNewEpisode) {
+      priorityByKey.set(key, 0);
+    } else if (series.hasContinueWatching) {
+      priorityByKey.set(key, 1);
+    }
     if (series.totalEpisodes > 0) {
       latestTotalEpisodesByKey.set(key, series.totalEpisodes);
     }
@@ -82,6 +88,7 @@ function buildWatchingUpdateIndexes(watchingUpdates?: WatchingUpdatesCache | nul
     continueWatchingSeries,
     latestTotalEpisodesByKey,
     newEpisodeSeries,
+    priorityByKey,
     watchingUpdatesMap,
   };
 }
@@ -96,11 +103,14 @@ export function buildContinueWatchingDisplayState(
     continueWatchingSeries,
     latestTotalEpisodesByKey,
     newEpisodeSeries,
+    priorityByKey,
     watchingUpdatesMap,
   } = buildWatchingUpdateIndexes(watchingUpdates);
 
-  const displayItems = limitHomeRecords(
-    sortHomeContinueWatchingRecords(records, latestTotalEpisodesByKey),
+  const displayItems = sortHomeContinueWatchingRecords(
+    records,
+    latestTotalEpisodesByKey,
+    priorityByKey,
   ).map((record) => {
     const { source, id } = parseStorageKey(record.key) || {
       id: '',

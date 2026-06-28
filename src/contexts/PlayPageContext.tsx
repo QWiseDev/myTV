@@ -9,6 +9,7 @@ import {
   useMemo,
 } from 'react';
 
+import { generateStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
 import { type WatchingUpdate } from '@/lib/watching-updates';
 import { usePlaybackRecords } from '@/hooks/usePlaybackRecords';
@@ -19,6 +20,11 @@ interface PlaybackDataContextType {
   playRecords: Record<string, PlayRecord> | null;
   setPlayRecords: Dispatch<SetStateAction<Record<string, PlayRecord> | null>>;
   loadingPlayRecords: boolean;
+  loadingMorePlayRecords: boolean;
+  hasMorePlayRecords: boolean;
+  loadMorePlayRecords: () => Promise<void>;
+  markPlayRecordDeleted: (key: string) => void;
+  markAllPlayRecordsDeleted: () => void;
 
   // 观看更新数据
   watchingUpdates: WatchingUpdate | null;
@@ -52,12 +58,24 @@ export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
     setWatchingUpdates,
     watchingUpdates,
   } = useWatchingUpdatesSnapshot();
+  const priorityPlayRecordKeys = useMemo(
+    () =>
+      (watchingUpdates?.updatedSeries || [])
+        .filter((series) => series.hasNewEpisode)
+        .map((series) => generateStorageKey(series.sourceKey, series.videoId)),
+    [watchingUpdates?.updatedSeries],
+  );
   const {
     loadingPlayRecords,
+    loadingMorePlayRecords,
+    hasMorePlayRecords,
+    loadMorePlayRecords,
+    markPlayRecordDeleted,
+    markAllPlayRecordsDeleted,
     playRecords,
     refreshPlayRecords,
     setPlayRecords,
-  } = usePlaybackRecords(refreshWatchingUpdates);
+  } = usePlaybackRecords(refreshWatchingUpdates, priorityPlayRecordKeys);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(
@@ -65,6 +83,11 @@ export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
       playRecords,
       setPlayRecords,
       loadingPlayRecords,
+      loadingMorePlayRecords,
+      hasMorePlayRecords,
+      loadMorePlayRecords,
+      markPlayRecordDeleted,
+      markAllPlayRecordsDeleted,
 
       watchingUpdates,
       setWatchingUpdates,
@@ -76,8 +99,15 @@ export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
     [
       playRecords,
       loadingPlayRecords,
+      loadingMorePlayRecords,
+      hasMorePlayRecords,
+      loadMorePlayRecords,
+      markPlayRecordDeleted,
+      markAllPlayRecordsDeleted,
+      setPlayRecords,
       watchingUpdates,
       loadingWatchingUpdates,
+      setWatchingUpdates,
       refreshPlayRecords,
       refreshWatchingUpdates,
     ],

@@ -21,6 +21,20 @@ export interface PlayRecord {
   remarks?: string; // 备注信息（如"已完结"、"更新至20集"等）
 }
 
+export interface PlayRecordsPageOptions {
+  cursor?: string | null;
+  includeKeys?: string[];
+  pageSize?: number;
+}
+
+export interface PlayRecordsPage {
+  records: Record<string, PlayRecord>;
+  pageSize: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+  total: number;
+}
+
 // 收藏数据结构
 export interface Favorite {
   source_name: string;
@@ -57,6 +71,10 @@ export interface IStorage {
     record: PlayRecord,
   ): Promise<void>;
   getAllPlayRecords(userName: string): Promise<{ [key: string]: PlayRecord }>;
+  getPlayRecordsPage?(
+    userName: string,
+    options?: PlayRecordsPageOptions,
+  ): Promise<PlayRecordsPage>;
   deletePlayRecord(userName: string, key: string): Promise<void>;
 
   // 收藏相关

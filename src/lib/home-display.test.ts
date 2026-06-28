@@ -1,7 +1,4 @@
-import {
-  limitHomeRecords,
-  sortHomeContinueWatchingRecords,
-} from './home-display';
+import { sortHomeContinueWatchingRecords } from './home-display';
 import type { PlayRecord } from './types';
 
 function createRecord(index: number): PlayRecord & { key: string } {
@@ -19,26 +16,6 @@ function createRecord(index: number): PlayRecord & { key: string } {
     search_title: `影片 ${index}`,
   };
 }
-
-describe('limitHomeRecords', () => {
-  it('keeps the home continue watching row bounded', () => {
-    const records = Array.from({ length: 40 }, (_, index) =>
-      createRecord(index)
-    );
-
-    expect(limitHomeRecords(records)).toHaveLength(30);
-    expect(limitHomeRecords(records)[0].key).toBe('source+0');
-    expect(limitHomeRecords(records)[29].key).toBe('source+29');
-  });
-
-  it('keeps short lists unchanged', () => {
-    const records = Array.from({ length: 3 }, (_, index) =>
-      createRecord(index)
-    );
-
-    expect(limitHomeRecords(records)).toHaveLength(3);
-  });
-});
 
 describe('sortHomeContinueWatchingRecords', () => {
   it('prioritizes unfinished records while keeping recent watch order within each group', () => {
@@ -73,7 +50,7 @@ describe('sortHomeContinueWatchingRecords', () => {
     ];
 
     expect(
-      sortHomeContinueWatchingRecords(records).map((record) => record.key)
+      sortHomeContinueWatchingRecords(records).map((record) => record.key),
     ).toEqual([
       'source+unfinished-newer',
       'source+unfinished-older',
@@ -105,8 +82,8 @@ describe('sortHomeContinueWatchingRecords', () => {
 
     expect(
       sortHomeContinueWatchingRecords(records, latestTotalEpisodes).map(
-        (record) => record.key
-      )
+        (record) => record.key,
+      ),
     ).toEqual(['source+b-recent', 'source+a-older']);
   });
 });

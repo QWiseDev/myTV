@@ -15,13 +15,21 @@
  */
 
 import { getAuthInfoFromBrowserCookie } from './auth';
-import { generateStorageKey, parseStorageKey } from './storage-key';
-import type { PlayRecord } from './types';
+import {
+  DEFAULT_PLAY_RECORDS_PAGE_SIZE,
+  paginatePlayRecords,
+} from './play-records-pagination';
+import { generateStorageKey } from './storage-key';
+import type {
+  PlayRecord,
+  PlayRecordsPage,
+  PlayRecordsPageOptions,
+} from './types';
 import { EpisodeSkipConfig, UserPlayStat } from './types';
 
 // 重新导出类型以保持API兼容性
-export type { EpisodeSkipConfig, PlayRecord, SkipSegment } from './types';
 export { generateStorageKey, parseStorageKey } from './storage-key';
+export type { EpisodeSkipConfig, PlayRecord, SkipSegment } from './types';
 
 // 全局错误触发函数
 function triggerGlobalError(message: string) {
@@ -773,44 +781,45 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
   }
 }
 
-/**
- * 获取最近的播放记录（按 save_time 倒序取前 N 条）。
- * 用于首页继续观看等非全量场景，避免全量记录的网络传输和客户端处理。
- */
-export async function getRecentPlayRecords(
-  limit = 60,
-): Promise<Record<string, PlayRecord>> {
+export async function getPlayRecordsPage(
+  options: PlayRecordsPageOptions = {},
+): Promise<PlayRecordsPage> {
   if (typeof window === 'undefined') {
-    return {};
+    return paginatePlayRecords({}, options);
   }
 
-  // 数据库模式：调用 API 加 ?limit=N
   if (STORAGE_TYPE !== 'localstorage') {
     try {
-      const freshData = await fetchFromApi<Record<string, PlayRecord>>(
-        `/api/playrecords?limit=${limit}`,
+      const params = new URLSearchParams();
+      if (options.cursor) {
+        params.set('cursor', options.cursor);
+      }
+      options.includeKeys?.forEach((key) => {
+        params.append('includeKey', key);
+      });
+      params.set(
+        'pageSize',
+        String(options.pageSize || DEFAULT_PLAY_RECORDS_PAGE_SIZE),
       );
-      return freshData;
+
+      return await fetchFromApi<PlayRecordsPage>(
+        `/api/playrecords?${params.toString()}`,
+      );
     } catch (err) {
-      console.warn('获取最近播放记录失败:', err);
-      triggerGlobalError('获取最近播放记录失败');
-      return {};
+      console.warn('分页获取播放记录失败:', err);
+      triggerGlobalError('分页获取播放记录失败');
+      return paginatePlayRecords({}, options);
     }
   }
 
-  // localStorage 模式：全量读取后截断
   try {
     const raw = localStorage.getItem(PLAY_RECORDS_KEY);
-    if (!raw) return {};
-    const allRecords = JSON.parse(raw) as Record<string, PlayRecord>;
-    const entries = Object.entries(allRecords)
-      .sort(([, a], [, b]) => (b.save_time || 0) - (a.save_time || 0))
-      .slice(0, limit);
-    return Object.fromEntries(entries);
+    const records = raw ? (JSON.parse(raw) as Record<string, PlayRecord>) : {};
+    return paginatePlayRecords(records, options);
   } catch (err) {
-    console.error('读取最近播放记录失败:', err);
-    triggerGlobalError('读取最近播放记录失败');
-    return {};
+    console.error('分页读取播放记录失败:', err);
+    triggerGlobalError('分页读取播放记录失败');
+    return paginatePlayRecords({}, options);
   }
 }
 

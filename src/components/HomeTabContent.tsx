@@ -22,9 +22,12 @@ interface HomeTabContentProps {
   playRecords: Record<string, PlayRecord>;
   watchingUpdates: WatchingUpdatesCache | null;
   loadingPlayRecords: boolean;
+  loadingMorePlayRecords: boolean;
+  hasMorePlayRecords: boolean;
   loadingWatchingUpdates: boolean;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
+  onLoadMorePlayRecords: () => Promise<void>;
   // 内容数据
   hotMovies: DoubanItem[];
   hotTvShows: DoubanItem[];
@@ -43,9 +46,12 @@ export default function HomeTabContent({
   playRecords,
   watchingUpdates,
   loadingPlayRecords,
+  loadingMorePlayRecords,
+  hasMorePlayRecords,
   loadingWatchingUpdates,
   onDeleteRecord,
   onClearAll,
+  onLoadMorePlayRecords,
   hotMovies,
   hotTvShows,
   hotVarietyShows,
@@ -64,8 +70,11 @@ export default function HomeTabContent({
           playRecords={playRecords}
           watchingUpdates={watchingUpdates}
           loading={loadingPlayRecords || loadingWatchingUpdates}
+          loadingMore={loadingMorePlayRecords}
+          hasMore={hasMorePlayRecords}
           onDeleteRecord={onDeleteRecord}
           onClearAll={onClearAll}
+          onLoadMore={onLoadMorePlayRecords}
         />
       </Suspense>
 

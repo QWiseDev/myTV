@@ -66,15 +66,15 @@ describe('usePlayRecordActions', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('optimistically removes one play record and refreshes after db delete succeeds', async () => {
+  it('optimistically removes one play record and marks it deleted after db delete succeeds', async () => {
     const record = createRecord();
     const state = createStateHarness({ [recordKey]: record });
-    const refreshPlayRecords = jest.fn().mockResolvedValue(undefined);
+    const markPlayRecordDeleted = jest.fn();
     mockDeletePlayRecord.mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       usePlayRecordActions({
-        refreshPlayRecords,
+        markPlayRecordDeleted,
         setPlayRecords: state.setPlayRecords,
       }),
     );
@@ -85,18 +85,18 @@ describe('usePlayRecordActions', () => {
 
     expect(state.records).toEqual({});
     expect(mockDeletePlayRecord).toHaveBeenCalledWith('source-a', 'video-a');
-    expect(refreshPlayRecords).toHaveBeenCalledTimes(1);
+    expect(markPlayRecordDeleted).toHaveBeenCalledWith(recordKey);
   });
 
   it('restores the deleted record when db delete fails', async () => {
     const record = createRecord();
     const state = createStateHarness({ [recordKey]: record });
-    const refreshPlayRecords = jest.fn();
+    const markPlayRecordDeleted = jest.fn();
     mockDeletePlayRecord.mockRejectedValue(new Error('db failed'));
 
     const { result } = renderHook(() =>
       usePlayRecordActions({
-        refreshPlayRecords,
+        markPlayRecordDeleted,
         setPlayRecords: state.setPlayRecords,
       }),
     );
@@ -106,7 +106,7 @@ describe('usePlayRecordActions', () => {
     });
 
     expect(state.records).toEqual({ [recordKey]: record });
-    expect(refreshPlayRecords).not.toHaveBeenCalled();
+    expect(markPlayRecordDeleted).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '删除播放记录失败:',
       expect.any(Error),
@@ -120,7 +120,6 @@ describe('usePlayRecordActions', () => {
 
     const { result } = renderHook(() =>
       usePlayRecordActions({
-        refreshPlayRecords: jest.fn(),
         setPlayRecords: state.setPlayRecords,
       }),
     );
@@ -133,14 +132,15 @@ describe('usePlayRecordActions', () => {
     expect(mockDeletePlayRecord).not.toHaveBeenCalled();
   });
 
-  it('clears all play records through db and then refreshes', async () => {
-    const state = createStateHarness({});
-    const refreshPlayRecords = jest.fn().mockResolvedValue(undefined);
+  it('clears all play records locally and marks the list deleted after db succeeds', async () => {
+    const record = createRecord();
+    const state = createStateHarness({ [recordKey]: record });
+    const markAllPlayRecordsDeleted = jest.fn();
     mockClearAllPlayRecords.mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       usePlayRecordActions({
-        refreshPlayRecords,
+        markAllPlayRecordsDeleted,
         setPlayRecords: state.setPlayRecords,
       }),
     );
@@ -149,7 +149,26 @@ describe('usePlayRecordActions', () => {
       await result.current.clearAllPlayRecords();
     });
 
+    expect(state.records).toEqual({});
     expect(mockClearAllPlayRecords).toHaveBeenCalledTimes(1);
-    expect(refreshPlayRecords).toHaveBeenCalledTimes(1);
+    expect(markAllPlayRecordsDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores play records when clearing all fails', async () => {
+    const record = createRecord();
+    const state = createStateHarness({ [recordKey]: record });
+    mockClearAllPlayRecords.mockRejectedValue(new Error('db failed'));
+
+    const { result } = renderHook(() =>
+      usePlayRecordActions({
+        setPlayRecords: state.setPlayRecords,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.clearAllPlayRecords();
+    });
+
+    expect(state.records).toEqual({ [recordKey]: record });
   });
 });

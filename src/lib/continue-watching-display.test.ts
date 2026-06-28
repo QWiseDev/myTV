@@ -25,9 +25,7 @@ function createRecord(
 function toRecordMap(
   records: Array<PlayRecord & { key: string }>,
 ): Record<string, PlayRecord> {
-  return Object.fromEntries(
-    records.map(({ key, ...record }) => [key, record]),
-  );
+  return Object.fromEntries(records.map(({ key, ...record }) => [key, record]));
 }
 
 function createWatchingUpdates(
@@ -130,7 +128,44 @@ describe('buildContinueWatchingDisplayState', () => {
     expect(continueWatchingItem.showContinueWatchingBadge).toBe(true);
   });
 
-  it('keeps only the newest 60 records and displays at most 30', () => {
+  it('prioritizes records with new episode reminders over regular recent records', () => {
+    const state = buildContinueWatchingDisplayState(
+      toRecordMap([
+        createRecord('source+recent', {
+          index: 2,
+          save_time: 300,
+          total_episodes: 8,
+        }),
+        createRecord('source+old-update', {
+          index: 6,
+          save_time: 100,
+          total_episodes: 6,
+        }),
+      ]),
+      createWatchingUpdates([
+        {
+          title: '老记录有新集',
+          source_name: '测试源',
+          year: '2026',
+          cover: '',
+          sourceKey: 'source',
+          videoId: 'old-update',
+          currentEpisode: 6,
+          totalEpisodes: 8,
+          hasNewEpisode: true,
+          hasContinueWatching: true,
+          newEpisodes: 2,
+        },
+      ]),
+    );
+
+    expect(state.displayItems.map((item) => item.record.key)).toEqual([
+      'source+old-update',
+      'source+recent',
+    ]);
+  });
+
+  it('keeps all loaded records and leaves paging to the data source', () => {
     const records = Array.from({ length: 70 }, (_, index) =>
       createRecord(`source+${index}`, {
         save_time: index,
@@ -139,9 +174,9 @@ describe('buildContinueWatchingDisplayState', () => {
 
     const state = buildContinueWatchingDisplayState(toRecordMap(records), null);
 
-    expect(state.records).toHaveLength(60);
-    expect(state.displayItems).toHaveLength(30);
+    expect(state.records).toHaveLength(70);
+    expect(state.displayItems).toHaveLength(70);
     expect(state.displayItems[0].record.key).toBe('source+69');
-    expect(state.displayItems[29].record.key).toBe('source+40');
+    expect(state.displayItems[69].record.key).toBe('source+0');
   });
 });

@@ -1,14 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 
-import { usePlaybackRecords } from './usePlaybackRecords';
 import type { PlayRecord } from '@/lib/types';
 
+import { usePlaybackRecords } from './usePlaybackRecords';
+
 jest.mock('@/lib/db.client', () => ({
-  getRecentPlayRecords: jest.fn(),
+  getPlayRecordsPage: jest.fn(),
 }));
 
-const { getRecentPlayRecords } = jest.requireMock('@/lib/db.client') as {
-  getRecentPlayRecords: jest.Mock;
+const { getPlayRecordsPage } = jest.requireMock('@/lib/db.client') as {
+  getPlayRecordsPage: jest.Mock;
 };
 
 function createRecord(): PlayRecord {
@@ -26,6 +27,20 @@ function createRecord(): PlayRecord {
   };
 }
 
+function createPage(
+  records: Record<string, PlayRecord>,
+  hasMore = false,
+  nextCursor: string | null = null,
+) {
+  return {
+    records,
+    pageSize: 30,
+    hasMore,
+    nextCursor,
+    total: Object.keys(records).length,
+  };
+}
+
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
@@ -34,7 +49,7 @@ async function flushAsyncWork() {
 describe('usePlaybackRecords', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    getRecentPlayRecords.mockReset();
+    getPlayRecordsPage.mockReset();
   });
 
   afterEach(() => {
@@ -45,28 +60,53 @@ describe('usePlaybackRecords', () => {
     const records = {
       'source+id': createRecord(),
     };
-    getRecentPlayRecords.mockResolvedValue(records);
+    getPlayRecordsPage.mockResolvedValue(createPage(records));
 
     const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
 
     expect(result.current.loadingPlayRecords).toBe(true);
-    expect(getRecentPlayRecords).not.toHaveBeenCalled();
+    expect(getPlayRecordsPage).not.toHaveBeenCalled();
 
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
     });
 
-    expect(getRecentPlayRecords).toHaveBeenCalledWith(60);
+    expect(getPlayRecordsPage).toHaveBeenCalledWith({
+      cursor: null,
+      includeKeys: [],
+      pageSize: 30,
+    });
     expect(result.current.playRecords).toBe(records);
     expect(result.current.loadingPlayRecords).toBe(false);
   });
 
+  it('includes priority play record keys on the first page request', async () => {
+    getPlayRecordsPage.mockResolvedValue(createPage({}));
+
+    renderHook(() =>
+      usePlaybackRecords(jest.fn(), ['source+old-update', 'source+new-update']),
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledWith({
+      cursor: null,
+      includeKeys: ['source+old-update', 'source+new-update'],
+      pageSize: 30,
+    });
+  });
+
   it('debounces manual refresh and refreshes watching updates afterwards', async () => {
     const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
-    getRecentPlayRecords.mockResolvedValue({
-      'source+id': createRecord(),
-    });
+    getPlayRecordsPage.mockResolvedValue(
+      createPage({
+        'source+id': createRecord(),
+      }),
+    );
 
     const { result } = renderHook(() =>
       usePlaybackRecords(refreshWatchingUpdates),
@@ -76,7 +116,7 @@ describe('usePlaybackRecords', () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
     });
-    getRecentPlayRecords.mockClear();
+    getPlayRecordsPage.mockClear();
 
     await act(async () => {
       result.current.refreshPlayRecords();
@@ -85,12 +125,99 @@ describe('usePlaybackRecords', () => {
       await flushAsyncWork();
     });
 
-    expect(getRecentPlayRecords).toHaveBeenCalledTimes(1);
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
     expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
+  it('loads more play records by cursor and appends the next page', async () => {
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          {
+            'source+first': createRecord(),
+          },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockResolvedValueOnce(
+        createPage({
+          'source+second': {
+            ...createRecord(),
+            title: '第二页',
+          },
+        }),
+      );
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(result.current.hasMorePlayRecords).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: '100:source%2Bfirst',
+      includeKeys: [],
+      pageSize: 30,
+    });
+    expect(Object.keys(result.current.playRecords || {})).toEqual([
+      'source+first',
+      'source+second',
+    ]);
+  });
+
+  it('keeps locally deleted records out of later page loads', async () => {
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          {
+            'source+deleted': createRecord(),
+          },
+          true,
+          '100:source%2Bdeleted',
+        ),
+      )
+      .mockResolvedValueOnce(
+        createPage({
+          'source+deleted': createRecord(),
+          'source+next': {
+            ...createRecord(),
+            title: '下一条',
+          },
+        }),
+      );
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    act(() => {
+      result.current.markPlayRecordDeleted('source+deleted');
+    });
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(Object.keys(result.current.playRecords || {})).toEqual([
+      'source+next',
+    ]);
+  });
+
   it('cancels scheduled initial loading after unmount', async () => {
-    getRecentPlayRecords.mockResolvedValue({});
+    getPlayRecordsPage.mockResolvedValue(createPage({}));
 
     const { unmount } = renderHook(() => usePlaybackRecords(jest.fn()));
     unmount();
@@ -100,6 +227,6 @@ describe('usePlaybackRecords', () => {
       await flushAsyncWork();
     });
 
-    expect(getRecentPlayRecords).not.toHaveBeenCalled();
+    expect(getPlayRecordsPage).not.toHaveBeenCalled();
   });
 });
