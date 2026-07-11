@@ -16,6 +16,7 @@ export default function HomeCardShell({
   children,
   className = '',
 }: HomeCardShellProps) {
+  // flex-shrink-0 已在 HOME_CARD_WIDTH_CLASS 中，防止横滑行被挤压变窄
   const mergedClassName = className
     ? `${HOME_CARD_WIDTH_CLASS} ${className}`
     : HOME_CARD_WIDTH_CLASS;

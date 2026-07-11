@@ -61,12 +61,12 @@ export default function AnimatedCardGrid({
           <motion.div
             key={index}
             variants={itemVariants}
-            className='inline-block'
+            className='flex-shrink-0'
           >
             {child}
           </motion.div>
         ) : (
-          <div key={index} className='inline-block'>
+          <div key={index} className='flex-shrink-0'>
             {child}
           </div>
         ),
