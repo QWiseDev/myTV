@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { scheduleIdleTask } from '@/lib/browser-scheduler';
 import type { PlayRecord } from '@/lib/types';
 
-const PLAY_RECORDS_PAGE_SIZE = 30;
+// 首页继续观看首屏可见量有限，配合「加载更多」降低首包与渲染成本
+const PLAY_RECORDS_PAGE_SIZE = 12;
 const EMPTY_PRIORITY_PLAY_RECORD_KEYS: string[] = [];
 
 function debugError(...args: unknown[]) {
@@ -39,14 +40,21 @@ export function usePlaybackRecords(
   const loadRequestRef = useRef(0);
   const deletedKeysRef = useRef<Set<string>>(new Set());
   const playRecordsRef = useRef<Record<string, PlayRecord> | null>(null);
+  const lastPriorityKeysRef = useRef<string>('');
 
   const loadPlayRecordsPage = useCallback(
     async (append = false) => {
       const requestId = ++loadRequestRef.current;
+      const hasExistingRecords = Boolean(
+        playRecordsRef.current &&
+          Object.keys(playRecordsRef.current).length > 0,
+      );
+
       try {
         if (append) {
           setLoadingMorePlayRecords(true);
-        } else {
+        } else if (!hasExistingRecords) {
+          // 已有首屏数据时静默刷新，避免 priority keys 到位后整行闪骨架
           setLoadingPlayRecords(true);
         }
 
@@ -70,7 +78,7 @@ export function usePlaybackRecords(
         setHasMorePlayRecords(page.hasMore);
       } catch (error) {
         debugError('加载播放记录失败:', error);
-        if (!append) {
+        if (!append && !playRecordsRef.current) {
           setPlayRecords(null);
         }
       } finally {
@@ -144,6 +152,19 @@ export function usePlaybackRecords(
   }, []);
 
   useEffect(() => {
+    const priorityKeySignature = priorityPlayRecordKeys.join('\0');
+    const isPriorityKeysChanged =
+      lastPriorityKeysRef.current !== '' &&
+      lastPriorityKeysRef.current !== priorityKeySignature;
+    lastPriorityKeysRef.current = priorityKeySignature;
+
+    // priority keys 变化时立即补拉，确保新更剧集出现在首屏；
+    // 首次加载仍走 idle，避免抢占关键渲染
+    if (isPriorityKeysChanged) {
+      void loadPlayRecordsPage(false);
+      return;
+    }
+
     const cancelLoad = scheduleIdleTask(
       () => {
         void loadPlayRecordsPage(false);
@@ -161,7 +182,7 @@ export function usePlaybackRecords(
         refreshTimeoutRef.current = null;
       }
     };
-  }, [loadPlayRecordsPage]);
+  }, [loadPlayRecordsPage, priorityPlayRecordKeys]);
 
   return {
     hasMorePlayRecords,

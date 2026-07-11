@@ -3,8 +3,11 @@ import { NextResponse } from 'next/server';
 import { getServerHomeData } from '@/lib/home-data.server';
 
 export const runtime = 'nodejs';
+// 聚合数据走进程/DB 缓存；路由本身保持动态，避免构建期打豆瓣
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+
+const HOME_CACHE_CONTROL =
+  'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
 
 export async function GET() {
   try {
@@ -12,7 +15,8 @@ export async function GET() {
 
     return NextResponse.json(data, {
       headers: {
-        'Cache-Control': 'private, max-age=120, stale-while-revalidate=300',
+        'Cache-Control': HOME_CACHE_CONTROL,
+        'CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
     });
   } catch (error) {
@@ -24,7 +28,13 @@ export async function GET() {
         hotVarietyShows: [],
         bangumiCalendarData: [],
       },
-      { status: 200 }
+      {
+        status: 200,
+        headers: {
+          // 失败结果不缓存，尽快重试
+          'Cache-Control': 'no-store',
+        },
+      },
     );
   }
 }

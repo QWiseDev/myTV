@@ -3,82 +3,90 @@
 import { Film, Sparkles, Tv } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
-import { BangumiCalendarData } from '@/lib/bangumi.client';
-import type { PlayRecord } from '@/lib/types';
-import { DoubanItem } from '@/lib/types';
-import { WatchingUpdatesCache } from '@/lib/watching-updates';
+import { HOME_VIDEO_CARD_SIZES } from '@/lib/constants/home';
+import type { HomeLoadingState } from '@/lib/home-data-client';
+import type { HomeData } from '@/lib/home-data-types';
+import type { DoubanItem, PlayRecord } from '@/lib/types';
+import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
 import BangumiSection from './BangumiSection';
 import LazyVideoSection from './LazyVideoSection';
 import SectionSkeleton from './SectionSkeleton';
+import VideoCard from './VideoCard';
 
 const ContinueWatching = lazy(() => import('./ContinueWatching'));
-const VideoCard = lazy(() => import('./VideoCard'));
 
-const HOME_VIDEO_CARD_SIZES = '(max-width: 640px) 96px, 180px';
-
-interface HomeTabContentProps {
-  // 播放记录相关
+/** 继续观看区块所需的播放态与操作 */
+export interface HomeContinueWatchingState {
   playRecords: Record<string, PlayRecord>;
   watchingUpdates: WatchingUpdatesCache | null;
-  loadingPlayRecords: boolean;
-  loadingMorePlayRecords: boolean;
-  hasMorePlayRecords: boolean;
-  loadingWatchingUpdates: boolean;
+  loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
-  onLoadMorePlayRecords: () => Promise<void>;
-  // 内容数据
-  hotMovies: DoubanItem[];
-  hotTvShows: DoubanItem[];
-  hotVarietyShows: DoubanItem[];
-  bangumiCalendarData: BangumiCalendarData[];
-  // 加载状态
-  criticalLoading: boolean;
-  secondaryLoading: boolean;
-  tertiaryLoading: boolean;
+  onLoadMore: () => Promise<void>;
+}
+
+interface HomeTabContentProps {
+  continueWatching: HomeContinueWatchingState;
+  homeData: HomeData;
+  loading: HomeLoadingState;
+}
+
+function renderDoubanCard(
+  item: DoubanItem,
+  options?: {
+    type?: string;
+    priority?: boolean;
+  },
+) {
+  return (
+    <VideoCard
+      from='douban'
+      title={item.title}
+      poster={item.poster}
+      douban_id={Number(item.id)}
+      rate={item.rate}
+      year={item.year}
+      type={options?.type}
+      priority={options?.priority}
+      sizes={HOME_VIDEO_CARD_SIZES}
+    />
+  );
 }
 
 /**
  * 首页内容区块组件 - 展示继续观看、热门内容等区块
  */
 export default function HomeTabContent({
-  playRecords,
-  watchingUpdates,
-  loadingPlayRecords,
-  loadingMorePlayRecords,
-  hasMorePlayRecords,
-  loadingWatchingUpdates,
-  onDeleteRecord,
-  onClearAll,
-  onLoadMorePlayRecords,
-  hotMovies,
-  hotTvShows,
-  hotVarietyShows,
-  bangumiCalendarData,
-  criticalLoading,
-  secondaryLoading,
-  tertiaryLoading,
+  continueWatching,
+  homeData,
+  loading,
 }: HomeTabContentProps) {
-  const hasContinueWatching = Object.keys(playRecords).length > 0;
+  const hasContinueWatching =
+    Object.keys(continueWatching.playRecords).length > 0;
+  const { hotMovies, hotTvShows, hotVarietyShows, bangumiCalendarData } =
+    homeData;
+  const { criticalLoading, secondaryLoading, tertiaryLoading } = loading;
 
   return (
     <>
       {/* 继续观看 */}
       <Suspense fallback={<SectionSkeleton title='继续观看' />}>
         <ContinueWatching
-          playRecords={playRecords}
-          watchingUpdates={watchingUpdates}
-          loading={loadingPlayRecords || loadingWatchingUpdates}
-          loadingMore={loadingMorePlayRecords}
-          hasMore={hasMorePlayRecords}
-          onDeleteRecord={onDeleteRecord}
-          onClearAll={onClearAll}
-          onLoadMore={onLoadMorePlayRecords}
+          playRecords={continueWatching.playRecords}
+          watchingUpdates={continueWatching.watchingUpdates}
+          loading={continueWatching.loading}
+          loadingMore={continueWatching.loadingMore}
+          hasMore={continueWatching.hasMore}
+          onDeleteRecord={continueWatching.onDeleteRecord}
+          onClearAll={continueWatching.onClearAll}
+          onLoadMore={continueWatching.onLoadMore}
         />
       </Suspense>
 
-      {/* 热门电影 */}
+      {/* 热门电影：首屏关键路径，VideoCard 静态导入减少瀑布 */}
       <Suspense fallback={<SectionSkeleton title='热门电影' />}>
         <LazyVideoSection
           title='热门电影'
@@ -86,19 +94,12 @@ export default function HomeTabContent({
           linkHref='/douban?type=movie'
           data={hotMovies}
           loading={criticalLoading}
-          renderItem={(movie, index) => (
-            <VideoCard
-              from='douban'
-              title={movie.title}
-              poster={movie.poster}
-              douban_id={Number(movie.id)}
-              rate={movie.rate}
-              year={movie.year}
-              type='movie'
-              priority={!hasContinueWatching && index < 3}
-              sizes={HOME_VIDEO_CARD_SIZES}
-            />
-          )}
+          renderItem={(movie, index) =>
+            renderDoubanCard(movie, {
+              type: 'movie',
+              priority: !hasContinueWatching && index < 3,
+            })
+          }
         />
       </Suspense>
 
@@ -111,17 +112,7 @@ export default function HomeTabContent({
           data={hotTvShows}
           loading={secondaryLoading}
           enableAnimation={false}
-          renderItem={(show) => (
-            <VideoCard
-              from='douban'
-              title={show.title}
-              poster={show.poster}
-              douban_id={Number(show.id)}
-              rate={show.rate}
-              year={show.year}
-              sizes={HOME_VIDEO_CARD_SIZES}
-            />
-          )}
+          renderItem={(show) => renderDoubanCard(show)}
         />
       </Suspense>
 
@@ -142,17 +133,7 @@ export default function HomeTabContent({
           data={hotVarietyShows}
           loading={secondaryLoading}
           enableAnimation={false}
-          renderItem={(show) => (
-            <VideoCard
-              from='douban'
-              title={show.title}
-              poster={show.poster}
-              douban_id={Number(show.id)}
-              rate={show.rate}
-              year={show.year}
-              sizes={HOME_VIDEO_CARD_SIZES}
-            />
-          )}
+          renderItem={(show) => renderDoubanCard(show)}
         />
       </Suspense>
     </>

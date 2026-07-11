@@ -1,15 +1,15 @@
 'use client';
 
-import { ChevronRight, LucideIcon } from 'lucide-react';
-import Link from 'next/link';
-import { lazy, Suspense } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { type ReactNode,useMemo } from 'react';
 
-import { DoubanItem } from '@/lib/types';
+import { HOME_RENDER_LIMITS } from '@/lib/constants/home';
+import type { DoubanItem } from '@/lib/types';
 
-import SectionTitle from './SectionTitle';
+import HomeCardShell from './HomeCardShell';
+import HomeSectionHeader from './HomeSectionHeader';
+import ScrollableRow from './ScrollableRow';
 import SkeletonRow from './SkeletonRow';
-
-const ScrollableRow = lazy(() => import('./ScrollableRow'));
 
 interface LazyVideoSectionProps {
   title: string;
@@ -17,8 +17,10 @@ interface LazyVideoSectionProps {
   linkHref: string;
   data: DoubanItem[];
   loading: boolean;
-  renderItem: (item: DoubanItem, index: number) => React.ReactNode;
+  renderItem: (item: DoubanItem, index: number) => ReactNode;
   enableAnimation?: boolean;
+  /** 首页横向列表渲染上限，控制图片并发 */
+  limit?: number;
 }
 
 /**
@@ -26,41 +28,33 @@ interface LazyVideoSectionProps {
  */
 export default function LazyVideoSection({
   title,
-  icon: Icon,
+  icon,
   linkHref,
   data,
   loading,
   renderItem,
   enableAnimation = true,
+  limit = HOME_RENDER_LIMITS.HOT_SECTION,
 }: LazyVideoSectionProps) {
+  const visibleData = useMemo(
+    () => (limit > 0 ? data.slice(0, limit) : data),
+    [data, limit],
+  );
+
   return (
     <section className='mb-8'>
-      <div className='mb-4 flex items-center justify-between'>
-        <SectionTitle title={title} icon={Icon} />
-        <Link
-          href={linkHref}
-          className='flex items-center text-sm text-[#5e5d59] hover:text-[#b85c38] dark:text-[#b7b1a8] dark:hover:text-[#f0b195] transition-colors'
-        >
-          查看更多
-          <ChevronRight className='w-4 h-4 ml-1' />
-        </Link>
-      </div>
-      <Suspense fallback={<SkeletonRow />}>
-        <ScrollableRow enableAnimation={enableAnimation}>
-          {loading ? (
-            <SkeletonRow />
-          ) : (
-            data.map((item, index) => (
-              <div
-                key={item.id || index}
-                className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-              >
-                {renderItem(item, index)}
-              </div>
-            ))
-          )}
-        </ScrollableRow>
-      </Suspense>
+      <HomeSectionHeader title={title} icon={icon} linkHref={linkHref} />
+      <ScrollableRow enableAnimation={enableAnimation}>
+        {loading ? (
+          <SkeletonRow />
+        ) : (
+          visibleData.map((item, index) => (
+            <HomeCardShell key={item.id || index}>
+              {renderItem(item, index)}
+            </HomeCardShell>
+          ))
+        )}
+      </ScrollableRow>
     </section>
   );
 }

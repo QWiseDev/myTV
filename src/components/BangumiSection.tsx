@@ -1,13 +1,14 @@
 'use client';
 
-import { Calendar, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
-import { lazy, Suspense } from 'react';
+import { Calendar } from 'lucide-react';
+import { lazy, Suspense, useMemo } from 'react';
 
-import { BangumiCalendarData } from '@/lib/bangumi.client';
-import { WEEKDAY_NAMES } from '@/lib/constants/home';
+import type { BangumiCalendarData } from '@/lib/bangumi.client';
+import { HOME_RENDER_LIMITS, WEEKDAY_NAMES } from '@/lib/constants/home';
+import { selectUsableImageUrl } from '@/lib/utils';
 
-import SectionTitle from './SectionTitle';
+import HomeCardShell from './HomeCardShell';
+import HomeSectionHeader from './HomeSectionHeader';
 import SkeletonCard from './SkeletonCard';
 import SkeletonRow from './SkeletonRow';
 
@@ -19,6 +20,29 @@ interface BangumiSectionProps {
   loading: boolean;
 }
 
+function getTodayAnimes(bangumiCalendarData: BangumiCalendarData[]) {
+  const currentWeekday = WEEKDAY_NAMES[new Date().getDay()];
+  return (
+    bangumiCalendarData.find((item) => item.weekday.en === currentWeekday)
+      ?.items || []
+  );
+}
+
+function resolveBangumiPoster(
+  images?: BangumiCalendarData['items'][number]['images'],
+): string {
+  // 首页卡片尺寸小，优先中小图降低 image-proxy 带宽与并发压力
+  return (
+    selectUsableImageUrl(
+      images?.medium,
+      images?.common,
+      images?.small,
+      images?.large,
+      images?.grid,
+    ) || '/placeholder-poster.jpg'
+  );
+}
+
 /**
  * 新番放送区块组件 - 显示今日更新的番剧
  */
@@ -26,59 +50,41 @@ export default function BangumiSection({
   bangumiCalendarData,
   loading,
 }: BangumiSectionProps) {
-  // 获取今日的番剧列表
-  const getTodayAnimes = () => {
-    const today = new Date();
-    const currentWeekday = WEEKDAY_NAMES[today.getDay()];
-    return (
-      bangumiCalendarData.find((item) => item.weekday.en === currentWeekday)
-        ?.items || []
-    );
-  };
+  const todayAnimes = useMemo(() => {
+    const items = getTodayAnimes(bangumiCalendarData);
+    return items.slice(0, HOME_RENDER_LIMITS.BANGUMI);
+  }, [bangumiCalendarData]);
 
   return (
     <section className='mb-8'>
-      <div className='mb-4 flex items-center justify-between'>
-        <SectionTitle title='新番放送' icon={Calendar} />
-        <Link
-          href='/douban?type=anime'
-          className='flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
-        >
-          查看更多
-          <ChevronRight className='w-4 h-4 ml-1' />
-        </Link>
-      </div>
-      <ScrollableRow enableAnimation={false}>
-        {loading ? (
-          <SkeletonRow />
-        ) : (
-          getTodayAnimes().map((anime, index) => (
-            <div
-              key={`${anime.id}-${index}`}
-              className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
-            >
-              <Suspense fallback={<SkeletonCard />}>
-                <VideoCard
-                  from='douban'
-                  title={anime.name_cn || anime.name}
-                  poster={
-                    anime.images?.large ||
-                    anime.images?.common ||
-                    anime.images?.medium ||
-                    anime.images?.small ||
-                    anime.images?.grid ||
-                    '/placeholder-poster.jpg'
-                  }
-                  douban_id={anime.id}
-                  rate={anime.rating?.score?.toFixed(1) || ''}
-                  year={anime.air_date?.split('-')?.[0] || ''}
-                  isBangumi={true}
-                />
-              </Suspense>
-            </div>
-          ))
-        )}
-      </ScrollableRow>
+      <HomeSectionHeader
+        title='新番放送'
+        icon={Calendar}
+        linkHref='/douban?type=anime'
+      />
+      <Suspense fallback={<SkeletonRow />}>
+        <ScrollableRow enableAnimation={false}>
+          {loading ? (
+            <SkeletonRow />
+          ) : (
+            todayAnimes.map((anime, index) => (
+              <HomeCardShell key={`${anime.id}-${index}`}>
+                <Suspense fallback={<SkeletonCard />}>
+                  <VideoCard
+                    from='douban'
+                    title={anime.name_cn || anime.name}
+                    poster={resolveBangumiPoster(anime.images)}
+                    douban_id={anime.id}
+                    rate={anime.rating?.score?.toFixed(1) || ''}
+                    year={anime.air_date?.split('-')?.[0] || ''}
+                    isBangumi={true}
+                  />
+                </Suspense>
+              </HomeCardShell>
+            ))
+          )}
+        </ScrollableRow>
+      </Suspense>
     </section>
   );
 }

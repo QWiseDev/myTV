@@ -34,7 +34,7 @@ function createPage(
 ) {
   return {
     records,
-    pageSize: 30,
+    pageSize: 12,
     hasMore,
     nextCursor,
     total: Object.keys(records).length,
@@ -75,7 +75,7 @@ describe('usePlaybackRecords', () => {
     expect(getPlayRecordsPage).toHaveBeenCalledWith({
       cursor: null,
       includeKeys: [],
-      pageSize: 30,
+      pageSize: 12,
     });
     expect(result.current.playRecords).toBe(records);
     expect(result.current.loadingPlayRecords).toBe(false);
@@ -96,7 +96,7 @@ describe('usePlaybackRecords', () => {
     expect(getPlayRecordsPage).toHaveBeenCalledWith({
       cursor: null,
       includeKeys: ['source+old-update', 'source+new-update'],
-      pageSize: 30,
+      pageSize: 12,
     });
   });
 
@@ -166,7 +166,7 @@ describe('usePlaybackRecords', () => {
     expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
       cursor: '100:source%2Bfirst',
       includeKeys: [],
-      pageSize: 30,
+      pageSize: 12,
     });
     expect(Object.keys(result.current.playRecords || {})).toEqual([
       'source+first',

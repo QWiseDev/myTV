@@ -6,6 +6,8 @@ import React from 'react';
 interface AnimatedCardGridProps {
   children: React.ReactNode;
   className?: string;
+  /** 仅对前 N 张做入场动画，降低长列表主线程压力 */
+  maxAnimatedItems?: number;
 }
 
 // 容器动画配置
@@ -14,8 +16,8 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.08, // 每个子元素延迟 80ms
-      delayChildren: 0.1, // 首个子元素延迟 100ms
+      staggerChildren: 0.05,
+      delayChildren: 0.05,
     },
   },
 };
@@ -24,8 +26,8 @@ const containerVariants = {
 const itemVariants = {
   hidden: {
     opacity: 0,
-    y: 20,
-    scale: 0.95,
+    y: 12,
+    scale: 0.98,
   },
   visible: {
     opacity: 1,
@@ -33,9 +35,9 @@ const itemVariants = {
     scale: 1,
     transition: {
       type: 'spring' as const,
-      stiffness: 100,
-      damping: 15,
-      mass: 0.5,
+      stiffness: 140,
+      damping: 18,
+      mass: 0.45,
     },
   },
 };
@@ -43,7 +45,10 @@ const itemVariants = {
 export default function AnimatedCardGrid({
   children,
   className = '',
+  maxAnimatedItems = 8,
 }: AnimatedCardGridProps) {
+  const childArray = React.Children.toArray(children);
+
   return (
     <motion.div
       className={className}
@@ -51,15 +56,21 @@ export default function AnimatedCardGrid({
       initial='hidden'
       animate='visible'
     >
-      {React.Children.map(children, (child, index) => (
-        <motion.div
-          key={index}
-          variants={itemVariants}
-          className='inline-block'
-        >
-          {child}
-        </motion.div>
-      ))}
+      {childArray.map((child, index) =>
+        index < maxAnimatedItems ? (
+          <motion.div
+            key={index}
+            variants={itemVariants}
+            className='inline-block'
+          >
+            {child}
+          </motion.div>
+        ) : (
+          <div key={index} className='inline-block'>
+            {child}
+          </div>
+        ),
+      )}
     </motion.div>
   );
 }

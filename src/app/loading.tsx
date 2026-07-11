@@ -1,9 +1,9 @@
 /**
  * 首页加载骨架屏 — 服务端数据加载期间立即展示，避免白屏
  */
-import SkeletonCard from '@/components/SkeletonCard';
+import { SKELETON_CONFIG } from '@/lib/constants/home';
 
-const SKELETON_COUNT = 8;
+import SectionSkeleton from '@/components/SectionSkeleton';
 
 export default function HomeLoading() {
   return (
@@ -38,41 +38,9 @@ export default function HomeLoading() {
             <div className='h-9 w-40 bg-[#f0eee6]/80 dark:bg-[#302d29]/80 rounded-md animate-pulse' />
           </div>
 
-          {/* 继续观看骨架 */}
-          <section className='mb-8'>
-            <div className='mb-4 h-8 w-24 bg-[#e8e6dc] dark:bg-[#3d3934] rounded animate-pulse' />
-            <div className='flex gap-6 overflow-hidden px-4 sm:px-6'>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44 flex-shrink-0'>
-                  <SkeletonCard />
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 热门电影骨架 */}
-          <section className='mb-8'>
-            <div className='mb-4 h-8 w-24 bg-[#e8e6dc] dark:bg-[#3d3934] rounded animate-pulse' />
-            <div className='flex gap-6 overflow-hidden px-4 sm:px-6'>
-              {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-                <div key={i} className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44 flex-shrink-0'>
-                  <SkeletonCard />
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 热门剧集骨架 */}
-          <section className='mb-8'>
-            <div className='mb-4 h-8 w-24 bg-[#e8e6dc] dark:bg-[#3d3934] rounded animate-pulse' />
-            <div className='flex gap-6 overflow-hidden px-4 sm:px-6'>
-              {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-                <div key={i} className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44 flex-shrink-0'>
-                  <SkeletonCard />
-                </div>
-              ))}
-            </div>
-          </section>
+          <SectionSkeleton count={SKELETON_CONFIG.CONTINUE_WATCHING_COUNT} />
+          <SectionSkeleton />
+          <SectionSkeleton />
         </div>
       </main>
 

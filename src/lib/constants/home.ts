@@ -15,12 +15,38 @@ export const DELAYS = {
   WATCHING_UPDATES_CHECK: 2000, // 追番更新缓存拉取延迟
   FAVORITE_UPDATE_DEBOUNCE: 300, // 收藏更新防抖延迟
   CACHE_CLEANUP: 100, // 缓存清理延迟
+  TERTIARY_LOAD: 1200, // 新番数据 idle 加载延迟，错开首屏图片
 } as const;
 
 // 骨架屏配置
 export const SKELETON_CONFIG = {
-  DEFAULT_COUNT: 8, // 默认骨架卡片数量
+  DEFAULT_COUNT: 6, // 默认骨架卡片数量（横向首屏可见量）
+  CONTINUE_WATCHING_COUNT: 6, // 继续观看骨架数量
 } as const;
+
+// 首页首屏渲染上限：降低图片并发与 DOM 成本
+export const HOME_RENDER_LIMITS = {
+  HOT_SECTION: 12,
+  BANGUMI: 12,
+  CONTINUE_WATCHING_PAGE: 12,
+} as const;
+
+// 首页卡片尺寸与操作样式（统一避免各区块 class 漂移）
+export const HOME_CARD_WIDTH_CLASS =
+  'min-w-[96px] w-24 sm:min-w-[180px] sm:w-44';
+
+export const HOME_VIDEO_CARD_SIZES = '(max-width: 640px) 96px, 180px';
+
+/** 收藏夹等网格布局 */
+export const HOME_FAVORITES_GRID_CLASS =
+  'justify-start grid grid-cols-2 gap-x-3 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8';
+
+/** 区块操作按钮/链接的中性文字色（清空等） */
+export const HOME_SECTION_ACTION_CLASS =
+  'text-sm text-[#5e5d59] hover:text-[#b85c38] dark:text-[#b7b1a8] dark:hover:text-[#f0b195] transition-colors';
+
+/** 「查看更多」链接样式 */
+export const HOME_SECTION_LINK_CLASS = `flex items-center ${HOME_SECTION_ACTION_CLASS}`;
 
 // 周日映射（用于 Bangumi 新番放送）
 export const WEEKDAY_NAMES = [

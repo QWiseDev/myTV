@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 
-import { BangumiCalendarData } from '@/lib/bangumi.client';
 import { scheduleIdleTask } from '@/lib/browser-scheduler';
+import { DELAYS } from '@/lib/constants/home';
 import {
+  type HomeLoadingState,
   createHomeDataSnapshot,
   createHomeLoadingState,
   mergeHomeData,
+  patchHomeData,
+  patchHomeLoadingState,
 } from '@/lib/home-data-client';
 import {
   loadCriticalData,
@@ -13,8 +16,11 @@ import {
   loadSecondaryData,
   loadTertiaryData,
 } from '@/lib/home-data-loader';
-import { getHomeDataAvailability, hasHomeData, HomeData } from '@/lib/home-data-types';
-import { DoubanItem } from '@/lib/types';
+import {
+  type HomeData,
+  getHomeDataAvailability,
+  hasHomeData,
+} from '@/lib/home-data-types';
 import { useWatchingUpdatesRefresh } from '@/hooks/useWatchingUpdatesRefresh';
 
 interface UseHomeDataOptions {
@@ -36,28 +42,11 @@ export function useHomeData({
   refreshWatchingUpdates,
   initialData,
 }: UseHomeDataOptions) {
-  const initialLoadingState = createHomeLoadingState(initialData);
-  const [hotMovies, setHotMovies] = useState<DoubanItem[]>(
-    initialData?.hotMovies || [],
+  const [homeData, setHomeData] = useState<HomeData>(() =>
+    createHomeDataSnapshot(initialData),
   );
-  const [hotTvShows, setHotTvShows] = useState<DoubanItem[]>(
-    initialData?.hotTvShows || [],
-  );
-  const [hotVarietyShows, setHotVarietyShows] = useState<DoubanItem[]>(
-    initialData?.hotVarietyShows || [],
-  );
-  const [bangumiCalendarData, setBangumiCalendarData] = useState<
-    BangumiCalendarData[]
-  >(initialData?.bangumiCalendarData || []);
-
-  const [criticalLoading, setCriticalLoading] = useState(
-    initialLoadingState.criticalLoading,
-  );
-  const [secondaryLoading, setSecondaryLoading] = useState(
-    initialLoadingState.secondaryLoading,
-  );
-  const [tertiaryLoading, setTertiaryLoading] = useState(
-    initialLoadingState.tertiaryLoading,
+  const [loading, setLoading] = useState<HomeLoadingState>(() =>
+    createHomeLoadingState(initialData),
   );
 
   const { scheduleWatchingUpdatesCheck } = useWatchingUpdatesRefresh({
@@ -69,44 +58,50 @@ export function useHomeData({
     let cancelled = false;
     let cancelTertiaryLoad: (() => void) | undefined;
 
-    const applyHomeData = (homeData: HomeData) => {
+    const applyHomeData = (nextData: HomeData) => {
       if (cancelled) return;
 
-      const availability = getHomeDataAvailability(homeData);
-      setHotMovies(homeData.hotMovies);
-      setHotTvShows(homeData.hotTvShows);
-      setHotVarietyShows(homeData.hotVarietyShows);
-      setBangumiCalendarData(homeData.bangumiCalendarData);
-
-      if (availability.hasCriticalData) {
-        setCriticalLoading(false);
-      }
-      if (availability.hasSecondaryData) {
-        setSecondaryLoading(false);
-      }
-      if (availability.hasTertiaryData) {
-        setTertiaryLoading(false);
-      }
+      const availability = getHomeDataAvailability(nextData);
+      setHomeData(nextData);
+      setLoading((prev) =>
+        patchHomeLoadingState(prev, {
+          criticalLoading: availability.hasCriticalData
+            ? false
+            : prev.criticalLoading,
+          secondaryLoading: availability.hasSecondaryData
+            ? false
+            : prev.secondaryLoading,
+          tertiaryLoading: availability.hasTertiaryData
+            ? false
+            : prev.tertiaryLoading,
+        }),
+      );
     };
 
     const loadMissingTertiaryData = () => {
       loadTertiaryData()
         .then((tertiaryData) => {
           if (cancelled) return;
-          setBangumiCalendarData(tertiaryData.bangumiCalendarData || []);
+          setHomeData((prev) =>
+            patchHomeData(prev, {
+              bangumiCalendarData: tertiaryData.bangumiCalendarData || [],
+            }),
+          );
         })
         .catch(ignoreAsyncError)
         .finally(() => {
           if (!cancelled) {
-            setTertiaryLoading(false);
+            setLoading((prev) =>
+              patchHomeLoadingState(prev, { tertiaryLoading: false }),
+            );
           }
         });
     };
 
     const scheduleTertiaryLoad = () => {
       cancelTertiaryLoad = scheduleIdleTask(loadMissingTertiaryData, {
-        delayMs: 600,
-        timeoutMs: 1500,
+        delayMs: DELAYS.TERTIARY_LOAD,
+        timeoutMs: DELAYS.TERTIARY_LOAD + 1500,
       });
     };
 
@@ -123,11 +118,15 @@ export function useHomeData({
             try {
               const moviesData = await hotMoviesPromise;
               if (!cancelled && moviesData?.code === 200) {
-                setHotMovies(moviesData.list);
+                setHomeData((prev) =>
+                  patchHomeData(prev, { hotMovies: moviesData.list }),
+                );
               }
             } finally {
               if (!cancelled) {
-                setCriticalLoading(false);
+                setLoading((prev) =>
+                  patchHomeLoadingState(prev, { criticalLoading: false }),
+                );
               }
             }
           }),
@@ -138,15 +137,25 @@ export function useHomeData({
         loadingTasks.push(
           loadSecondaryData().then((secondaryData) => {
             try {
-              if (!cancelled && secondaryData.hotTvShows?.code === 200) {
-                setHotTvShows(secondaryData.hotTvShows.list);
-              }
-              if (!cancelled && secondaryData.hotVarietyShows?.code === 200) {
-                setHotVarietyShows(secondaryData.hotVarietyShows.list);
+              if (!cancelled) {
+                setHomeData((prev) =>
+                  patchHomeData(prev, {
+                    hotTvShows:
+                      secondaryData.hotTvShows?.code === 200
+                        ? secondaryData.hotTvShows.list
+                        : undefined,
+                    hotVarietyShows:
+                      secondaryData.hotVarietyShows?.code === 200
+                        ? secondaryData.hotVarietyShows.list
+                        : undefined,
+                  }),
+                );
               }
             } finally {
               if (!cancelled) {
-                setSecondaryLoading(false);
+                setLoading((prev) =>
+                  patchHomeLoadingState(prev, { secondaryLoading: false }),
+                );
               }
             }
           }),
@@ -161,8 +170,8 @@ export function useHomeData({
     };
 
     const loadAllData = async () => {
-      let homeData = createHomeDataSnapshot(initialData);
-      let availability = getHomeDataAvailability(homeData);
+      let snapshot = createHomeDataSnapshot(initialData);
+      let availability = getHomeDataAvailability(snapshot);
 
       if (availability.isComplete) {
         scheduleWatchingUpdatesCheck();
@@ -172,9 +181,9 @@ export function useHomeData({
       try {
         const apiHomeData = await loadHomeDataFromApi();
         if (hasHomeData(apiHomeData)) {
-          homeData = mergeHomeData(homeData, apiHomeData);
-          applyHomeData(homeData);
-          availability = getHomeDataAvailability(homeData);
+          snapshot = mergeHomeData(snapshot, apiHomeData);
+          applyHomeData(snapshot);
+          availability = getHomeDataAvailability(snapshot);
         }
       } catch (error) {
         reportHomeDataError('首页聚合数据加载失败，回退分批加载:', error);
@@ -200,12 +209,7 @@ export function useHomeData({
   }, [initialData, scheduleWatchingUpdatesCheck]);
 
   return {
-    hotMovies,
-    hotTvShows,
-    hotVarietyShows,
-    bangumiCalendarData,
-    criticalLoading,
-    secondaryLoading,
-    tertiaryLoading,
+    homeData,
+    loading,
   };
 }

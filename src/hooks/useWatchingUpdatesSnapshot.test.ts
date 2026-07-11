@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 
-import { useWatchingUpdatesSnapshot } from './useWatchingUpdatesSnapshot';
 import type { WatchingUpdate } from '@/lib/watching-updates';
+
+import { useWatchingUpdatesSnapshot } from './useWatchingUpdatesSnapshot';
 
 jest.mock('@/lib/watching-updates', () => ({
   getDetailedWatchingUpdates: jest.fn(),
@@ -35,6 +36,17 @@ describe('useWatchingUpdatesSnapshot', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('hydrates watching updates from cache on mount', () => {
+    const updates = createWatchingUpdate();
+    getDetailedWatchingUpdates.mockReturnValue(updates);
+
+    const { result } = renderHook(() => useWatchingUpdatesSnapshot());
+
+    expect(getDetailedWatchingUpdates).toHaveBeenCalled();
+    expect(result.current.watchingUpdates).toBe(updates);
+    expect(result.current.loadingWatchingUpdates).toBe(false);
+  });
+
   it('refreshes the watching updates snapshot from cache', async () => {
     const updates = createWatchingUpdate();
     getDetailedWatchingUpdates.mockReturnValue(updates);
@@ -45,7 +57,7 @@ describe('useWatchingUpdatesSnapshot', () => {
       await result.current.refreshWatchingUpdates();
     });
 
-    expect(getDetailedWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(getDetailedWatchingUpdates).toHaveBeenCalled();
     expect(result.current.watchingUpdates).toBe(updates);
     expect(result.current.loadingWatchingUpdates).toBe(false);
   });

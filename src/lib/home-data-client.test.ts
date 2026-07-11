@@ -2,8 +2,10 @@ import {
   createHomeDataSnapshot,
   createHomeLoadingState,
   mergeHomeData,
+  patchHomeData,
+  patchHomeLoadingState,
 } from './home-data-client';
-import { EMPTY_HOME_DATA, type HomeData } from './home-data-types';
+import { type HomeData,EMPTY_HOME_DATA } from './home-data-types';
 
 const item = {
   id: '1',
@@ -65,6 +67,40 @@ describe('home data client helpers', () => {
       hotTvShows: [{ ...item, id: 'tv-current' }],
       hotVarietyShows: [{ ...item, id: 'show-incoming' }],
       bangumiCalendarData: [bangumiItem],
+    });
+  });
+
+  it('patches home data while ignoring undefined fields', () => {
+    const current = createHomeData({
+      hotMovies: [{ ...item, id: 'movie-current' }],
+      hotTvShows: [{ ...item, id: 'tv-current' }],
+    });
+
+    expect(
+      patchHomeData(current, {
+        hotMovies: [{ ...item, id: 'movie-patched' }],
+        hotTvShows: undefined,
+      }),
+    ).toEqual({
+      ...current,
+      hotMovies: [{ ...item, id: 'movie-patched' }],
+    });
+  });
+
+  it('patches home loading state partially', () => {
+    expect(
+      patchHomeLoadingState(
+        {
+          criticalLoading: true,
+          secondaryLoading: true,
+          tertiaryLoading: true,
+        },
+        { criticalLoading: false },
+      ),
+    ).toEqual({
+      criticalLoading: false,
+      secondaryLoading: true,
+      tertiaryLoading: true,
     });
   });
 });

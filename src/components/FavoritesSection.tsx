@@ -2,10 +2,15 @@
 
 import { lazy, Suspense } from 'react';
 
+import {
+  HOME_FAVORITES_GRID_CLASS,
+  HOME_SECTION_ACTION_CLASS,
+} from '@/lib/constants/home';
 import { clearAllFavorites } from '@/lib/db.client';
-import { FavoriteItem } from '@/lib/types';
+import type { FavoriteItem } from '@/lib/types';
 
 import EmptyFavorites from './EmptyFavorites';
+import HomeSectionHeader from './HomeSectionHeader';
 import SkeletonCard from './SkeletonCard';
 
 const VideoCard = lazy(() => import('./VideoCard'));
@@ -29,20 +34,21 @@ export default function FavoritesSection({
 
   return (
     <section className='mb-8'>
-      <div className='mb-4 flex items-center justify-between'>
-        <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-          我的收藏
-        </h2>
-        {favoriteItems.length > 0 && (
-          <button
-            className='text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-            onClick={handleClearAll}
-          >
-            清空
-          </button>
-        )}
-      </div>
-      <div className='justify-start grid grid-cols-2 gap-x-3 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
+      <HomeSectionHeader
+        title='我的收藏'
+        action={
+          favoriteItems.length > 0 ? (
+            <button
+              type='button'
+              className={HOME_SECTION_ACTION_CLASS}
+              onClick={handleClearAll}
+            >
+              清空
+            </button>
+          ) : null
+        }
+      />
+      <div className={HOME_FAVORITES_GRID_CLASS}>
         {favoriteItems.map((item) => (
           <div key={item.id + item.source} className='w-full'>
             <Suspense fallback={<SkeletonCard />}>

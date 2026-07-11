@@ -24,6 +24,58 @@ function canUseScrollControls(): boolean {
   );
 }
 
+interface ScrollNavButtonProps {
+  direction: 'left' | 'right';
+  visible: boolean;
+  isHovered: boolean;
+  onClick: () => void;
+}
+
+function ScrollNavButton({
+  direction,
+  visible,
+  isHovered,
+  onClick,
+}: ScrollNavButtonProps) {
+  if (!visible) return null;
+
+  const isLeft = direction === 'left';
+
+  return (
+    <div
+      className={`hidden sm:flex absolute ${isLeft ? 'left-0' : 'right-0'} top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 ${
+        isHovered ? 'opacity-100' : 'opacity-0'
+      }`}
+      style={{
+        background: 'transparent',
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        className='absolute inset-0 flex items-center justify-center'
+        style={{
+          top: '40%',
+          bottom: '60%',
+          ...(isLeft ? { left: '-4.5rem' } : { right: '-4.5rem' }),
+          pointerEvents: 'auto',
+        }}
+      >
+        <button
+          type='button'
+          onClick={onClick}
+          className='w-12 h-12 bg-white/95 rounded-full shadow-lg flex items-center justify-center hover:bg-white border border-gray-200 transition-transform hover:scale-105 dark:bg-gray-800/90 dark:hover:bg-gray-700 dark:border-gray-600'
+        >
+          {isLeft ? (
+            <ChevronLeft className='w-6 h-6 text-gray-600 dark:text-gray-300' />
+          ) : (
+            <ChevronRight className='w-6 h-6 text-gray-600 dark:text-gray-300' />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ScrollableRow({
   children,
   scrollDistance = 1000,
@@ -34,7 +86,7 @@ function ScrollableRow({
   const [showRightScroll, setShowRightScroll] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const checkScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+    null,
   );
 
   const checkScroll = useCallback(() => {
@@ -54,10 +106,10 @@ function ScrollableRow({
       const canScrollLeft = scrollLeft > threshold;
 
       setShowRightScroll((prev) =>
-        prev !== canScrollRight ? canScrollRight : prev
+        prev !== canScrollRight ? canScrollRight : prev,
       );
       setShowLeftScroll((prev) =>
-        prev !== canScrollLeft ? canScrollLeft : prev
+        prev !== canScrollLeft ? canScrollLeft : prev,
       );
     }
   }, []);
@@ -103,23 +155,15 @@ function ScrollableRow({
     };
   }, [childrenCount, checkScroll]);
 
-  const handleScrollRightClick = useCallback(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollBy({
-        left: scrollDistance,
+  const handleScrollBy = useCallback(
+    (distance: number) => {
+      containerRef.current?.scrollBy({
+        left: distance,
         behavior: 'smooth',
       });
-    }
-  }, [scrollDistance]);
-
-  const handleScrollLeftClick = useCallback(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollBy({
-        left: -scrollDistance,
-        behavior: 'smooth',
-      });
-    }
-  }, [scrollDistance]);
+    },
+    [],
+  );
 
   return (
     <div
@@ -145,63 +189,18 @@ function ScrollableRow({
           children
         )}
       </div>
-      {showLeftScroll && (
-        <div
-          className={`hidden sm:flex absolute left-0 top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 ${
-            isHovered ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            background: 'transparent',
-            pointerEvents: 'none', // 允许点击穿透
-          }}
-        >
-          <div
-            className='absolute inset-0 flex items-center justify-center'
-            style={{
-              top: '40%',
-              bottom: '60%',
-              left: '-4.5rem',
-              pointerEvents: 'auto',
-            }}
-          >
-            <button
-              onClick={handleScrollLeftClick}
-              className='w-12 h-12 bg-white/95 rounded-full shadow-lg flex items-center justify-center hover:bg-white border border-gray-200 transition-transform hover:scale-105 dark:bg-gray-800/90 dark:hover:bg-gray-700 dark:border-gray-600'
-            >
-              <ChevronLeft className='w-6 h-6 text-gray-600 dark:text-gray-300' />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showRightScroll && (
-        <div
-          className={`hidden sm:flex absolute right-0 top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 ${
-            isHovered ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            background: 'transparent',
-            pointerEvents: 'none', // 允许点击穿透
-          }}
-        >
-          <div
-            className='absolute inset-0 flex items-center justify-center'
-            style={{
-              top: '40%',
-              bottom: '60%',
-              right: '-4.5rem',
-              pointerEvents: 'auto',
-            }}
-          >
-            <button
-              onClick={handleScrollRightClick}
-              className='w-12 h-12 bg-white/95 rounded-full shadow-lg flex items-center justify-center hover:bg-white border border-gray-200 transition-transform hover:scale-105 dark:bg-gray-800/90 dark:hover:bg-gray-700 dark:border-gray-600'
-            >
-              <ChevronRight className='w-6 h-6 text-gray-600 dark:text-gray-300' />
-            </button>
-          </div>
-        </div>
-      )}
+      <ScrollNavButton
+        direction='left'
+        visible={showLeftScroll}
+        isHovered={isHovered}
+        onClick={() => handleScrollBy(-scrollDistance)}
+      />
+      <ScrollNavButton
+        direction='right'
+        visible={showRightScroll}
+        isHovered={isHovered}
+        onClick={() => handleScrollBy(scrollDistance)}
+      />
     </div>
   );
 }

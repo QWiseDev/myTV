@@ -1,6 +1,9 @@
+/**
+ * 海报卡骨架 — 尺寸由外层 HomeCardShell / 网格容器控制，避免双重宽度 class
+ */
 export default function SkeletonCard() {
   return (
-    <div className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'>
+    <div className='w-full'>
       {/* 海报骨架 */}
       <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-[#e8e6dc] bg-[#f0eee6] dark:border-[#3d3934] dark:bg-[#302d29]'>
         {/* Shimmer 效果 */}

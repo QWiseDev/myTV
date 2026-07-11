@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const IMAGE_PROXY_FETCH_TIMEOUT_MS = 5000;
-const IMAGE_PROXY_MAX_CONCURRENT_REQUESTS = 12;
+// 生产源站并发能力有限，代理图不宜占满连接；首页新番等会集中命中此接口
+const IMAGE_PROXY_MAX_CONCURRENT_REQUESTS = 6;
 
 let activeImageProxyRequests = 0;
 

@@ -1,7 +1,7 @@
 import {
+  type HomeData,
   EMPTY_HOME_DATA,
   getHomeDataAvailability,
-  type HomeData,
 } from './home-data-types';
 
 export interface HomeLoadingState {
@@ -37,6 +37,7 @@ export function createHomeLoadingState(
   };
 }
 
+
 export function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
   return {
     hotMovies: preferNonEmptyArray(incoming.hotMovies, current.hotMovies),
@@ -49,5 +50,27 @@ export function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
       incoming.bangumiCalendarData,
       current.bangumiCalendarData,
     ),
+  };
+}
+
+export function patchHomeData(
+  current: HomeData,
+  patch: Partial<HomeData>,
+): HomeData {
+  return {
+    ...current,
+    ...Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    ),
+  } as HomeData;
+}
+
+export function patchHomeLoadingState(
+  current: HomeLoadingState,
+  patch: Partial<HomeLoadingState>,
+): HomeLoadingState {
+  return {
+    ...current,
+    ...patch,
   };
 }

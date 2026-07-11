@@ -5,16 +5,81 @@
 import { GetBangumiCalendarData } from '@/lib/bangumi.client';
 import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
 import { getDoubanCategories } from '@/lib/douban.client';
-import { EMPTY_HOME_DATA, HomeData } from '@/lib/home-data-types';
+import {
+  type HomeData,
+  EMPTY_HOME_DATA,
+  getHomeDataAvailability,
+} from '@/lib/home-data-types';
 import { withTimeout } from '@/lib/promise-timeout';
 
+const CLIENT_HOME_DATA_TTL_MS = 60_000;
+
+type ClientHomeDataCache = {
+  data: HomeData;
+  expireAt: number;
+};
+
+let clientHomeDataCache: ClientHomeDataCache | null = null;
+let inflightClientHomeData: Promise<HomeData> | null = null;
+
+function readClientHomeDataCache(): HomeData | null {
+  if (!clientHomeDataCache) return null;
+  if (Date.now() >= clientHomeDataCache.expireAt) {
+    clientHomeDataCache = null;
+    return null;
+  }
+  return clientHomeDataCache.data;
+}
+
+function writeClientHomeDataCache(data: HomeData): void {
+  if (!getHomeDataAvailability(data).hasAnyData) return;
+  clientHomeDataCache = {
+    data,
+    expireAt: Date.now() + CLIENT_HOME_DATA_TTL_MS,
+  };
+}
+
 export async function loadHomeDataFromApi(): Promise<HomeData> {
-  const response = await fetch('/api/home');
-  if (!response.ok) {
-    return EMPTY_HOME_DATA;
+  const cached = readClientHomeDataCache();
+  if (cached) {
+    return cached;
   }
 
-  return (await response.json()) as HomeData;
+  if (inflightClientHomeData) {
+    return inflightClientHomeData;
+  }
+
+  inflightClientHomeData = (async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      DATA_FETCH_TIMEOUTS.CRITICAL,
+    );
+
+    try {
+      const response = await fetch('/api/home', {
+        signal: controller.signal,
+        cache: 'default',
+      });
+      if (!response.ok) {
+        return EMPTY_HOME_DATA;
+      }
+
+      const data = (await response.json()) as HomeData;
+      writeClientHomeDataCache(data);
+      return data;
+    } catch {
+      return EMPTY_HOME_DATA;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  })();
+
+  try {
+    return await inflightClientHomeData;
+  } finally {
+    inflightClientHomeData = null;
+  }
 }
 
 /**
@@ -28,7 +93,7 @@ export const loadCriticalData = async () => {
       code: 200,
       message: 'fallback',
       list: [],
-    }
+    },
   );
 
   return { hotMoviesPromise };
@@ -46,7 +111,7 @@ export const loadSecondaryData = async () => {
         code: 200,
         message: 'fallback',
         list: [],
-      }
+      },
     ),
     withTimeout(
       getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
@@ -55,7 +120,7 @@ export const loadSecondaryData = async () => {
         code: 200,
         message: 'fallback',
         list: [],
-      }
+      },
     ),
   ]);
 

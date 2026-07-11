@@ -1,6 +1,6 @@
 'use client';
 
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
@@ -14,7 +14,9 @@ import { usePlayRecordActions } from '@/hooks/usePlayRecordActions';
 import AIRecommendButton from '@/components/AIRecommendButton';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import CapsuleSwitch from '@/components/CapsuleSwitch';
-import HomeTabContent from '@/components/HomeTabContent';
+import HomeTabContent, {
+  type HomeContinueWatchingState,
+} from '@/components/HomeTabContent';
 import PageLayout from '@/components/PageLayout';
 import { useSite } from '@/components/SiteProvider';
 
@@ -64,15 +66,7 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
   } = usePlaybackData();
 
   const { favoriteItems, clearFavorites } = useFavoriteItems(activeTab);
-  const {
-    hotMovies,
-    hotTvShows,
-    hotVarietyShows,
-    bangumiCalendarData,
-    criticalLoading,
-    secondaryLoading,
-    tertiaryLoading,
-  } = useHomeData({
+  const { homeData, loading: homeLoading } = useHomeData({
     activeTab,
     refreshWatchingUpdates,
     initialData: initialHomeData,
@@ -87,6 +81,30 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     markPlayRecordDeleted,
     setPlayRecords,
   });
+
+  const continueWatching = useMemo<HomeContinueWatchingState>(
+    () => ({
+      playRecords: playRecords ?? {},
+      watchingUpdates: watchingUpdates ?? null,
+      loading: loadingPlayRecords || loadingWatchingUpdates,
+      loadingMore: loadingMorePlayRecords,
+      hasMore: hasMorePlayRecords,
+      onDeleteRecord: deletePlayRecord,
+      onClearAll: clearAllPlayRecords,
+      onLoadMore: loadMorePlayRecords,
+    }),
+    [
+      playRecords,
+      watchingUpdates,
+      loadingPlayRecords,
+      loadingWatchingUpdates,
+      loadingMorePlayRecords,
+      hasMorePlayRecords,
+      deletePlayRecord,
+      clearAllPlayRecords,
+      loadMorePlayRecords,
+    ],
+  );
 
   useEffect(() => {
     const authInfo = getAuthInfoFromBrowserCookie();
@@ -108,7 +126,8 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
         <TelegramWelcomeModal />
       </Suspense>
 
-      <div className='px-2 sm:px-10 py-2 sm:py-4 overflow-visible'>
+      {/* 布局容器交给 PageLayout，避免多层 padding 叠加 */}
+      <div className='overflow-visible'>
         <div className='mb-4 flex flex-col sm:flex-row items-center justify-center gap-4'>
           <CapsuleSwitch
             options={HOME_TABS}
@@ -121,35 +140,20 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
           )}
         </div>
 
-        <div className='w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
-          {activeTab === 'favorites' ? (
-            <Suspense fallback={null}>
-              <FavoritesSection
-                favoriteItems={favoriteItems}
-                onClearAll={clearFavorites}
-              />
-            </Suspense>
-          ) : (
-            <HomeTabContent
-              playRecords={playRecords ?? {}}
-              watchingUpdates={watchingUpdates ?? null}
-              loadingPlayRecords={loadingPlayRecords}
-              loadingMorePlayRecords={loadingMorePlayRecords}
-              hasMorePlayRecords={hasMorePlayRecords}
-              loadingWatchingUpdates={loadingWatchingUpdates}
-              onDeleteRecord={deletePlayRecord}
-              onClearAll={clearAllPlayRecords}
-              onLoadMorePlayRecords={loadMorePlayRecords}
-              hotMovies={hotMovies}
-              hotTvShows={hotTvShows}
-              hotVarietyShows={hotVarietyShows}
-              bangumiCalendarData={bangumiCalendarData}
-              criticalLoading={criticalLoading}
-              secondaryLoading={secondaryLoading}
-              tertiaryLoading={tertiaryLoading}
+        {activeTab === 'favorites' ? (
+          <Suspense fallback={null}>
+            <FavoritesSection
+              favoriteItems={favoriteItems}
+              onClearAll={clearFavorites}
             />
-          )}
-        </div>
+          </Suspense>
+        ) : (
+          <HomeTabContent
+            continueWatching={continueWatching}
+            homeData={homeData}
+            loading={homeLoading}
+          />
+        )}
       </div>
 
       <AnnouncementModal
