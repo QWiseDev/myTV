@@ -374,12 +374,6 @@ function PlayPageClient() {
     handleNetDiskSearch,
   } = useNetdiskSearch();
 
-  // 进度条拖拽状态管理
-  const seekResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // resize事件防抖管理
-  const resizeResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const currentSourceRef = useRef(currentSource);
   const currentIdRef = useRef(currentId);
   const videoUrlRef = useRef(videoUrl);
@@ -609,8 +603,7 @@ function PlayPageClient() {
   const isSkipControllerTriggeredRef = useRef<boolean>(false); // 标记是否通过 SkipController 触发了下一集
   const videoEndedHandledRef = useRef<boolean>(false); // 🔥 标记当前视频的 video:ended 事件是否已经被处理过（防止多个监听器重复触发）
 
-  // 🚀 新增：连续切换源防抖和资源管理
-  const sourceSwitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // 连续切换源的异步任务管理
   const switchPromiseRef = useRef<Promise<void> | null>(null); // 当前切换的Promise
 
   const artPlayerRef = useRef<PlayArtplayer | null>(null);
@@ -629,21 +622,6 @@ function PlayPageClient() {
     if (episodeSwitchTimeoutRef.current) {
       clearTimeout(episodeSwitchTimeoutRef.current);
       episodeSwitchTimeoutRef.current = null;
-    }
-    if (sourceSwitchTimeoutRef.current) {
-      clearTimeout(sourceSwitchTimeoutRef.current);
-      sourceSwitchTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearPlaybackTimers = useCallback(() => {
-    if (seekResetTimeoutRef.current) {
-      clearTimeout(seekResetTimeoutRef.current);
-      seekResetTimeoutRef.current = null;
-    }
-    if (resizeResetTimeoutRef.current) {
-      clearTimeout(resizeResetTimeoutRef.current);
-      resizeResetTimeoutRef.current = null;
     }
   }, []);
 
@@ -958,7 +936,7 @@ function PlayPageClient() {
       setDanmuEpisodeOffset((prev) => prev + offset);
       danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
     },
-    [danmuEpisodeNum],
+    [],
   );
 
   usePlayerInitializer({
@@ -1005,7 +983,6 @@ function PlayPageClient() {
     analytics,
     ensureVideoSource,
     loadExternalDanmuRef,
-    sourceSwitchTimeoutRef,
     switchPromiseRef,
     danmuPluginStateRef,
     isSourceChangingRef,
@@ -1055,15 +1032,13 @@ function PlayPageClient() {
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
     return () => {
-      clearPlaybackTimers();
-
       // 释放 Wake Lock
       releaseWakeLock();
 
       // 销毁播放器实例
       cleanupPlayer();
     };
-  }, [cleanupPlayer, clearPlaybackTimers, releaseWakeLock]);
+  }, [cleanupPlayer, releaseWakeLock]);
 
   if (loading) {
     return (
@@ -1148,9 +1123,25 @@ function PlayPageClient() {
 export default function PlayPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <PlaybackDataProvider>
-        <PlayPageClient />
-      </PlaybackDataProvider>
+      <PlayPageDataBoundary />
     </Suspense>
+  );
+}
+
+function PlayPageDataBoundary() {
+  const searchParams = useSearchParams();
+  const routeQuery = searchParams.toString();
+  const includePlayRecordKeys = useMemo(() => {
+    const params = new URLSearchParams(routeQuery);
+    const source = params.get('source');
+    const id = params.get('id');
+
+    return source && id ? [generateStorageKey(source, id)] : [];
+  }, [routeQuery]);
+
+  return (
+    <PlaybackDataProvider includePlayRecordKeys={includePlayRecordKeys}>
+      <PlayPageClient />
+    </PlaybackDataProvider>
   );
 }

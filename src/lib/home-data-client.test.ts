@@ -5,7 +5,7 @@ import {
   patchHomeData,
   patchHomeLoadingState,
 } from './home-data-client';
-import { type HomeData,EMPTY_HOME_DATA } from './home-data-types';
+import { type HomeData, EMPTY_HOME_DATA } from './home-data-types';
 
 const item = {
   id: '1',
@@ -43,8 +43,24 @@ describe('home data client helpers', () => {
       ),
     ).toEqual({
       criticalLoading: false,
-      secondaryLoading: false,
       tertiaryLoading: true,
+      tvLoading: false,
+      varietyLoading: false,
+    });
+  });
+
+  it('creates independent loading flags for partial secondary data', () => {
+    expect(
+      createHomeLoadingState(
+        createHomeData({
+          hotTvShows: [item],
+        }),
+      ),
+    ).toEqual({
+      criticalLoading: true,
+      tertiaryLoading: true,
+      tvLoading: false,
+      varietyLoading: true,
     });
   });
 
@@ -92,15 +108,17 @@ describe('home data client helpers', () => {
       patchHomeLoadingState(
         {
           criticalLoading: true,
-          secondaryLoading: true,
           tertiaryLoading: true,
+          tvLoading: true,
+          varietyLoading: true,
         },
         { criticalLoading: false },
       ),
     ).toEqual({
       criticalLoading: false,
-      secondaryLoading: true,
       tertiaryLoading: true,
+      tvLoading: true,
+      varietyLoading: true,
     });
   });
 });

@@ -74,7 +74,25 @@ type InFlightDanmakuLoad = {
   key: string;
   startedAt: number;
   promise: Promise<DanmakuItemLike[]>;
+  controller: AbortController | null;
+  token: object;
 };
+
+function throwIfDanmakuLoadAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+
+  if (typeof DOMException !== 'undefined') {
+    throw new DOMException('弹幕请求已取消', 'AbortError');
+  }
+
+  const error = new Error('弹幕请求已取消');
+  error.name = 'AbortError';
+  throw error;
+}
+
+export function isDanmakuAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
 
 export function getDanmakuPlugin(art: ArtPlayerLike | null | undefined) {
   return art?.plugins?.artplayerPluginDanmuku;
@@ -149,6 +167,7 @@ export class DanmakuLoadManager {
   ) {}
 
   reset() {
+    this.inFlight?.controller?.abort();
     this.inFlight = null;
   }
 
@@ -173,8 +192,13 @@ export class DanmakuLoadManager {
       return this.inFlight.promise;
     }
 
-    const promise = this.loadByRequest(request).finally(() => {
-      if (this.inFlight?.key === request.key) {
+    this.reset();
+
+    const controller =
+      typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const token = {};
+    const promise = this.loadByRequest(request, controller).finally(() => {
+      if (this.inFlight?.token === token) {
         this.inFlight = null;
       }
     });
@@ -183,6 +207,8 @@ export class DanmakuLoadManager {
       key: request.key,
       startedAt: now,
       promise,
+      controller,
+      token,
     };
 
     return promise;
@@ -190,8 +216,11 @@ export class DanmakuLoadManager {
 
   private async loadByRequest(
     request: DanmakuRequest,
+    controller: AbortController | null,
   ): Promise<DanmakuItemLike[]> {
+    const signal = controller?.signal;
     const cached = await getDanmuCacheItem(request.key);
+    throwIfDanmakuLoadAborted(signal);
     const now = this.now();
 
     if (
@@ -201,17 +230,17 @@ export class DanmakuLoadManager {
       return cached.data;
     }
 
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller
       ? window.setTimeout(() => controller.abort(), this.timeoutMs)
       : null;
 
     try {
       const danmaku = await fetchExternalDanmaku(request, {
-        signal: controller?.signal,
+        signal,
       });
+      throwIfDanmakuLoadAborted(signal);
       await setDanmuCacheItem(request.key, danmaku);
+      throwIfDanmakuLoadAborted(signal);
       return danmaku;
     } finally {
       if (timeoutId !== null) {

@@ -7,6 +7,7 @@ import {
   clearDanmakuDisplay,
   createDanmakuLoadManager,
   DanmakuItemLike,
+  isDanmakuAbortError,
   loadAndRenderDanmaku,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
@@ -69,13 +70,23 @@ export function useDanmuController({
       episodeOffset: latestOffset,
       source: currentSourceRef.current,
     });
-    lastDanmuLoadKeyRef.current = loadManagerRef.current.activeKey;
-    const danmaku = await loadPromise.catch((error) => {
+    const requestKey = loadManagerRef.current.activeKey;
+    lastDanmuLoadKeyRef.current = requestKey;
+
+    try {
+      return await loadPromise;
+    } catch (error) {
+      if (isDanmakuAbortError(error)) {
+        throw error;
+      }
       console.error('加载外部弹幕失败:', error);
       return [];
-    });
-    danmuLoadingRef.current = false;
-    return danmaku;
+    } finally {
+      const activeKey = loadManagerRef.current.activeKey;
+      if (!activeKey || activeKey === requestKey) {
+        danmuLoadingRef.current = false;
+      }
+    }
   }, [
     currentSourceRef,
     currentEpisodeIndexRef,
@@ -120,6 +131,7 @@ export function useDanmuController({
             showNotice: true,
           });
         } catch (error) {
+          if (isDanmakuAbortError(error)) return;
           console.error('弹幕开关操作失败:', error);
           showDanmakuErrorNotice(art, error);
         }

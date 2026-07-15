@@ -16,36 +16,52 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
   // 防抖机制：防止 getAllPlayRecords 重复调用
   const favoriteUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFavoriteRef = useRef(false);
+  const pendingFavoritesRef = useRef<Record<string, Favorite> | null>(null);
+
+  const processPendingFavorites = useCallback(async () => {
+    if (isUpdatingFavoriteRef.current) return;
+
+    isUpdatingFavoriteRef.current = true;
+
+    try {
+      while (pendingFavoritesRef.current) {
+        const allFavorites = pendingFavoritesRef.current;
+        pendingFavoritesRef.current = null;
+
+        try {
+          const { getAllPlayRecords } = await import('@/lib/db.client');
+          const allPlayRecords = await getAllPlayRecords();
+
+          // 请求期间有更新到达时，旧结果不再写回，直接补全最新一版。
+          if (pendingFavoritesRef.current) continue;
+
+          setFavoriteItems(buildFavoriteItems(allFavorites, allPlayRecords));
+        } catch (error) {
+          console.error('更新收藏项失败:', error);
+          // 若失败期间已有更新到达，while 会继续处理最新 payload。
+        }
+      }
+    } finally {
+      isUpdatingFavoriteRef.current = false;
+    }
+  }, []);
 
   const updateFavoriteItems = useCallback(
-    async (allFavorites: Record<string, Favorite>) => {
-      if (isUpdatingFavoriteRef.current) {
-        return;
-      }
+    (allFavorites: Record<string, Favorite>) => {
+      pendingFavoritesRef.current = allFavorites;
+
+      if (isUpdatingFavoriteRef.current) return;
 
       if (favoriteUpdateTimeoutRef.current) {
         clearTimeout(favoriteUpdateTimeoutRef.current);
       }
 
-      favoriteUpdateTimeoutRef.current = setTimeout(async () => {
-        if (isUpdatingFavoriteRef.current) {
-          return;
-        }
-
-        try {
-          isUpdatingFavoriteRef.current = true;
-          const { getAllPlayRecords } = await import('@/lib/db.client');
-          const allPlayRecords = await getAllPlayRecords();
-
-          setFavoriteItems(buildFavoriteItems(allFavorites, allPlayRecords));
-        } catch (error) {
-          console.error('更新收藏项失败:', error);
-        } finally {
-          isUpdatingFavoriteRef.current = false;
-        }
+      favoriteUpdateTimeoutRef.current = setTimeout(() => {
+        favoriteUpdateTimeoutRef.current = null;
+        void processPendingFavorites();
       }, DELAYS.FAVORITE_UPDATE_DEBOUNCE);
     },
-    [],
+    [processPendingFavorites],
   );
 
   // 加载收藏夹数据
@@ -62,7 +78,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
       if (cancelled) return;
 
       const allFavorites = await getAllFavorites();
-      await updateFavoriteItems(allFavorites);
+      updateFavoriteItems(allFavorites);
 
       if (cancelled) return;
 
@@ -90,6 +106,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
       if (favoriteUpdateTimeoutRef.current) {
         clearTimeout(favoriteUpdateTimeoutRef.current);
       }
+      pendingFavoritesRef.current = null;
     };
   }, []);
 

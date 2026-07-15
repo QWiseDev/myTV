@@ -102,26 +102,36 @@ export const loadCriticalData = async () => {
 /**
  * 加载次要数据 - 电视剧和综艺
  */
-export const loadSecondaryData = async () => {
+export const loadSecondaryData = async ({
+  loadTvShows,
+  loadVarietyShows,
+}: {
+  loadTvShows: boolean;
+  loadVarietyShows: boolean;
+}) => {
   const [tvShowsResult, varietyShowsResult] = await Promise.allSettled([
-    withTimeout(
-      getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
-      DATA_FETCH_TIMEOUTS.SECONDARY,
-      {
-        code: 200,
-        message: 'fallback',
-        list: [],
-      },
-    ),
-    withTimeout(
-      getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
-      DATA_FETCH_TIMEOUTS.SECONDARY,
-      {
-        code: 200,
-        message: 'fallback',
-        list: [],
-      },
-    ),
+    loadTvShows
+      ? withTimeout(
+          getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
+          DATA_FETCH_TIMEOUTS.SECONDARY,
+          {
+            code: 200,
+            message: 'fallback',
+            list: [],
+          },
+        )
+      : Promise.resolve(undefined),
+    loadVarietyShows
+      ? withTimeout(
+          getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
+          DATA_FETCH_TIMEOUTS.SECONDARY,
+          {
+            code: 200,
+            message: 'fallback',
+            list: [],
+          },
+        )
+      : Promise.resolve(undefined),
   ]);
 
   return {

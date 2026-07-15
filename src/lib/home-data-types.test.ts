@@ -25,6 +25,25 @@ describe('getHomeDataAvailability', () => {
       hasCriticalData: true,
       hasSecondaryData: false,
       hasTertiaryData: false,
+      hasTvData: false,
+      hasVarietyData: false,
+      isComplete: false,
+    });
+  });
+
+  it('tracks TV and variety availability independently', () => {
+    const availability = getHomeDataAvailability({
+      ...EMPTY_HOME_DATA,
+      hotTvShows: [item],
+    });
+
+    expect(availability).toEqual({
+      hasAnyData: true,
+      hasCriticalData: false,
+      hasSecondaryData: false,
+      hasTertiaryData: false,
+      hasTvData: true,
+      hasVarietyData: false,
       isComplete: false,
     });
   });
@@ -38,7 +57,7 @@ describe('getHomeDataAvailability', () => {
         bangumiCalendarData: [
           { weekday: { en: 'Mon', cn: '周一', ja: '月' }, items: [] },
         ],
-      }).isComplete
+      }).isComplete,
     ).toBe(true);
   });
 });

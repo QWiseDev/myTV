@@ -3,7 +3,8 @@ doc_type: audit-index
 audit: 2026-06-27-home-review
 scope: 首页 /home 功能、首页 API 聚合、继续观看、收藏夹、AI 推荐、豆瓣/Bangumi 展示与横向滚动
 created: 2026-06-27
-status: resolved
+status: superseded
+superseded-by: 2026-07-15-home-deep-review
 total_findings: 7
 ---
 

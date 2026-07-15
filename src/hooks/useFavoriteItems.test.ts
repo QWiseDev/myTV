@@ -52,6 +52,17 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 async function runFavoriteDebounce() {
   await act(async () => {
     jest.advanceTimersByTime(300);
@@ -155,6 +166,87 @@ describe('useFavoriteItems', () => {
     await runFavoriteDebounce();
 
     expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(1);
+  });
+
+  it('processes the latest favorites payload received during record enrichment', async () => {
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    const pendingPlayRecords = createDeferred<Record<string, PlayRecord>>();
+    mockGetAllPlayRecords
+      .mockReset()
+      .mockImplementationOnce(() => pendingPlayRecords.promise)
+      .mockResolvedValueOnce({});
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        [favoriteKey]: createFavorite({ title: '旧收藏' }),
+      });
+    });
+    await runFavoriteDebounce();
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        [favoriteKey]: createFavorite({ save_time: 300, title: '新收藏' }),
+      });
+    });
+
+    await act(async () => {
+      pendingPlayRecords.resolve({});
+      await flushAsyncWork();
+    });
+
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(2);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '新收藏' }),
+    ]);
+  });
+
+  it('continues with the latest payload when the superseded enrichment fails', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    const failedPlayRecords = createDeferred<Record<string, PlayRecord>>();
+    mockGetAllPlayRecords
+      .mockReset()
+      .mockImplementationOnce(() => failedPlayRecords.promise)
+      .mockResolvedValueOnce({});
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        [favoriteKey]: createFavorite({ title: '旧收藏' }),
+      });
+    });
+    await runFavoriteDebounce();
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        [favoriteKey]: createFavorite({ save_time: 300, title: '新收藏' }),
+      });
+    });
+
+    await act(async () => {
+      failedPlayRecords.reject(new Error('temporary failure'));
+      await flushAsyncWork();
+    });
+
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(2);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '新收藏' }),
+    ]);
+    consoleError.mockRestore();
   });
 
   it('cancels pending favorite updates after unmount', async () => {

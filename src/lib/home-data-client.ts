@@ -6,8 +6,9 @@ import {
 
 export interface HomeLoadingState {
   criticalLoading: boolean;
-  secondaryLoading: boolean;
   tertiaryLoading: boolean;
+  tvLoading: boolean;
+  varietyLoading: boolean;
 }
 
 function preferNonEmptyArray<T>(incoming: T[], current: T[]): T[] {
@@ -32,11 +33,11 @@ export function createHomeLoadingState(
 
   return {
     criticalLoading: !availability.hasCriticalData,
-    secondaryLoading: !availability.hasSecondaryData,
     tertiaryLoading: !availability.hasTertiaryData,
+    tvLoading: !availability.hasTvData,
+    varietyLoading: !availability.hasVarietyData,
   };
 }
-
 
 export function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
   return {

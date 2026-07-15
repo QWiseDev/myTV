@@ -20,30 +20,35 @@ export interface HomeDataAvailability {
   hasCriticalData: boolean;
   hasSecondaryData: boolean;
   hasTertiaryData: boolean;
+  hasTvData: boolean;
+  hasVarietyData: boolean;
   isComplete: boolean;
 }
 
 export function getHomeDataAvailability(
-  data: HomeData | null | undefined
+  data: HomeData | null | undefined,
 ): HomeDataAvailability {
   const hasCriticalData = Boolean(data?.hotMovies.length);
-  const hasSecondaryData = Boolean(
-    data?.hotTvShows.length && data.hotVarietyShows.length
-  );
+  const hasTvData = Boolean(data?.hotTvShows.length);
+  const hasVarietyData = Boolean(data?.hotVarietyShows.length);
+  const hasSecondaryData = hasTvData && hasVarietyData;
   const hasTertiaryData = Boolean(data?.bangumiCalendarData.length);
-  const hasAnyData = hasCriticalData || hasSecondaryData || hasTertiaryData;
+  const hasAnyData =
+    hasCriticalData || hasTvData || hasVarietyData || hasTertiaryData;
 
   return {
     hasAnyData,
     hasCriticalData,
     hasSecondaryData,
     hasTertiaryData,
+    hasTvData,
+    hasVarietyData,
     isComplete: hasCriticalData && hasSecondaryData && hasTertiaryData,
   };
 }
 
 export function hasHomeData(
-  data: HomeData | null | undefined
+  data: HomeData | null | undefined,
 ): data is HomeData {
   return getHomeDataAvailability(data).hasAnyData;
 }

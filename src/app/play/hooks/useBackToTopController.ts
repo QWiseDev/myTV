@@ -14,42 +14,26 @@ export function useBackToTopController({
 }: UseBackToTopControllerOptions) {
   useEffect(() => {
     const getScrollTop = () => document.body.scrollTop || 0;
+    let frameId: number | null = null;
 
-    let running = true;
-    let lastCheck = 0;
-    const throttleInterval = 200; // ✅ 限制检查频率为 200ms（5Hz），降低 CPU 占用
-    
-    const checkScrollPosition = () => {
-      if (!running) return;
-      
-      const now = Date.now();
-      if (now - lastCheck >= throttleInterval) {
-        lastCheck = now;
-        setShowBackToTop(getScrollTop() > 300);
-      }
-      
-      requestAnimationFrame(checkScrollPosition);
+    const updateVisibility = () => {
+      frameId = null;
+      setShowBackToTop(getScrollTop() > 300);
     };
 
-    checkScrollPosition();
-
-    // ✅ scroll 事件已经有节流，但可以进一步优化
-    let scrollTimeout: NodeJS.Timeout | null = null;
     const handleScroll = () => {
-      if (scrollTimeout) return; // 防抖：已有待执行的更新
-      
-      scrollTimeout = setTimeout(() => {
-        setShowBackToTop(getScrollTop() > 300);
-        scrollTimeout = null;
-      }, 100); // 100ms 防抖
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(updateVisibility);
     };
 
+    updateVisibility();
     document.body.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      running = false;
-      if (scrollTimeout) clearTimeout(scrollTimeout);
       document.body.removeEventListener('scroll', handleScroll);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
     };
   }, [setShowBackToTop]);
 

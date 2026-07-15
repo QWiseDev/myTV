@@ -1,15 +1,22 @@
 'use client';
 
-import { Dispatch, MutableRefObject, SetStateAction, useCallback } from 'react';
+import {
+  Dispatch,
+  MutableRefObject,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 
 import { cachedGet } from '@/lib/api-cache.client';
-import { deletePlayRecord } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
 
 import {
   ArtPlayerLike,
   clearDanmakuDisplay,
   DanmakuItemLike,
+  isDanmakuAbortError,
   loadAndRenderDanmaku,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
@@ -77,13 +84,43 @@ export function useSourceSwitcher({
   externalDanmuEnabledRef,
   loadExternalDanmu,
 }: UseSourceSwitcherParams) {
+  const availableSourcesRef = useRef(availableSources);
+  const operationGenerationRef = useRef(0);
+  availableSourcesRef.current = availableSources;
+
+  useEffect(() => {
+    return () => {
+      operationGenerationRef.current += 1;
+      isSourceChangingRef.current = false;
+    };
+  }, [isSourceChangingRef]);
+
   const handleSourceChange = useCallback(
     async (newSource: string, newId: string, newTitle: string) => {
-      try {
-        if (isSourceChangingRef.current) {
-          return;
-        }
+      if (isSourceChangingRef.current) {
+        return;
+      }
 
+      const sourcePageUrl = new URL(window.location.href);
+      if (sourcePageUrl.pathname !== '/play') {
+        return;
+      }
+
+      const operationGeneration = ++operationGenerationRef.current;
+      const isCurrentOperation = () =>
+        operationGenerationRef.current === operationGeneration;
+      const isStillOnSourcePage = () =>
+        sourcePageUrl.pathname === '/play' &&
+        window.location.pathname === sourcePageUrl.pathname;
+      const canCommitOperation = () =>
+        isCurrentOperation() && isStillOnSourcePage();
+      const abandonOperation = () => {
+        if (isCurrentOperation()) {
+          isSourceChangingRef.current = false;
+        }
+      };
+
+      try {
         isSourceChangingRef.current = true;
 
         setVideoLoadingStage('sourceChanging');
@@ -105,18 +142,7 @@ export function useSourceSwitcher({
 
         const currentPlayTime = artPlayerRef.current?.currentTime || 0;
 
-        if (currentSourceRef.current && currentIdRef.current) {
-          try {
-            await deletePlayRecord(
-              currentSourceRef.current,
-              currentIdRef.current,
-            );
-          } catch (err) {
-            console.error('清除播放记录失败:', err);
-          }
-        }
-
-        const newDetail = findSourceByIdentity(availableSources, {
+        const newDetail = findSourceByIdentity(availableSourcesRef.current, {
           source: newSource,
           id: newId,
         });
@@ -140,6 +166,10 @@ export function useSourceSwitcher({
               console.warn('补全换源详情失败，继续使用搜索结果:', error),
           },
         );
+        if (!canCommitOperation()) {
+          abandonOperation();
+          return;
+        }
 
         let targetIndex = currentEpisodeIndex;
 
@@ -150,6 +180,10 @@ export function useSourceSwitcher({
           targetIndex = 0;
         }
 
+        const targetVideoUrl = resolvedDetail.episodes?.[targetIndex]?.trim();
+        if (!targetVideoUrl) {
+          throw new Error('目标播放源当前集没有可播放地址');
+        }
         if (targetIndex !== currentEpisodeIndex) {
           resumeTimeRef.current = 0;
         } else if (
@@ -159,12 +193,23 @@ export function useSourceSwitcher({
           resumeTimeRef.current = currentPlayTime;
         }
 
-        setVideoTitle(resolvedDetail.title || newTitle);
+        const resolvedTitle = resolvedDetail.title || newTitle;
+        const resolvedDoubanId = resolveDoubanId(
+          resolvedDetail,
+          videoDoubanIdRef.current,
+        );
+
+        if (!canCommitOperation()) {
+          abandonOperation();
+          return;
+        }
+
+        setVideoTitle(resolvedTitle);
         setVideoYear(resolvedDetail.year);
         setVideoCover(resolvedDetail.poster);
-        setVideoDoubanId(
-          resolveDoubanId(resolvedDetail, videoDoubanIdRef.current),
-        );
+        setVideoDoubanId(resolvedDoubanId);
+        currentSourceRef.current = newSource;
+        currentIdRef.current = newId;
         setCurrentSource(newSource);
         setCurrentId(newId);
         setDetail(resolvedDetail);
@@ -182,13 +227,34 @@ export function useSourceSwitcher({
         });
         setCurrentEpisodeIndex(targetIndex);
 
-        const newUrl = new URL(window.location.href);
+        const newUrl = new URL(sourcePageUrl.toString());
         newUrl.searchParams.set('source', newSource);
         newUrl.searchParams.set('id', newId);
-        newUrl.searchParams.set('year', resolvedDetail.year);
+        newUrl.searchParams.set('title', resolvedTitle);
+        if (resolvedDetail.year) {
+          newUrl.searchParams.set('year', resolvedDetail.year);
+        } else {
+          newUrl.searchParams.delete('year');
+        }
+        if (resolvedDetail.poster) {
+          newUrl.searchParams.set('poster', resolvedDetail.poster);
+        } else {
+          newUrl.searchParams.delete('poster');
+        }
+        if (resolvedDoubanId > 0) {
+          newUrl.searchParams.set('douban_id', String(resolvedDoubanId));
+        } else {
+          newUrl.searchParams.delete('douban_id');
+        }
+        newUrl.searchParams.delete('prefer');
+        if (!canCommitOperation()) {
+          abandonOperation();
+          return;
+        }
         window.history.replaceState({}, '', newUrl.toString());
 
         setTimeout(async () => {
+          if (!canCommitOperation()) return;
           const art = artPlayerRef.current;
 
           if (
@@ -204,19 +270,21 @@ export function useSourceSwitcher({
                 showNotice: true,
               });
             } catch (error) {
+              if (isDanmakuAbortError(error)) return;
               console.error('换源后弹幕加载失败:', error);
               showDanmakuErrorNotice(art, error);
             }
           }
         }, 1000);
       } catch (err) {
+        if (!isCurrentOperation()) return;
         isSourceChangingRef.current = false;
+        if (!isStillOnSourcePage()) return;
         setIsVideoLoading(false);
         setError(err instanceof Error ? err.message : '换源失败');
       }
     },
     [
-      availableSources,
       artPlayerRef,
       currentEpisodeIndex,
       currentIdRef,

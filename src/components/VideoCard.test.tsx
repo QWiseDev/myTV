@@ -1,18 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const mockRouterPush = jest.fn();
 const mockDeleteFavorite = jest.fn();
 const mockDeletePlayRecord = jest.fn();
 const mockIsFavorited = jest.fn();
 const mockSaveFavorite = jest.fn();
 const mockSubscribeToDataUpdates = jest.fn();
-
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockRouterPush,
-  }),
-}));
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -96,7 +89,6 @@ describe('VideoCard behavior', () => {
   beforeEach(() => {
     favoriteUpdateHandler = undefined;
     localStorage.clear();
-    mockRouterPush.mockReset();
     mockDeleteFavorite.mockReset();
     mockDeletePlayRecord.mockReset();
     mockIsFavorited.mockReset();
@@ -179,6 +171,56 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('shares image proxy listeners across multiple cards', () => {
+    const addEventListenerSpy = jest.spyOn(window, 'addEventListener');
+    const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener');
+
+    const { unmount } = render(
+      <>
+        <VideoCard from='douban' poster={bangumiPoster} title='影片 A' />
+        <VideoCard from='douban' poster={bangumiPoster} title='影片 B' />
+        <VideoCard from='douban' poster={bangumiPoster} title='影片 C' />
+      </>,
+    );
+
+    expect(
+      addEventListenerSpy.mock.calls.filter(
+        ([eventName]) => eventName === 'doubanImageProxyChanged',
+      ),
+    ).toHaveLength(1);
+    expect(
+      addEventListenerSpy.mock.calls.filter(
+        ([eventName]) => eventName === 'storage',
+      ),
+    ).toHaveLength(1);
+
+    unmount();
+
+    expect(
+      removeEventListenerSpy.mock.calls.filter(
+        ([eventName]) => eventName === 'doubanImageProxyChanged',
+      ),
+    ).toHaveLength(1);
+    expect(
+      removeEventListenerSpy.mock.calls.filter(
+        ([eventName]) => eventName === 'storage',
+      ),
+    ).toHaveLength(1);
+
+    addEventListenerSpy.mockRestore();
+    removeEventListenerSpy.mockRestore();
+  });
+
+  it('does not mount action sheet timers before the first open', () => {
+    jest.useFakeTimers();
+
+    render(
+      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
+    );
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('marks the poster as loaded after the image load event', async () => {
     render(
       <VideoCard
@@ -229,6 +271,39 @@ describe('VideoCard behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('添加收藏')).not.toBeNull();
     });
+  });
+
+  it('does not let an older favorite query overwrite a newer update event', async () => {
+    jest.useFakeTimers();
+    Reflect.deleteProperty(window, 'requestIdleCallback');
+    let resolveFavoriteStatus: (favorited: boolean) => void = () => undefined;
+    mockIsFavorited.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveFavoriteStatus = resolve;
+      }),
+    );
+
+    renderSourceBackedCard();
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+      await flushAsyncWork();
+    });
+    expect(mockIsFavorited).toHaveBeenCalledWith('source-a', 'video-a');
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        'source-a+video-a': { title: '测试影片' },
+      });
+    });
+    openActionSheet();
+    expect(await screen.findByText('取消收藏')).not.toBeNull();
+
+    await act(async () => {
+      resolveFavoriteStatus(false);
+      await flushAsyncWork();
+    });
+
+    expect(screen.getByText('取消收藏')).not.toBeNull();
   });
 
   it('cancels the delayed favorite status check after unmount', async () => {

@@ -1,10 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
+import { navigateVideoCardPlayUrl } from '@/lib/video-card-utils';
 
 interface RecommendationItem {
   id: string;
@@ -32,7 +32,7 @@ function RecommendationPoster({ poster, title }: RecommendationPosterProps) {
   const normalizedPoster = poster.replace(/^http:/, 'https:');
   const fallbackUrls = useMemo(
     () => getImageFallbackUrls(normalizedPoster),
-    [normalizedPoster]
+    [normalizedPoster],
   );
   const imageSrc =
     fallbackUrls[fallbackIndex] || processImageUrl(normalizedPoster);
@@ -78,8 +78,6 @@ export default function RecommendationsSection({
   recommendations,
   isEpisodic = false,
 }: RecommendationsSectionProps) {
-  const router = useRouter();
-
   if (!recommendations || recommendations.length === 0) {
     return null;
   }
@@ -88,7 +86,7 @@ export default function RecommendationsSection({
     const playUrl = `/play?title=${encodeURIComponent(item.title)}&douban_id=${
       item.id
     }&prefer=true`;
-    router.push(playUrl);
+    navigateVideoCardPlayUrl(playUrl);
   };
 
   return (

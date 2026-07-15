@@ -13,7 +13,7 @@ const edgePrimitives = jest.requireActual(
 };
 
 describe('/api/image-proxy', () => {
-  const imageProxyMaxConcurrentRequests = 12;
+  const imageProxyMaxConcurrentRequests = 6;
 
   let GET: typeof import('./route').GET;
   let originalFetch: typeof global.fetch;

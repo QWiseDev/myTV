@@ -1,3 +1,5 @@
+import { waitFor } from '@testing-library/react';
+
 import {
   clearDanmakuDisplay,
   createDanmakuRequest,
@@ -124,6 +126,91 @@ describe('danmakuRuntime', () => {
       '/api/danmu-external?douban_id=123&title=%E6%B5%8B%E8%AF%95%E5%89%A7&year=2024&episode=1',
       { signal: expect.any(AbortSignal) },
     );
+  });
+
+  test('aborts the previous request when a new request key starts', async () => {
+    (getDanmuCacheItem as jest.Mock).mockResolvedValue(null);
+    const pendingResponses: Array<{
+      resolve: (response: Response) => void;
+      signal?: AbortSignal;
+    }> = [];
+    (global.fetch as jest.Mock).mockImplementation(
+      (_url: string, options?: { signal?: AbortSignal }) =>
+        new Promise<Response>((resolve) => {
+          pendingResponses.push({ resolve, signal: options?.signal });
+        }),
+    );
+
+    const manager = new DanmakuLoadManager(() => 10000);
+    const firstResult = manager
+      .load({
+        enabled: true,
+        videoTitle: '测试剧',
+        episodeIndex: 0,
+        episodeOffset: 0,
+      })
+      .catch((error) => error);
+    await waitFor(() => {
+      expect(pendingResponses).toHaveLength(1);
+    });
+
+    const secondResult = manager.load({
+      enabled: true,
+      videoTitle: '测试剧',
+      episodeIndex: 1,
+      episodeOffset: 0,
+    });
+    await waitFor(() => {
+      expect(pendingResponses).toHaveLength(2);
+    });
+
+    expect(pendingResponses[0].signal?.aborted).toBe(true);
+    pendingResponses[0].resolve({
+      ok: true,
+      json: async () => ({ danmu: [{ text: 'old' }] }),
+    } as Response);
+    pendingResponses[1].resolve({
+      ok: true,
+      json: async () => ({ danmu: [{ text: 'current' }] }),
+    } as Response);
+
+    await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
+    await expect(secondResult).resolves.toEqual([{ text: 'current' }]);
+  });
+
+  test('reset aborts the active request', async () => {
+    (getDanmuCacheItem as jest.Mock).mockResolvedValue(null);
+    let resolveResponse: (response: Response) => void = () => undefined;
+    let requestSignal: AbortSignal | undefined;
+    (global.fetch as jest.Mock).mockImplementation(
+      (_url: string, options?: { signal?: AbortSignal }) =>
+        new Promise<Response>((resolve) => {
+          requestSignal = options?.signal;
+          resolveResponse = resolve;
+        }),
+    );
+
+    const manager = new DanmakuLoadManager(() => 10000);
+    const result = manager
+      .load({
+        enabled: true,
+        videoTitle: '测试剧',
+        episodeIndex: 0,
+        episodeOffset: 0,
+      })
+      .catch((error) => error);
+    await waitFor(() => {
+      expect(requestSignal).toBeDefined();
+    });
+
+    manager.reset();
+    expect(requestSignal?.aborted).toBe(true);
+
+    resolveResponse({
+      ok: true,
+      json: async () => ({ danmu: [] }),
+    } as Response);
+    await expect(result).resolves.toMatchObject({ name: 'AbortError' });
   });
 
   test('clears and hides the plugin through one runtime path', () => {

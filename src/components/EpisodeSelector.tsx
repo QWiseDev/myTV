@@ -13,6 +13,8 @@ import { SearchResult } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
 
 import {
+  buildEpisodeProbeCacheKey,
+  buildEpisodeSourceKey,
   EpisodeSourceCheckResult,
   planEpisodeSourceChecks,
   probePlayableMediaUrl,
@@ -81,13 +83,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 }) => {
   const router = useRouter();
   const pageCount = Math.ceil(totalEpisodes / episodesPerPage);
+  const selectedEpisodeIndex = Math.max(value - 1, 0);
 
   // 存储每个源的视频信息
   const [videoInfoMap, setVideoInfoMap] = useState<Map<string, VideoInfo>>(
     new Map(),
-  );
-  const [attemptedSources, setAttemptedSources] = useState<Set<string>>(
-    new Set(),
   );
 
   // ==================== "检查当前集" 状态 ====================
@@ -122,17 +122,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 使用 ref 来避免闭包问题
   const attemptedSourcesRef = useRef<Set<string>>(new Set());
-  const videoInfoMapRef = useRef<Map<string, VideoInfo>>(new Map());
   const sourceSearchRequestKeyRef = useRef<string>('');
-
-  // 同步状态到 ref
-  useEffect(() => {
-    attemptedSourcesRef.current = attemptedSources;
-  }, [attemptedSources]);
-
-  useEffect(() => {
-    videoInfoMapRef.current = videoInfoMap;
-  }, [videoInfoMap]);
 
   // 主要的 tab 状态：'episodes' 或 'sources'
   // 当只有一集时默认展示 "换源"，并隐藏 "选集" 标签
@@ -168,15 +158,19 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     if (validPage !== currentPage) {
       setCurrentPage(validPage);
     }
-  }, [value, episodesPerPage, pageCount]); // 移除currentPage依赖避免循环触发
+  }, [activeTab, currentPage, episodesPerPage, pageCount, value]);
 
   // 获取视频信息的函数 - 移除 attemptedSources 依赖避免不必要的重新创建
   const getVideoInfo = useCallback(
     async (source: SearchResult) => {
-      const sourceKey = `${source.source}-${source.id}`;
+      const sourceKey = buildEpisodeSourceKey(source);
+      const probeCacheKey = buildEpisodeProbeCacheKey(
+        sourceKey,
+        selectedEpisodeIndex,
+      );
 
       // 使用 ref 获取最新的状态，避免闭包问题
-      if (attemptedSourcesRef.current.has(sourceKey)) {
+      if (attemptedSourcesRef.current.has(probeCacheKey)) {
         return;
       }
 
@@ -185,7 +179,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         return;
       }
       const episodeIndex = Math.min(
-        Math.max(value - 1, 0),
+        selectedEpisodeIndex,
         source.episodes.length - 1,
       );
       const episodeData = source.episodes[episodeIndex] || source.episodes[0];
@@ -200,7 +194,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       };
 
       // 标记为已尝试
-      setAttemptedSources((prev) => new Set(prev).add(sourceKey));
+      attemptedSourcesRef.current.add(probeCacheKey);
 
       try {
         const probeUrl = await resolveProbeUrl();
@@ -217,7 +211,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             signal: controller.signal,
           });
           setVideoInfoMap((prev) =>
-            new Map(prev).set(sourceKey, {
+            new Map(prev).set(probeCacheKey, {
               quality: info.quality,
               loadSpeed: info.loadSpeed,
               pingTime: info.pingTimeMs,
@@ -229,7 +223,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       } catch {
         // 使用与“检查当前集”一致的口径：探测失败即标记为异常
         setVideoInfoMap((prev) =>
-          new Map(prev).set(sourceKey, {
+          new Map(prev).set(probeCacheKey, {
             quality: '错误',
             loadSpeed: '未知',
             pingTime: 0,
@@ -238,7 +232,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         );
       }
     },
-    [value],
+    [selectedEpisodeIndex],
   );
 
   // 当有预计算结果时，先合并到videoInfoMap中
@@ -247,13 +241,16 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       // 仅作为首屏占位展示，后续仍会走一次真实可播探测覆盖结果
       setVideoInfoMap((prev) => {
         const newMap = new Map(prev);
-        precomputedVideoInfo.forEach((value, key) => {
-          newMap.set(key, value);
+        precomputedVideoInfo.forEach((videoInfo, sourceKey) => {
+          newMap.set(
+            buildEpisodeProbeCacheKey(sourceKey, selectedEpisodeIndex),
+            videoInfo,
+          );
         });
         return newMap;
       });
     }
-  }, [precomputedVideoInfo]);
+  }, [precomputedVideoInfo, selectedEpisodeIndex]);
 
   // 读取本地"优选和测速"开关，默认开启
   const [optimizationEnabled] = useState<boolean>(() => {
@@ -284,8 +281,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
       // 筛选出尚未测速的播放源
       const pendingSources = availableSources.filter((source) => {
-        const sourceKey = `${source.source}-${source.id}`;
-        return !attemptedSourcesRef.current.has(sourceKey);
+        const sourceKey = buildEpisodeSourceKey(source);
+        const probeCacheKey = buildEpisodeProbeCacheKey(
+          sourceKey,
+          selectedEpisodeIndex,
+        );
+        return !attemptedSourcesRef.current.has(probeCacheKey);
       });
 
       if (pendingSources.length === 0) return;
@@ -299,13 +300,14 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     };
 
     fetchVideoInfosInBatches();
-    // 修复依赖项：移除 availableSources，使用长度避免对象引用变化
+    // 来源数组整体变化时重新筛选，等长替换也必须触发新来源测速。
   }, [
     activeTab,
-    availableSources.length,
+    availableSources,
     episodeCheckRun.status,
     getVideoInfo,
     optimizationEnabled,
+    selectedEpisodeIndex,
   ]);
 
   const isEpisodeChecking =
@@ -395,11 +397,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       s === 'success' || s === 'error' || s === 'skipped' || s === 'cancelled';
 
     const onUpdate = (next: EpisodeSourceCheckResult) => {
-      setEpisodeCheckResults((prev) => {
-        const nextMap = new Map(prev);
-        nextMap.set(next.sourceKey, next);
-        return nextMap;
-      });
+      if (episodeCheckRunIdRef.current !== runId) return;
+
+      setEpisodeCheckResults((prev) =>
+        new Map(prev).set(next.sourceKey, next),
+      );
 
       // 进度更新：只在进入最终态时 +1，避免 checking -> success 重复计数
       const prev = episodeCheckResultsRef.current.get(next.sourceKey);
@@ -509,7 +511,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       // 如果只有1集且当前在选集tab，自动切换到换源tab
       setActiveTab('sources');
     }
-  }, [totalEpisodes]); // 只依赖totalEpisodes，避免与activeTab变化产生循环
+  }, [activeTab, totalEpisodes]);
 
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -991,7 +993,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                 )}
                               </div>
                               {(() => {
-                                const sourceKey = `${source.source}-${source.id}`;
+                                const sourceKey =
+                                  buildEpisodeSourceKey(source);
                                 const check =
                                   episodeCheckResults.get(sourceKey);
 
@@ -1031,7 +1034,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                   );
                                 }
 
-                                const videoInfo = videoInfoMap.get(sourceKey);
+                                const videoInfo = videoInfoMap.get(
+                                  buildEpisodeProbeCacheKey(
+                                    sourceKey,
+                                    selectedEpisodeIndex,
+                                  ),
+                                );
 
                                 if (videoInfo && videoInfo.quality !== '未知') {
                                   if (videoInfo.hasError) {
@@ -1083,7 +1091,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                             {/* 网络信息 - 底部 */}
                             <div className='flex items-end h-5 sm:h-6'>
                               {(() => {
-                                const sourceKey = `${source.source}-${source.id}`;
+                                const sourceKey =
+                                  buildEpisodeSourceKey(source);
                                 const check =
                                   episodeCheckResults.get(sourceKey);
 
@@ -1139,7 +1148,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                   }
                                 }
 
-                                const videoInfo = videoInfoMap.get(sourceKey);
+                                const videoInfo = videoInfoMap.get(
+                                  buildEpisodeProbeCacheKey(
+                                    sourceKey,
+                                    selectedEpisodeIndex,
+                                  ),
+                                );
                                 if (videoInfo) {
                                   if (!videoInfo.hasError) {
                                     return (

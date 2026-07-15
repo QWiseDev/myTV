@@ -70,8 +70,15 @@ export function buildEpisodeSourceKey(
   return `${String(source.source)}-${String(source.id)}`;
 }
 
+export function buildEpisodeProbeCacheKey(
+  sourceKey: string,
+  episodeIndex: number,
+): string {
+  return `${sourceKey}::episode-${episodeIndex}`;
+}
+
 export function isLikelyHlsUrl(url: string): boolean {
-  return /\.m3u8($|\?)/i.test(url);
+  return /\.m3u8(?:$|[?#])/i.test(url);
 }
 
 export function qualityFromHeight(height: number): string {

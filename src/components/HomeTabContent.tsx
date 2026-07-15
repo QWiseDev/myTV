@@ -68,7 +68,8 @@ export default function HomeTabContent({
     Object.keys(continueWatching.playRecords).length > 0;
   const { hotMovies, hotTvShows, hotVarietyShows, bangumiCalendarData } =
     homeData;
-  const { criticalLoading, secondaryLoading, tertiaryLoading } = loading;
+  const { criticalLoading, tertiaryLoading, tvLoading, varietyLoading } =
+    loading;
 
   return (
     <>
@@ -110,7 +111,7 @@ export default function HomeTabContent({
           icon={Tv}
           linkHref='/douban?type=tv'
           data={hotTvShows}
-          loading={secondaryLoading}
+          loading={tvLoading}
           enableAnimation={false}
           renderItem={(show) => renderDoubanCard(show)}
         />
@@ -131,7 +132,7 @@ export default function HomeTabContent({
           icon={Sparkles}
           linkHref='/douban?type=show'
           data={hotVarietyShows}
-          loading={secondaryLoading}
+          loading={varietyLoading}
           enableAnimation={false}
           renderItem={(show) => renderDoubanCard(show)}
         />

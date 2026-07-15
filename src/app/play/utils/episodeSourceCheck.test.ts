@@ -1,6 +1,8 @@
 import type { SearchResult } from '@/lib/types';
 
 import {
+  buildEpisodeProbeCacheKey,
+  isLikelyHlsUrl,
   planEpisodeSourceChecks,
   runEpisodeSourceChecks,
 } from '@/app/play/utils/episodeSourceCheck';
@@ -20,6 +22,17 @@ function createSource(overrides: Partial<SearchResult>): SearchResult {
 }
 
 describe('episodeSourceCheck', () => {
+  test('buildEpisodeProbeCacheKey: different episodes use different cache entries', () => {
+    expect(buildEpisodeProbeCacheKey('s1-a', 0)).toBe('s1-a::episode-0');
+    expect(buildEpisodeProbeCacheKey('s1-a', 1)).toBe('s1-a::episode-1');
+  });
+
+  test('isLikelyHlsUrl: recognises query strings and fragments', () => {
+    expect(isLikelyHlsUrl('https://example.com/live.m3u8?token=1')).toBe(true);
+    expect(isLikelyHlsUrl('https://example.com/live.m3u8#segment')).toBe(true);
+    expect(isLikelyHlsUrl('https://example.com/live.mp4#segment')).toBe(false);
+  });
+
   test('planEpisodeSourceChecks: current source is placed first', () => {
     const a = createSource({ id: 'a', source: 's1', source_name: 'S1' });
     const b = createSource({ id: 'b', source: 's2', source_name: 'S2' });

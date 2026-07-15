@@ -49,9 +49,15 @@ export function usePlaybackData() {
 
 interface PlaybackDataProviderProps {
   children: ReactNode;
+  includePlayRecordKeys?: string[];
 }
 
-export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
+const EMPTY_INCLUDE_PLAY_RECORD_KEYS: string[] = [];
+
+export function PlaybackDataProvider({
+  children,
+  includePlayRecordKeys = EMPTY_INCLUDE_PLAY_RECORD_KEYS,
+}: PlaybackDataProviderProps) {
   const {
     loadingWatchingUpdates,
     refreshWatchingUpdates,
@@ -65,6 +71,13 @@ export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
         .map((series) => generateStorageKey(series.sourceKey, series.videoId)),
     [watchingUpdates?.updatedSeries],
   );
+  const firstPagePlayRecordKeys = useMemo(
+    () =>
+      Array.from(
+        new Set([...includePlayRecordKeys, ...priorityPlayRecordKeys]),
+      ),
+    [includePlayRecordKeys, priorityPlayRecordKeys],
+  );
   const {
     loadingPlayRecords,
     loadingMorePlayRecords,
@@ -75,7 +88,7 @@ export function PlaybackDataProvider({ children }: PlaybackDataProviderProps) {
     playRecords,
     refreshPlayRecords,
     setPlayRecords,
-  } = usePlaybackRecords(refreshWatchingUpdates, priorityPlayRecordKeys);
+  } = usePlaybackRecords(refreshWatchingUpdates, firstPagePlayRecordKeys);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(

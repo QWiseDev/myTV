@@ -9,7 +9,9 @@ import React, {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 
 import {
@@ -22,12 +24,14 @@ import {
 } from '@/lib/db.client';
 import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import {
+  type FavoriteStatusLoadParams,
+  type SearchFavoriteStatusParams,
   buildPlayUrl,
   buildVideoCardSubjectUrl,
   canToggleVideoCardFavorite,
   cardContainerStyle,
-  getVideoCardEntryPoster,
   getVideoCardConfig,
+  getVideoCardEntryPoster,
   getVideoCardSearchType,
   navigateVideoCardPlayUrl,
   noPointerStyle,
@@ -37,8 +41,6 @@ import {
   shouldCheckSearchFavoriteStatus,
   shouldLoadVideoCardFavoriteStatus,
   shouldUseUnoptimizedImage,
-  type FavoriteStatusLoadParams,
-  type SearchFavoriteStatusParams,
 } from '@/lib/video-card-utils';
 import { useLongPress } from '@/hooks/useLongPress';
 import { useMobileActions } from '@/hooks/useMobileActions';
@@ -96,34 +98,54 @@ function useSyncedState<T>(
   return [state, setState];
 }
 
-function useImageProxyVersion() {
-  const [imageProxyVersion, setImageProxyVersion] = useState(0);
+let imageProxyVersion = 0;
+const imageProxyListeners = new Set<() => void>();
+let detachImageProxyListeners: (() => void) | null = null;
 
-  useEffect(() => {
-    const handleImageProxyChange = () => {
-      setImageProxyVersion((version) => version + 1);
-    };
+function notifyImageProxyChange() {
+  imageProxyVersion += 1;
+  imageProxyListeners.forEach((listener) => listener());
+}
+
+function subscribeImageProxyVersion(listener: () => void) {
+  imageProxyListeners.add(listener);
+
+  if (!detachImageProxyListeners) {
     const handleStorageChange = (event: StorageEvent) => {
       if (
         event.key === 'doubanImageProxyType' ||
         event.key === 'doubanImageProxyUrl'
       ) {
-        handleImageProxyChange();
+        notifyImageProxyChange();
       }
     };
 
-    window.addEventListener('doubanImageProxyChanged', handleImageProxyChange);
+    window.addEventListener('doubanImageProxyChanged', notifyImageProxyChange);
     window.addEventListener('storage', handleStorageChange);
-    return () => {
+    detachImageProxyListeners = () => {
       window.removeEventListener(
         'doubanImageProxyChanged',
-        handleImageProxyChange,
+        notifyImageProxyChange,
       );
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, []);
+  }
 
-  return imageProxyVersion;
+  return () => {
+    imageProxyListeners.delete(listener);
+    if (imageProxyListeners.size === 0 && detachImageProxyListeners) {
+      detachImageProxyListeners();
+      detachImageProxyListeners = null;
+    }
+  };
+}
+
+function useImageProxyVersion() {
+  return useSyncExternalStore(
+    subscribeImageProxyVersion,
+    () => imageProxyVersion,
+    () => 0,
+  );
 }
 
 function scheduleFavoriteStatusFetch(fetchFavoriteStatus: () => void) {
@@ -171,8 +193,18 @@ function useVideoCardFavoriteStatus({
   from,
   source,
   id,
-}: FavoriteStatusLoadParams): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+}: FavoriteStatusLoadParams): [
+  boolean,
+  React.Dispatch<React.SetStateAction<boolean>>,
+] {
   const [favorited, setFavorited] = useState(false);
+  const favoriteRevisionRef = useRef(0);
+  const updateFavorited = useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >((nextFavorited) => {
+    favoriteRevisionRef.current += 1;
+    setFavorited(nextFavorited);
+  }, []);
 
   useEffect(() => {
     const favoriteStatusParams = {
@@ -187,11 +219,12 @@ function useVideoCardFavoriteStatus({
     const { source: favoriteSource, id: favoriteId } = favoriteStatusParams;
 
     let cancelled = false;
+    const requestRevision = ++favoriteRevisionRef.current;
 
     const fetchFavoriteStatus = async () => {
       try {
         const fav = await isFavorited(favoriteSource, favoriteId);
-        if (!cancelled) {
+        if (!cancelled && favoriteRevisionRef.current === requestRevision) {
           setFavorited(fav);
         }
       } catch (err) {
@@ -210,18 +243,19 @@ function useVideoCardFavoriteStatus({
       'favoritesUpdated',
       (newFavorites: Record<string, any>) => {
         const isNowFavorited = !!newFavorites[storageKey];
-        setFavorited(isNowFavorited);
+        updateFavorited(isNowFavorited);
       },
     );
 
     return () => {
       cancelled = true;
+      favoriteRevisionRef.current += 1;
       cancelFavoriteStatusFetch();
       unsubscribe();
     };
-  }, [from, source, id]);
+  }, [from, id, source, updateFavorited]);
 
-  return [favorited, setFavorited];
+  return [favorited, updateFavorited];
 }
 
 function useVideoCardSearchFavoriteStatus({
@@ -344,6 +378,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ref,
   ) {
     const [showMobileActions, setShowMobileActions] = useState(false);
+    const hasOpenedMobileActionsRef = useRef(false);
 
     // 可外部修改的可控字段
     const [dynamicEpisodes, setDynamicEpisodes] = useSyncedState(episodes);
@@ -522,6 +557,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     }, [playUrl]);
 
     const openMobileActions = useCallback(() => {
+      hasOpenedMobileActionsRef.current = true;
       setShowMobileActions(true);
 
       // 异步检查收藏状态，不阻塞菜单显示
@@ -851,19 +887,21 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         </div>
 
         {/* 操作菜单 - 支持右键和长按触发 */}
-        <MobileActionSheet
-          isOpen={showMobileActions}
-          onClose={closeMobileActions}
-          title={actualTitle}
-          poster={actionSheetPoster}
-          actions={mobileActions}
-          sources={actionSheetSources}
-          isAggregate={isAggregate}
-          sourceName={source_name}
-          currentEpisode={currentEpisode}
-          totalEpisodes={actualEpisodes}
-          origin={origin}
-        />
+        {hasOpenedMobileActionsRef.current && (
+          <MobileActionSheet
+            isOpen={showMobileActions}
+            onClose={closeMobileActions}
+            title={actualTitle}
+            poster={actionSheetPoster}
+            actions={mobileActions}
+            sources={actionSheetSources}
+            isAggregate={isAggregate}
+            sourceName={source_name}
+            currentEpisode={currentEpisode}
+            totalEpisodes={actualEpisodes}
+            origin={origin}
+          />
+        )}
       </>
     );
   },

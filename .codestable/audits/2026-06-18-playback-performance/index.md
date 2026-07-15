@@ -3,7 +3,8 @@ doc_type: audit-index
 audit: 2026-06-18-playback-performance
 scope: 播放页电脑播放发热相关性能路径
 created: 2026-06-18
-status: resolved
+status: superseded
+superseded-by: 2026-07-15-playback-deep-review
 total_findings: 3
 ---
 

@@ -25,8 +25,9 @@ import { getOptimizedDanmakuConfig } from '../utils/danmakuConfig';
 import {
   type ArtPlayerLike,
   type DanmakuItemLike,
-  loadAndRenderDanmaku,
+  isDanmakuAbortError,
   recoverStoppedDanmaku,
+  renderDanmakuList,
   resetDanmakuTimeline,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
@@ -146,7 +147,6 @@ interface UsePlayerInitializerParams {
   loadExternalDanmuRef: MutableRefObject<
     (() => Promise<DanmakuItemLike[]>) | null
   >;
-  sourceSwitchTimeoutRef: MutableRefObject<NodeJS.Timeout | null>;
   switchPromiseRef: MutableRefObject<Promise<void> | null>;
   danmuPluginStateRef: MutableRefObject<DanmakuPluginSnapshot | null>;
   isSourceChangingRef: MutableRefObject<boolean>;
@@ -165,8 +165,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
   const customAdFilterCodeRef = useRef('');
+  const initializationGenerationRef = useRef(0);
 
-  const { videoUrl, loading, currentEpisodeIndex, artRef } = params;
+  const {
+    videoUrl,
+    loading,
+    currentEpisodeIndex,
+    currentSource: mediaSource,
+    currentId: mediaId,
+    artRef,
+  } = params;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,6 +258,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   }, []);
 
   useEffect(() => {
+    const generation = ++initializationGenerationRef.current;
+    const isCurrentInitialization = () =>
+      initializationGenerationRef.current === generation;
+
     const {
       detail,
       totalEpisodes,
@@ -289,7 +301,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       analytics,
       ensureVideoSource,
       loadExternalDanmuRef,
-      sourceSwitchTimeoutRef,
       switchPromiseRef,
       danmuPluginStateRef,
       isSourceChangingRef,
@@ -329,9 +340,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
       availableSourcesRef.current = sources;
       setAvailableSources(sources);
+      finishSourceSwitch('当前源失败');
 
       if (allowAutoSwitch && nextSource) {
-        finishSourceSwitch('当前源失败，允许自动换源');
         handleSourceChange(nextSource.source, nextSource.id, nextSource.title);
         return;
       }
@@ -346,6 +357,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       Hls: HlsConstructor,
     ) => {
       if (
+        !isCurrentInitialization() ||
         !Hls ||
         !videoUrl ||
         loading ||
@@ -434,6 +446,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
       const existingArt = artPlayerRef.current;
       if (existingArt && !loading) {
+        if (!isCurrentInitialization()) return;
         const isEpisodeChange = isEpisodeChangingRef.current;
         const isSourceChange = isSourceChangingRef.current;
 
@@ -446,11 +459,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           cleanupPlayer();
         } else {
           try {
-            if (sourceSwitchTimeoutRef.current) {
-              clearTimeout(sourceSwitchTimeoutRef.current);
-              sourceSwitchTimeoutRef.current = null;
-            }
-
             if (switchPromiseRef.current) {
               switchPromiseRef.current = null;
             }
@@ -477,7 +485,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               resumeTime,
             })
               .then(() => {
-                if (switchPromiseRef.current === switchPromise) {
+                if (
+                  isCurrentInitialization() &&
+                  switchPromiseRef.current === switchPromise
+                ) {
                   if (isEpisodeChange) {
                     if (!resumeTimeRef.current || resumeTimeRef.current <= 0) {
                       existingArt.currentTime = 0;
@@ -487,7 +498,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 }
               })
               .catch((error: unknown) => {
-                if (switchPromiseRef.current === switchPromise) {
+                if (
+                  isCurrentInitialization() &&
+                  switchPromiseRef.current === switchPromise
+                ) {
                   console.warn('⚠️ 源切换失败，将重建播放器:', error);
                   if (isEpisodeChange) {
                     isEpisodeChangingRef.current = false;
@@ -498,6 +512,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
             switchPromiseRef.current = switchPromise;
             await switchPromise;
+            if (!isCurrentInitialization()) return;
 
             if (existingArt.video) {
               ensureVideoSource(
@@ -508,16 +523,19 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
             return;
           } catch (error) {
+            if (!isCurrentInitialization()) return;
             console.warn('Switch方法失败，将重建播放器:', error);
             isEpisodeChangingRef.current = false;
             cleanupPlayer();
           }
         }
       }
+      if (!isCurrentInitialization()) return;
       if (artPlayerRef.current) {
         cleanupPlayer();
       }
 
+      if (!isCurrentInitialization()) return;
       if (artRef.current) {
         artRef.current.innerHTML = '';
       }
@@ -547,6 +565,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                   video,
                   (errorMessage: string) => {
                     setTimeout(() => {
+                      if (!isCurrentInitialization()) return;
                       setLoading(false);
                       setIsVideoLoading(false);
                       console.error('播放失败，详细错误信息:', errorMessage);
@@ -614,9 +633,13 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         artPlayerRef.current = new Artplayer(playerConfig) as PlayArtplayer;
         const artPlayer = artPlayerRef.current;
+        // 播放器实例在换集/换源时会复用；事件监听必须跨 effect generation 保持生效。
+        // generation 只约束尚未提交的异步初始化，实例事件只校验当前播放器身份。
+        const isActivePlayer = () => artPlayerRef.current === artPlayer;
 
         const videoElement = artPlayer.video as HTMLVideoElement;
         const clearVideoLoadingWhenRenderable = (reason: string) => {
+          if (!isActivePlayer()) return false;
           if (
             videoElement.readyState >= VIDEO_HAVE_CURRENT_DATA &&
             videoElement.videoWidth > 0 &&
@@ -647,6 +670,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         const videoErrorHandler = (e: Event) => {
+          if (!isActivePlayer()) return;
           const video = e.target as HTMLVideoElement;
           const error = video.error;
 
@@ -670,7 +694,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         videoElement.addEventListener('error', videoErrorHandler);
 
         const loadingTimeout = setTimeout(() => {
-          if (artPlayerRef.current === artPlayer && !artPlayer.playing) {
+          if (
+            isCurrentInitialization() &&
+            artPlayerRef.current === artPlayer &&
+            !artPlayer.playing
+          ) {
             setLoading(false);
             setIsVideoLoading(false);
             finishSourceSwitch('视频加载超时');
@@ -691,6 +719,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         applyAllUiEnhancements(artPlayerRef);
 
         artPlayer.on('ready', async () => {
+          if (!isActivePlayer()) return;
           clearTimeout(loadingTimeout);
           setError(null);
 
@@ -721,8 +750,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           if ((isIOS || isSafari) && artPlayer.muted) {
             const handleFirstPlay = () => {
+              if (!isActivePlayer()) return;
               setTimeout(() => {
-                if (artPlayerRef.current === artPlayer && artPlayer.muted) {
+                if (isActivePlayer() && artPlayer.muted) {
                   artPlayer.muted = false;
                   artPlayer.volume = lastVolumeRef.current || 0.7;
                 }
@@ -735,7 +765,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           setTimeout(async () => {
-            const art = artPlayerRef.current;
+            if (!isActivePlayer()) return;
 
             try {
               // 🔥 使用 ref.current 获取最新的弹幕加载函数，避免闭包过期
@@ -745,31 +775,39 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 return;
               }
 
-              if (!art?.plugins?.artplayerPluginDanmuku) {
+              if (!artPlayer.plugins?.artplayerPluginDanmuku) {
                 return;
               }
 
-              await loadAndRenderDanmaku(art, loadDanmuFn, {
+              const danmaku = await loadDanmuFn();
+              if (!isActivePlayer()) return;
+
+              renderDanmakuList(artPlayer, danmaku, {
                 preserveHidden: false,
                 showNotice: true,
               });
             } catch (error) {
+              if (!isActivePlayer()) return;
+              if (isDanmakuAbortError(error)) return;
               console.error('加载外部弹幕失败:', error);
-              showDanmakuErrorNotice(art, error);
+              showDanmakuErrorNotice(artPlayer, error);
             }
           }, 1000);
 
           artPlayer.on('artplayerPluginDanmuku:show', () => {
+            if (!isActivePlayer()) return;
             localStorage.setItem('danmaku_visible', 'true');
           });
 
           artPlayer.on('artplayerPluginDanmuku:hide', () => {
+            if (!isActivePlayer()) return;
             localStorage.setItem('danmaku_visible', 'false');
           });
 
           artPlayer.on(
             'artplayerPluginDanmuku:config',
             (option: DanmakuConfigChange) => {
+              if (!isActivePlayer()) return;
               try {
                 if (typeof option.fontSize !== 'undefined') {
                   localStorage.setItem(
@@ -794,11 +832,13 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('play', () => {
+          if (!isActivePlayer()) return;
           requestWakeLock();
           analytics.handlePlay(artPlayer.currentTime || 0);
         });
 
         artPlayer.on('pause', () => {
+          if (!isActivePlayer()) return;
           releaseWakeLock();
           const currentTime = artPlayer.currentTime || 0;
           const duration = artPlayer.duration || 0;
@@ -813,6 +853,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('video:ended', () => {
+          if (!isActivePlayer()) return;
           releaseWakeLock();
           analytics.trackProgress(100);
         });
@@ -822,15 +863,18 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         }
 
         artPlayer.on('video:volumechange', () => {
+          if (!isActivePlayer()) return;
           lastVolumeRef.current = artPlayer.volume;
           analytics.handleVolumeChange(artPlayer.volume);
         });
         artPlayer.on('video:ratechange', () => {
+          if (!isActivePlayer()) return;
           lastPlaybackRateRef.current = artPlayer.playbackRate;
           analytics.handleSpeedChange(artPlayer.playbackRate);
         });
 
         artPlayer.on('video:canplay', () => {
+          if (!isActivePlayer()) return;
           setIsVideoLoading(false);
           finishSourceSwitch('视频可播放');
           videoEndedHandledRef.current = false;
@@ -869,11 +913,13 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           if ((isIOS || isSafari) && artPlayer.paused) {
             const tryAutoPlay = async () => {
+              if (!isActivePlayer()) return;
               try {
                 let playAttempts = 0;
                 const maxAttempts = 3;
 
                 const attemptPlay = async (): Promise<boolean> => {
+                  if (!isActivePlayer()) return false;
                   playAttempts++;
 
                   try {
@@ -906,23 +952,29 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 };
 
                 const success = await attemptPlay();
+                if (!isActivePlayer()) return;
 
                 if (!success) {
-                  if (artPlayerRef.current === artPlayer) {
+                  if (isActivePlayer()) {
                     artPlayer.notice.show = '轻触播放按钮开始观看';
 
                     let hasHandledFirstInteraction = false;
                     const handleFirstUserInteraction = async () => {
+                      if (!isActivePlayer()) {
+                        artPlayer.off('video:play', handleFirstUserInteraction);
+                        document.removeEventListener(
+                          'click',
+                          handleFirstUserInteraction,
+                        );
+                        return;
+                      }
                       if (hasHandledFirstInteraction) return;
                       hasHandledFirstInteraction = true;
 
                       try {
                         await artPlayer.play();
                         setTimeout(() => {
-                          if (
-                            artPlayerRef.current === artPlayer &&
-                            !artPlayer.muted
-                          ) {
+                          if (isActivePlayer() && !artPlayer.muted) {
                             artPlayer.volume = lastVolumeRef.current || 0.7;
                           }
                         }, 1000);
@@ -953,6 +1005,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           setTimeout(() => {
+            if (!isActivePlayer()) return;
             if (Math.abs(artPlayer.volume - lastVolumeRef.current) > 0.01) {
               artPlayer.volume = lastVolumeRef.current;
             }
@@ -975,6 +1028,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('error', (err: unknown) => {
+          if (!isActivePlayer()) return;
           console.error('播放器错误:', err);
 
           setIsVideoLoading(false);
@@ -991,6 +1045,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('video:ended', () => {
+          if (!isActivePlayer()) return;
           const idx = currentEpisodeIndexRef.current;
 
           if (videoEndedHandledRef.current) {
@@ -1000,7 +1055,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           if (isSkipControllerTriggeredRef.current) {
             videoEndedHandledRef.current = true;
             setTimeout(() => {
-              isSkipControllerTriggeredRef.current = false;
+              if (isActivePlayer()) {
+                isSkipControllerTriggeredRef.current = false;
+              }
             }, 2000);
             return;
           }
@@ -1009,12 +1066,15 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           if (d && d.episodes && idx < d.episodes.length - 1) {
             videoEndedHandledRef.current = true;
             setTimeout(() => {
-              setCurrentEpisodeIndex(idx + 1);
+              if (isActivePlayer()) {
+                setCurrentEpisodeIndex(idx + 1);
+              }
             }, 1000);
           }
         });
 
         artPlayer.on('video:timeupdate', () => {
+          if (!isActivePlayer()) return;
           const currentTime = artPlayer.currentTime || 0;
           const duration = artPlayer.duration || 0;
 
@@ -1039,6 +1099,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         artPlayer.on('video:seeked', () => {
+          if (!isActivePlayer()) return;
           resetDanmakuTimeline(artPlayer);
         });
 
@@ -1046,6 +1107,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           ensureVideoSource(artPlayer.video as HTMLVideoElement, videoUrl);
         }
       } catch (err) {
+        if (!isCurrentInitialization()) return;
         console.error('创建播放器失败:', err);
         finishSourceSwitch('播放器初始化失败');
         isEpisodeChangingRef.current = false;
@@ -1061,8 +1123,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           import('../utils/hlsConfig'),
           import('hls.js'),
         ]);
+        if (!isCurrentInitialization()) return;
         await initPlayer(artplayerModules, hlsRuntime, hlsModule.default);
       } catch (error) {
+        if (!isCurrentInitialization()) return;
         console.error('动态导入 ArtPlayer 失败:', error);
         finishSourceSwitch('播放器模块加载失败');
         setIsVideoLoading(false);
@@ -1070,12 +1134,19 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       }
     };
 
-    loadAndInit();
+    void loadAndInit();
+    return () => {
+      if (initializationGenerationRef.current === generation) {
+        initializationGenerationRef.current += 1;
+      }
+    };
   }, [
     videoUrl,
     artRef,
     loading, // 需要loading状态来判断是否初始化播放器
     currentEpisodeIndex, // 需要集数索引来验证播放条件
+    mediaSource,
+    mediaId,
     // 其他状态通过 ref 访问，避免不必要的重新初始化
   ]);
 }

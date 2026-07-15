@@ -68,12 +68,13 @@ export function useHomeData({
           criticalLoading: availability.hasCriticalData
             ? false
             : prev.criticalLoading,
-          secondaryLoading: availability.hasSecondaryData
-            ? false
-            : prev.secondaryLoading,
           tertiaryLoading: availability.hasTertiaryData
             ? false
             : prev.tertiaryLoading,
+          tvLoading: availability.hasTvData ? false : prev.tvLoading,
+          varietyLoading: availability.hasVarietyData
+            ? false
+            : prev.varietyLoading,
         }),
       );
     };
@@ -107,8 +108,9 @@ export function useHomeData({
 
     const loadFallbackBatches = async (availability: {
       hasCriticalData: boolean;
-      hasSecondaryData: boolean;
       hasTertiaryData: boolean;
+      hasTvData: boolean;
+      hasVarietyData: boolean;
     }) => {
       const loadingTasks: Promise<void>[] = [];
 
@@ -133,32 +135,41 @@ export function useHomeData({
         );
       }
 
-      if (!availability.hasSecondaryData) {
+      if (!availability.hasTvData || !availability.hasVarietyData) {
+        const loadTvShows = !availability.hasTvData;
+        const loadVarietyShows = !availability.hasVarietyData;
+
         loadingTasks.push(
-          loadSecondaryData().then((secondaryData) => {
-            try {
-              if (!cancelled) {
-                setHomeData((prev) =>
-                  patchHomeData(prev, {
-                    hotTvShows:
-                      secondaryData.hotTvShows?.code === 200
-                        ? secondaryData.hotTvShows.list
-                        : undefined,
-                    hotVarietyShows:
-                      secondaryData.hotVarietyShows?.code === 200
-                        ? secondaryData.hotVarietyShows.list
-                        : undefined,
-                  }),
-                );
+          loadSecondaryData({ loadTvShows, loadVarietyShows }).then(
+            (secondaryData) => {
+              try {
+                if (!cancelled) {
+                  setHomeData((prev) =>
+                    patchHomeData(prev, {
+                      hotTvShows:
+                        loadTvShows && secondaryData.hotTvShows?.code === 200
+                          ? secondaryData.hotTvShows.list
+                          : undefined,
+                      hotVarietyShows:
+                        loadVarietyShows &&
+                        secondaryData.hotVarietyShows?.code === 200
+                          ? secondaryData.hotVarietyShows.list
+                          : undefined,
+                    }),
+                  );
+                }
+              } finally {
+                if (!cancelled) {
+                  setLoading((prev) =>
+                    patchHomeLoadingState(prev, {
+                      ...(loadTvShows ? { tvLoading: false } : {}),
+                      ...(loadVarietyShows ? { varietyLoading: false } : {}),
+                    }),
+                  );
+                }
               }
-            } finally {
-              if (!cancelled) {
-                setLoading((prev) =>
-                  patchHomeLoadingState(prev, { secondaryLoading: false }),
-                );
-              }
-            }
-          }),
+            },
+          ),
         );
       }
 

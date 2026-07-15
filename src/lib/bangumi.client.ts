@@ -1,6 +1,9 @@
 'use client';
 
-import { BANGUMI_CALENDAR_ENDPOINT } from '@/lib/bangumi-shared';
+import {
+  BANGUMI_CALENDAR_ENDPOINT,
+  normalizeBangumiCalendar,
+} from '@/lib/bangumi-shared';
 
 import { ClientCache } from './client-cache';
 
@@ -43,17 +46,18 @@ const BANGUMI_CACHE_KEY = 'bangumi-calendar-v1';
 const BANGUMI_CACHE_EXPIRE = 30 * 60; // 30分钟
 
 export async function GetBangumiCalendarData(): Promise<BangumiCalendarData[]> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
-
   try {
     const cached = await ClientCache.get(BANGUMI_CACHE_KEY);
-    if (Array.isArray(cached) && cached.length > 0) {
-      return cached as BangumiCalendarData[];
+    const cachedCalendar = normalizeBangumiCalendar(cached);
+    if (cachedCalendar.length > 0) {
+      return cachedCalendar;
     }
   } catch {
     // 缓存读取失败不影响主流程
   }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
 
   try {
     const response = await fetch(BANGUMI_CALENDAR_ENDPOINT, {
@@ -62,23 +66,27 @@ export async function GetBangumiCalendarData(): Promise<BangumiCalendarData[]> {
         Accept: 'application/json',
       },
     });
-    clearTimeout(timeoutId);
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Bangumi API 请求失败: HTTP ${response.status}`);
+    }
 
-    if (Array.isArray(data) && data.length > 0) {
+    const data = normalizeBangumiCalendar(await response.json());
+
+    if (data.length > 0) {
       ClientCache.set(BANGUMI_CACHE_KEY, data, BANGUMI_CACHE_EXPIRE).catch(
-        () => undefined
+        () => undefined,
       );
     }
 
     return data;
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       console.warn('Bangumi API 请求超时');
     } else {
       console.error('获取 Bangumi 数据失败:', error);
     }
     return []; // 返回空数组，不阻塞页面
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { MutableRefObject, useEffect } from 'react';
+import { MutableRefObject, useEffect, useRef } from 'react';
 
 import type { SearchResult } from '@/lib/types';
 
@@ -9,7 +9,8 @@ import {
   clearDanmakuDisplay,
   DanmakuItemLike,
   DanmakuPluginLike,
-  loadAndRenderDanmaku,
+  isDanmakuAbortError,
+  renderDanmakuList,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
 
@@ -52,7 +53,12 @@ export function useEpisodeDanmuSync({
   danmuPluginStateRef,
   loadExternalDanmu,
 }: UseEpisodeDanmuSyncParams) {
+  const syncGenerationRef = useRef(0);
+
   useEffect(() => {
+    const generation = ++syncGenerationRef.current;
+    const isCurrentGeneration = () => syncGenerationRef.current === generation;
+
     if (episodeSwitchTimeoutRef.current) {
       clearTimeout(episodeSwitchTimeoutRef.current);
       episodeSwitchTimeoutRef.current = null;
@@ -85,7 +91,7 @@ export function useEpisodeDanmuSync({
       };
       clearDanmakuDisplay(artPlayerRef.current);
 
-      episodeSwitchTimeoutRef.current = setTimeout(async () => {
+      const timeoutId = setTimeout(async () => {
         const art = artPlayerRef.current;
 
         try {
@@ -93,19 +99,34 @@ export function useEpisodeDanmuSync({
             return;
           }
 
-          await loadAndRenderDanmaku(art, loadExternalDanmu, {
+          const danmaku = await loadExternalDanmu();
+          if (!isCurrentGeneration() || artPlayerRef.current !== art) {
+            return;
+          }
+
+          renderDanmakuList(art, danmaku, {
             preserveHidden: Boolean(danmuPluginStateRef.current?.isHide),
             showNotice: true,
           });
         } catch (error) {
+          if (!isCurrentGeneration() || artPlayerRef.current !== art) {
+            return;
+          }
+          if (isDanmakuAbortError(error)) return;
           console.error('集数变化后加载外部弹幕失败:', error);
           showDanmakuErrorNotice(art, error);
         } finally {
-          episodeSwitchTimeoutRef.current = null;
+          if (episodeSwitchTimeoutRef.current === timeoutId) {
+            episodeSwitchTimeoutRef.current = null;
+          }
         }
       }, 800);
+      episodeSwitchTimeoutRef.current = timeoutId;
     }
     return () => {
+      if (syncGenerationRef.current === generation) {
+        syncGenerationRef.current += 1;
+      }
       if (episodeSwitchTimeoutRef.current) {
         clearTimeout(episodeSwitchTimeoutRef.current);
         episodeSwitchTimeoutRef.current = null;
