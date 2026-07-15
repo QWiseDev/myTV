@@ -82,6 +82,7 @@ function renderSourceBackedCard() {
 
 describe('VideoCard behavior', () => {
   let favoriteUpdateHandler: FavoriteUpdateHandler | undefined;
+  let favoriteUpdateUnsubscribe: jest.Mock;
   let originalCancelIdleCallback: IdleWindow['cancelIdleCallback'];
   let originalRequestAnimationFrame: typeof window.requestAnimationFrame;
   let originalRequestIdleCallback: IdleWindow['requestIdleCallback'];
@@ -94,6 +95,7 @@ describe('VideoCard behavior', () => {
 
   beforeEach(() => {
     favoriteUpdateHandler = undefined;
+    favoriteUpdateUnsubscribe = jest.fn();
     localStorage.clear();
     mockDeleteFavorite.mockReset();
     mockDeletePlayRecord.mockReset();
@@ -103,7 +105,7 @@ describe('VideoCard behavior', () => {
     mockSubscribeToDataUpdates.mockImplementation(
       (_event: string, handler: FavoriteUpdateHandler) => {
         favoriteUpdateHandler = handler;
-        return jest.fn();
+        return favoriteUpdateUnsubscribe;
       },
     );
 
@@ -211,6 +213,49 @@ describe('VideoCard behavior', () => {
 
     addEventListenerSpy.mockRestore();
     removeEventListenerSpy.mockRestore();
+  });
+
+  it('shares one favorite update subscription across source-backed cards', async () => {
+    const renderCards = (showFirst: boolean) => (
+      <>
+        {showFirst && (
+          <VideoCard
+            key='card-a'
+            from='playrecord'
+            id='video-a'
+            source='source-a'
+            title='影片 A'
+          />
+        )}
+        <VideoCard
+          key='card-b'
+          from='playrecord'
+          id='video-b'
+          source='source-b'
+          title='影片 B'
+        />
+      </>
+    );
+    const { rerender, unmount } = render(renderCards(true));
+
+    expect(mockSubscribeToDataUpdates).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        'source-a+video-a': { title: '影片 A' },
+        'source-b+video-b': { title: '影片 B' },
+      });
+    });
+    fireEvent.contextMenu(screen.getAllByText('影片 A')[0]);
+    fireEvent.contextMenu(screen.getAllByText('影片 B')[0]);
+
+    expect(await screen.findAllByText('取消收藏')).toHaveLength(2);
+
+    rerender(renderCards(false));
+    expect(favoriteUpdateUnsubscribe).not.toHaveBeenCalled();
+
+    unmount();
+    expect(favoriteUpdateUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('does not mount action sheet timers before the first open', () => {

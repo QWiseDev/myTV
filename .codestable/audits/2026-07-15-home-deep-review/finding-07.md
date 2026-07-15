@@ -46,7 +46,9 @@ status: partially-resolved
 - 删除 3 份 `useSyncedState`、同步 effect、imperative handle 与搜索页 ref/cache 补丁后，所有卡片直接以 props 为事实源；首页约 48-60 张卡不再承担约 144-180 份无用镜像 state/effect。
 - Profiler 回归测试确认聚合字段更新从 2 次 commit 降为 1 次；最新集数、来源与豆瓣 ID 同一 render 生效。
 - 全量 Jest 68 suites / 287 tests、typecheck、production build 与目标 ESLint 通过；`/search` First Load JS 从约 213 kB 降至 212 kB。
-- 普通收藏/搜索收藏两套 hook、逐卡 `favoritesUpdated` 底层监听和关闭后隐藏 ActionSheet fiber 仍待处理，finding 保持 partially-resolved。
+- `favoritesUpdated` 已收口为 `VideoCard` 模块级单一底层订阅；各卡片只保留按 storage key 更新自身状态的轻量 listener，首张 source-backed 卡挂载时订阅、最后一张卸载时清理。
+- 多卡回归测试覆盖同一事件更新两张卡、卸载部分卡不提前 detach，以及最后一张卸载后完整清理；全量 Jest 更新为 68 suites / 288 tests。
+- 普通收藏/搜索收藏两套 hook 和关闭后隐藏 ActionSheet fiber 仍待处理，finding 保持 partially-resolved。
 
 ## 建议动作
 

@@ -169,6 +169,44 @@ function scheduleFavoriteStatusFetch(fetchFavoriteStatus: () => void) {
   };
 }
 
+type FavoriteUpdatePayload = Record<string, any>;
+type FavoriteUpdateListener = (favorites: FavoriteUpdatePayload) => void;
+
+const favoriteUpdateListeners = new Set<FavoriteUpdateListener>();
+let detachFavoriteUpdateListener: (() => void) | null = null;
+
+function subscribeToFavoriteUpdates(listener: FavoriteUpdateListener) {
+  favoriteUpdateListeners.add(listener);
+
+  if (!detachFavoriteUpdateListener) {
+    detachFavoriteUpdateListener =
+      subscribeToDataUpdates<FavoriteUpdatePayload>(
+        'favoritesUpdated',
+        (favorites) => {
+          favoriteUpdateListeners.forEach((currentListener) => {
+            try {
+              currentListener(favorites);
+            } catch (error) {
+              console.error('处理收藏更新失败:', error);
+            }
+          });
+        },
+      );
+  }
+
+  let subscribed = true;
+  return () => {
+    if (!subscribed) return;
+    subscribed = false;
+    favoriteUpdateListeners.delete(listener);
+
+    if (favoriteUpdateListeners.size === 0 && detachFavoriteUpdateListener) {
+      detachFavoriteUpdateListener();
+      detachFavoriteUpdateListener = null;
+    }
+  };
+}
+
 function useVideoCardFavoriteStatus({
   from,
   source,
@@ -219,13 +257,10 @@ function useVideoCardFavoriteStatus({
     });
 
     const storageKey = generateStorageKey(favoriteSource, favoriteId);
-    const unsubscribe = subscribeToDataUpdates(
-      'favoritesUpdated',
-      (newFavorites: Record<string, any>) => {
-        const isNowFavorited = !!newFavorites[storageKey];
-        updateFavorited(isNowFavorited);
-      },
-    );
+    const unsubscribe = subscribeToFavoriteUpdates((newFavorites) => {
+      const isNowFavorited = !!newFavorites[storageKey];
+      updateFavorited(isNowFavorited);
+    });
 
     return () => {
       cancelled = true;
