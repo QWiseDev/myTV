@@ -23,15 +23,21 @@ import {
 const HOME_DATA_MEMORY_TTL_MS = 60_000;
 /** Redis/Kvrocks 缓存：公开热门内容，允许分钟级延迟 */
 const HOME_DATA_DB_TTL_SECONDS = 5 * 60;
+/** 首页聚合缓存读取上限，避免 Redis 重连阻塞 SSR/API */
+const HOME_DATA_DB_READ_TIMEOUT_MS = 500;
 const HOME_DATA_CACHE_KEY = 'home:aggregate-v1';
 
-type MemoryHomeDataCache = {
-  data: HomeData;
+type MemoryCache<T> = {
+  data: T;
   expireAt: number;
 };
 
-let memoryHomeDataCache: MemoryHomeDataCache | null = null;
+let memoryHomeDataCache: MemoryCache<HomeData> | null = null;
+let memoryCriticalMoviesCache: MemoryCache<DoubanItem[]> | null = null;
 let inflightHomeDataPromise: Promise<HomeData> | null = null;
+let inflightInitialHomeDataPromise: Promise<HomeData> | null = null;
+let inflightCriticalMoviesPromise: Promise<DoubanItem[]> | null = null;
+let homeDataCacheGeneration = 0;
 
 async function getDoubanCategory(params: {
   kind: 'movie' | 'tv';
@@ -82,21 +88,43 @@ async function withAbortableTimeout<T>(
   }
 }
 
-function isUsableHomeData(data: HomeData | null | undefined): data is HomeData {
-  return Boolean(data && getHomeDataAvailability(data).hasAnyData);
+async function withDeadline<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function isCompleteHomeData(
+  data: HomeData | null | undefined,
+): data is HomeData {
+  return Boolean(data && getHomeDataAvailability(data).isComplete);
+}
+
+function readMemoryCache<T>(cache: MemoryCache<T> | null): T | null {
+  if (!cache || Date.now() >= cache.expireAt) {
+    return null;
+  }
+
+  return cache.data;
 }
 
 function readMemoryHomeData(): HomeData | null {
-  if (!memoryHomeDataCache) {
-    return null;
-  }
-
-  if (Date.now() >= memoryHomeDataCache.expireAt) {
-    memoryHomeDataCache = null;
-    return null;
-  }
-
-  return memoryHomeDataCache.data;
+  return readMemoryCache(memoryHomeDataCache);
 }
 
 function writeMemoryHomeData(data: HomeData): void {
@@ -106,10 +134,37 @@ function writeMemoryHomeData(data: HomeData): void {
   };
 }
 
+function readMemoryCriticalMovies(): DoubanItem[] | null {
+  return readMemoryCache(memoryCriticalMoviesCache);
+}
+
+function writeMemoryCriticalMovies(data: DoubanItem[]): void {
+  memoryCriticalMoviesCache = {
+    data,
+    expireAt: Date.now() + HOME_DATA_MEMORY_TTL_MS,
+  };
+}
+
+function writeCompleteMemoryHomeData(data: HomeData): void {
+  if (!isCompleteHomeData(data)) {
+    return;
+  }
+
+  writeMemoryHomeData(data);
+  memoryCriticalMoviesCache = null;
+}
+
+function createCriticalHomeData(hotMovies: DoubanItem[]): HomeData {
+  return {
+    ...EMPTY_HOME_DATA,
+    hotMovies,
+  };
+}
+
 async function readDbHomeData(): Promise<HomeData | null> {
   try {
     const cached = await db.getCache(HOME_DATA_CACHE_KEY);
-    if (!isUsableHomeData(cached)) {
+    if (!isCompleteHomeData(cached)) {
       return null;
     }
     return cached;
@@ -119,6 +174,10 @@ async function readDbHomeData(): Promise<HomeData | null> {
     }
     return null;
   }
+}
+
+function readDbHomeDataWithDeadline(): Promise<HomeData | null> {
+  return withDeadline(readDbHomeData(), HOME_DATA_DB_READ_TIMEOUT_MS, null);
 }
 
 async function writeDbHomeData(data: HomeData): Promise<void> {
@@ -131,20 +190,56 @@ async function writeDbHomeData(data: HomeData): Promise<void> {
   }
 }
 
+async function getCriticalMovies(): Promise<DoubanItem[]> {
+  const fullMemoryCached = readMemoryHomeData();
+  if (fullMemoryCached) {
+    return fullMemoryCached.hotMovies;
+  }
+
+  const memoryCached = readMemoryCriticalMovies();
+  if (memoryCached) {
+    return memoryCached;
+  }
+
+  if (inflightCriticalMoviesPromise) {
+    return inflightCriticalMoviesPromise;
+  }
+
+  const generation = homeDataCacheGeneration;
+  const request = withAbortableTimeout(
+    (signal) =>
+      getDoubanCategory({
+        kind: 'movie',
+        category: '热门',
+        type: '全部',
+        signal,
+      }),
+    DATA_FETCH_TIMEOUTS.CRITICAL,
+    EMPTY_HOME_DATA.hotMovies,
+  );
+  inflightCriticalMoviesPromise = request;
+
+  try {
+    const movies = await request;
+    if (
+      movies.length > 0 &&
+      generation === homeDataCacheGeneration &&
+      !readMemoryHomeData()
+    ) {
+      writeMemoryCriticalMovies(movies);
+    }
+    return movies;
+  } finally {
+    if (inflightCriticalMoviesPromise === request) {
+      inflightCriticalMoviesPromise = null;
+    }
+  }
+}
+
 async function fetchFreshHomeData(): Promise<HomeData> {
   const [movies, tvShows, varietyShows, bangumiCalendarData] =
     await Promise.all([
-      withAbortableTimeout(
-        (signal) =>
-          getDoubanCategory({
-            kind: 'movie',
-            category: '热门',
-            type: '全部',
-            signal,
-          }),
-        DATA_FETCH_TIMEOUTS.CRITICAL,
-        EMPTY_HOME_DATA.hotMovies,
-      ),
+      getCriticalMovies(),
       withAbortableTimeout(
         (signal) =>
           getDoubanCategory({
@@ -196,30 +291,102 @@ export async function getServerHomeData(): Promise<HomeData> {
     return inflightHomeDataPromise;
   }
 
-  inflightHomeDataPromise = (async () => {
-    const dbCached = await readDbHomeData();
+  const generation = homeDataCacheGeneration;
+  const request = (async () => {
+    const hasCriticalDataSource = Boolean(
+      readMemoryCriticalMovies() || inflightCriticalMoviesPromise,
+    );
+    const dbCached = hasCriticalDataSource
+      ? null
+      : await readDbHomeDataWithDeadline();
+
+    const memoryCachedAfterDb = readMemoryHomeData();
+    if (memoryCachedAfterDb) {
+      return memoryCachedAfterDb;
+    }
+
     if (dbCached) {
-      writeMemoryHomeData(dbCached);
+      if (generation === homeDataCacheGeneration) {
+        writeCompleteMemoryHomeData(dbCached);
+      }
       return dbCached;
     }
 
     const fresh = await fetchFreshHomeData();
-    if (isUsableHomeData(fresh)) {
-      writeMemoryHomeData(fresh);
+    if (isCompleteHomeData(fresh) && generation === homeDataCacheGeneration) {
+      writeCompleteMemoryHomeData(fresh);
       void writeDbHomeData(fresh);
+      return fresh;
     }
-    return fresh;
+
+    return readMemoryHomeData() ?? fresh;
   })();
+  inflightHomeDataPromise = request;
 
   try {
-    return await inflightHomeDataPromise;
+    return await request;
   } finally {
-    inflightHomeDataPromise = null;
+    if (inflightHomeDataPromise === request) {
+      inflightHomeDataPromise = null;
+    }
+  }
+}
+
+/**
+ * 获取首页 SSR 首批数据。
+ * 完整缓存命中时直接复用；冷缓存只等待热门电影，其余区块交给客户端补载。
+ */
+export async function getServerInitialHomeData(): Promise<HomeData> {
+  const fullMemoryCached = readMemoryHomeData();
+  if (fullMemoryCached) {
+    return fullMemoryCached;
+  }
+
+  const criticalMemoryCached = readMemoryCriticalMovies();
+  if (criticalMemoryCached) {
+    return createCriticalHomeData(criticalMemoryCached);
+  }
+
+  if (inflightInitialHomeDataPromise) {
+    return inflightInitialHomeDataPromise;
+  }
+
+  const generation = homeDataCacheGeneration;
+  const request = (async () => {
+    const dbCached = await readDbHomeDataWithDeadline();
+
+    const fullMemoryCachedAfterDb = readMemoryHomeData();
+    if (fullMemoryCachedAfterDb) {
+      return fullMemoryCachedAfterDb;
+    }
+
+    if (dbCached) {
+      if (generation === homeDataCacheGeneration) {
+        writeCompleteMemoryHomeData(dbCached);
+      }
+      return dbCached;
+    }
+
+    const movies = await getCriticalMovies();
+    return readMemoryHomeData() ?? createCriticalHomeData(movies);
+  })();
+  inflightInitialHomeDataPromise = request;
+
+  try {
+    return await request;
+  } finally {
+    if (inflightInitialHomeDataPromise === request) {
+      inflightInitialHomeDataPromise = null;
+    }
   }
 }
 
 /** 测试/运维用：清理进程内缓存 */
 export function clearServerHomeDataMemoryCache(): void {
+  homeDataCacheGeneration += 1;
   memoryHomeDataCache = null;
+  memoryCriticalMoviesCache = null;
   inflightHomeDataPromise = null;
+  inflightInitialHomeDataPromise = null;
+  inflightCriticalMoviesPromise = null;
 }

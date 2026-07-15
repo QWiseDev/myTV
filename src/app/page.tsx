@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 
-import { getServerHomeData } from '@/lib/home-data.server';
+import { getServerInitialHomeData } from '@/lib/home-data.server';
 import { EMPTY_HOME_DATA } from '@/lib/home-data-types';
 
 import HomeClient from '@/components/HomeClient';
@@ -14,7 +14,7 @@ async function loadInitialHomeData() {
       return EMPTY_HOME_DATA;
     }
 
-    return await getServerHomeData();
+    return await getServerInitialHomeData();
   } catch (error) {
     console.error('首页首屏数据预取失败:', error);
     return EMPTY_HOME_DATA;

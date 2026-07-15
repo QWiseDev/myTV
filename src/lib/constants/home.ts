@@ -7,6 +7,7 @@ export const DATA_FETCH_TIMEOUTS = {
   CRITICAL: 5000, // 关键数据（电影）- 首屏优先
   SECONDARY: 6000, // 次要数据（剧集、综艺）
   TERTIARY: 8000, // 低优先级数据（Bangumi）
+  AGGREGATE: 9000, // 完整聚合：覆盖服务端 DB deadline + 最慢区块
 } as const;
 
 // 延迟执行配置（毫秒）

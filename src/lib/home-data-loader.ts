@@ -32,7 +32,7 @@ function readClientHomeDataCache(): HomeData | null {
 }
 
 function writeClientHomeDataCache(data: HomeData): void {
-  if (!getHomeDataAvailability(data).hasAnyData) return;
+  if (!getHomeDataAvailability(data).isComplete) return;
   clientHomeDataCache = {
     data,
     expireAt: Date.now() + CLIENT_HOME_DATA_TTL_MS,
@@ -53,7 +53,7 @@ export async function loadHomeDataFromApi(): Promise<HomeData> {
     const controller = new AbortController();
     const timeoutId = setTimeout(
       () => controller.abort(),
-      DATA_FETCH_TIMEOUTS.CRITICAL,
+      DATA_FETCH_TIMEOUTS.AGGREGATE,
     );
 
     try {

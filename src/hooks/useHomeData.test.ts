@@ -1,4 +1,5 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { type ReactNode, createElement, StrictMode } from 'react';
 
 import { EMPTY_HOME_DATA } from '@/lib/home-data-types';
 
@@ -35,6 +36,14 @@ const bangumiDay = {
   weekday: { en: 'Mon', cn: '周一', ja: '月' },
   items: [],
 };
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe('useHomeData', () => {
   beforeAll(async () => {
@@ -88,6 +97,94 @@ describe('useHomeData', () => {
       ]);
       expect(result.current.loading.tvLoading).toBe(false);
       expect(result.current.loading.varietyLoading).toBe(false);
+    });
+  });
+
+  it('hydrates a critical-only snapshot without hiding its movies', async () => {
+    const apiData = {
+      hotMovies: [item],
+      hotTvShows: [{ ...item, id: 'tv-api' }],
+      hotVarietyShows: [{ ...item, id: 'show-api' }],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const deferredApi = createDeferred<typeof apiData>();
+    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+    const initialData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [],
+    };
+
+    const { result } = renderHook(() =>
+      useHomeData({
+        activeTab: 'home',
+        refreshWatchingUpdates: jest.fn(),
+        initialData,
+      }),
+    );
+
+    expect(result.current.homeData.hotMovies).toEqual([item]);
+    expect(result.current.loading).toEqual({
+      criticalLoading: false,
+      tertiaryLoading: true,
+      tvLoading: true,
+      varietyLoading: true,
+    });
+
+    await act(async () => {
+      deferredApi.resolve(apiData);
+      await deferredApi.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.homeData).toEqual(apiData);
+      expect(result.current.loading).toEqual({
+        criticalLoading: false,
+        tertiaryLoading: false,
+        tvLoading: false,
+        varietyLoading: false,
+      });
+    });
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
+  });
+
+  it('does not start fallback work from a cancelled StrictMode effect', async () => {
+    const deferredApi = createDeferred<typeof EMPTY_HOME_DATA>();
+    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { code: 200, list: [] },
+      hotVarietyShows: { code: 200, list: [] },
+    });
+    const initialData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StrictMode, null, children);
+
+    renderHook(
+      () =>
+        useHomeData({
+          activeTab: 'home',
+          refreshWatchingUpdates: jest.fn(),
+          initialData,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      deferredApi.resolve(EMPTY_HOME_DATA);
+      await deferredApi.promise;
+    });
+
+    await waitFor(() => {
+      expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+      expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -6,14 +6,14 @@ nature: performance
 severity: P1
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 06：冷缓存首屏等待最慢三级数据
 
 ## 速答
 
-首页服务端把关键、次要和三级数据放进同一个 `Promise.all`，冷缓存时整页要等待最慢的 8 秒 Bangumi 预算，客户端所谓分层加载只能在内容首次返回后发生。
+首页服务端原本把关键、次要和三级数据放进同一个 `Promise.all`，冷缓存时整页会等待最慢的 Bangumi；现已拆分 SSR 首批读取与完整聚合，冷缓存首屏只等待电影关键数据。
 
 ## 关键证据
 
@@ -31,10 +31,23 @@ status: open
 
 单独设计 SSR 总预算和关键 section 边界；不完整聚合不按完整 TTL 缓存，客户端直接补缺失 section。
 
-## 本轮进展（2026-07-15）
+## 修复记录（2026-07-15）
 
-本轮只拆分了客户端 TV/综艺的缺失项补载与 loading 所有权，没有改动服务端 `loadInitialHomeData()` 的聚合等待、Bangumi 预算或部分结果缓存 TTL。冷缓存首屏仍可能被低优先级数据拖住，因此保持 open，需单独设计和验证 SSR/缓存策略。
+- 新增 `getServerInitialHomeData()`：完整内存缓存优先，DB 读取最多等待 500ms；冷缓存未命中时只等待热门电影，返回四字段齐全、缺失区块为空数组的 `HomeData`。
+- `page.tsx` 改用首批读取；完整 `/api/home` 聚合继续补 TV、综艺和 Bangumi，不再阻塞 SSR。
+- initial/full 共用电影 critical memory 与 inflight；已有 critical 时 full 跳过可能更旧的 DB 快照，避免电影列表在 hydration 后回退。
+- full 的 DB 读取同样增加 500ms deadline；只有 `isComplete` 聚合才能写入 60 秒完整内存缓存和 5 分钟 DB 缓存。
+- `/api/home` 的 partial/empty/error 响应统一 `no-store`，客户端聚合内存也只缓存完整结果。
+- 客户端聚合等待预算调整为 9 秒，覆盖服务端 500ms DB deadline 与 8 秒 Bangumi 上限；已取消的 StrictMode effect 不再继续发 fallback 或安排追更。
+- 已补 SSR 首批、DB deadline、initial/full 去重、partial 缓存、缓存时序、路由 header、客户端缓存和 StrictMode cleanup 回归测试。
+
+## 验证
+
+- `pnpm exec jest --runInBand`：64 suites / 271 tests 通过。
+- `pnpm typecheck`、`pnpm build`、本轮文件 ESLint/Prettier、`git diff --check`：通过。
+- 本地生产包浏览器冒烟：`/` 与 `/play?...` 的认证重定向正确，登录页可渲染且控制台无 error。
+- 本机无法连接 `.env` 指向的远端 Redis，因此未完成登录后真实首页数据目视验收；构建仍成功完成。
 
 ## 建议动作
 
-`cs-refactor`，因为这会改变性能与缓存边界，需要设计和浏览器/服务端验证。
+`cs-refactor`，因为这会改变性能与缓存边界，需要设计和浏览器/服务端验证；本轮已按确认后的边界完成修复。
