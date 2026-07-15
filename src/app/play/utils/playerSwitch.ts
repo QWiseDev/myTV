@@ -17,6 +17,9 @@ export interface PlayerMediaSwitchOptions {
 }
 
 export interface PlayerMediaSwitchResult {
+  displayTitle: string;
+  poster: string;
+  resetCurrentTime: boolean;
   restoredTime?: number;
 }
 
@@ -33,7 +36,7 @@ export function shouldRebuildPlayerForMediaSwitch({
 
 export function clampRestoreTime(
   time: number | null | undefined,
-  duration: number | null | undefined
+  duration: number | null | undefined,
 ): number {
   if (typeof time !== 'number' || !Number.isFinite(time) || time <= 0) {
     return 0;
@@ -52,7 +55,7 @@ export function clampRestoreTime(
 
 export async function switchPlayerMedia(
   player: SwitchablePlayer,
-  options: PlayerMediaSwitchOptions
+  options: PlayerMediaSwitchOptions,
 ): Promise<PlayerMediaSwitchResult> {
   const fallbackResumeTime = player.currentTime || 0;
   const requestedResumeTime =
@@ -62,25 +65,47 @@ export async function switchPlayerMedia(
 
   await player.switchUrl(options.videoUrl);
 
-  player.title = `${options.title} - 第${options.episodeIndex + 1}集`;
-  player.poster = options.poster;
+  const result: PlayerMediaSwitchResult = {
+    displayTitle: `${options.title} - 第${options.episodeIndex + 1}集`,
+    poster: options.poster,
+    resetCurrentTime: false,
+  };
 
   if (options.isEpisodeChange) {
     if (!requestedResumeTime || requestedResumeTime <= 0) {
-      player.currentTime = 0;
+      result.resetCurrentTime = true;
     }
-    return {};
+    return result;
   }
 
   const restoredTime = clampRestoreTime(requestedResumeTime, player.duration);
   if (restoredTime <= 0) {
-    return {};
+    return result;
+  }
+
+  result.restoredTime = restoredTime;
+
+  return result;
+}
+
+export function applyPlayerMediaSwitch(
+  player: SwitchablePlayer,
+  result: PlayerMediaSwitchResult,
+): void {
+  player.title = result.displayTitle;
+  player.poster = result.poster;
+
+  if (result.resetCurrentTime) {
+    player.currentTime = 0;
+    return;
+  }
+
+  if (!result.restoredTime || result.restoredTime <= 0) {
+    return;
   }
 
   if (player.video) {
-    player.video.currentTime = restoredTime;
+    player.video.currentTime = result.restoredTime;
   }
-  player.currentTime = restoredTime;
-
-  return { restoredTime };
+  player.currentTime = result.restoredTime;
 }

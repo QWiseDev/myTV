@@ -53,6 +53,7 @@ import type {
 } from './utils/danmakuRuntime';
 import { readExternalDanmuPref } from './utils/danmuPreference';
 import { detectDevice } from './utils/deviceDetection';
+import type { PlayerMediaSwitchResult } from './utils/playerSwitch';
 
 // 🚀 性能优化：基于内存压力的动态组件导入
 // 非关键组件 - 完全动态导入
@@ -604,7 +605,8 @@ function PlayPageClient() {
   const videoEndedHandledRef = useRef<boolean>(false); // 🔥 标记当前视频的 video:ended 事件是否已经被处理过（防止多个监听器重复触发）
 
   // 连续切换源的异步任务管理
-  const switchPromiseRef = useRef<Promise<void> | null>(null); // 当前切换的Promise
+  const switchPromiseRef =
+    useRef<Promise<PlayerMediaSwitchResult> | null>(null);
 
   const artPlayerRef = useRef<PlayArtplayer | null>(null);
   const artRef = useRef<HTMLDivElement | null>(null);

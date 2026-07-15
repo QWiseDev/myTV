@@ -35,6 +35,8 @@ import type { HlsRuntimeInstance } from '../utils/hlsConfig';
 import { stripMpegTsPrefix } from '../utils/mpegTs';
 import { detectPlayerBrowserSupport } from '../utils/playerBrowserSupport';
 import {
+  type PlayerMediaSwitchResult,
+  applyPlayerMediaSwitch,
   shouldRebuildPlayerForMediaSwitch,
   switchPlayerMedia,
 } from '../utils/playerSwitch';
@@ -147,7 +149,7 @@ interface UsePlayerInitializerParams {
   loadExternalDanmuRef: MutableRefObject<
     (() => Promise<DanmakuItemLike[]>) | null
   >;
-  switchPromiseRef: MutableRefObject<Promise<void> | null>;
+  switchPromiseRef: MutableRefObject<Promise<PlayerMediaSwitchResult> | null>;
   danmuPluginStateRef: MutableRefObject<DanmakuPluginSnapshot | null>;
   isSourceChangingRef: MutableRefObject<boolean>;
   isEpisodeChangingRef: MutableRefObject<boolean>;
@@ -166,6 +168,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   latestParamsRef.current = params;
   const customAdFilterCodeRef = useRef('');
   const initializationGenerationRef = useRef(0);
+  const mediaSessionRef = useRef(0);
+  const mediaLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const {
     videoUrl,
@@ -259,8 +265,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
   useEffect(() => {
     const generation = ++initializationGenerationRef.current;
+    const mediaSession = ++mediaSessionRef.current;
     const isCurrentInitialization = () =>
       initializationGenerationRef.current === generation;
+
+    const clearMediaLoadingTimeout = () => {
+      if (mediaLoadingTimeoutRef.current) {
+        clearTimeout(mediaLoadingTimeoutRef.current);
+        mediaLoadingTimeoutRef.current = null;
+      }
+    };
 
     const {
       detail,
@@ -348,6 +362,41 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       }
 
       showPlayerNotice(finalNotice);
+    };
+
+    const scheduleMediaLoadingTimeout = (artPlayer: PlayArtplayer) => {
+      clearMediaLoadingTimeout();
+
+      const timeoutId = setTimeout(() => {
+        if (mediaLoadingTimeoutRef.current === timeoutId) {
+          mediaLoadingTimeoutRef.current = null;
+        }
+        if (
+          mediaSessionRef.current !== mediaSession ||
+          artPlayerRef.current !== artPlayer ||
+          artPlayer.playing
+        ) {
+          return;
+        }
+
+        const activeParams = latestParamsRef.current;
+        setLoading(false);
+        setIsVideoLoading(false);
+        finishSourceSwitch('视频加载超时');
+
+        console.error('视频加载超时:', {
+          url: activeParams.videoUrl,
+          source: activeParams.currentSource,
+          id: activeParams.currentId,
+          episodeIndex: activeParams.currentEpisodeIndex,
+        });
+
+        handleCurrentSourceFailure(
+          `视频加载超时 (10秒)\n地址: ${activeParams.videoUrl}\n\n没有更多播放源了`,
+        );
+      }, 10000);
+
+      mediaLoadingTimeoutRef.current = timeoutId;
     };
 
     // 异步初始化播放器，避免SSR问题
@@ -454,14 +503,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           shouldRebuildPlayerForMediaSwitch({
             isEpisodeChange,
             isSourceChange,
-          })
+          }) ||
+          switchPromiseRef.current
         ) {
+          switchPromiseRef.current = null;
           cleanupPlayer();
         } else {
+          let switchPromise: ReturnType<typeof switchPlayerMedia> | null = null;
+
           try {
-            if (switchPromiseRef.current) {
-              switchPromiseRef.current = null;
-            }
+            scheduleMediaLoadingTimeout(existingArt);
 
             if (existingArt.plugins?.artplayerPluginDanmuku) {
               danmuPluginStateRef.current = {
@@ -476,43 +527,30 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               ? resumeTimeRef.current
               : resumeTimeRef.current || currentTime;
 
-            const switchPromise = switchPlayerMedia(existingArt, {
+            switchPromise = switchPlayerMedia(existingArt, {
               videoUrl,
               title: videoTitle,
               poster: videoCover,
               episodeIndex: currentEpisodeIndex,
               isEpisodeChange,
               resumeTime,
-            })
-              .then(() => {
-                if (
-                  isCurrentInitialization() &&
-                  switchPromiseRef.current === switchPromise
-                ) {
-                  if (isEpisodeChange) {
-                    if (!resumeTimeRef.current || resumeTimeRef.current <= 0) {
-                      existingArt.currentTime = 0;
-                    }
-                    isEpisodeChangingRef.current = false;
-                  }
-                }
-              })
-              .catch((error: unknown) => {
-                if (
-                  isCurrentInitialization() &&
-                  switchPromiseRef.current === switchPromise
-                ) {
-                  console.warn('⚠️ 源切换失败，将重建播放器:', error);
-                  if (isEpisodeChange) {
-                    isEpisodeChangingRef.current = false;
-                  }
-                  throw error;
-                }
-              });
+            });
 
             switchPromiseRef.current = switchPromise;
-            await switchPromise;
-            if (!isCurrentInitialization()) return;
+            const switchResult = await switchPromise;
+            if (
+              !isCurrentInitialization() ||
+              artPlayerRef.current !== existingArt ||
+              switchPromiseRef.current !== switchPromise
+            ) {
+              return;
+            }
+
+            applyPlayerMediaSwitch(existingArt, switchResult);
+
+            if (isEpisodeChange) {
+              isEpisodeChangingRef.current = false;
+            }
 
             if (existingArt.video) {
               ensureVideoSource(
@@ -523,10 +561,20 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
             return;
           } catch (error) {
-            if (!isCurrentInitialization()) return;
+            if (
+              !isCurrentInitialization() ||
+              artPlayerRef.current !== existingArt
+            ) {
+              return;
+            }
             console.warn('Switch方法失败，将重建播放器:', error);
             isEpisodeChangingRef.current = false;
+            clearMediaLoadingTimeout();
             cleanupPlayer();
+          } finally {
+            if (switchPromise && switchPromiseRef.current === switchPromise) {
+              switchPromiseRef.current = null;
+            }
           }
         }
       }
@@ -548,7 +596,15 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         const customType = {
           m3u8: function (video: HTMLVideoElement, url: string) {
-            const hls = initAdaptiveHls(
+            const hlsSession = mediaSessionRef.current;
+            let hls: HlsRuntimeInstance | null = null;
+            const isActiveHlsSession = () =>
+              Boolean(hls) &&
+              mediaSessionRef.current === hlsSession &&
+              artPlayerRef.current?.video === video &&
+              (video as HlsMediaVideo).hls === hls;
+
+            hls = initAdaptiveHls(
               video,
               url,
               {
@@ -558,14 +614,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               },
               memoryPressure,
               (event, data) => {
+                if (!isActiveHlsSession() || !hls) return;
                 handleHlsError(
                   event,
                   data,
-                  (video as HlsMediaVideo).hls,
+                  hls,
                   video,
                   (errorMessage: string) => {
                     setTimeout(() => {
-                      if (!isCurrentInitialization()) return;
+                      if (!isActiveHlsSession()) return;
+                      clearMediaLoadingTimeout();
                       setLoading(false);
                       setIsVideoLoading(false);
                       console.error('播放失败，详细错误信息:', errorMessage);
@@ -636,6 +694,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         // 播放器实例在换集/换源时会复用；事件监听必须跨 effect generation 保持生效。
         // generation 只约束尚未提交的异步初始化，实例事件只校验当前播放器身份。
         const isActivePlayer = () => artPlayerRef.current === artPlayer;
+        scheduleMediaLoadingTimeout(artPlayer);
 
         const videoElement = artPlayer.video as HTMLVideoElement;
         const clearVideoLoadingWhenRenderable = (reason: string) => {
@@ -645,6 +704,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             videoElement.videoWidth > 0 &&
             videoElement.videoHeight > 0
           ) {
+            clearMediaLoadingTimeout();
             setIsVideoLoading(false);
             finishSourceSwitch(reason);
             return true;
@@ -685,6 +745,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           });
 
           setIsVideoLoading(false);
+          clearMediaLoadingTimeout();
           finishSourceSwitch('视频元素错误');
 
           handleCurrentSourceFailure(getVideoErrorMessage(error));
@@ -693,34 +754,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         videoErrorHandlerRef.current = videoErrorHandler;
         videoElement.addEventListener('error', videoErrorHandler);
 
-        const loadingTimeout = setTimeout(() => {
-          if (
-            isCurrentInitialization() &&
-            artPlayerRef.current === artPlayer &&
-            !artPlayer.playing
-          ) {
-            setLoading(false);
-            setIsVideoLoading(false);
-            finishSourceSwitch('视频加载超时');
-
-            console.error('视频加载超时:', {
-              url: videoUrl,
-              source: currentSource,
-              id: currentId,
-              episodeIndex: currentEpisodeIndex,
-            });
-
-            handleCurrentSourceFailure(
-              `视频加载超时 (10秒)\n地址: ${videoUrl}\n\n没有更多播放源了`,
-            );
-          }
-        }, 10000);
-
         applyAllUiEnhancements(artPlayerRef);
 
         artPlayer.on('ready', async () => {
           if (!isActivePlayer()) return;
-          clearTimeout(loadingTimeout);
+          clearMediaLoadingTimeout();
           setError(null);
 
           // ✅ 添加分辨率显示
@@ -875,6 +913,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         artPlayer.on('video:canplay', () => {
           if (!isActivePlayer()) return;
+          clearMediaLoadingTimeout();
           setIsVideoLoading(false);
           finishSourceSwitch('视频可播放');
           videoEndedHandledRef.current = false;
@@ -1031,6 +1070,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           if (!isActivePlayer()) return;
           console.error('播放器错误:', err);
 
+          clearMediaLoadingTimeout();
           setIsVideoLoading(false);
           finishSourceSwitch('播放器错误');
 
@@ -1117,6 +1157,28 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     };
 
     const loadAndInit = async () => {
+      const expectedVideoUrl =
+        detail?.episodes &&
+        currentEpisodeIndex !== null &&
+        currentEpisodeIndex >= 0 &&
+        currentEpisodeIndex < detail.episodes.length
+          ? detail.episodes[currentEpisodeIndex]?.trim() || ''
+          : null;
+
+      // 选集会先更新 episodeIndex，再由 useEpisodeDanmuSync 写入对应 URL。
+      // 过渡 render 仍携带旧 URL，必须等待下一次 render，避免对旧媒体误发 switch。
+      if (
+        expectedVideoUrl !== null &&
+        videoUrl.trim() !== expectedVideoUrl
+      ) {
+        return;
+      }
+
+      if (expectedVideoUrl === '') {
+        setError('视频地址无效');
+        return;
+      }
+
       try {
         const [artplayerModules, hlsRuntime, hlsModule] = await Promise.all([
           loadArtplayerModules(),
@@ -1139,6 +1201,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       if (initializationGenerationRef.current === generation) {
         initializationGenerationRef.current += 1;
       }
+      clearMediaLoadingTimeout();
     };
   }, [
     videoUrl,

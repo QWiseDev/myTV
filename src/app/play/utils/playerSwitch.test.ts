@@ -1,4 +1,5 @@
 import {
+  applyPlayerMediaSwitch,
   shouldRebuildPlayerForMediaSwitch,
   switchPlayerMedia,
 } from './playerSwitch';
@@ -22,7 +23,7 @@ describe('playerSwitch', () => {
       shouldRebuildPlayerForMediaSwitch({
         isEpisodeChange: false,
         isSourceChange: true,
-      })
+      }),
     ).toBe(true);
   });
 
@@ -31,7 +32,7 @@ describe('playerSwitch', () => {
       shouldRebuildPlayerForMediaSwitch({
         isEpisodeChange: true,
         isSourceChange: false,
-      })
+      }),
     ).toBe(false);
   });
 
@@ -40,7 +41,7 @@ describe('playerSwitch', () => {
       shouldRebuildPlayerForMediaSwitch({
         isEpisodeChange: true,
         isSourceChange: true,
-      })
+      }),
     ).toBe(true);
   });
 
@@ -57,9 +58,15 @@ describe('playerSwitch', () => {
     });
 
     expect(player.switchUrl).toHaveBeenCalledWith(
-      'https://example.com/next.m3u8'
+      'https://example.com/next.m3u8',
     );
     expect(player.switchQuality).not.toHaveBeenCalled();
+    expect(player.title).toBe('old title');
+    expect(player.poster).toBe('old.jpg');
+    expect(player.currentTime).toBe(125);
+
+    applyPlayerMediaSwitch(player, result);
+
     expect(player.title).toBe('new title - 第2集');
     expect(player.poster).toBe('new.jpg');
     expect(player.currentTime).toBe(125);
@@ -80,9 +87,13 @@ describe('playerSwitch', () => {
     });
 
     expect(player.switchUrl).toHaveBeenCalledWith(
-      'https://example.com/episode-2.m3u8'
+      'https://example.com/episode-2.m3u8',
     );
     expect(player.switchQuality).not.toHaveBeenCalled();
+    expect(player.currentTime).toBe(88);
+
+    applyPlayerMediaSwitch(player, result);
+
     expect(player.currentTime).toBe(0);
     expect(result.restoredTime).toBeUndefined();
   });
