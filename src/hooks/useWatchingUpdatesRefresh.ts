@@ -57,8 +57,8 @@ export function useWatchingUpdatesRefresh({
     }
   }, []);
 
-  const scheduleWatchingUpdatesCheck = useCallback(() => {
-    if (typeof window === 'undefined') return;
+  const scheduleWatchingUpdatesCheck = useCallback((): (() => void) => {
+    if (typeof window === 'undefined') return () => undefined;
 
     const runCheck = () => {
       if (!canCheckWatchingUpdates(activeTabRef.current)) return;
@@ -67,7 +67,7 @@ export function useWatchingUpdatesRefresh({
 
     const delay = Math.max(DELAYS.WATCHING_UPDATES_CHECK, 4000);
 
-    scheduleIdleTask(runCheck, {
+    return scheduleIdleTask(runCheck, {
       delayMs: delay,
       timeoutMs: delay + 1500,
     });
@@ -101,7 +101,9 @@ export function useWatchingUpdatesRefresh({
       if (!canCheckWatchingUpdates(activeTabRef.current)) return;
 
       const now = Date.now();
-      if (shouldThrottleVisibilityCheck(visibilityCheckThrottleRef.current, now)) {
+      if (
+        shouldThrottleVisibilityCheck(visibilityCheckThrottleRef.current, now)
+      ) {
         return;
       }
 

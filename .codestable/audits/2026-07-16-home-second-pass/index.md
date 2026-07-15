@@ -21,7 +21,7 @@ total_findings: 8
 
 ## 总评
 
-共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。3 条 P1 已全部解决；收藏夹加载状态、异步生命周期和清空失败也已在同一可靠性阶段收口。当前剩余 2 条 P2，分别是追更 idle 任务所有权和新 SSR initialData 同步。
+共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。3 条 P1、收藏夹可靠性和追更 idle 任务所有权均已收口。当前只剩 1 条 P2：新 SSR initialData 不会同步到现有首页 state。
 
 未发现新的安全问题。`.codestable/architecture/ARCHITECTURE.md` 仍是骨架，因此本轮不产 `arch-drift` finding。
 
@@ -61,9 +61,10 @@ total_findings: 8
 - **#2 resolved**：继续观看分页前后保持同一个动画容器；12→13 条不再切换父结构。全量 Jest 更新为 69 suites / 294 tests。
 - **#3 resolved**：播放记录未决时不再给热门电影 priority；确认无续播记录后才分配电影优先级。全量 Jest 更新为 69 suites / 295 tests。
 - **#4、#5、#8 resolved**：收藏基础 payload 立即可见，loading/error/loaded-empty 明确区分；补全 worker 绑定 effect generation，旧 GET 不覆盖新事件；清空失败在点击边界消费且不清本地列表。全量 Jest 更新为 69 suites / 305 tests，typecheck 与 production build 通过。
-- **#6、#7 open**：继续按独立生命周期边界处理。
+- **#6 resolved**：追更 idle 调度返回取消句柄并由创建它的 `useHomeData` effect 持有；StrictMode 首轮与组件卸载都会回收未执行任务。全量 Jest 更新为 69 suites / 307 tests，typecheck 与 production build 通过。
+- **#7 open**：单独处理新完整 initialData 的 state 同步，不扩大到 partial merge 语义。
 
 ## 下一步建议
 
-- **P2 按同域收口**：#4、#5、#8 合并为收藏夹可靠性阶段；#6 独立收回 idle 任务所有权；#7 补 `router.refresh`/prop rerender 回归后修复。
+- **剩余 P2**：#7 补 `router.refresh`/prop rerender 回归后修复，明确把新完整 RSC snapshot 视为权威输入。
 - 聚合缓存“完整才缓存”的故障隔离粒度已在上一轮明确列为运行数据观察项，本轮没有新证据证明应立即扩大为分区缓存重构，因此不重复立项。

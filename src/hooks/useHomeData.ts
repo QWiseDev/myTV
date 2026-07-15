@@ -57,6 +57,7 @@ export function useHomeData({
   useEffect(() => {
     let cancelled = false;
     let cancelTertiaryLoad: (() => void) | undefined;
+    let cancelWatchingUpdatesCheck: (() => void) | undefined;
 
     const applyHomeData = (nextData: HomeData) => {
       if (cancelled) return;
@@ -185,7 +186,7 @@ export function useHomeData({
       let availability = getHomeDataAvailability(snapshot);
 
       if (availability.isComplete) {
-        scheduleWatchingUpdatesCheck();
+        cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();
         return;
       }
 
@@ -214,7 +215,7 @@ export function useHomeData({
       }
 
       if (cancelled) return;
-      scheduleWatchingUpdatesCheck();
+      cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();
     };
 
     loadAllData();
@@ -222,6 +223,7 @@ export function useHomeData({
     return () => {
       cancelled = true;
       cancelTertiaryLoad?.();
+      cancelWatchingUpdatesCheck?.();
     };
   }, [initialData, scheduleWatchingUpdatesCheck]);
 

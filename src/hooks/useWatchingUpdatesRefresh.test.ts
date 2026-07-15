@@ -49,6 +49,8 @@ describe('useWatchingUpdatesRefresh', () => {
   });
 
   it('schedules a visible home-tab watching update check on idle', async () => {
+    const cancelIdleTask = jest.fn();
+    mockScheduleIdleTask.mockReturnValue(cancelIdleTask);
     const { result } = renderHook(() =>
       useWatchingUpdatesRefresh({
         activeTab: 'home',
@@ -60,10 +62,12 @@ describe('useWatchingUpdatesRefresh', () => {
       await flushAsyncWork();
     });
 
+    let cancelScheduledCheck: (() => void) | undefined;
     act(() => {
-      result.current.scheduleWatchingUpdatesCheck();
+      cancelScheduledCheck = result.current.scheduleWatchingUpdatesCheck();
     });
 
+    expect(cancelScheduledCheck).toBe(cancelIdleTask);
     expect(mockScheduleIdleTask).toHaveBeenCalledWith(expect.any(Function), {
       delayMs: 4000,
       timeoutMs: 5500,
@@ -77,6 +81,9 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockFetchWatchingUpdatesFromServer).toHaveBeenCalledTimes(1);
+
+    cancelScheduledCheck?.();
+    expect(cancelIdleTask).toHaveBeenCalledTimes(1);
   });
 
   it('skips the scheduled check outside the visible home tab', async () => {

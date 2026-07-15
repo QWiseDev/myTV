@@ -7,6 +7,7 @@ const mockLoadCriticalData = jest.fn();
 const mockLoadHomeDataFromApi = jest.fn();
 const mockLoadSecondaryData = jest.fn();
 const mockLoadTertiaryData = jest.fn();
+const mockCancelWatchingUpdatesCheck = jest.fn();
 const mockScheduleWatchingUpdatesCheck = jest.fn();
 
 jest.mock('@/lib/home-data-loader', () => ({
@@ -37,6 +38,13 @@ const bangumiDay = {
   items: [],
 };
 
+const completeInitialData = {
+  hotMovies: [item],
+  hotTvShows: [{ ...item, id: 'tv-initial' }],
+  hotVarietyShows: [{ ...item, id: 'show-initial' }],
+  bangumiCalendarData: [bangumiDay],
+};
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {
@@ -55,8 +63,50 @@ describe('useHomeData', () => {
     mockLoadHomeDataFromApi.mockReset();
     mockLoadSecondaryData.mockReset();
     mockLoadTertiaryData.mockReset();
+    mockCancelWatchingUpdatesCheck.mockReset();
     mockScheduleWatchingUpdatesCheck.mockReset();
+    mockScheduleWatchingUpdatesCheck.mockReturnValue(
+      mockCancelWatchingUpdatesCheck,
+    );
     mockLoadHomeDataFromApi.mockResolvedValue(EMPTY_HOME_DATA);
+  });
+
+  it('cancels a scheduled watching update check on unmount', () => {
+    const { unmount } = renderHook(() =>
+      useHomeData({
+        activeTab: 'home',
+        refreshWatchingUpdates: jest.fn(),
+        initialData: completeInitialData,
+      }),
+    );
+
+    expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    expect(mockCancelWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the StrictMode setup before keeping the live scheduled check', () => {
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StrictMode, null, children);
+
+    const { unmount } = renderHook(
+      () =>
+        useHomeData({
+          activeTab: 'home',
+          refreshWatchingUpdates: jest.fn(),
+          initialData: completeInitialData,
+        }),
+      { wrapper },
+    );
+
+    expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(2);
+    expect(mockCancelWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    expect(mockCancelWatchingUpdatesCheck).toHaveBeenCalledTimes(2);
   });
 
   it('loads only the missing variety section and preserves existing TV data', async () => {

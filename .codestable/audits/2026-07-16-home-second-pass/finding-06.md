@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 06：追更 idle 检查丢失取消句柄
@@ -32,3 +32,11 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为这是现有调度契约的所有权补全，不需要改变追更逻辑。
+
+## 修复记录（2026-07-16）
+
+- `scheduleWatchingUpdatesCheck()` 现在返回底层 `scheduleIdleTask()` 的取消函数；SSR 分支返回 no-op，调用契约保持统一。
+- `useHomeData` effect 接住该句柄，并在 cleanup 与 tertiary idle 任务一起取消；创建与回收由同一 effect 持有。
+- 完整 initialData 的 StrictMode 首轮 setup 会在模拟 cleanup 时取消，第二轮只保留一个 live task；普通卸载同样会取消未执行任务。
+- 不扩大到中止已经开始的追更 fetch；active tab 与页面可见性门禁保持不变。
+- 定向 Jest 2 suites / 10 tests、全量 Jest 69 suites / 307 tests、typecheck、production build、目标 ESLint 与格式检查通过。
