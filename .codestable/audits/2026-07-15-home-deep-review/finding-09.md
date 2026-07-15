@@ -6,7 +6,7 @@ nature: maintainability
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 09：首页 fallback 与 Suspense 层级重复
@@ -35,6 +35,15 @@ status: open
 ## 本轮进展（2026-07-15）
 
 TV/综艺 availability、loading 和按需 patch 已拆开，Bangumi 边界也统一在客户端归一化，减少了部分错误所有权混淆；相关 characterization tests 已补。但 `withTimeout()` 外的 `Promise.allSettled`、聚合加载 catch 以及不会真实 suspend 的多层 UI 边界尚未系统删除，finding 保持 open。
+
+## 完成记录（2026-07-16）
+
+- secondary/tertiary 已删除 `withTimeout()` 外重复的 settled 结果拆包，并通过 characterization test 保留 tertiary 失败时的真实 `undefined` 契约。
+- `loadHomeDataFromApi()` 的 never-reject 契约已由 fetch/JSON/非 2xx 测试固化，hook 外不可达 catch 已删除。
+- 首页 5 个同步 `Suspense` 已删除；Bangumi/Favorites 内已被首页依赖图静态加载的 `ScrollableRow`/`VideoCard` 不再重复 lazy。
+- ContinueWatching、FavoritesSection、Telegram、AI modal、SlotMachine 的真实 lazy 局部边界，以及数据 loading skeleton 均保留。
+- 全量 Jest、类型检查、生产构建、变更文件 lint/format 与真实浏览器首页/收藏夹切换均通过，finding 关闭。
+- Bangumi 失败导致 `/api/home` 等待 8 秒属于独立性能策略，不混入本次行为等价重构。
 
 ## 建议动作
 

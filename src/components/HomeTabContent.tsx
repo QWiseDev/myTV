@@ -88,55 +88,47 @@ export default function HomeTabContent({
       </Suspense>
 
       {/* 热门电影：首屏关键路径，VideoCard 静态导入减少瀑布 */}
-      <Suspense fallback={<SectionSkeleton title='热门电影' />}>
-        <LazyVideoSection
-          title='热门电影'
-          icon={Film}
-          linkHref='/douban?type=movie'
-          data={hotMovies}
-          loading={criticalLoading}
-          renderItem={(movie, index) =>
-            renderDoubanCard(movie, {
-              type: 'movie',
-              priority: !hasContinueWatching && index < 3,
-            })
-          }
-        />
-      </Suspense>
+      <LazyVideoSection
+        title='热门电影'
+        icon={Film}
+        linkHref='/douban?type=movie'
+        data={hotMovies}
+        loading={criticalLoading}
+        renderItem={(movie, index) =>
+          renderDoubanCard(movie, {
+            type: 'movie',
+            priority: !hasContinueWatching && index < 3,
+          })
+        }
+      />
 
       {/* 热门剧集 */}
-      <Suspense fallback={<SectionSkeleton title='热门剧集' />}>
-        <LazyVideoSection
-          title='热门剧集'
-          icon={Tv}
-          linkHref='/douban?type=tv'
-          data={hotTvShows}
-          loading={tvLoading}
-          enableAnimation={false}
-          renderItem={(show) => renderDoubanCard(show)}
-        />
-      </Suspense>
+      <LazyVideoSection
+        title='热门剧集'
+        icon={Tv}
+        linkHref='/douban?type=tv'
+        data={hotTvShows}
+        loading={tvLoading}
+        enableAnimation={false}
+        renderItem={(show) => renderDoubanCard(show)}
+      />
 
       {/* 每日新番放送 */}
-      <Suspense fallback={<SectionSkeleton title='新番放送' />}>
-        <BangumiSection
-          bangumiCalendarData={bangumiCalendarData}
-          loading={tertiaryLoading}
-        />
-      </Suspense>
+      <BangumiSection
+        bangumiCalendarData={bangumiCalendarData}
+        loading={tertiaryLoading}
+      />
 
       {/* 热门综艺 */}
-      <Suspense fallback={<SectionSkeleton title='热门综艺' />}>
-        <LazyVideoSection
-          title='热门综艺'
-          icon={Sparkles}
-          linkHref='/douban?type=show'
-          data={hotVarietyShows}
-          loading={varietyLoading}
-          enableAnimation={false}
-          renderItem={(show) => renderDoubanCard(show)}
-        />
-      </Suspense>
+      <LazyVideoSection
+        title='热门综艺'
+        icon={Sparkles}
+        linkHref='/douban?type=show'
+        data={hotVarietyShows}
+        loading={varietyLoading}
+        enableAnimation={false}
+        renderItem={(show) => renderDoubanCard(show)}
+      />
     </>
   );
 }

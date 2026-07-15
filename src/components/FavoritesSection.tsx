@@ -1,7 +1,5 @@
 'use client';
 
-import { lazy, Suspense } from 'react';
-
 import {
   HOME_FAVORITES_GRID_CLASS,
   HOME_SECTION_ACTION_CLASS,
@@ -11,9 +9,7 @@ import type { FavoriteItem } from '@/lib/types';
 
 import EmptyFavorites from './EmptyFavorites';
 import HomeSectionHeader from './HomeSectionHeader';
-import SkeletonCard from './SkeletonCard';
-
-const VideoCard = lazy(() => import('./VideoCard'));
+import VideoCard from './VideoCard';
 
 interface FavoritesSectionProps {
   favoriteItems: FavoriteItem[];
@@ -51,14 +47,12 @@ export default function FavoritesSection({
       <div className={HOME_FAVORITES_GRID_CLASS}>
         {favoriteItems.map((item) => (
           <div key={item.id + item.source} className='w-full'>
-            <Suspense fallback={<SkeletonCard />}>
-              <VideoCard
-                query={item.search_title}
-                {...item}
-                from='favorite'
-                type={item.episodes > 1 ? 'tv' : ''}
-              />
-            </Suspense>
+            <VideoCard
+              query={item.search_title}
+              {...item}
+              from='favorite'
+              type={item.episodes > 1 ? 'tv' : ''}
+            />
           </div>
         ))}
         {favoriteItems.length === 0 && <EmptyFavorites />}

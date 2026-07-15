@@ -109,7 +109,7 @@ export const loadSecondaryData = async ({
   loadTvShows: boolean;
   loadVarietyShows: boolean;
 }) => {
-  const [tvShowsResult, varietyShowsResult] = await Promise.allSettled([
+  const [hotTvShows, hotVarietyShows] = await Promise.all([
     loadTvShows
       ? withTimeout(
           getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
@@ -135,12 +135,8 @@ export const loadSecondaryData = async ({
   ]);
 
   return {
-    hotTvShows:
-      tvShowsResult.status === 'fulfilled' ? tvShowsResult.value : undefined,
-    hotVarietyShows:
-      varietyShowsResult.status === 'fulfilled'
-        ? varietyShowsResult.value
-        : undefined,
+    hotTvShows,
+    hotVarietyShows,
   };
 };
 
@@ -148,12 +144,10 @@ export const loadSecondaryData = async ({
  * 加载第三级数据 - 番剧
  */
 export const loadTertiaryData = async () => {
-  const [bangumiResult] = await Promise.allSettled([
-    withTimeout(GetBangumiCalendarData(), DATA_FETCH_TIMEOUTS.TERTIARY),
-  ]);
+  const bangumiCalendarData = await withTimeout(
+    GetBangumiCalendarData(),
+    DATA_FETCH_TIMEOUTS.TERTIARY,
+  );
 
-  return {
-    bangumiCalendarData:
-      bangumiResult.status === 'fulfilled' ? bangumiResult.value : [],
-  };
+  return { bangumiCalendarData };
 };

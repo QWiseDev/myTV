@@ -1,4 +1,11 @@
+import { EMPTY_HOME_DATA } from './home-data-types';
+
+const mockGetBangumiCalendarData = jest.fn();
 const mockGetDoubanCategories = jest.fn();
+
+jest.mock('@/lib/bangumi.client', () => ({
+  GetBangumiCalendarData: mockGetBangumiCalendarData,
+}));
 
 jest.mock('@/lib/douban.client', () => ({
   getDoubanCategories: mockGetDoubanCategories,
@@ -6,6 +13,7 @@ jest.mock('@/lib/douban.client', () => ({
 
 let loadSecondaryData: typeof import('./home-data-loader').loadSecondaryData;
 let loadHomeDataFromApi: typeof import('./home-data-loader').loadHomeDataFromApi;
+let loadTertiaryData: typeof import('./home-data-loader').loadTertiaryData;
 
 const item = {
   id: '1',
@@ -27,13 +35,15 @@ const completeHomeData = {
   ],
 };
 
-describe('loadSecondaryData', () => {
+describe('home-data-loader', () => {
   beforeAll(async () => {
-    ({ loadHomeDataFromApi, loadSecondaryData } =
+    ({ loadHomeDataFromApi, loadSecondaryData, loadTertiaryData } =
       await import('./home-data-loader'));
   });
 
   beforeEach(() => {
+    mockGetBangumiCalendarData.mockReset();
+    mockGetBangumiCalendarData.mockResolvedValue([]);
     mockGetDoubanCategories.mockReset();
     mockGetDoubanCategories.mockResolvedValue({
       code: 200,
@@ -41,8 +51,31 @@ describe('loadSecondaryData', () => {
     });
   });
 
+  it('normalizes aggregate transport and parsing failures to empty data', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('network failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          throw new Error('invalid json');
+        },
+      })
+      .mockResolvedValueOnce({ ok: false }) as unknown as typeof fetch;
+
+    try {
+      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
+      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
+      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('requests only the selected secondary section', async () => {
-    await loadSecondaryData({
+    const result = await loadSecondaryData({
       loadTvShows: false,
       loadVarietyShows: true,
     });
@@ -52,6 +85,35 @@ describe('loadSecondaryData', () => {
       kind: 'tv',
       category: 'show',
       type: 'show',
+    });
+    expect(result.hotTvShows).toBeUndefined();
+  });
+
+  it('keeps a successful secondary result when its sibling rejects', async () => {
+    const varietyResult = {
+      code: 200,
+      message: 'success',
+      list: [{ ...item, id: 'show-success' }],
+    };
+    mockGetDoubanCategories
+      .mockRejectedValueOnce(new Error('tv failed'))
+      .mockResolvedValueOnce(varietyResult);
+
+    await expect(
+      loadSecondaryData({ loadTvShows: true, loadVarietyShows: true }),
+    ).resolves.toEqual({
+      hotTvShows: { code: 200, message: 'fallback', list: [] },
+      hotVarietyShows: varietyResult,
+    });
+  });
+
+  it('normalizes a tertiary rejection without rejecting the loader', async () => {
+    mockGetBangumiCalendarData.mockRejectedValueOnce(
+      new Error('bangumi failed'),
+    );
+
+    await expect(loadTertiaryData()).resolves.toEqual({
+      bangumiCalendarData: undefined,
     });
   });
 

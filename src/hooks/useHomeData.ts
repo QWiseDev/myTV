@@ -189,18 +189,13 @@ export function useHomeData({
         return;
       }
 
-      try {
-        const apiHomeData = await loadHomeDataFromApi();
-        if (cancelled) return;
+      const apiHomeData = await loadHomeDataFromApi();
+      if (cancelled) return;
 
-        if (hasHomeData(apiHomeData)) {
-          snapshot = mergeHomeData(snapshot, apiHomeData);
-          applyHomeData(snapshot);
-          availability = getHomeDataAvailability(snapshot);
-        }
-      } catch (error) {
-        if (cancelled) return;
-        reportHomeDataError('首页聚合数据加载失败，回退分批加载:', error);
+      if (hasHomeData(apiHomeData)) {
+        snapshot = mergeHomeData(snapshot, apiHomeData);
+        applyHomeData(snapshot);
+        availability = getHomeDataAvailability(snapshot);
       }
 
       if (cancelled) return;

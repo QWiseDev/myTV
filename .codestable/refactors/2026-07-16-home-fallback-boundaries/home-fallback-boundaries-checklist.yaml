@@ -1,0 +1,29 @@
+refactor: 2026-07-16-home-fallback-boundaries
+status: done
+steps:
+  - id: characterization-tests
+    title: 固化错误与渲染边界行为
+    status: done
+    verify: 定向 Jest 在改动前后通过
+  - id: data-boundaries
+    title: 收口数据 fallback 所有权
+    status: done
+    verify: loader 与 hook 测试、typecheck 通过
+  - id: suspense-boundaries
+    title: 收口首页 Suspense 所有权
+    status: done
+    verify: 组件测试与 production build 通过
+  - id: full-verification
+    title: 完整回归与运行态复验
+    status: done
+    verify: Jest、ESLint、typecheck、build 与真实首页复验通过
+checks:
+  - id: behavior-equivalence
+    title: 请求时序、缓存与 loading 语义不变
+    status: passed
+  - id: real-lazy-boundaries
+    title: 真实 lazy 组件仍有最近 Suspense
+    status: passed
+  - id: performance-issue-separated
+    title: Bangumi 8 秒性能策略未混入本次提交
+    status: passed

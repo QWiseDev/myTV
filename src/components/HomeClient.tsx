@@ -1,6 +1,13 @@
 'use client';
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
@@ -184,10 +191,8 @@ export default function HomeClient({
   initialHomeData?: HomeData;
 }) {
   return (
-    <Suspense fallback={null}>
-      <PlaybackDataProvider>
-        <HomeContent initialHomeData={initialHomeData} />
-      </PlaybackDataProvider>
-    </Suspense>
+    <PlaybackDataProvider>
+      <HomeContent initialHomeData={initialHomeData} />
+    </PlaybackDataProvider>
   );
 }
