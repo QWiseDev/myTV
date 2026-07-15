@@ -15,6 +15,7 @@ interface ActionItem {
 interface MobileActionSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  onExited: () => void;
   title: string;
   actions: ActionItem[];
   poster?: string;
@@ -26,9 +27,12 @@ interface MobileActionSheetProps {
   origin?: 'vod' | 'live';
 }
 
+const EXIT_ANIMATION_DURATION_MS = 200;
+
 const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   isOpen,
   onClose,
+  onExited,
   title,
   actions,
   poster,
@@ -39,16 +43,14 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   totalEpisodes,
   origin = 'vod',
 }) => {
-  const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
   // 控制动画状态
   useEffect(() => {
-    let animationId: number;
-    let timer: NodeJS.Timeout;
+    let animationId: number | null = null;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (isOpen) {
-      setIsVisible(true);
       // 使用双重 requestAnimationFrame 确保DOM完全渲染
       animationId = requestAnimationFrame(() => {
         animationId = requestAnimationFrame(() => {
@@ -57,71 +59,66 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
       });
     } else {
       setIsAnimating(false);
-      // 等待动画完成后隐藏组件
-      timer = setTimeout(() => {
-        setIsVisible(false);
-      }, 200);
+      exitTimer = setTimeout(onExited, EXIT_ANIMATION_DURATION_MS);
     }
 
     return () => {
-      if (animationId) {
+      if (animationId !== null) {
         cancelAnimationFrame(animationId);
       }
-      if (timer) {
-        clearTimeout(timer);
+      if (exitTimer !== null) {
+        clearTimeout(exitTimer);
       }
     };
-  }, [isOpen]);
+  }, [isOpen, onExited]);
 
   // 阻止背景滚动
   useEffect(() => {
-    if (isVisible) {
-      // 保存当前滚动位置
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
-      const body = document.body;
-      const html = document.documentElement;
+    // 保存当前滚动位置
+    const scrollY = window.scrollY;
+    const scrollX = window.scrollX;
+    const body = document.body;
+    const html = document.documentElement;
 
-      // 获取滚动条宽度
-      const scrollBarWidth = window.innerWidth - html.clientWidth;
+    // 获取滚动条宽度
+    const scrollBarWidth = window.innerWidth - html.clientWidth;
 
-      // 保存原始样式
-      const originalBodyStyle = {
-        position: body.style.position,
-        top: body.style.top,
-        left: body.style.left,
-        right: body.style.right,
-        width: body.style.width,
-        paddingRight: body.style.paddingRight,
-        overflow: body.style.overflow,
-      };
+    // 保存原始样式
+    const originalBodyStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      paddingRight: body.style.paddingRight,
+      overflow: body.style.overflow,
+    };
 
-      // 设置body样式来阻止滚动，但保持原位置
-      body.style.position = 'fixed';
-      body.style.top = `-${scrollY}px`;
-      body.style.left = `-${scrollX}px`;
-      body.style.right = '0';
-      body.style.width = '100%';
-      body.style.overflow = 'hidden';
-      body.style.paddingRight = `${scrollBarWidth}px`;
+    // 设置body样式来阻止滚动，但保持原位置
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = `-${scrollX}px`;
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    body.style.paddingRight = `${scrollBarWidth}px`;
 
-      return () => {
-        // 恢复所有原始样式
-        body.style.position = originalBodyStyle.position;
-        body.style.top = originalBodyStyle.top;
-        body.style.left = originalBodyStyle.left;
-        body.style.right = originalBodyStyle.right;
-        body.style.width = originalBodyStyle.width;
-        body.style.paddingRight = originalBodyStyle.paddingRight;
-        body.style.overflow = originalBodyStyle.overflow;
+    return () => {
+      // 恢复所有原始样式
+      body.style.position = originalBodyStyle.position;
+      body.style.top = originalBodyStyle.top;
+      body.style.left = originalBodyStyle.left;
+      body.style.right = originalBodyStyle.right;
+      body.style.width = originalBodyStyle.width;
+      body.style.paddingRight = originalBodyStyle.paddingRight;
+      body.style.overflow = originalBodyStyle.overflow;
 
-        // 使用 requestAnimationFrame 确保样式恢复后再滚动
-        requestAnimationFrame(() => {
-          window.scrollTo(scrollX, scrollY);
-        });
-      };
-    }
-  }, [isVisible]);
+      // 使用 requestAnimationFrame 确保样式恢复后再滚动
+      requestAnimationFrame(() => {
+        window.scrollTo(scrollX, scrollY);
+      });
+    };
+  }, []);
 
   // ESC键关闭
   useEffect(() => {
@@ -131,13 +128,9 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
       }
     };
 
-    if (isVisible) {
-      document.addEventListener('keydown', handleEsc);
-      return () => document.removeEventListener('keydown', handleEsc);
-    }
-  }, [isVisible, onClose]);
-
-  if (!isVisible) return null;
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
 
   const renderContent = () => (
     <div

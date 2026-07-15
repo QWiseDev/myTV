@@ -364,6 +364,8 @@ function useVideoCardImageState(poster: string) {
   };
 }
 
+type ActionSheetPhase = 'closed' | 'open' | 'closing';
+
 const VideoCard = memo(function VideoCard(
     {
       id,
@@ -390,8 +392,9 @@ const VideoCard = memo(function VideoCard(
       sizes,
     }: VideoCardProps,
   ) {
-    const [showMobileActions, setShowMobileActions] = useState(false);
-    const hasOpenedMobileActionsRef = useRef(false);
+    const [actionSheetPhase, setActionSheetPhase] =
+      useState<ActionSheetPhase>('closed');
+    const showMobileActions = actionSheetPhase === 'open';
 
     const actualTitle = title;
     const actualPoster = poster;
@@ -558,8 +561,7 @@ const VideoCard = memo(function VideoCard(
     }, [playUrl]);
 
     const openMobileActions = useCallback(() => {
-      hasOpenedMobileActionsRef.current = true;
-      setShowMobileActions(true);
+      setActionSheetPhase('open');
 
       // 异步检查收藏状态，不阻塞菜单显示
       void checkSearchFavoriteStatus();
@@ -589,7 +591,15 @@ const VideoCard = memo(function VideoCard(
     );
 
     const closeMobileActions = useCallback(() => {
-      setShowMobileActions(false);
+      setActionSheetPhase((currentPhase) =>
+        currentPhase === 'open' ? 'closing' : currentPhase,
+      );
+    }, []);
+
+    const handleMobileActionsExited = useCallback(() => {
+      setActionSheetPhase((currentPhase) =>
+        currentPhase === 'closing' ? 'closed' : currentPhase,
+      );
     }, []);
 
     // 长按手势hook
@@ -888,10 +898,11 @@ const VideoCard = memo(function VideoCard(
         </div>
 
         {/* 操作菜单 - 支持右键和长按触发 */}
-        {hasOpenedMobileActionsRef.current && (
+        {actionSheetPhase !== 'closed' && (
           <MobileActionSheet
             isOpen={showMobileActions}
             onClose={closeMobileActions}
+            onExited={handleMobileActionsExited}
             title={actualTitle}
             poster={actionSheetPoster}
             actions={mobileActions}

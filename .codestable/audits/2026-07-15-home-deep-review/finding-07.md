@@ -6,16 +6,16 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: partially-resolved
+status: resolved
 ---
 
 # Finding 07：每张 VideoCard 都挂载完整状态与全局监听
 
-## 速答
+## 速答（修复前）
 
-首页通常同时挂载约 48-60 张卡，但每张卡都创建三份 props 镜像、两套收藏状态、两个全局事件监听和一个关闭状态的 ActionSheet。
+首页通常同时挂载约 48-60 张卡；修复前每张卡都会创建三份 props 镜像、两套收藏状态、两个全局事件监听和一个关闭状态的 ActionSheet。
 
-## 关键证据
+## 关键证据（修复前）
 
 - `src/components/VideoCard.tsx:87-97` — 每个可变字段各自用 state + effect 镜像 props。
 - `src/components/VideoCard.tsx:99-124` — 每张卡注册 `doubanImageProxyChanged` 与 `storage` 两个 window listener。
@@ -48,8 +48,14 @@ status: partially-resolved
 - 全量 Jest 68 suites / 287 tests、typecheck、production build 与目标 ESLint 通过；`/search` First Load JS 从约 213 kB 降至 212 kB。
 - `favoritesUpdated` 已收口为 `VideoCard` 模块级单一底层订阅；各卡片只保留按 storage key 更新自身状态的轻量 listener，首张 source-backed 卡挂载时订阅、最后一张卸载时清理。
 - 多卡回归测试覆盖同一事件更新两张卡、卸载部分卡不提前 detach，以及最后一张卸载后完整清理；全量 Jest 更新为 68 suites / 288 tests。
-- 普通收藏/搜索收藏两套 hook 和关闭后隐藏 ActionSheet fiber 仍待处理，finding 保持 partially-resolved。
+- ActionSheet 生命周期改为 `closed / open / closing` 单一父级状态；关闭动画完成后通过 `onExited` 真正卸载，不再为每张打开过的卡保留隐藏 fiber。
+- 退场测试覆盖 199/200ms 边界、关闭途中重新打开，以及卡片提前卸载时取消旧退出回调；`VideoCard.test.tsx` 15 个 tests、全量 Jest 68 suites / 291 tests 和 typecheck 通过。
+- 普通收藏与搜索收藏分别承担“延迟持续同步”和“按需三态加载”，不是纯重复状态；在没有 profile 证据前强行合并会扩大行为风险，不再作为本 finding 的未完成项。
+
+## 最终判定
+
+props 镜像、逐卡底层全局监听、未打开 timer 和关闭后隐藏 ActionSheet 实例均已移除；剩余每卡状态都有独立行为职责，原 P2 性能问题已解决。
 
 ## 建议动作
 
-`cs-refactor`，因为这是保持功能不变的组件状态边界重划。
+已按 `cs-refactor` 完成行为等价的状态与监听所有权收口。

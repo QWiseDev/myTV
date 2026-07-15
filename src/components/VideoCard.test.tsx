@@ -12,6 +12,8 @@ const mockDeletePlayRecord = jest.fn();
 const mockIsFavorited = jest.fn();
 const mockSaveFavorite = jest.fn();
 const mockSubscribeToDataUpdates = jest.fn();
+const mockMobileActionSheetExited = jest.fn();
+const mockMobileActionSheetUnmount = jest.fn();
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -43,6 +45,39 @@ jest.mock('@/lib/db.client', () => ({
   saveFavorite: mockSaveFavorite,
   subscribeToDataUpdates: mockSubscribeToDataUpdates,
 }));
+
+jest.mock('./MobileActionSheet', () => {
+  const actualReact = jest.requireActual<typeof import('react')>('react');
+  const actualModule = jest.requireActual<typeof import('./MobileActionSheet')>(
+    './MobileActionSheet',
+  );
+
+  const TrackedMobileActionSheet = (
+    props: React.ComponentProps<typeof actualModule.default>,
+  ) => {
+    actualReact.useEffect(
+      () => () => {
+        mockMobileActionSheetUnmount();
+      },
+      [],
+    );
+
+    const handleExited = actualReact.useCallback(() => {
+      mockMobileActionSheetExited();
+      props.onExited();
+    }, [props.onExited]);
+
+    return actualReact.createElement(actualModule.default, {
+      ...props,
+      onExited: handleExited,
+    });
+  };
+
+  return {
+    __esModule: true,
+    default: TrackedMobileActionSheet,
+  };
+});
 
 let VideoCard: typeof import('./VideoCard').default;
 
@@ -100,6 +135,8 @@ describe('VideoCard behavior', () => {
     mockDeleteFavorite.mockReset();
     mockDeletePlayRecord.mockReset();
     mockIsFavorited.mockReset();
+    mockMobileActionSheetExited.mockReset();
+    mockMobileActionSheetUnmount.mockReset();
     mockSaveFavorite.mockReset();
     mockSubscribeToDataUpdates.mockReset();
     mockSubscribeToDataUpdates.mockImplementation(
@@ -264,6 +301,82 @@ describe('VideoCard behavior', () => {
     render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
 
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('unmounts the action sheet after its closing animation', () => {
+    jest.useFakeTimers();
+    const initialBodyPosition = document.body.style.position;
+
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
+    openActionSheet();
+
+    expect(screen.getByText('选择操作')).not.toBeNull();
+    expect(document.body.style.position).toBe('fixed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    act(() => {
+      jest.advanceTimersByTime(199);
+    });
+    expect(screen.getByText('选择操作')).not.toBeNull();
+    expect(mockMobileActionSheetUnmount).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText('选择操作')).toBeNull();
+    expect(mockMobileActionSheetExited).toHaveBeenCalledTimes(1);
+    expect(mockMobileActionSheetUnmount).toHaveBeenCalledTimes(1);
+    expect(document.body.style.position).toBe(initialBodyPosition);
+  });
+
+  it('cancels action sheet unmount when reopened during closing', () => {
+    jest.useFakeTimers();
+
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
+    openActionSheet();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    openActionSheet();
+
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(screen.getByText('选择操作')).not.toBeNull();
+    expect(mockMobileActionSheetExited).not.toHaveBeenCalled();
+    expect(mockMobileActionSheetUnmount).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(screen.queryByText('选择操作')).toBeNull();
+    expect(mockMobileActionSheetExited).toHaveBeenCalledTimes(1);
+    expect(mockMobileActionSheetUnmount).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the pending action sheet exit when the card unmounts', () => {
+    jest.useFakeTimers();
+
+    const { unmount } = render(
+      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
+    );
+    openActionSheet();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(jest.getTimerCount()).toBe(1);
+    unmount();
+    expect(mockMobileActionSheetUnmount).toHaveBeenCalledTimes(1);
+    expect(mockMobileActionSheetExited).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(mockMobileActionSheetExited).not.toHaveBeenCalled();
+    expect(mockMobileActionSheetUnmount).toHaveBeenCalledTimes(1);
   });
 
   it('marks the poster as loaded after the image load event', async () => {
