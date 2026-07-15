@@ -48,6 +48,13 @@ status: resolved
 - 本地生产包浏览器冒烟：`/` 与 `/play?...` 的认证重定向正确，登录页可渲染且控制台无 error。
 - 本机无法连接 `.env` 指向的远端 Redis，因此未完成登录后真实首页数据目视验收；构建仍成功完成。
 
+## 运行态跟进（2026-07-16）
+
+- SSH Redis 隧道复验确认 SSR 首屏已解除阻塞：冷首页 `HTTP 200`，TTFB `0.152s`、总耗时 `0.777s`，HTML 已包含热门电影。
+- 同次复验发现 hydration 仍会请求完整 `/api/home`；Bangumi 失败时该接口约 `8.04s` 才返回 partial，TV/综艺虽各有 20 条也被整体扣留。
+- 后续 issue `2026-07-16-home-secondary-blocked-by-bangumi` 已修复该客户端 head-of-line：有 SSR critical 时直接补 TV/综艺并 idle 拉 Bangumi，只有空 initial 才保留聚合兜底。
+- 最新生产包下 TV/综艺分项接口并发返回各 20 条，总耗时约 `1.58s` 与 `1.52s`；全量 Jest 更新为 67 suites / 285 tests。
+
 ## 建议动作
 
 `cs-refactor`，因为这会改变性能与缓存边界，需要设计和浏览器/服务端验证；本轮已按确认后的边界完成修复。

@@ -100,15 +100,13 @@ describe('useHomeData', () => {
     });
   });
 
-  it('hydrates a critical-only snapshot without hiding its movies', async () => {
-    const apiData = {
-      hotMovies: [item],
-      hotTvShows: [{ ...item, id: 'tv-api' }],
-      hotVarietyShows: [{ ...item, id: 'show-api' }],
-      bangumiCalendarData: [bangumiDay],
+  it('loads missing batches directly when SSR already provides critical movies', async () => {
+    const secondaryData = {
+      hotTvShows: { code: 200, list: [{ ...item, id: 'tv-direct' }] },
+      hotVarietyShows: { code: 200, list: [{ ...item, id: 'show-direct' }] },
     };
-    const deferredApi = createDeferred<typeof apiData>();
-    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+    const deferredSecondary = createDeferred<typeof secondaryData>();
+    mockLoadSecondaryData.mockReturnValue(deferredSecondary.promise);
     const initialData = {
       hotMovies: [item],
       hotTvShows: [],
@@ -132,6 +130,58 @@ describe('useHomeData', () => {
       varietyLoading: true,
     });
 
+    await waitFor(() => {
+      expect(mockLoadSecondaryData).toHaveBeenCalledWith({
+        loadTvShows: true,
+        loadVarietyShows: true,
+      });
+    });
+    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deferredSecondary.resolve(secondaryData);
+      await deferredSecondary.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.homeData.hotMovies).toEqual([item]);
+      expect(result.current.homeData.hotTvShows).toEqual(
+        secondaryData.hotTvShows.list,
+      );
+      expect(result.current.homeData.hotVarietyShows).toEqual(
+        secondaryData.hotVarietyShows.list,
+      );
+      expect(result.current.loading.tvLoading).toBe(false);
+      expect(result.current.loading.varietyLoading).toBe(false);
+    });
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
+  });
+
+  it('keeps the aggregate loader as the fallback for an empty initial snapshot', async () => {
+    const apiData = {
+      hotMovies: [item],
+      hotTvShows: [{ ...item, id: 'tv-api' }],
+      hotVarietyShows: [{ ...item, id: 'show-api' }],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const deferredApi = createDeferred<typeof apiData>();
+    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+
+    const { result } = renderHook(() =>
+      useHomeData({
+        activeTab: 'home',
+        refreshWatchingUpdates: jest.fn(),
+        initialData: EMPTY_HOME_DATA,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockLoadHomeDataFromApi).toHaveBeenCalledTimes(1);
+    });
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
+
     await act(async () => {
       deferredApi.resolve(apiData);
       await deferredApi.promise;
@@ -152,8 +202,6 @@ describe('useHomeData', () => {
   });
 
   it('does not start fallback work from a cancelled StrictMode effect', async () => {
-    const deferredApi = createDeferred<typeof EMPTY_HOME_DATA>();
-    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
     mockLoadSecondaryData.mockResolvedValue({
       hotTvShows: { code: 200, list: [] },
       hotVarietyShows: { code: 200, list: [] },
@@ -177,14 +225,10 @@ describe('useHomeData', () => {
       { wrapper },
     );
 
-    await act(async () => {
-      deferredApi.resolve(EMPTY_HOME_DATA);
-      await deferredApi.promise;
-    });
-
     await waitFor(() => {
       expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
       expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
     });
+    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
   });
 });

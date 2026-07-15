@@ -189,13 +189,18 @@ export function useHomeData({
         return;
       }
 
-      const apiHomeData = await loadHomeDataFromApi();
-      if (cancelled) return;
+      if (!availability.hasCriticalData) {
+        const apiHomeData = await loadHomeDataFromApi();
+        if (cancelled) return;
 
-      if (hasHomeData(apiHomeData)) {
-        snapshot = mergeHomeData(snapshot, apiHomeData);
-        applyHomeData(snapshot);
-        availability = getHomeDataAvailability(snapshot);
+        if (hasHomeData(apiHomeData)) {
+          snapshot = mergeHomeData(snapshot, apiHomeData);
+          applyHomeData(snapshot);
+          availability = getHomeDataAvailability(snapshot);
+        }
+      } else {
+        // 给 StrictMode cleanup 留出取消点，避免首轮 effect 启动重复分项请求
+        await Promise.resolve();
       }
 
       if (cancelled) return;
