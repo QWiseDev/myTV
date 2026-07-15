@@ -8,6 +8,7 @@ import type { HomeLoadingState } from '@/lib/home-data-client';
 import type { HomeData } from '@/lib/home-data-types';
 import type { DoubanItem, PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
+import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
 
 import BangumiSection from './BangumiSection';
 import LazyVideoSection from './LazyVideoSection';
@@ -23,9 +24,11 @@ export interface HomeContinueWatchingState {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
+  loadError: PlayRecordsLoadError;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
   onLoadMore: () => Promise<void>;
+  onRetry: () => Promise<void>;
 }
 
 interface HomeTabContentProps {
@@ -81,9 +84,11 @@ export default function HomeTabContent({
           loading={continueWatching.loading}
           loadingMore={continueWatching.loadingMore}
           hasMore={continueWatching.hasMore}
+          loadError={continueWatching.loadError}
           onDeleteRecord={continueWatching.onDeleteRecord}
           onClearAll={continueWatching.onClearAll}
           onLoadMore={continueWatching.onLoadMore}
+          onRetry={continueWatching.onRetry}
         />
       </Suspense>
 

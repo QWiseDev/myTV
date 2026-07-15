@@ -808,7 +808,7 @@ export async function getPlayRecordsPage(
     } catch (err) {
       console.warn('分页获取播放记录失败:', err);
       triggerGlobalError('分页获取播放记录失败');
-      return paginatePlayRecords({}, options);
+      throw err;
     }
   }
 
@@ -819,7 +819,7 @@ export async function getPlayRecordsPage(
   } catch (err) {
     console.error('分页读取播放记录失败:', err);
     triggerGlobalError('分页读取播放记录失败');
-    return paginatePlayRecords({}, options);
+    throw err;
   }
 }
 

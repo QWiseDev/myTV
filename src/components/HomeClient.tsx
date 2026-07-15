@@ -69,7 +69,9 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     loadMorePlayRecords,
     markAllPlayRecordsDeleted,
     markPlayRecordDeleted,
+    playRecordsLoadError,
     refreshWatchingUpdates,
+    retryPlayRecords,
   } = usePlaybackData();
 
   const { favoriteItems, favoriteLoadError, loadingFavorites, clearFavorites } =
@@ -97,9 +99,11 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
       loading: loadingPlayRecords || loadingWatchingUpdates,
       loadingMore: loadingMorePlayRecords,
       hasMore: hasMorePlayRecords,
+      loadError: playRecordsLoadError,
       onDeleteRecord: deletePlayRecord,
       onClearAll: clearAllPlayRecords,
       onLoadMore: loadMorePlayRecords,
+      onRetry: retryPlayRecords,
     }),
     [
       playRecords,
@@ -108,9 +112,11 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
       loadingWatchingUpdates,
       loadingMorePlayRecords,
       hasMorePlayRecords,
+      playRecordsLoadError,
       deletePlayRecord,
       clearAllPlayRecords,
       loadMorePlayRecords,
+      retryPlayRecords,
     ],
   );
 

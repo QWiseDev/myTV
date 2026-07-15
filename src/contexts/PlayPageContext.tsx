@@ -12,7 +12,10 @@ import {
 import { generateStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
 import { type WatchingUpdate } from '@/lib/watching-updates';
-import { usePlaybackRecords } from '@/hooks/usePlaybackRecords';
+import {
+  type PlayRecordsLoadError,
+  usePlaybackRecords,
+} from '@/hooks/usePlaybackRecords';
 import { useWatchingUpdatesSnapshot } from '@/hooks/useWatchingUpdatesSnapshot';
 
 interface PlaybackDataContextType {
@@ -22,7 +25,9 @@ interface PlaybackDataContextType {
   loadingPlayRecords: boolean;
   loadingMorePlayRecords: boolean;
   hasMorePlayRecords: boolean;
+  playRecordsLoadError: PlayRecordsLoadError;
   loadMorePlayRecords: () => Promise<void>;
+  retryPlayRecords: () => Promise<void>;
   markPlayRecordDeleted: (key: string) => void;
   markAllPlayRecordsDeleted: () => void;
 
@@ -86,7 +91,9 @@ export function PlaybackDataProvider({
     markPlayRecordDeleted,
     markAllPlayRecordsDeleted,
     playRecords,
+    playRecordsLoadError,
     refreshPlayRecords,
+    retryPlayRecords,
     setPlayRecords,
   } = usePlaybackRecords(refreshWatchingUpdates, firstPagePlayRecordKeys);
 
@@ -98,7 +105,9 @@ export function PlaybackDataProvider({
       loadingPlayRecords,
       loadingMorePlayRecords,
       hasMorePlayRecords,
+      playRecordsLoadError,
       loadMorePlayRecords,
+      retryPlayRecords,
       markPlayRecordDeleted,
       markAllPlayRecordsDeleted,
 
@@ -114,7 +123,9 @@ export function PlaybackDataProvider({
       loadingPlayRecords,
       loadingMorePlayRecords,
       hasMorePlayRecords,
+      playRecordsLoadError,
       loadMorePlayRecords,
+      retryPlayRecords,
       markPlayRecordDeleted,
       markAllPlayRecordsDeleted,
       setPlayRecords,

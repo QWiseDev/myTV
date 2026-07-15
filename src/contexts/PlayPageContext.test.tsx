@@ -37,7 +37,9 @@ describe('PlaybackDataProvider', () => {
       markAllPlayRecordsDeleted: jest.fn(),
       markPlayRecordDeleted: jest.fn(),
       playRecords: {},
+      playRecordsLoadError: null,
       refreshPlayRecords: jest.fn(),
+      retryPlayRecords: jest.fn(),
       setPlayRecords: jest.fn(),
     });
   });

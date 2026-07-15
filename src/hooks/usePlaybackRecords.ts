@@ -7,6 +7,8 @@ import type { PlayRecord } from '@/lib/types';
 const PLAY_RECORDS_PAGE_SIZE = 12;
 const EMPTY_PRIORITY_PLAY_RECORD_KEYS: string[] = [];
 
+export type PlayRecordsLoadError = 'initial' | 'refresh' | 'append' | null;
+
 function debugError(...args: unknown[]) {
   if (process.env.NODE_ENV !== 'production') {
     console.error(...args);
@@ -35,80 +37,95 @@ export function usePlaybackRecords(
   const [loadingPlayRecords, setLoadingPlayRecords] = useState(true);
   const [loadingMorePlayRecords, setLoadingMorePlayRecords] = useState(false);
   const [hasMorePlayRecords, setHasMorePlayRecords] = useState(false);
+  const [playRecordsLoadError, setPlayRecordsLoadError] =
+    useState<PlayRecordsLoadError>(null);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextCursorRef = useRef<string | null>(null);
   const loadRequestRef = useRef(0);
   const appendRequestRef = useRef(0);
+  const appendLoadPromiseRef = useRef<Promise<void> | null>(null);
+  const retryLoadPromiseRef = useRef<Promise<void> | null>(null);
   const firstPageLoadingRef = useRef(false);
   const deletedKeysRef = useRef<Set<string>>(new Set());
   const playRecordsRef = useRef<Record<string, PlayRecord> | null>(null);
-  const lastPriorityKeysRef = useRef<string>('');
+  const lastPriorityKeySignatureRef = useRef<string | null>(null);
+  const normalizedPriorityPlayRecordKeys = Array.from(
+    new Set(priorityPlayRecordKeys),
+  ).sort();
+  const priorityKeySignature = normalizedPriorityPlayRecordKeys.join('\0');
+  const priorityPlayRecordKeysRef = useRef(normalizedPriorityPlayRecordKeys);
+  priorityPlayRecordKeysRef.current = normalizedPriorityPlayRecordKeys;
 
-  const loadPlayRecordsPage = useCallback(
-    async (append = false) => {
-      const requestId = append
-        ? loadRequestRef.current
-        : ++loadRequestRef.current;
-      const appendRequestId = append ? ++appendRequestRef.current : null;
-      const isCurrentRequest = () =>
-        requestId === loadRequestRef.current &&
-        (!append || appendRequestId === appendRequestRef.current);
-      const hasExistingRecords = Boolean(
-        playRecordsRef.current &&
-        Object.keys(playRecordsRef.current).length > 0,
-      );
+  const loadPlayRecordsPage = useCallback(async (append = false) => {
+    const requestId = append
+      ? loadRequestRef.current
+      : ++loadRequestRef.current;
+    const appendRequestId = append ? ++appendRequestRef.current : null;
+    const isCurrentRequest = () =>
+      requestId === loadRequestRef.current &&
+      (!append || appendRequestId === appendRequestRef.current);
+    const loadErrorStage: Exclude<PlayRecordsLoadError, null> = append
+      ? 'append'
+      : playRecordsRef.current === null
+        ? 'initial'
+        : 'refresh';
+    const hasExistingRecords = Boolean(
+      playRecordsRef.current && Object.keys(playRecordsRef.current).length > 0,
+    );
 
-      try {
-        if (append) {
-          setLoadingMorePlayRecords(true);
-        } else {
-          firstPageLoadingRef.current = true;
-          // 首屏刷新拥有新的游标基线；旧 append 即使底层请求仍挂起，也不应继续占用按钮或写回。
-          appendRequestRef.current += 1;
-          setLoadingMorePlayRecords(false);
-          if (!hasExistingRecords) {
-            // 已有首屏数据时静默刷新，避免 priority keys 到位后整行闪骨架
-            setLoadingPlayRecords(true);
-          }
-        }
-
-        const { getPlayRecordsPage } = await import('@/lib/db.client');
-        const page = await getPlayRecordsPage({
-          cursor: append ? nextCursorRef.current : null,
-          includeKeys: append ? [] : priorityPlayRecordKeys,
-          pageSize: PLAY_RECORDS_PAGE_SIZE,
-        });
-
-        if (!isCurrentRequest()) return;
-
-        const pageRecords = filterDeletedRecords(
-          page.records,
-          deletedKeysRef.current,
-        );
-        setPlayRecords((currentRecords) =>
-          append ? { ...(currentRecords || {}), ...pageRecords } : pageRecords,
-        );
-        nextCursorRef.current = page.nextCursor;
-        setHasMorePlayRecords(page.hasMore);
-      } catch (error) {
-        if (!isCurrentRequest()) return;
-        debugError('加载播放记录失败:', error);
-        if (!append && !playRecordsRef.current) {
-          setPlayRecords(null);
-        }
-      } finally {
-        if (append) {
-          if (isCurrentRequest()) {
-            setLoadingMorePlayRecords(false);
-          }
-        } else if (isCurrentRequest()) {
-          firstPageLoadingRef.current = false;
-          setLoadingPlayRecords(false);
+    try {
+      if (append) {
+        setLoadingMorePlayRecords(true);
+      } else {
+        firstPageLoadingRef.current = true;
+        // 首屏刷新拥有新的游标基线；旧 append 即使底层请求仍挂起，也不应继续占用按钮或写回。
+        appendRequestRef.current += 1;
+        appendLoadPromiseRef.current = null;
+        setLoadingMorePlayRecords(false);
+        if (!hasExistingRecords) {
+          // 已有首屏数据时静默刷新，避免 priority keys 到位后整行闪骨架
+          setLoadingPlayRecords(true);
         }
       }
-    },
-    [priorityPlayRecordKeys],
-  );
+
+      const { getPlayRecordsPage } = await import('@/lib/db.client');
+      const page = await getPlayRecordsPage({
+        cursor: append ? nextCursorRef.current : null,
+        includeKeys: append ? [] : priorityPlayRecordKeysRef.current,
+        pageSize: PLAY_RECORDS_PAGE_SIZE,
+      });
+
+      if (!isCurrentRequest()) return;
+
+      const pageRecords = filterDeletedRecords(
+        page.records,
+        deletedKeysRef.current,
+      );
+      setPlayRecords((currentRecords) =>
+        append ? { ...(currentRecords || {}), ...pageRecords } : pageRecords,
+      );
+      nextCursorRef.current = page.nextCursor;
+      setHasMorePlayRecords(page.hasMore);
+      setPlayRecordsLoadError((currentError) =>
+        append && currentError !== 'append' ? currentError : null,
+      );
+    } catch (error) {
+      if (!isCurrentRequest()) return;
+      debugError('加载播放记录失败:', error);
+      setPlayRecordsLoadError((currentError) =>
+        append && currentError === 'refresh' ? currentError : loadErrorStage,
+      );
+    } finally {
+      if (append) {
+        if (isCurrentRequest()) {
+          setLoadingMorePlayRecords(false);
+        }
+      } else if (isCurrentRequest()) {
+        firstPageLoadingRef.current = false;
+        setLoadingPlayRecords(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     playRecordsRef.current = playRecords;
@@ -129,24 +146,52 @@ export function usePlaybackRecords(
     }, 500);
   }, [loadPlayRecordsPage, refreshWatchingUpdates]);
 
-  const loadMorePlayRecords = useCallback(async () => {
+  const loadMorePlayRecords = useCallback((): Promise<void> => {
+    if (appendLoadPromiseRef.current) {
+      return appendLoadPromiseRef.current;
+    }
+
     if (
       !hasMorePlayRecords ||
       firstPageLoadingRef.current ||
       loadingPlayRecords ||
       loadingMorePlayRecords ||
+      playRecordsLoadError === 'refresh' ||
       !nextCursorRef.current
     ) {
-      return;
+      return Promise.resolve();
     }
 
-    await loadPlayRecordsPage(true);
+    const appendPromise = loadPlayRecordsPage(true);
+    appendLoadPromiseRef.current = appendPromise;
+
+    return appendPromise.finally(() => {
+      if (appendLoadPromiseRef.current === appendPromise) {
+        appendLoadPromiseRef.current = null;
+      }
+    });
   }, [
     hasMorePlayRecords,
     loadPlayRecordsPage,
     loadingMorePlayRecords,
     loadingPlayRecords,
+    playRecordsLoadError,
   ]);
+
+  const retryPlayRecords = useCallback((): Promise<void> => {
+    if (retryLoadPromiseRef.current) {
+      return retryLoadPromiseRef.current;
+    }
+
+    const retryPromise = loadPlayRecordsPage(false);
+    retryLoadPromiseRef.current = retryPromise;
+
+    return retryPromise.finally(() => {
+      if (retryLoadPromiseRef.current === retryPromise) {
+        retryLoadPromiseRef.current = null;
+      }
+    });
+  }, [loadPlayRecordsPage]);
 
   const markPlayRecordDeleted = useCallback((key: string) => {
     deletedKeysRef.current.add(key);
@@ -162,6 +207,8 @@ export function usePlaybackRecords(
   const markAllPlayRecordsDeleted = useCallback(() => {
     loadRequestRef.current += 1;
     appendRequestRef.current += 1;
+    appendLoadPromiseRef.current = null;
+    retryLoadPromiseRef.current = null;
     firstPageLoadingRef.current = false;
     deletedKeysRef.current.clear();
     playRecordsRef.current = {};
@@ -170,14 +217,15 @@ export function usePlaybackRecords(
     setLoadingMorePlayRecords(false);
     nextCursorRef.current = null;
     setHasMorePlayRecords(false);
+    setPlayRecordsLoadError(null);
   }, []);
 
   useEffect(() => {
-    const priorityKeySignature = priorityPlayRecordKeys.join('\0');
+    const isInitialLoad = lastPriorityKeySignatureRef.current === null;
     const isPriorityKeysChanged =
-      lastPriorityKeysRef.current !== '' &&
-      lastPriorityKeysRef.current !== priorityKeySignature;
-    lastPriorityKeysRef.current = priorityKeySignature;
+      !isInitialLoad &&
+      lastPriorityKeySignatureRef.current !== priorityKeySignature;
+    lastPriorityKeySignatureRef.current = priorityKeySignature;
 
     // priority keys 变化时立即补拉，确保新更剧集出现在首屏；
     // 首次加载仍走 idle，避免抢占关键渲染
@@ -185,6 +233,8 @@ export function usePlaybackRecords(
       void loadPlayRecordsPage(false);
       return;
     }
+
+    if (!isInitialLoad) return;
 
     const cancelLoad = scheduleIdleTask(
       () => {
@@ -203,7 +253,7 @@ export function usePlaybackRecords(
         refreshTimeoutRef.current = null;
       }
     };
-  }, [loadPlayRecordsPage, priorityPlayRecordKeys]);
+  }, [loadPlayRecordsPage, priorityKeySignature]);
 
   return {
     hasMorePlayRecords,
@@ -213,7 +263,9 @@ export function usePlaybackRecords(
     markAllPlayRecordsDeleted,
     markPlayRecordDeleted,
     playRecords,
+    playRecordsLoadError,
     refreshPlayRecords,
+    retryPlayRecords,
     setPlayRecords,
   };
 }

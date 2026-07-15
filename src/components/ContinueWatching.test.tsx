@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
 import type { PlayRecord } from '@/lib/types';
@@ -52,15 +52,22 @@ function createPlayRecords(count: number): Record<string, PlayRecord> {
 
 const defaultProps = {
   hasMore: true,
+  loadError: null,
   loading: false,
   loadingMore: false,
   onClearAll: jest.fn(),
   onDeleteRecord: jest.fn(),
   onLoadMore: jest.fn().mockResolvedValue(undefined),
+  onRetry: jest.fn().mockResolvedValue(undefined),
   watchingUpdates: null,
 };
 
 describe('ContinueWatching', () => {
+  beforeEach(() => {
+    defaultProps.onLoadMore.mockClear();
+    defaultProps.onRetry.mockClear();
+  });
+
   it('keeps the animated row structure when a second page is appended', () => {
     const { rerender } = render(
       <ContinueWatching
@@ -79,5 +86,68 @@ describe('ContinueWatching', () => {
     );
 
     expect(screen.getByTestId('scrollable-row').dataset.animation).toBe('true');
+  });
+
+  it('keeps the next-page entry visible after the loaded records are deleted', () => {
+    render(<ContinueWatching {...defaultProps} playRecords={{}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '加载更多继续观看' }));
+
+    expect(defaultProps.onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders an immediate retry entry after the initial page fails', async () => {
+    render(
+      <ContinueWatching
+        {...defaultProps}
+        hasMore={false}
+        loadError='initial'
+        playRecords={{}}
+      />,
+    );
+
+    expect(screen.getByText('加载失败')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重试加载继续观看' }));
+      await Promise.resolve();
+    });
+
+    expect(defaultProps.onRetry).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onLoadMore).not.toHaveBeenCalled();
+  });
+
+  it('uses the existing cursor retry action after an append failure', () => {
+    render(
+      <ContinueWatching
+        {...defaultProps}
+        loadError='append'
+        playRecords={createPlayRecords(1)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '重试加载继续观看' }));
+
+    expect(defaultProps.onLoadMore).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onRetry).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes a first-page retry after a silent refresh fails', async () => {
+    render(
+      <ContinueWatching
+        {...defaultProps}
+        hasMore={false}
+        loadError='refresh'
+        playRecords={createPlayRecords(1)}
+      />,
+    );
+
+    expect(screen.getByText('刷新失败')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重试加载继续观看' }));
+      await Promise.resolve();
+    });
+
+    expect(defaultProps.onRetry).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onLoadMore).not.toHaveBeenCalled();
   });
 });

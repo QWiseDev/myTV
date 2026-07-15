@@ -58,12 +58,18 @@ function createDeferred<T>() {
 }
 
 describe('usePlaybackRecords', () => {
+  let consoleErrorSpy: jest.SpyInstance;
+
   beforeEach(() => {
     jest.useFakeTimers();
     getPlayRecordsPage.mockReset();
+    consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    consoleErrorSpy.mockRestore();
     jest.useRealTimers();
   });
 
@@ -106,7 +112,7 @@ describe('usePlaybackRecords', () => {
 
     expect(getPlayRecordsPage).toHaveBeenCalledWith({
       cursor: null,
-      includeKeys: ['source+old-update', 'source+new-update'],
+      includeKeys: ['source+new-update', 'source+old-update'],
       pageSize: 12,
     });
   });
@@ -183,6 +189,172 @@ describe('usePlaybackRecords', () => {
       'source+first',
       'source+second',
     ]);
+  });
+
+  it('exposes an initial load error and retries the first page immediately', async () => {
+    const retryRecord = {
+      ...createRecord(),
+      title: '重试成功',
+    };
+    getPlayRecordsPage
+      .mockRejectedValueOnce(new Error('initial request failed'))
+      .mockResolvedValueOnce(createPage({ 'source+retry': retryRecord }));
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toBeNull();
+    expect(result.current.playRecordsLoadError).toBe('initial');
+    expect(result.current.loadingPlayRecords).toBe(false);
+
+    await act(async () => {
+      await result.current.retryPlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+    expect(result.current.playRecords).toEqual({
+      'source+retry': retryRecord,
+    });
+    expect(result.current.playRecordsLoadError).toBeNull();
+  });
+
+  it('keeps the last successful page and cursor when append fails', async () => {
+    const secondRecord = {
+      ...createRecord(),
+      title: '第二页',
+    };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          { 'source+first': createRecord() },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockRejectedValueOnce(new Error('append failed'))
+      .mockResolvedValueOnce(createPage({ 'source+second': secondRecord }));
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecordsLoadError).toBe('append');
+    expect(result.current.hasMorePlayRecords).toBe(true);
+    expect(Object.keys(result.current.playRecords || {})).toEqual([
+      'source+first',
+    ]);
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage.mock.calls.slice(1)).toEqual([
+      [
+        {
+          cursor: '100:source%2Bfirst',
+          includeKeys: [],
+          pageSize: 12,
+        },
+      ],
+      [
+        {
+          cursor: '100:source%2Bfirst',
+          includeKeys: [],
+          pageSize: 12,
+        },
+      ],
+    ]);
+    expect(result.current.playRecords).toEqual({
+      'source+first': createRecord(),
+      'source+second': secondRecord,
+    });
+    expect(result.current.playRecordsLoadError).toBeNull();
+  });
+
+  it('does not duplicate an append request before React commits loading state', async () => {
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          { 'source+first': createRecord() },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockImplementation(() => appendPage.promise);
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let firstAppend!: Promise<void>;
+    let duplicateAppend!: Promise<void>;
+    act(() => {
+      firstAppend = result.current.loadMorePlayRecords();
+      duplicateAppend = result.current.loadMorePlayRecords();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      appendPage.resolve(createPage({ 'source+second': createRecord() }));
+      await Promise.all([firstAppend, duplicateAppend]);
+      await flushAsyncWork();
+    });
+  });
+
+  it('does not reload the first page for an equivalent priority key set', async () => {
+    getPlayRecordsPage.mockResolvedValue(createPage({}));
+
+    const { rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(jest.fn(), includeKeys),
+      { initialProps: { includeKeys: ['source+b', 'source+a'] } },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
+
+    rerender({ includeKeys: ['source+a', 'source+b', 'source+a'] });
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
+
+    rerender({ includeKeys: ['source+c'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+c'],
+      pageSize: 12,
+    });
   });
 
   it('clears loading more after a priority refresh supersedes the append request', async () => {
@@ -329,6 +501,127 @@ describe('usePlaybackRecords', () => {
       'source+latest': refreshedRecord,
     });
     expect(result.current.loadingPlayRecords).toBe(false);
+    expect(result.current.playRecordsLoadError).toBeNull();
+  });
+
+  it('keeps existing records and paging state when a silent refresh fails', async () => {
+    const firstRecord = createRecord();
+    const priorityRecord = {
+      ...createRecord(),
+      title: '优先记录',
+    };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage({ 'source+first': firstRecord }, true, '100:source%2Bfirst'),
+      )
+      .mockRejectedValueOnce(new Error('silent refresh failed'))
+      .mockResolvedValueOnce(
+        createPage(
+          {
+            'source+first': firstRecord,
+            'source+priority': priorityRecord,
+          },
+          true,
+          '90:source%2Bpriority',
+        ),
+      );
+
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(jest.fn(), includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({ 'source+first': firstRecord });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+    expect(result.current.playRecordsLoadError).toBe('refresh');
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await result.current.retryPlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+priority'],
+      pageSize: 12,
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority': priorityRecord,
+    });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+    expect(result.current.playRecordsLoadError).toBeNull();
+  });
+
+  it('does not duplicate an immediate first-page retry', async () => {
+    const retryPage = createDeferred<ReturnType<typeof createPage>>();
+    getPlayRecordsPage
+      .mockRejectedValueOnce(new Error('initial request failed'))
+      .mockImplementationOnce(() => retryPage.promise);
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let firstRetry!: Promise<void>;
+    let duplicateRetry!: Promise<void>;
+    act(() => {
+      firstRetry = result.current.retryPlayRecords();
+      duplicateRetry = result.current.retryPlayRecords();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      retryPage.resolve(createPage({ 'source+retry': createRecord() }));
+      await Promise.all([firstRetry, duplicateRetry]);
+      await flushAsyncWork();
+    });
+  });
+
+  it('does not expose an in-flight first-page failure after clear-all', async () => {
+    const firstPage = createDeferred<ReturnType<typeof createPage>>();
+    getPlayRecordsPage.mockImplementationOnce(() => firstPage.promise);
+
+    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    act(() => {
+      result.current.markAllPlayRecordsDeleted();
+    });
+    await act(async () => {
+      firstPage.reject(new Error('stale failure'));
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({});
+    expect(result.current.playRecordsLoadError).toBeNull();
+    expect(result.current.loadingPlayRecords).toBe(false);
   });
 
   it('keeps records empty when clear-all invalidates an in-flight first page', async () => {
@@ -354,6 +647,7 @@ describe('usePlaybackRecords', () => {
     expect(result.current.playRecords).toEqual({});
     expect(result.current.hasMorePlayRecords).toBe(false);
     expect(result.current.loadingPlayRecords).toBe(false);
+    expect(result.current.playRecordsLoadError).toBeNull();
   });
 
   it('keeps records empty when clear-all invalidates an in-flight append', async () => {
@@ -402,6 +696,7 @@ describe('usePlaybackRecords', () => {
     expect(result.current.playRecords).toEqual({});
     expect(result.current.hasMorePlayRecords).toBe(false);
     expect(result.current.loadingMorePlayRecords).toBe(false);
+    expect(result.current.playRecordsLoadError).toBeNull();
   });
 
   it('keeps locally deleted records out of later page loads', async () => {

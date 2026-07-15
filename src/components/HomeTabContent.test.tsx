@@ -64,9 +64,11 @@ const continueWatching: HomeContinueWatchingState = {
   loading: false,
   loadingMore: false,
   hasMore: false,
+  loadError: null,
   onDeleteRecord: jest.fn(),
   onClearAll: jest.fn(),
   onLoadMore: jest.fn().mockResolvedValue(undefined),
+  onRetry: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('HomeTabContent', () => {

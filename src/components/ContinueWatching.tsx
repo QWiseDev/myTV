@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronRight, Clock, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   HOME_CARD_WIDTH_CLASS,
@@ -15,6 +15,7 @@ import {
 } from '@/lib/continue-watching-display';
 import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
+import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
 
 import HomeCardShell from '@/components/HomeCardShell';
 import HomeSectionHeader from '@/components/HomeSectionHeader';
@@ -29,9 +30,11 @@ interface ContinueWatchingProps {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
+  loadError: PlayRecordsLoadError;
   onDeleteRecord: (key: string) => void;
   onClearAll: () => void;
   onLoadMore: () => Promise<void>;
+  onRetry: () => Promise<void>;
 }
 
 const SUMMARY_BADGE_STYLES = {
@@ -142,10 +145,13 @@ export default function ContinueWatching({
   loading,
   loadingMore,
   hasMore,
+  loadError,
   onDeleteRecord,
   onClearAll,
   onLoadMore,
+  onRetry,
 }: ContinueWatchingProps) {
+  const [retryingFirstPage, setRetryingFirstPage] = useState(false);
   const { newEpisodeSeries, continueWatchingSeries, displayItems, records } =
     useMemo(
       () => buildContinueWatchingDisplayState(playRecords, watchingUpdates),
@@ -155,9 +161,27 @@ export default function ContinueWatching({
   const hasNewEpisodeSeries = newEpisodeSeries.length > 0;
   const hasContinueWatchingSeries = continueWatchingSeries.length > 0;
   const showSummaryBadges = hasNewEpisodeSeries || hasContinueWatchingSeries;
+  const firstPageRetry = loadError === 'initial' || loadError === 'refresh';
+  const hasRetryAction = firstPageRetry || loadError === 'append';
+  const loadControlBusy = loadingMore || retryingFirstPage;
 
-  // 如果没有播放记录，则不渲染组件
-  if (!loading && !hasRecords) {
+  const handleLoadControl = () => {
+    if (!firstPageRetry) {
+      void onLoadMore();
+      return;
+    }
+
+    if (retryingFirstPage) return;
+
+    setRetryingFirstPage(true);
+    void onRetry().then(
+      () => setRetryingFirstPage(false),
+      () => setRetryingFirstPage(false),
+    );
+  };
+
+  // 真实空态不渲染；分页入口或首屏失败重试仍需保留。
+  if (!loading && !hasRecords && !hasMore && !firstPageRetry) {
     return null;
   }
 
@@ -210,24 +234,37 @@ export default function ContinueWatching({
             />
           ))
         )}
-        {!loading && hasMore && (
+        {!loading && (hasMore || firstPageRetry) && (
           <button
             type='button'
-            onClick={() => {
-              void onLoadMore();
-            }}
-            disabled={loadingMore}
+            onClick={handleLoadControl}
+            disabled={loadControlBusy}
             className={`${HOME_CARD_WIDTH_CLASS} aspect-[2/3] rounded-lg border border-dashed border-gray-300 bg-white/60 text-gray-600 transition-colors hover:border-gray-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:bg-gray-800/70 flex flex-col items-center justify-center gap-2`}
-            aria-label='加载更多继续观看'
+            aria-label={
+              hasRetryAction ? '重试加载继续观看' : '加载更多继续观看'
+            }
           >
-            {loadingMore ? (
+            {loadControlBusy ? (
               <Loader2 className='h-5 w-5 animate-spin' />
             ) : (
               <ChevronRight className='h-5 w-5' />
             )}
             <span className='text-xs sm:text-sm font-medium'>
-              {loadingMore ? '加载中' : '更多'}
+              {loadControlBusy
+                ? '加载中'
+                : loadError === 'initial'
+                  ? '加载失败'
+                  : loadError === 'refresh'
+                    ? '刷新失败'
+                    : loadError === 'append'
+                      ? '重试'
+                      : '更多'}
             </span>
+            {firstPageRetry && !loadControlBusy && (
+              <span className='text-xs text-gray-500 dark:text-gray-400'>
+                重试
+              </span>
+            )}
           </button>
         )}
       </ScrollableRow>
