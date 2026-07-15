@@ -109,6 +109,7 @@ function debugLog(..._args: unknown[]): void {
 function dispatchWatchingUpdatesEvent(
   hasUpdates: boolean,
   updatedCount: number,
+  invalidated = false,
 ): void {
   if (typeof window === 'undefined') {
     return;
@@ -116,7 +117,7 @@ function dispatchWatchingUpdatesEvent(
 
   window.dispatchEvent(
     new CustomEvent(WATCHING_UPDATES_EVENT, {
-      detail: { hasUpdates, updatedCount },
+      detail: { hasUpdates, invalidated, updatedCount },
     }),
   );
 }
@@ -208,8 +209,13 @@ export async function checkWatchingUpdates(
 
       if (currentTime - lastCheckTime < CACHE_DURATION) {
         debugLog('距离上次检查时间太短（不足30分钟），使用缓存结果');
-        const cached = getCachedWatchingUpdates();
-        notifyListeners(cached);
+        const cached = getDetailedWatchingUpdates();
+        const hasCachedUpdates = Boolean(cached?.hasUpdates);
+        notifyListeners(hasCachedUpdates);
+        dispatchWatchingUpdatesEvent(
+          hasCachedUpdates,
+          cached?.updatedCount || 0,
+        );
         return;
       }
     }
@@ -273,6 +279,7 @@ export async function checkWatchingUpdates(
         localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
       }
       notifyListeners(false);
+      dispatchWatchingUpdatesEvent(false, 0);
       return;
     }
 
@@ -737,6 +744,8 @@ export function forceClearWatchingUpdatesCache(): void {
       localStorage.removeItem(WATCHING_UPDATES_CACHE_KEY);
       localStorage.removeItem(LAST_CHECK_TIME_KEY);
     }
+
+    dispatchWatchingUpdatesEvent(false, 0, true);
   } catch (error) {
     console.error('清除 watching-updates 缓存失败:', error);
   }
@@ -778,15 +787,19 @@ export async function checkVideoUpdate(
  * 订阅新集数更新事件（来自Alpha版本）
  */
 export function subscribeToWatchingUpdatesEvent(
-  callback: (hasUpdates: boolean, updatedCount: number) => void,
+  callback: (
+    hasUpdates: boolean,
+    updatedCount: number,
+    invalidated: boolean,
+  ) => void,
 ): () => void {
   if (typeof window === 'undefined') {
     return () => void 0;
   }
 
   const handleUpdate = (event: CustomEvent) => {
-    const { hasUpdates, updatedCount } = event.detail;
-    callback(hasUpdates, updatedCount);
+    const { hasUpdates, invalidated = false, updatedCount } = event.detail;
+    callback(hasUpdates, updatedCount, invalidated);
   };
 
   window.addEventListener(

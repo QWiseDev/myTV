@@ -9,6 +9,13 @@ const WATCHING_UPDATES_CACHE_TTL_SECONDS = 3 * 60 * 60; // 3小时，覆盖2小�
 const WATCHING_UPDATES_CONCURRENCY = 2;
 const WATCHING_UPDATES_BATCH_PAUSE = 150;
 
+const watchingUpdatesCacheGenerations = new Map<string, number>();
+const watchingUpdatesSavedGenerations = new Map<string, number>();
+const watchingUpdatesRebuildPromises = new Map<
+  string,
+  Promise<CachedWatchingUpdate>
+>();
+
 export interface CachedWatchingSeries {
   title: string;
   source_name: string;
@@ -43,6 +50,10 @@ export type VideoDetailResolver = (
 
 function getWatchingUpdatesCacheKey(username: string): string {
   return `${WATCHING_UPDATES_CACHE_PREFIX}${username}`;
+}
+
+function getWatchingUpdatesCacheGeneration(username: string): number {
+  return watchingUpdatesCacheGenerations.get(username) || 0;
 }
 
 function parsePositiveNumber(value: unknown, fallback = 0): number {
@@ -340,25 +351,83 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
 export async function getCachedWatchingUpdatesForUser(
   username: string,
 ): Promise<CachedWatchingUpdate | null> {
+  const currentGeneration = getWatchingUpdatesCacheGeneration(username);
+  const savedGeneration = watchingUpdatesSavedGenerations.get(username) || 0;
+  if (currentGeneration !== savedGeneration) {
+    return null;
+  }
+
   const cacheKey = getWatchingUpdatesCacheKey(username);
   const cached = await db.getCache(cacheKey);
   return normalizeCachedWatchingUpdate(cached);
 }
 
-export async function saveWatchingUpdatesForUser(
+export async function invalidateWatchingUpdatesForUser(
+  username: string,
+): Promise<void> {
+  watchingUpdatesCacheGenerations.set(
+    username,
+    getWatchingUpdatesCacheGeneration(username) + 1,
+  );
+  await db.deleteCache(getWatchingUpdatesCacheKey(username));
+}
+
+async function saveWatchingUpdatesForUser(
   username: string,
   updates: CachedWatchingUpdate,
 ): Promise<void> {
+  const generation = getWatchingUpdatesCacheGeneration(username);
   const cacheKey = getWatchingUpdatesCacheKey(username);
   await db.setCache(cacheKey, updates, WATCHING_UPDATES_CACHE_TTL_SECONDS);
+
+  if (generation !== getWatchingUpdatesCacheGeneration(username)) {
+    await db.deleteCache(cacheKey);
+    return;
+  }
+
+  watchingUpdatesSavedGenerations.set(username, generation);
 }
 
 export async function rebuildWatchingUpdatesForUser(
   username: string,
-  playRecords?: Record<string, PlayRecord>,
+  detailResolver?: VideoDetailResolver,
 ): Promise<CachedWatchingUpdate> {
-  const records = playRecords || (await db.getAllPlayRecords(username));
-  const updates = await buildWatchingUpdatesFromRecordsWithDetails(records);
-  await saveWatchingUpdatesForUser(username, updates);
-  return updates;
+  const existingRebuild = watchingUpdatesRebuildPromises.get(username);
+  if (existingRebuild) {
+    return existingRebuild;
+  }
+
+  const rebuildPromise = (async () => {
+    for (;;) {
+      const generation = getWatchingUpdatesCacheGeneration(username);
+      const records = await db.getAllPlayRecords(username);
+
+      if (generation !== getWatchingUpdatesCacheGeneration(username)) {
+        continue;
+      }
+
+      const updates = await buildWatchingUpdatesFromRecordsWithDetails(
+        records,
+        Date.now(),
+        detailResolver,
+      );
+      if (generation !== getWatchingUpdatesCacheGeneration(username)) {
+        continue;
+      }
+
+      await saveWatchingUpdatesForUser(username, updates);
+      if (generation === getWatchingUpdatesCacheGeneration(username)) {
+        return updates;
+      }
+    }
+  })();
+  watchingUpdatesRebuildPromises.set(username, rebuildPromise);
+
+  try {
+    return await rebuildPromise;
+  } finally {
+    if (watchingUpdatesRebuildPromises.get(username) === rebuildPromise) {
+      watchingUpdatesRebuildPromises.delete(username);
+    }
+  }
 }

@@ -3,6 +3,7 @@ import Image from 'next/image';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { shouldUseUnoptimizedImage } from '@/lib/video-card-utils';
 import type { MobileAction } from '@/hooks/useMobileActions';
 
 interface MobileActionSheetProps {
@@ -189,6 +190,8 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
                     origin === 'live' ? 'object-contain' : 'object-cover'
                   }
                   loading='lazy'
+                  sizes='48px'
+                  unoptimized={shouldUseUnoptimizedImage(poster)}
                 />
               </div>
             )}

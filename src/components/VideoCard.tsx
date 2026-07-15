@@ -611,10 +611,6 @@ const VideoCard = memo(function VideoCard(
 
     const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
     const isLiveCard = origin === 'live';
-    const actionSheetPoster = useMemo(
-      () => processImageUrl(actualPoster),
-      [actualPoster],
-    );
     const actionSheetSources = useMemo(
       () =>
         isAggregate && source_names
@@ -904,7 +900,7 @@ const VideoCard = memo(function VideoCard(
             onClose={closeMobileActions}
             onExited={handleMobileActionsExited}
             title={actualTitle}
-            poster={actionSheetPoster}
+            poster={imageSrc}
             actions={mobileActions}
             sources={actionSheetSources}
             isAggregate={isAggregate}

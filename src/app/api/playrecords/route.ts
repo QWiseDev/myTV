@@ -4,10 +4,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
+import {
+  savePlayRecordMutation,
+  serializePlayRecordMutation,
+} from '@/lib/play-record-mutations';
 import { normalizePlayRecordsPageSize } from '@/lib/play-records-pagination';
 import { parseStorageKey } from '@/lib/storage-key';
 import { PlayRecord } from '@/lib/types';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
+import { invalidateWatchingUpdatesForUser } from '@/lib/watching-updates-cache';
 
 export const runtime = 'nodejs';
 
@@ -21,29 +26,11 @@ const PLAY_RECORDS_NO_CACHE_HEADERS = {
   Expires: '0',
 };
 
-const playRecordMutationQueues = new Map<string, Promise<void>>();
-
-async function serializePlayRecordMutation<T>(
-  username: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = playRecordMutationQueues.get(username) || Promise.resolve();
-  const waitForPrevious = previous.catch(() => undefined);
-  let release: () => void = () => undefined;
-  const current = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const tail = waitForPrevious.then(() => current);
-  playRecordMutationQueues.set(username, tail);
-
-  await waitForPrevious;
+async function invalidateWatchingUpdates(username: string): Promise<void> {
   try {
-    return await operation();
-  } finally {
-    release();
-    if (playRecordMutationQueues.get(username) === tail) {
-      playRecordMutationQueues.delete(username);
-    }
+    await invalidateWatchingUpdatesForUser(username);
+  } catch (error) {
+    console.warn('失效追更缓存失败:', error);
   }
 }
 
@@ -166,68 +153,15 @@ export async function POST(request: NextRequest) {
 
     const username = authInfo.username;
 
-    return await serializePlayRecordMutation(username, async () => {
-      // 同一用户、同一记录在当前进程内串行 read-compare-write，避免并发 POST 交错覆盖。
-      const incomingSaveTime =
-        typeof record.save_time === 'number' &&
-        Number.isFinite(record.save_time)
-          ? record.save_time
-          : Date.now();
+    const result = await savePlayRecordMutation(username, source, id, record);
 
-      const existingRecord = await db.getPlayRecord(
-        username,
-        source,
-        id,
-      );
-
-      if (
-        existingRecord &&
-        typeof existingRecord.save_time === 'number' &&
-        existingRecord.save_time > incomingSaveTime
-      ) {
-        return NextResponse.json(
-          { success: true, ignored: true },
-          {
-            status: 200,
-            headers: PLAY_RECORDS_NO_CACHE_HEADERS,
-          },
-        );
-      }
-
-      // 🔑 关键修复：信任客户端传来的 original_episodes（已经过 checkShouldUpdateOriginalEpisodes 验证）
-      // 只有在客户端没有提供时，才使用数据库中的值作为 fallback
-      let originalEpisodes: number;
-      if (
-        record.original_episodes !== undefined &&
-        record.original_episodes !== null
-      ) {
-        // 客户端已经设置了 original_episodes，信任它（可能是更新后的值）
-        originalEpisodes = record.original_episodes;
-      } else {
-        // 客户端没有提供，使用数据库中的值或当前 total_episodes
-        originalEpisodes =
-          existingRecord?.original_episodes ||
-          existingRecord?.total_episodes ||
-          record.total_episodes;
-      }
-
-      const finalRecord = {
-        ...record,
-        douban_id: record.douban_id || existingRecord?.douban_id,
-        save_time: incomingSaveTime,
-        original_episodes: originalEpisodes,
-      } as PlayRecord;
-
-      await db.savePlayRecord(username, source, id, finalRecord);
-
-      return NextResponse.json(
-        { success: true },
-        {
-          status: 200,
-          headers: PLAY_RECORDS_NO_CACHE_HEADERS,
-        },
-      );
-    });
+    return NextResponse.json(
+      { success: true, ...(result.ignored ? { ignored: true } : {}) },
+      {
+        status: 200,
+        headers: PLAY_RECORDS_NO_CACHE_HEADERS,
+      },
+    );
   } catch (err) {
     console.error('保存播放记录失败', err);
     return NextResponse.json(
@@ -270,6 +204,7 @@ export async function DELETE(request: NextRequest) {
         // 未提供 key，则清空全部播放记录
         await db.clearAllPlayRecords(username);
       }
+      await invalidateWatchingUpdates(username);
 
       return NextResponse.json(
         { success: true },

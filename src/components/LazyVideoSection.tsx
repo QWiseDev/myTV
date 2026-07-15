@@ -44,7 +44,7 @@ export default function LazyVideoSection({
   return (
     <section className='mb-8'>
       <HomeSectionHeader title={title} icon={icon} linkHref={linkHref} />
-      <ScrollableRow enableAnimation={enableAnimation}>
+      <ScrollableRow enableAnimation={!loading && enableAnimation}>
         {loading ? (
           <SkeletonRow />
         ) : (

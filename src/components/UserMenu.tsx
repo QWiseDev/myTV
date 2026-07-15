@@ -27,20 +27,20 @@ import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { getAllPlayRecords } from '@/lib/db.client';
 import { debug } from '@/lib/debug';
 import {
-  buildUserMenuFavoriteRecords,
   type UserMenuFavoriteRecord,
+  buildUserMenuFavoriteRecords,
 } from '@/lib/favorite-items';
 import { parseStorageKey } from '@/lib/storage-key';
 import type { Favorite, PlayRecord } from '@/lib/types';
 import {
+  type UserMenuContinueWatchingRecord,
   buildUserMenuContinueWatchingRecords,
   calculatePlayRecordProgress,
-  type UserMenuContinueWatchingRecord,
 } from '@/lib/user-menu-continue-watching';
 import {
+  type UserMenuSettingsSnapshot,
   buildDefaultUserMenuSettings,
   readUserMenuSettings,
-  type UserMenuSettingsSnapshot,
   writeUserMenuSettings,
 } from '@/lib/user-menu-settings';
 import {
@@ -409,12 +409,16 @@ export const UserMenu: React.FC = () => {
     }
 
     // 订阅更新事件
-    const unsubscribe = subscribeToWatchingUpdatesEvent(() => {
-      debug.log('收到 watching-updates 事件，更新数据...');
-      // 收到事件时也从缓存获取，不主动触发检查
-      const updates = getDetailedWatchingUpdates();
-      setWatchingUpdates(updates);
-    });
+    const unsubscribe = subscribeToWatchingUpdatesEvent(
+      (_hasUpdates, _updatedCount, invalidated) => {
+        if (invalidated) return;
+
+        debug.log('收到 watching-updates 事件，更新数据...');
+        // 收到事件时也从缓存获取，不主动触发检查
+        const updates = getDetailedWatchingUpdates();
+        setWatchingUpdates(updates);
+      },
+    );
 
     // 清理函数
     return () => {
@@ -471,27 +475,33 @@ export const UserMenu: React.FC = () => {
     window.addEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
 
     // 与 ContinueWatching 组件保持一致，监听 watching-updates 事件
-    const unsubscribeWatchingUpdates = subscribeToWatchingUpdatesEvent(() => {
-      debug.log('UserMenu: 收到watching-updates事件');
+    const unsubscribeWatchingUpdates = subscribeToWatchingUpdatesEvent(
+      (_hasUpdates, _updatedCount, invalidated) => {
+        if (invalidated) return;
 
-      // 🚀 优化：移除强制刷新播放记录缓存，避免频繁调用 /api/detail
-      // 缓存系统已经有30分钟间隔，足够保证数据及时性
-      const updates = getDetailedWatchingUpdates();
-      if (updates && updates.hasUpdates && updates.updatedCount > 0) {
-        debug.log('UserMenu: 检测到新集数更新，使用现有缓存（30分钟间隔）');
+        debug.log('UserMenu: 收到watching-updates事件');
 
-        // 短暂延迟后重新获取播放记录，确保缓存已刷新
-        if (refreshTimer) {
-          clearTimeout(refreshTimer);
+        // 🚀 优化：移除强制刷新播放记录缓存，避免频繁调用 /api/detail
+        // 缓存系统已经有30分钟间隔，足够保证数据及时性
+        const updates = getDetailedWatchingUpdates();
+        if (updates && updates.hasUpdates && updates.updatedCount > 0) {
+          debug.log(
+            'UserMenu: 检测到新集数更新，使用现有缓存（30分钟间隔）',
+          );
+
+          // 短暂延迟后重新获取播放记录，确保缓存已刷新
+          if (refreshTimer) {
+            clearTimeout(refreshTimer);
+          }
+          refreshTimer = setTimeout(async () => {
+            const freshRecords = await getAllPlayRecords();
+            if (!isActive) return;
+
+            updateContinueWatchingRecords(freshRecords);
+          }, 100);
         }
-        refreshTimer = setTimeout(async () => {
-          const freshRecords = await getAllPlayRecords();
-          if (!isActive) return;
-
-          updateContinueWatchingRecords(freshRecords);
-        }, 100);
-      }
-    });
+      },
+    );
 
     return () => {
       isActive = false;

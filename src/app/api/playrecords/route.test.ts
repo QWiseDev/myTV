@@ -9,6 +9,7 @@ const mockEnsureUserAccessOrResponse = jest.fn();
 const mockClearAllPlayRecords = jest.fn();
 const mockDeletePlayRecord = jest.fn();
 const mockGetPlayRecord = jest.fn();
+const mockInvalidateWatchingUpdatesForUser = jest.fn();
 const mockSavePlayRecord = jest.fn();
 
 jest.mock('@/lib/auth', () => ({
@@ -26,6 +27,10 @@ jest.mock('@/lib/db', () => ({
 
 jest.mock('@/lib/user-access', () => ({
   ensureUserAccessOrResponse: mockEnsureUserAccessOrResponse,
+}));
+
+jest.mock('@/lib/watching-updates-cache', () => ({
+  invalidateWatchingUpdatesForUser: mockInvalidateWatchingUpdatesForUser,
 }));
 
 const edgePrimitives = jest.requireActual(
@@ -85,6 +90,7 @@ describe('POST /api/playrecords', () => {
     mockEnsureUserAccessOrResponse.mockResolvedValue({});
     mockClearAllPlayRecords.mockResolvedValue(undefined);
     mockDeletePlayRecord.mockResolvedValue(undefined);
+    mockInvalidateWatchingUpdatesForUser.mockResolvedValue(undefined);
   });
 
   function createRequest(record: PlayRecord) {
@@ -118,7 +124,9 @@ describe('POST /api/playrecords', () => {
   });
 
   test('saves a record newer than the stored value', async () => {
-    mockGetPlayRecord.mockResolvedValue(createRecord({ save_time: 1000 }));
+    mockGetPlayRecord.mockResolvedValue(
+      createRecord({ original_episodes: 10, save_time: 1000 }),
+    );
     const incomingRecord = createRecord({
       play_time: 250,
       save_time: 2000,
@@ -136,6 +144,18 @@ describe('POST /api/playrecords', () => {
         save_time: 2000,
       }),
     );
+    expect(mockInvalidateWatchingUpdatesForUser).not.toHaveBeenCalled();
+  });
+
+  test('invalidates watching updates when episode progress changes', async () => {
+    mockGetPlayRecord.mockResolvedValue(createRecord({ index: 1 }));
+
+    const response = await POST(
+      createRequest(createRecord({ index: 2, save_time: 2000 })),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockInvalidateWatchingUpdatesForUser).toHaveBeenCalledWith('tester');
   });
 
   test('serializes concurrent writes for the same user and record key', async () => {
@@ -227,7 +247,20 @@ describe('POST /api/playrecords', () => {
     expect(saveResponse.status).toBe(200);
     expect(deleteResponse.status).toBe(200);
     expect(mockDeletePlayRecord).toHaveBeenCalledTimes(1);
+    expect(mockInvalidateWatchingUpdatesForUser).toHaveBeenCalledWith('tester');
     expect(storedRecord).toBeNull();
+  });
+
+  test('invalidates watching updates after clearing all records', async () => {
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/playrecords', {
+        method: 'DELETE',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockClearAllPlayRecords).toHaveBeenCalledWith('tester');
+    expect(mockInvalidateWatchingUpdatesForUser).toHaveBeenCalledWith('tester');
   });
 });
 

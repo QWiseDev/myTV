@@ -7,11 +7,11 @@ import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshEnabledLiveChannels } from '@/lib/live';
+import { savePlayRecordMutation } from '@/lib/play-record-mutations';
 import { parseStorageKey } from '@/lib/storage-key';
 import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
 import {
-  buildWatchingUpdatesFromRecordsWithDetails,
-  saveWatchingUpdatesForUser,
+  rebuildWatchingUpdatesForUser,
   VideoDetailResolver,
 } from '@/lib/watching-updates-cache';
 
@@ -216,12 +216,9 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
         continue;
       }
 
-      let latestPlayRecords: Record<string, PlayRecord> | null = null;
-
       // 播放记录
       try {
         const playRecords = await db.getAllPlayRecords(user);
-        latestPlayRecords = { ...playRecords };
         const _totalRecords = Object.keys(playRecords).length;
 
         for (const [key, record] of Object.entries(playRecords)) {
@@ -240,10 +237,12 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
             }
 
             const nextRecord = applyDetailToPlayRecord(record, detail);
-            latestPlayRecords[key] = nextRecord;
 
             if (nextRecord !== record) {
-              await db.savePlayRecord(user, source, id, nextRecord);
+              await savePlayRecordMutation(user, source, id, nextRecord, {
+                expectedSaveTime: record.save_time,
+                requireExisting: true,
+              });
             }
           } catch (err) {
             console.error(`处理播放记录失败 (${key}):`, err);
@@ -254,20 +253,11 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
         console.error(`获取用户播放记录失败 (${user}):`, err);
       }
 
-      if (latestPlayRecords) {
-        try {
-          const updates = await buildWatchingUpdatesFromRecordsWithDetails(
-            latestPlayRecords,
-            Date.now(),
-            getDetail,
-          );
-          await saveWatchingUpdatesForUser(user, updates);
-        } catch (error) {
-          failedUsers.push(user);
-          console.error(`刷新追更提醒缓存失败 (${user}):`, error);
-        }
-      } else {
+      try {
+        await rebuildWatchingUpdatesForUser(user, getDetail);
+      } catch (error) {
         failedUsers.push(user);
+        console.error(`刷新追更提醒缓存失败 (${user}):`, error);
       }
 
       // 收藏

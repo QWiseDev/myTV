@@ -1,9 +1,10 @@
 import {
+  type WatchingUpdatesCache,
+  checkWatchingUpdates,
   forceClearWatchingUpdatesCache,
   getCachedWatchingUpdates,
   getDetailedWatchingUpdates,
   markUpdatesAsViewed,
-  type WatchingUpdatesCache,
 } from './watching-updates';
 
 const WATCHING_UPDATES_CACHE_KEY = 'moontv_watching_updates';
@@ -41,11 +42,18 @@ function writeCache(cache: WatchingUpdatesCache) {
 }
 
 describe('watching updates cache helpers', () => {
+  const originalFetch = global.fetch;
+
   beforeEach(() => {
     localStorage.clear();
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => [],
+      ok: true,
+    });
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     localStorage.clear();
   });
 
@@ -95,10 +103,49 @@ describe('watching updates cache helpers', () => {
   it('force clears cached updates and last check time', () => {
     writeCache(createCache());
     localStorage.setItem(LAST_CHECK_TIME_KEY, String(Date.now()));
+    const eventListener = jest.fn();
+    window.addEventListener('watchingUpdatesChanged', eventListener, {
+      once: true,
+    });
 
     forceClearWatchingUpdatesCache();
 
     expect(localStorage.getItem(WATCHING_UPDATES_CACHE_KEY)).toBeNull();
     expect(localStorage.getItem(LAST_CHECK_TIME_KEY)).toBeNull();
+    expect(eventListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: {
+          hasUpdates: false,
+          invalidated: true,
+          updatedCount: 0,
+        },
+      }),
+    );
+  });
+
+  it('publishes a normal empty result after an invalidated empty record set is checked', async () => {
+    const eventListener = jest.fn();
+    window.addEventListener('watchingUpdatesChanged', eventListener);
+
+    forceClearWatchingUpdatesCache();
+    await checkWatchingUpdates(true);
+
+    expect(eventListener).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        detail: {
+          hasUpdates: false,
+          invalidated: false,
+          updatedCount: 0,
+        },
+      }),
+    );
+    expect(getDetailedWatchingUpdates()).toEqual(
+      expect.objectContaining({
+        hasUpdates: false,
+        updatedSeries: [],
+      }),
+    );
+
+    window.removeEventListener('watchingUpdatesChanged', eventListener);
   });
 });

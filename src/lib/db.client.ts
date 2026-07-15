@@ -26,6 +26,7 @@ import type {
   PlayRecordsPageOptions,
 } from './types';
 import { EpisodeSkipConfig, UserPlayStat } from './types';
+import { shouldInvalidateWatchingUpdates } from './watching-updates-invalidation';
 
 // 重新导出类型以保持API兼容性
 export { generateStorageKey, parseStorageKey } from './storage-key';
@@ -612,6 +613,17 @@ async function handleDatabaseOperationFailure(
   }
 }
 
+async function invalidateWatchingUpdatesClientCache(): Promise<void> {
+  try {
+    const { forceClearWatchingUpdatesCache } = await import(
+      './watching-updates'
+    );
+    forceClearWatchingUpdatesCache();
+  } catch (error) {
+    console.warn('失效客户端追更缓存失败:', error);
+  }
+}
+
 // 页面加载时清理过期缓存
 if (typeof window !== 'undefined') {
   setTimeout(() => cacheManager.clearExpiredCaches(), 1000);
@@ -863,6 +875,11 @@ export async function savePlayRecord(
     }
   }
 
+  const invalidatesWatchingUpdates = shouldInvalidateWatchingUpdates(
+    existingRecord || null,
+    record,
+  );
+
   // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
     // 立即更新缓存
@@ -888,6 +905,9 @@ export async function savePlayRecord(
       });
 
       // 播放记录保存已经包含了统计更新逻辑，无需单独调用
+      if (invalidatesWatchingUpdates) {
+        await invalidateWatchingUpdatesClientCache();
+      }
     } catch (err) {
       await handleDatabaseOperationFailure('playRecords', err);
       triggerGlobalError('保存播放记录失败');
@@ -911,6 +931,10 @@ export async function savePlayRecord(
         detail: allRecords,
       }),
     );
+
+    if (invalidatesWatchingUpdates) {
+      await invalidateWatchingUpdatesClientCache();
+    }
 
     // 播放记录保存已经包含了统计更新逻辑，无需单独调用
   } catch (err) {
@@ -949,6 +973,7 @@ export async function deletePlayRecord(
       await fetchWithAuth(`/api/playrecords?key=${encodeURIComponent(key)}`, {
         method: 'DELETE',
       });
+      await invalidateWatchingUpdatesClientCache();
     } catch (err) {
       await handleDatabaseOperationFailure('playRecords', err);
       triggerGlobalError('删除播放记录失败');
@@ -972,6 +997,7 @@ export async function deletePlayRecord(
         detail: allRecords,
       }),
     );
+    await invalidateWatchingUpdatesClientCache();
   } catch (err) {
     console.error('删除播放记录失败:', err);
     triggerGlobalError('删除播放记录失败');
@@ -1482,6 +1508,7 @@ export async function clearAllPlayRecords(): Promise<void> {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
+      await invalidateWatchingUpdatesClientCache();
     } catch (err) {
       await handleDatabaseOperationFailure('playRecords', err);
       triggerGlobalError('清空播放记录失败');
@@ -1498,26 +1525,16 @@ export async function clearAllPlayRecords(): Promise<void> {
       detail: {},
     }),
   );
+  await invalidateWatchingUpdatesClientCache();
 }
 
 /**
  * 清空全部收藏
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 数据库存储模式下等待数据库删除成功后再更新缓存。
  */
 export async function clearAllFavorites(): Promise<void> {
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
+  // 数据库存储模式（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
-    // 立即更新缓存
-    cacheManager.cacheFavorites({});
-
-    // 触发立即更新事件
-    window.dispatchEvent(
-      new CustomEvent('favoritesUpdated', {
-        detail: {},
-      }),
-    );
-
-    // 异步同步到数据库
     try {
       await fetchWithAuth(`/api/favorites`, {
         method: 'DELETE',
@@ -1528,6 +1545,13 @@ export async function clearAllFavorites(): Promise<void> {
       triggerGlobalError('清空收藏失败');
       throw err;
     }
+
+    cacheManager.cacheFavorites({});
+    window.dispatchEvent(
+      new CustomEvent('favoritesUpdated', {
+        detail: {},
+      }),
+    );
     return;
   }
 

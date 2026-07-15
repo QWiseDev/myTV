@@ -255,7 +255,7 @@ export function getImageFallbackUrls(originalUrl: string): string[] {
   }
 
   if (!originalUrl || !originalUrl.includes('doubanio.com')) {
-    return [originalUrl].filter(Boolean);
+    return [originalUrl, IMAGE_PLACEHOLDER_URL].filter(Boolean);
   }
 
   const preferredType = getConfiguredImageProxyType();
@@ -273,11 +273,12 @@ export function getImageFallbackUrls(originalUrl: string): string[] {
   }
 
   return Array.from(
-    new Set(
-      proxyTypes.map((proxyType) =>
+    new Set([
+      ...proxyTypes.map((proxyType) =>
         applyDoubanImageProxy(originalUrl, proxyType),
       ),
-    ),
+      IMAGE_PLACEHOLDER_URL,
+    ]),
   ).filter(Boolean);
 }
 

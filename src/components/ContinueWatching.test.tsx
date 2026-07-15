@@ -68,6 +68,20 @@ describe('ContinueWatching', () => {
     defaultProps.onRetry.mockClear();
   });
 
+  it('disables row animation while loading skeletons', () => {
+    render(
+      <ContinueWatching
+        {...defaultProps}
+        loading
+        playRecords={createPlayRecords(1)}
+      />,
+    );
+
+    expect(screen.getByTestId('scrollable-row').dataset.animation).toBe(
+      'false',
+    );
+  });
+
   it('keeps the animated row structure when a second page is appended', () => {
     const { rerender } = render(
       <ContinueWatching

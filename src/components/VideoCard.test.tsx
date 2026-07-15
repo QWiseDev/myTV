@@ -25,13 +25,13 @@ jest.mock('next/image', () => ({
       unoptimized?: boolean;
     },
   ) => {
-    const { src, ...imageProps } = props;
+    const { src, unoptimized, ...imageProps } = props;
     delete imageProps.fill;
     delete imageProps.priority;
-    delete imageProps.unoptimized;
 
     return React.createElement('img', {
       ...imageProps,
+      'data-unoptimized': String(Boolean(unoptimized)),
       src: typeof src === 'string' ? src : src.src,
     });
   },
@@ -189,6 +189,62 @@ describe('VideoCard behavior', () => {
     await waitFor(() => {
       expect(image.getAttribute('src')).toBe('/logo.svg');
     });
+  });
+
+  it('falls back from a regular external poster to the local placeholder', async () => {
+    render(
+      <VideoCard
+        from='douban'
+        poster='https://cdn.example/poster.jpg'
+        title='测试影片'
+      />,
+    );
+
+    const image = screen.getByAltText('测试影片');
+    fireEvent.error(image);
+
+    await waitFor(() => {
+      expect(image.getAttribute('src')).toBe('/logo.svg');
+    });
+  });
+
+  it('reuses the current poster fallback in the action sheet', async () => {
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
+
+    const cardImage = screen.getByAltText('测试影片');
+    fireEvent.error(cardImage);
+
+    await waitFor(() => {
+      expect(cardImage.getAttribute('src')).toBe('/logo.svg');
+    });
+
+    openActionSheet();
+
+    const actionSheetImage = screen
+      .getAllByAltText('测试影片')
+      .find((image) => image !== cardImage);
+    expect(actionSheetImage?.getAttribute('src')).toBe('/logo.svg');
+    expect(actionSheetImage?.getAttribute('sizes')).toBe('48px');
+    expect(actionSheetImage?.getAttribute('data-unoptimized')).toBe('false');
+  });
+
+  it('keeps external action sheet posters unoptimized', () => {
+    render(
+      <VideoCard
+        from='douban'
+        poster='https://cdn.example/poster.jpg'
+        title='测试影片'
+      />,
+    );
+
+    const cardImage = screen.getByAltText('测试影片');
+    openActionSheet();
+
+    const actionSheetImage = screen
+      .getAllByAltText('测试影片')
+      .find((image) => image !== cardImage);
+    expect(actionSheetImage?.getAttribute('sizes')).toBe('48px');
+    expect(actionSheetImage?.getAttribute('data-unoptimized')).toBe('true');
   });
 
   it('resets image fallback after the image proxy config changes', async () => {

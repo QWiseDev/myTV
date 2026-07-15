@@ -90,6 +90,14 @@ describe('getImageFallbackUrls', () => {
       'https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg',
     );
     expect(urls).not.toContain(doubanImage);
+    expect(urls.at(-1)).toBe('/logo.svg');
+  });
+
+  it('falls back from regular external images to the local placeholder', () => {
+    expect(getImageFallbackUrls('https://cdn.example/poster.jpg')).toEqual([
+      'https://cdn.example/poster.jpg',
+      '/logo.svg',
+    ]);
   });
 
   it('skips douban official domains and falls back to CDN then image-proxy', () => {

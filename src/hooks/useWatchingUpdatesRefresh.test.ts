@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 
 import { useWatchingUpdatesRefresh } from './useWatchingUpdatesRefresh';
 
-const mockFetchWatchingUpdatesFromServer = jest.fn();
+const mockCheckWatchingUpdates = jest.fn();
 const mockScheduleIdleTask = jest.fn();
 const mockSubscribeToWatchingUpdatesEvent = jest.fn();
 
@@ -14,7 +14,8 @@ jest.mock('@/lib/browser-scheduler', () => ({
 }));
 
 jest.mock('@/lib/watching-updates', () => ({
-  fetchWatchingUpdatesFromServer: () => mockFetchWatchingUpdatesFromServer(),
+  checkWatchingUpdates: (forceRefresh?: boolean) =>
+    mockCheckWatchingUpdates(forceRefresh),
   subscribeToWatchingUpdatesEvent: (handler: () => void) =>
     mockSubscribeToWatchingUpdatesEvent(handler),
 }));
@@ -23,6 +24,14 @@ async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function setDocumentHidden(hidden: boolean) {
@@ -34,10 +43,10 @@ function setDocumentHidden(hidden: boolean) {
 
 describe('useWatchingUpdatesRefresh', () => {
   beforeEach(() => {
-    mockFetchWatchingUpdatesFromServer.mockReset();
+    mockCheckWatchingUpdates.mockReset();
     mockScheduleIdleTask.mockReset();
     mockSubscribeToWatchingUpdatesEvent.mockReset();
-    mockFetchWatchingUpdatesFromServer.mockResolvedValue(undefined);
+    mockCheckWatchingUpdates.mockResolvedValue(undefined);
     mockScheduleIdleTask.mockReturnValue(jest.fn());
     mockSubscribeToWatchingUpdatesEvent.mockReturnValue(jest.fn());
     setDocumentHidden(false);
@@ -50,11 +59,12 @@ describe('useWatchingUpdatesRefresh', () => {
 
   it('schedules a visible home-tab watching update check on idle', async () => {
     const cancelIdleTask = jest.fn();
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
     mockScheduleIdleTask.mockReturnValue(cancelIdleTask);
     const { result } = renderHook(() =>
       useWatchingUpdatesRefresh({
         activeTab: 'home',
-        refreshWatchingUpdates: jest.fn(),
+        refreshWatchingUpdates,
       }),
     );
 
@@ -80,10 +90,151 @@ describe('useWatchingUpdatesRefresh', () => {
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
 
     cancelScheduledCheck?.();
     expect(cancelIdleTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refresh the snapshot twice when the check publishes an event', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useWatchingUpdatesRefresh({
+        activeTab: 'home',
+        refreshWatchingUpdates,
+      }),
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    mockCheckWatchingUpdates.mockImplementationOnce(async () => {
+      eventHandler();
+    });
+
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks a pending invalidation when returning to the home tab', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const { rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useWatchingUpdatesRefresh({
+          activeTab,
+          refreshWatchingUpdates,
+        }),
+      {
+        initialProps: {
+          activeTab: 'favorites' as 'home' | 'favorites',
+        },
+      },
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    act(() => {
+      eventHandler(false, 0, true);
+    });
+    expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
+
+    mockCheckWatchingUpdates.mockImplementationOnce(async () => {
+      eventHandler(false, 0, false);
+    });
+    rerender({ activeTab: 'home' });
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the stale snapshot when an invalidation check publishes no result', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    renderHook(() =>
+      useWatchingUpdatesRefresh({
+        activeTab: 'home',
+        refreshWatchingUpdates,
+      }),
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    await act(async () => {
+      eventHandler(false, 0, true);
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues an invalidation that arrives during an existing check', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const firstCheck = createDeferred();
+    const { result } = renderHook(() =>
+      useWatchingUpdatesRefresh({
+        activeTab: 'home',
+        refreshWatchingUpdates,
+      }),
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    mockCheckWatchingUpdates
+      .mockReturnValueOnce(firstCheck.promise)
+      .mockImplementationOnce(async () => {
+        eventHandler(false, 0, false);
+      });
+
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      eventHandler(false, 0, true);
+    });
+
+    await act(async () => {
+      firstCheck.resolve();
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(2);
+    expect(mockCheckWatchingUpdates.mock.calls).toEqual([[false], [true]]);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
   it('skips the scheduled check outside the visible home tab', async () => {
@@ -110,7 +261,7 @@ describe('useWatchingUpdatesRefresh', () => {
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).not.toHaveBeenCalled();
+    expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
 
     rerender({ activeTab: 'home' });
     setDocumentHidden(true);
@@ -125,7 +276,7 @@ describe('useWatchingUpdatesRefresh', () => {
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).not.toHaveBeenCalled();
+    expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
   });
 
   it('checks on visibility changes with throttling', async () => {
@@ -147,21 +298,21 @@ describe('useWatchingUpdatesRefresh', () => {
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
       await flushAsyncWork();
     });
 
-    expect(mockFetchWatchingUpdatesFromServer).toHaveBeenCalledTimes(2);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(2);
   });
 
   it('subscribes to watching update events on the home tab and cleans up', async () => {
@@ -181,8 +332,14 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockSubscribeToWatchingUpdatesEvent).toHaveBeenCalledWith(
-      refreshWatchingUpdates,
+      expect.any(Function),
     );
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    act(() => {
+      eventHandler();
+    });
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
 
     unmount();
 
