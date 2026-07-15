@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { type ReactNode, createElement, StrictMode } from 'react';
 
-import { EMPTY_HOME_DATA } from '@/lib/home-data-types';
+import { type HomeData, EMPTY_HOME_DATA } from '@/lib/home-data-types';
 
 const mockLoadCriticalData = jest.fn();
 const mockLoadHomeDataFromApi = jest.fn();
@@ -38,12 +38,16 @@ const bangumiDay = {
   items: [],
 };
 
-const completeInitialData = {
-  hotMovies: [item],
-  hotTvShows: [{ ...item, id: 'tv-initial' }],
-  hotVarietyShows: [{ ...item, id: 'show-initial' }],
-  bangumiCalendarData: [bangumiDay],
-};
+function createCompleteHomeData(suffix: string) {
+  return {
+    hotMovies: [{ ...item, id: `movie-${suffix}` }],
+    hotTvShows: [{ ...item, id: `tv-${suffix}` }],
+    hotVarietyShows: [{ ...item, id: `show-${suffix}` }],
+    bangumiCalendarData: [bangumiDay],
+  };
+}
+
+const completeInitialData = createCompleteHomeData('initial');
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -51,6 +55,20 @@ function createDeferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function renderHomeDataHook(initialData: HomeData) {
+  const refreshWatchingUpdates = jest.fn();
+
+  return renderHook(
+    ({ initialData }: { initialData: HomeData }) =>
+      useHomeData({
+        activeTab: 'home',
+        refreshWatchingUpdates,
+        initialData,
+      }),
+    { initialProps: { initialData } },
+  );
 }
 
 describe('useHomeData', () => {
@@ -107,6 +125,82 @@ describe('useHomeData', () => {
     unmount();
 
     expect(mockCancelWatchingUpdatesCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it('syncs a new complete initial snapshot into existing state', () => {
+    const refreshedInitialData = createCompleteHomeData('refreshed');
+    const { result, rerender } = renderHomeDataHook(completeInitialData);
+
+    rerender({ initialData: refreshedInitialData });
+
+    expect(result.current.homeData).toEqual(refreshedInitialData);
+    expect(result.current.loading).toEqual({
+      criticalLoading: false,
+      tertiaryLoading: false,
+      tvLoading: false,
+      varietyLoading: false,
+    });
+    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
+  });
+
+  it('does not let an older aggregate response overwrite a new complete snapshot', async () => {
+    const staleApiData = createCompleteHomeData('stale-api');
+    const refreshedInitialData = createCompleteHomeData('refreshed');
+    const deferredApi = createDeferred<typeof staleApiData>();
+    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+    const { result, rerender } = renderHomeDataHook(EMPTY_HOME_DATA);
+
+    await waitFor(() => {
+      expect(mockLoadHomeDataFromApi).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ initialData: refreshedInitialData });
+
+    await act(async () => {
+      deferredApi.resolve(staleApiData);
+      await deferredApi.promise;
+    });
+
+    expect(result.current.homeData).toEqual(refreshedInitialData);
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
+  });
+
+  it('does not let an older secondary response overwrite a new complete snapshot', async () => {
+    const staleSecondaryData = {
+      hotTvShows: { code: 200, list: [{ ...item, id: 'tv-stale' }] },
+      hotVarietyShows: { code: 200, list: [{ ...item, id: 'show-stale' }] },
+    };
+    const deferredSecondary = createDeferred<typeof staleSecondaryData>();
+    mockLoadSecondaryData.mockReturnValue(deferredSecondary.promise);
+    const partialInitialData: HomeData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const refreshedInitialData = createCompleteHomeData('refreshed');
+    const { result, rerender } = renderHomeDataHook(partialInitialData);
+
+    await waitFor(() => {
+      expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ initialData: refreshedInitialData });
+
+    await act(async () => {
+      deferredSecondary.resolve(staleSecondaryData);
+      await deferredSecondary.promise;
+    });
+
+    expect(result.current.homeData).toEqual(refreshedInitialData);
+    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
+    expect(mockLoadCriticalData).not.toHaveBeenCalled();
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
 
   it('loads only the missing variety section and preserves existing TV data', async () => {

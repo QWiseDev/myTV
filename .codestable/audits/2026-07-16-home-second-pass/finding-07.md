@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: medium
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 07：新 initialData 不会同步到现有首页 state
@@ -33,3 +33,11 @@ status: open
 ## 建议动作
 
 `cs-issue`，因为 prop 已变化但可见 state 不更新；触发频率未证实，所以置信度为 medium。
+
+## 修复记录（2026-07-16）
+
+- `useHomeData` 记录上一版 `initialData` 引用；新引用到达且 snapshot 完整时，通过现有 `applyHomeData()` 同步数据并清除全部 loading。
+- 首次挂载和 StrictMode 第二次 setup 不重复写 state；新完整 RSC snapshot 明确作为权威输入。
+- 新 snapshot 会 cleanup 旧 effect；回归覆盖旧 aggregate 与旧 secondary Promise 迟到后不得覆盖新数据。
+- partial snapshot 仍只参与缺失区块判定与既有 fallback，不改变当前 merge 规则。
+- 定向 Jest 1 suite / 9 tests、全量 Jest 69 suites / 310 tests、typecheck、production build、目标 ESLint 与格式检查通过。

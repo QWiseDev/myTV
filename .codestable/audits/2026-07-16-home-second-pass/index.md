@@ -3,7 +3,7 @@ doc_type: audit-index
 audit: 2026-07-16-home-second-pass
 scope: 首页组件、收藏夹、继续观看、Bangumi 与首页数据 Hook 的第二轮复核
 created: 2026-07-16
-status: active
+status: resolved
 total_findings: 8
 ---
 
@@ -21,7 +21,7 @@ total_findings: 8
 
 ## 总评
 
-共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。3 条 P1、收藏夹可靠性和追更 idle 任务所有权均已收口。当前只剩 1 条 P2：新 SSR initialData 不会同步到现有首页 state。
+共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance，现已全部解决。最后一项通过把新的完整 SSR snapshot 视为权威输入，补齐了 RSC 保留客户端实例时的 state 同步；partial snapshot 的 merge/fallback 语义保持不变。
 
 未发现新的安全问题。`.codestable/architecture/ARCHITECTURE.md` 仍是骨架，因此本轮不产 `arch-drift` finding。
 
@@ -62,9 +62,9 @@ total_findings: 8
 - **#3 resolved**：播放记录未决时不再给热门电影 priority；确认无续播记录后才分配电影优先级。全量 Jest 更新为 69 suites / 295 tests。
 - **#4、#5、#8 resolved**：收藏基础 payload 立即可见，loading/error/loaded-empty 明确区分；补全 worker 绑定 effect generation，旧 GET 不覆盖新事件；清空失败在点击边界消费且不清本地列表。全量 Jest 更新为 69 suites / 305 tests，typecheck 与 production build 通过。
 - **#6 resolved**：追更 idle 调度返回取消句柄并由创建它的 `useHomeData` effect 持有；StrictMode 首轮与组件卸载都会回收未执行任务。全量 Jest 更新为 69 suites / 307 tests，typecheck 与 production build 通过。
-- **#7 open**：单独处理新完整 initialData 的 state 同步，不扩大到 partial merge 语义。
+- **#7 resolved**：`initialData` 引用变化且新 snapshot 完整时同步到现有 state，并让旧 aggregate/secondary effect 失效；不扩大到 partial merge 语义。全量 Jest 更新为 69 suites / 310 tests，typecheck 与 production build 通过。
 
 ## 下一步建议
 
-- **剩余 P2**：#7 补 `router.refresh`/prop rerender 回归后修复，明确把新完整 RSC snapshot 视为权威输入。
+- 本轮 8 条 finding 已全部闭环；后续首页工作只在出现新运行证据时另开审计或 issue，不继续叠加同一批补丁。
 - 聚合缓存“完整才缓存”的故障隔离粒度已在上一轮明确列为运行数据观察项，本轮没有新证据证明应立即扩大为分区缓存重构，因此不重复立项。

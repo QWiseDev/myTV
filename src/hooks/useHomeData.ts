@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { scheduleIdleTask } from '@/lib/browser-scheduler';
 import { DELAYS } from '@/lib/constants/home';
@@ -48,6 +48,7 @@ export function useHomeData({
   const [loading, setLoading] = useState<HomeLoadingState>(() =>
     createHomeLoadingState(initialData),
   );
+  const previousInitialDataRef = useRef(initialData);
 
   const { scheduleWatchingUpdatesCheck } = useWatchingUpdatesRefresh({
     activeTab,
@@ -55,6 +56,9 @@ export function useHomeData({
   });
 
   useEffect(() => {
+    const initialDataChanged = previousInitialDataRef.current !== initialData;
+    previousInitialDataRef.current = initialData;
+
     let cancelled = false;
     let cancelTertiaryLoad: (() => void) | undefined;
     let cancelWatchingUpdatesCheck: (() => void) | undefined;
@@ -186,6 +190,9 @@ export function useHomeData({
       let availability = getHomeDataAvailability(snapshot);
 
       if (availability.isComplete) {
+        if (initialDataChanged) {
+          applyHomeData(snapshot);
+        }
         cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();
         return;
       }
