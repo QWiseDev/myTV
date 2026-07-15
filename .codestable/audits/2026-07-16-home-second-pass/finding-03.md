@@ -6,7 +6,7 @@ nature: performance
 severity: P1
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 03：播放记录未决时会先后启动两组 priority 图片
@@ -33,3 +33,9 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为目标是收口资源优先级而不改变页面内容。
+
+## 修复记录（2026-07-16）
+
+- 热门电影 priority 现在同时要求播放记录加载完成且确认为空；未决阶段不再提前抢占图片优先级。
+- 有继续观看记录时仍由续播前 3 张持有 priority；确认无记录后，电影前 3 张才获得 priority。
+- 新增 loading→resolved rerender 回归；全量 Jest 69 suites / 295 tests、typecheck、production build 与目标 ESLint 通过。

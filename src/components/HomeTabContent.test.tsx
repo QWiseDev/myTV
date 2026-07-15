@@ -1,10 +1,15 @@
 import { render, screen } from '@testing-library/react';
 
+import type { DoubanItem } from '@/lib/types';
+
 import type { HomeContinueWatchingState } from './HomeTabContent';
 import HomeTabContent from './HomeTabContent';
 
 let mockSuspendContinueWatching = false;
 const mockNeverResolve = new Promise<void>(() => undefined);
+const mockVideoCard = jest.fn(({ title }: { title: string }) => (
+  <div>{title}</div>
+));
 
 jest.mock('./ContinueWatching', () => ({
   __esModule: true,
@@ -18,7 +23,7 @@ jest.mock('./ContinueWatching', () => ({
 
 jest.mock('./VideoCard', () => ({
   __esModule: true,
-  default: () => <div>视频卡片</div>,
+  default: (props: { title: string }) => mockVideoCard(props),
 }));
 
 jest.mock('./BangumiSection', () => ({
@@ -28,8 +33,21 @@ jest.mock('./BangumiSection', () => ({
 
 jest.mock('./LazyVideoSection', () => ({
   __esModule: true,
-  default: ({ loading, title }: { loading: boolean; title: string }) => (
-    <div data-testid={title}>{String(loading)}</div>
+  default: ({
+    data,
+    loading,
+    renderItem,
+    title,
+  }: {
+    data: DoubanItem[];
+    loading: boolean;
+    renderItem: (item: DoubanItem, index: number) => React.ReactNode;
+    title: string;
+  }) => (
+    <div data-testid={title}>
+      {String(loading)}
+      {data[0] ? renderItem(data[0], 0) : null}
+    </div>
   ),
 }));
 
@@ -54,6 +72,7 @@ const continueWatching: HomeContinueWatchingState = {
 describe('HomeTabContent', () => {
   beforeEach(() => {
     mockSuspendContinueWatching = false;
+    mockVideoCard.mockClear();
   });
 
   it('passes independent loading state to TV and variety sections', async () => {
@@ -106,5 +125,54 @@ describe('HomeTabContent', () => {
     expect(screen.getByTestId('热门剧集')).toBeTruthy();
     expect(screen.getByTestId('新番放送')).toBeTruthy();
     expect(screen.getByTestId('热门综艺')).toBeTruthy();
+  });
+
+  it('waits for playback records before prioritizing popular movie posters', () => {
+    const movie: DoubanItem = {
+      id: '1',
+      poster: 'https://example.com/movie.jpg',
+      rate: '8.0',
+      title: '热门电影 1',
+      year: '2026',
+    };
+    const loadingContinueWatching = {
+      ...continueWatching,
+      loading: true,
+    };
+    const homeData = {
+      hotMovies: [movie],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [],
+    };
+    const loading = {
+      criticalLoading: false,
+      tertiaryLoading: false,
+      tvLoading: false,
+      varietyLoading: false,
+    };
+    const { rerender } = render(
+      <HomeTabContent
+        continueWatching={loadingContinueWatching}
+        homeData={homeData}
+        loading={loading}
+      />,
+    );
+
+    expect(mockVideoCard.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ priority: false, title: '热门电影 1' }),
+    );
+
+    rerender(
+      <HomeTabContent
+        continueWatching={continueWatching}
+        homeData={homeData}
+        loading={loading}
+      />,
+    );
+
+    expect(mockVideoCard.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ priority: true, title: '热门电影 1' }),
+    );
   });
 });

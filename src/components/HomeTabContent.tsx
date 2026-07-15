@@ -97,7 +97,8 @@ export default function HomeTabContent({
         renderItem={(movie, index) =>
           renderDoubanCard(movie, {
             type: 'movie',
-            priority: !hasContinueWatching && index < 3,
+            priority:
+              !continueWatching.loading && !hasContinueWatching && index < 3,
           })
         }
       />
