@@ -148,4 +148,38 @@ describe('watching updates cache helpers', () => {
 
     window.removeEventListener('watchingUpdatesChanged', eventListener);
   });
+
+  it('reuses the in-flight non-forced check', async () => {
+    const nextCheckTime = Date.now() + 6 * 60 * 1000;
+    const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(nextCheckTime);
+    let resolveFetch!: (value: {
+      json: () => Promise<never[]>;
+      ok: boolean;
+    }) => void;
+    global.fetch = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const eventListener = jest.fn();
+    window.addEventListener('watchingUpdatesChanged', eventListener);
+
+    const firstCheck = checkWatchingUpdates();
+    const secondCheck = checkWatchingUpdates();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    resolveFetch({
+      json: async () => [],
+      ok: true,
+    });
+    await Promise.all([firstCheck, secondCheck]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(eventListener).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener('watchingUpdatesChanged', eventListener);
+    dateNowSpy.mockRestore();
+  });
 });

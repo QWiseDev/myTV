@@ -8,7 +8,7 @@ interface UseWatchingUpdatesRefreshOptions {
   refreshWatchingUpdates: () => void | Promise<void>;
 }
 
-const VISIBILITY_CHECK_THROTTLE_MS = 15_000;
+const WATCHING_UPDATES_POLL_INTERVAL_MS = 30 * 60 * 1000;
 
 function reportWatchingUpdatesError(message: string, error: unknown) {
   if (process.env.NODE_ENV !== 'production') {
@@ -25,17 +25,24 @@ function canCheckWatchingUpdates(
   );
 }
 
-function shouldThrottleVisibilityCheck(lastCheckAt: number, now: number) {
-  return now - lastCheckAt < VISIBILITY_CHECK_THROTTLE_MS;
+function shouldThrottleWatchingUpdatesCheck(
+  lastCheckAt: number | null,
+  now: number,
+) {
+  return (
+    lastCheckAt !== null &&
+    now - lastCheckAt < WATCHING_UPDATES_POLL_INTERVAL_MS
+  );
 }
 
 export function useWatchingUpdatesRefresh({
   activeTab,
   refreshWatchingUpdates,
 }: UseWatchingUpdatesRefreshOptions) {
+  const isMountedRef = useRef(true);
   const isCheckingRef = useRef(false);
   const activeTabRef = useRef(activeTab);
-  const visibilityCheckThrottleRef = useRef(0);
+  const lastCheckAtRef = useRef<number | null>(null);
   const watchingUpdatesEventVersionRef = useRef(0);
   const pendingInvalidationRef = useRef(false);
 
@@ -43,11 +50,29 @@ export function useWatchingUpdatesRefresh({
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      pendingInvalidationRef.current = false;
+    };
+  }, []);
+
   const runWatchingUpdatesCheck = useCallback(async () => {
+    if (!isMountedRef.current) return;
     if (isCheckingRef.current) return;
     if (!canCheckWatchingUpdates(activeTabRef.current)) return;
 
     const isInvalidationCheck = pendingInvalidationRef.current;
+    const now = Date.now();
+    if (
+      !isInvalidationCheck &&
+      shouldThrottleWatchingUpdatesCheck(lastCheckAtRef.current, now)
+    ) {
+      return;
+    }
+
     pendingInvalidationRef.current = false;
 
     try {
@@ -55,6 +80,8 @@ export function useWatchingUpdatesRefresh({
       const eventVersion = watchingUpdatesEventVersionRef.current;
       const { checkWatchingUpdates } = await import('@/lib/watching-updates');
       await checkWatchingUpdates(isInvalidationCheck);
+      lastCheckAtRef.current = Date.now();
+      if (!isMountedRef.current) return;
       if (
         watchingUpdatesEventVersionRef.current === eventVersion &&
         !pendingInvalidationRef.current
@@ -66,6 +93,7 @@ export function useWatchingUpdatesRefresh({
     } finally {
       isCheckingRef.current = false;
       if (
+        isMountedRef.current &&
         pendingInvalidationRef.current &&
         canCheckWatchingUpdates(activeTabRef.current)
       ) {
@@ -131,15 +159,6 @@ export function useWatchingUpdatesRefresh({
 
     const handleVisibilityChange = () => {
       if (!canCheckWatchingUpdates(activeTabRef.current)) return;
-
-      const now = Date.now();
-      if (
-        shouldThrottleVisibilityCheck(visibilityCheckThrottleRef.current, now)
-      ) {
-        return;
-      }
-
-      visibilityCheckThrottleRef.current = now;
       void runWatchingUpdatesCheck();
     };
 

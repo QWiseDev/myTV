@@ -27,7 +27,6 @@ function filterDeletedRecords(
 }
 
 export function usePlaybackRecords(
-  refreshWatchingUpdates: () => Promise<void>,
   priorityPlayRecordKeys: string[] = EMPTY_PRIORITY_PLAY_RECORD_KEYS,
 ) {
   const [playRecords, setPlayRecords] = useState<Record<
@@ -39,7 +38,6 @@ export function usePlaybackRecords(
   const [hasMorePlayRecords, setHasMorePlayRecords] = useState(false);
   const [playRecordsLoadError, setPlayRecordsLoadError] =
     useState<PlayRecordsLoadError>(null);
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextCursorRef = useRef<string | null>(null);
   const loadRequestRef = useRef(0);
   const appendRequestRef = useRef(0);
@@ -130,21 +128,6 @@ export function usePlaybackRecords(
   useEffect(() => {
     playRecordsRef.current = playRecords;
   }, [playRecords]);
-
-  const refreshPlayRecords = useCallback(async () => {
-    if (typeof window === 'undefined') return;
-
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
-
-    refreshTimeoutRef.current = setTimeout(() => {
-      void (async () => {
-        await loadPlayRecordsPage(false);
-        await refreshWatchingUpdates();
-      })();
-    }, 500);
-  }, [loadPlayRecordsPage, refreshWatchingUpdates]);
 
   const loadMorePlayRecords = useCallback((): Promise<void> => {
     if (appendLoadPromiseRef.current) {
@@ -248,10 +231,6 @@ export function usePlaybackRecords(
 
     return () => {
       cancelLoad();
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
     };
   }, [loadPlayRecordsPage, priorityKeySignature]);
 
@@ -264,7 +243,6 @@ export function usePlaybackRecords(
     markPlayRecordDeleted,
     playRecords,
     playRecordsLoadError,
-    refreshPlayRecords,
     retryPlayRecords,
     setPlayRecords,
   };

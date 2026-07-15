@@ -279,20 +279,29 @@ describe('useWatchingUpdatesRefresh', () => {
     expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
   });
 
-  it('checks on visibility changes with throttling', async () => {
-    jest
-      .spyOn(Date, 'now')
-      .mockReturnValueOnce(20_000)
-      .mockReturnValueOnce(25_000)
-      .mockReturnValueOnce(36_000);
-
-    renderHook(() =>
+  it('shares the regular check interval across idle and visibility triggers', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(20_000);
+    const { result } = renderHook(() =>
       useWatchingUpdatesRefresh({
         activeTab: 'home',
         refreshWatchingUpdates: jest.fn(),
       }),
     );
 
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenLastCalledWith(false);
+
+    nowSpy.mockReturnValue(20_000 + 30 * 60 * 1000 - 1);
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
       await flushAsyncWork();
@@ -300,12 +309,37 @@ describe('useWatchingUpdatesRefresh', () => {
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
 
+    nowSpy.mockReturnValue(20_000 + 30 * 60 * 1000);
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
       await flushAsyncWork();
     });
 
-    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows a regular retry when the previous check rejects', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(20_000);
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockCheckWatchingUpdates
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() =>
+      useWatchingUpdatesRefresh({
+        activeTab: 'home',
+        refreshWatchingUpdates: jest.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
 
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
@@ -313,6 +347,45 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not refresh or recheck after unmount', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const firstCheck = createDeferred();
+    mockCheckWatchingUpdates.mockReturnValueOnce(firstCheck.promise);
+    const { result, unmount } = renderHook(() =>
+      useWatchingUpdatesRefresh({
+        activeTab: 'home',
+        refreshWatchingUpdates,
+      }),
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+    act(() => {
+      eventHandler(false, 0, true);
+      unmount();
+    });
+
+    await act(async () => {
+      firstCheck.resolve();
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(refreshWatchingUpdates).not.toHaveBeenCalled();
   });
 
   it('subscribes to watching update events on the home tab and cleans up', async () => {

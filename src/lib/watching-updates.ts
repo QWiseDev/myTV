@@ -67,9 +67,6 @@ export interface WatchingUpdatesCache {
   updatedSeries: WatchingUpdate['updatedSeries'];
 }
 
-// 全局事件监听器
-const updateListeners = new Set<(hasUpdates: boolean) => void>();
-
 type PlayRecordWithId = PlayRecord & { id: string };
 
 function delay(ms: number): Promise<void> {
@@ -98,13 +95,6 @@ async function runBatchedTasks<T>(
 }
 
 const WATCHING_UPDATES_MAX_RECORDS = 24; // 常规检查最多处理最近24条记录
-const WATCHING_UPDATES_DEBUG =
-  process.env.NODE_ENV !== 'production' &&
-  process.env.NEXT_PUBLIC_DEBUG_WATCHING_UPDATES === 'true';
-
-function debugLog(..._args: unknown[]): void {
-  if (!WATCHING_UPDATES_DEBUG) return;
-}
 
 function dispatchWatchingUpdatesEvent(
   hasUpdates: boolean,
@@ -144,7 +134,6 @@ export async function fetchWatchingUpdatesFromServer(
     });
 
     if (!response.ok) {
-      debugLog('从服务端获取追更提醒失败:', response.status);
       return getDetailedWatchingUpdates();
     }
 
@@ -155,7 +144,6 @@ export async function fetchWatchingUpdatesFromServer(
 
     cacheWatchingUpdates(data);
     memoryLastCheckTime = data.timestamp || Date.now();
-    notifyListeners(Boolean(data.hasUpdates));
     dispatchWatchingUpdatesEvent(
       Boolean(data.hasUpdates),
       data.updatedCount || 0,
@@ -176,9 +164,6 @@ export async function fetchWatchingUpdatesFromServer(
 // 防抖控制：避免并发重复调用
 let updateCheckPromise: Promise<void> | null = null;
 
-// 🚀 新增：全局检查状态，防止首次加载时多个组件同时触发检查
-let globalCheckInProgress = false;
-
 export async function checkWatchingUpdates(
   forceRefresh = false,
 ): Promise<void> {
@@ -187,19 +172,12 @@ export async function checkWatchingUpdates(
     return;
   }
 
-  if (!forceRefresh && globalCheckInProgress) {
-    debugLog('全局检查正在进行中，等待完成...');
-    return updateCheckPromise || Promise.resolve();
-  }
-
   if (!forceRefresh && updateCheckPromise) {
-    debugLog('检查正在进行中，返回现有Promise...');
     return updateCheckPromise;
   }
 
   const runCheck = async () => {
     const currentTime = Date.now();
-    debugLog('开始检查追番更新...', forceRefresh ? '(强制刷新)' : '');
 
     if (!forceRefresh) {
       const lastCheckTime =
@@ -208,10 +186,8 @@ export async function checkWatchingUpdates(
           : parseInt(localStorage.getItem(LAST_CHECK_TIME_KEY) || '0');
 
       if (currentTime - lastCheckTime < CACHE_DURATION) {
-        debugLog('距离上次检查时间太短（不足30分钟），使用缓存结果');
         const cached = getDetailedWatchingUpdates();
         const hasCachedUpdates = Boolean(cached?.hasUpdates);
-        notifyListeners(hasCachedUpdates);
         dispatchWatchingUpdatesEvent(
           hasCachedUpdates,
           cached?.updatedCount || 0,
@@ -229,7 +205,6 @@ export async function checkWatchingUpdates(
         Date.now() - sourcesCache.timestamp < SOURCES_CACHE_DURATION
       ) {
         sources = sourcesCache.data;
-        debugLog('使用已缓存的数据源列表');
       } else {
         const sourcesResponse = await fetch('/api/sources');
         if (sourcesResponse.ok) {
@@ -238,9 +213,6 @@ export async function checkWatchingUpdates(
             data: sources,
             timestamp: Date.now(),
           };
-          debugLog(
-            `数据源列表已缓存，有效期${SOURCES_CACHE_DURATION / 1000}秒`,
-          );
         }
       }
     } catch (error) {
@@ -278,7 +250,6 @@ export async function checkWatchingUpdates(
       } else {
         localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
       }
-      notifyListeners(false);
       dispatchWatchingUpdatesEvent(false, 0);
       return;
     }
@@ -291,10 +262,6 @@ export async function checkWatchingUpdates(
       !forceRefresh && allCandidateRecords.length > WATCHING_UPDATES_MAX_RECORDS
         ? allCandidateRecords.slice(0, WATCHING_UPDATES_MAX_RECORDS)
         : allCandidateRecords;
-
-    debugLog(
-      `找到 ${allCandidateRecords.length} 个可能有更新的剧集，本次检查 ${candidateRecords.length} 个`,
-    );
 
     let hasAnyUpdates = false;
     let updatedCount = 0;
@@ -352,10 +319,6 @@ export async function checkWatchingUpdates(
           hasAnyUpdates = true;
           continueWatchingCount++;
         }
-
-        debugLog(
-          `${record.title} 检查结果: hasUpdate=${updateInfo.hasUpdate}, hasContinueWatching=${updateInfo.hasContinueWatching}`,
-        );
       } catch (error) {
         console.error(`检查 ${record.title} 更新失败:`, error);
         const seriesInfo = {
@@ -386,12 +349,6 @@ export async function checkWatchingUpdates(
       WATCHING_UPDATES_BATCH_PAUSE,
     );
 
-    if (!forceRefresh && candidateRecords.length < allCandidateRecords.length) {
-      debugLog(
-        `本次跳过 ${allCandidateRecords.length - candidateRecords.length} 条较早记录，降低首页阶段详情请求压力`,
-      );
-    }
-
     updatedSeries.sort((a, b) => {
       if (a.hasNewEpisode !== b.hasNewEpisode) {
         return a.hasNewEpisode ? -1 : 1;
@@ -401,14 +358,6 @@ export async function checkWatchingUpdates(
       }
       return a.title.localeCompare(b.title, 'zh-CN');
     });
-
-    debugLog(
-      `检查完成: ${
-        hasAnyUpdates
-          ? `发现${updatedCount}部剧集有新集数更新，${continueWatchingCount}部剧集需要继续观看`
-          : '暂无更新'
-      }`,
-    );
 
     const result: WatchingUpdate = {
       hasUpdates: hasAnyUpdates,
@@ -425,7 +374,6 @@ export async function checkWatchingUpdates(
       localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
     }
 
-    notifyListeners(hasAnyUpdates);
     dispatchWatchingUpdatesEvent(hasAnyUpdates, updatedCount);
   };
 
@@ -434,22 +382,18 @@ export async function checkWatchingUpdates(
       await runCheck();
     } catch (error) {
       console.error('检查追番更新失败:', error);
-      notifyListeners(false);
     }
     return;
   }
 
-  globalCheckInProgress = true;
   updateCheckPromise = runCheck();
 
   try {
     await updateCheckPromise;
   } catch (error) {
     console.error('检查追番更新失败:', error);
-    notifyListeners(false);
   } finally {
     updateCheckPromise = null;
-    globalCheckInProgress = false;
   }
 }
 
@@ -473,11 +417,8 @@ async function checkSingleRecordUpdate(
     const finalSourceKey = sourceKey || record.source_name;
     const apiUrl = `/api/detail?source=${finalSourceKey}&id=${videoId}`;
 
-    debugLog(`${record.title} 调用API获取最新详情:`, apiUrl);
-
     const response = await fetch(apiUrl);
     if (!response.ok) {
-      debugLog(`获取${record.title}详情失败: ${response.status}`);
       return {
         hasUpdate: false,
         hasContinueWatching: false,
@@ -513,24 +454,6 @@ async function checkSingleRecordUpdate(
     const remainingEpisodes = hasContinueWatching
       ? protectedTotalEpisodes - record.index
       : 0;
-
-    if (latestEpisodes < originalTotalEpisodes) {
-      debugLog(
-        `${record.title} API返回集数(${latestEpisodes})少于原始记录(${originalTotalEpisodes})，按保护逻辑使用较大集数`,
-      );
-    }
-
-    if (hasUpdate) {
-      debugLog(
-        `${record.title} 发现新集数: ${originalTotalEpisodes} -> ${latestEpisodes} 集，新增${newEpisodes}集`,
-      );
-    }
-
-    if (hasContinueWatching) {
-      debugLog(
-        `${record.title} 继续观看提醒: 当前第${record.index}集，共${protectedTotalEpisodes}集，还有${remainingEpisodes}集未看`,
-      );
-    }
 
     return {
       hasUpdate,
@@ -573,8 +496,8 @@ async function getOriginalEpisodes(
     if (freshRecord?.original_episodes && freshRecord.original_episodes > 0) {
       return freshRecord.original_episodes;
     }
-  } catch (error) {
-    debugLog(`从数据库读取原始集数失败: ${record.title}`, error);
+  } catch {
+    // 读取失败时继续使用当前播放记录中的集数。
   }
 
   if (record.original_episodes && record.original_episodes > 0) {
@@ -598,8 +521,8 @@ async function getOriginalEpisodes(
         return data[storageKey];
       }
     }
-  } catch (error) {
-    debugLog('从localStorage读取原始集数失败:', error);
+  } catch {
+    // 本地缓存损坏时继续使用播放记录中的集数。
   }
 
   return record.total_episodes;
@@ -635,19 +558,6 @@ function cacheWatchingUpdates(data: WatchingUpdate): void {
   } catch (error) {
     console.error('缓存更新信息失败:', error);
   }
-}
-
-/**
- * 通知所有监听器
- */
-function notifyListeners(hasUpdates: boolean): void {
-  updateListeners.forEach((callback) => {
-    try {
-      callback(hasUpdates);
-    } catch (error) {
-      console.error('通知更新监听器失败:', error);
-    }
-  });
 }
 
 function getWatchingUpdatesCacheDuration(): number {
@@ -721,7 +631,6 @@ export function markUpdatesAsViewed(): void {
         })),
       };
       cacheWatchingUpdates(updatedData);
-      notifyListeners(false);
       dispatchWatchingUpdatesEvent(false, 0);
     }
   } catch (error) {
@@ -735,8 +644,6 @@ export function markUpdatesAsViewed(): void {
  */
 export function forceClearWatchingUpdatesCache(): void {
   try {
-    debugLog('强制清除 watching-updates 缓存');
-
     memoryWatchingUpdatesCache = null;
     memoryLastCheckTime = 0;
 

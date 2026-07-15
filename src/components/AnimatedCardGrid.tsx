@@ -56,21 +56,19 @@ export default function AnimatedCardGrid({
       initial='hidden'
       animate='visible'
     >
-      {childArray.map((child, index) =>
-        index < maxAnimatedItems ? (
+      {childArray.map((child, index) => {
+        const key = React.isValidElement(child) ? child.key : null;
+
+        return (
           <motion.div
-            key={index}
-            variants={itemVariants}
+            key={key ?? index}
+            variants={index < maxAnimatedItems ? itemVariants : undefined}
             className='flex-shrink-0'
           >
             {child}
           </motion.div>
-        ) : (
-          <div key={index} className='flex-shrink-0'>
-            {child}
-          </div>
-        ),
-      )}
+        );
+      })}
     </motion.div>
   );
 }

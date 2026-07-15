@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 08：动画 wrapper 的 index key 让排序重挂卡片
@@ -32,3 +32,10 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为这是行为等价的 reconciliation identity 修正。
+
+## 修复记录（2026-07-16）
+
+- wrapper 复用有效 child 的业务 key，无 key 时才回退位置 key。
+- 所有卡片统一使用稳定的 `motion.div` wrapper，仅前 `maxAnimatedItems` 项挂载动画 variants，避免卡片跨动画边界时因元素类型变化重挂。
+- 生命周期回归使用 `maxAnimatedItems={1}` 交换两张卡片，确认跨边界重排后 mount 仍各为 1、无 unmount。
+- 修复记录见 `.codestable/issues/2026-07-16-home-p2-cleanup/home-p2-cleanup-fix-note.md`。

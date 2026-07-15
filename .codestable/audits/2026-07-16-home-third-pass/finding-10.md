@@ -6,7 +6,7 @@ nature: maintainability
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 10：首页数据上下文与追更模块保留无消费者补丁路径
@@ -33,3 +33,11 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为这些代码已无运行时职责，只是多轮补丁残留。
+
+## 修复记录（2026-07-16）
+
+- 删除无消费者的 `refreshPlayRecords` Context/API、500ms timer 及 `usePlaybackRecords` 的追更刷新参数。
+- 删除无注册入口的内部 listener Set、空实现 debug 通道和与 `updateCheckPromise` 镜像的布尔状态。
+- 保留实际使用的 `refreshWatchingUpdates` 与唯一 DOM event 通知通道。
+- 新增非强制并发检查回归，确认 singleflight 只请求一次、只发布一次事件。
+- 修复记录见 `.codestable/issues/2026-07-16-home-p2-cleanup/home-p2-cleanup-fix-note.md`。

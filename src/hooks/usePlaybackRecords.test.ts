@@ -79,7 +79,7 @@ describe('usePlaybackRecords', () => {
     };
     getPlayRecordsPage.mockResolvedValue(createPage(records));
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
 
     expect(result.current.loadingPlayRecords).toBe(true);
     expect(getPlayRecordsPage).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('usePlaybackRecords', () => {
     getPlayRecordsPage.mockResolvedValue(createPage({}));
 
     renderHook(() =>
-      usePlaybackRecords(jest.fn(), ['source+old-update', 'source+new-update']),
+      usePlaybackRecords(['source+old-update', 'source+new-update']),
     );
 
     await act(async () => {
@@ -115,35 +115,6 @@ describe('usePlaybackRecords', () => {
       includeKeys: ['source+new-update', 'source+old-update'],
       pageSize: 12,
     });
-  });
-
-  it('debounces manual refresh and refreshes watching updates afterwards', async () => {
-    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
-    getPlayRecordsPage.mockResolvedValue(
-      createPage({
-        'source+id': createRecord(),
-      }),
-    );
-
-    const { result } = renderHook(() =>
-      usePlaybackRecords(refreshWatchingUpdates),
-    );
-
-    await act(async () => {
-      jest.advanceTimersByTime(200);
-      await flushAsyncWork();
-    });
-    getPlayRecordsPage.mockClear();
-
-    await act(async () => {
-      result.current.refreshPlayRecords();
-      result.current.refreshPlayRecords();
-      jest.advanceTimersByTime(500);
-      await flushAsyncWork();
-    });
-
-    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
-    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
   it('loads more play records by cursor and appends the next page', async () => {
@@ -166,7 +137,7 @@ describe('usePlaybackRecords', () => {
         }),
       );
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
 
     await act(async () => {
       jest.advanceTimersByTime(200);
@@ -200,7 +171,7 @@ describe('usePlaybackRecords', () => {
       .mockRejectedValueOnce(new Error('initial request failed'))
       .mockResolvedValueOnce(createPage({ 'source+retry': retryRecord }));
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
 
     await act(async () => {
       jest.advanceTimersByTime(200);
@@ -239,7 +210,7 @@ describe('usePlaybackRecords', () => {
       .mockRejectedValueOnce(new Error('append failed'))
       .mockResolvedValueOnce(createPage({ 'source+second': secondRecord }));
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -296,7 +267,7 @@ describe('usePlaybackRecords', () => {
       )
       .mockImplementation(() => appendPage.promise);
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -326,7 +297,7 @@ describe('usePlaybackRecords', () => {
 
     const { rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
-        usePlaybackRecords(jest.fn(), includeKeys),
+        usePlaybackRecords(includeKeys),
       { initialProps: { includeKeys: ['source+b', 'source+a'] } },
     );
 
@@ -371,7 +342,7 @@ describe('usePlaybackRecords', () => {
 
     const { result, rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
-        usePlaybackRecords(jest.fn(), includeKeys),
+        usePlaybackRecords(includeKeys),
       { initialProps: { includeKeys: ['source+initial'] } },
     );
 
@@ -433,7 +404,7 @@ describe('usePlaybackRecords', () => {
 
     const { result, rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
-        usePlaybackRecords(jest.fn(), includeKeys),
+        usePlaybackRecords(includeKeys),
       { initialProps: { includeKeys: ['source+initial'] } },
     );
 
@@ -481,7 +452,7 @@ describe('usePlaybackRecords', () => {
 
     const { result, rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
-        usePlaybackRecords(jest.fn(), includeKeys),
+        usePlaybackRecords(includeKeys),
       { initialProps: { includeKeys: ['source+initial'] } },
     );
 
@@ -528,7 +499,7 @@ describe('usePlaybackRecords', () => {
 
     const { result, rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
-        usePlaybackRecords(jest.fn(), includeKeys),
+        usePlaybackRecords(includeKeys),
       { initialProps: { includeKeys: ['source+initial'] } },
     );
     await act(async () => {
@@ -576,7 +547,7 @@ describe('usePlaybackRecords', () => {
       .mockRejectedValueOnce(new Error('initial request failed'))
       .mockImplementationOnce(() => retryPage.promise);
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -605,7 +576,7 @@ describe('usePlaybackRecords', () => {
     const firstPage = createDeferred<ReturnType<typeof createPage>>();
     getPlayRecordsPage.mockImplementationOnce(() => firstPage.promise);
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -628,7 +599,7 @@ describe('usePlaybackRecords', () => {
     const firstPage = createDeferred<ReturnType<typeof createPage>>();
     getPlayRecordsPage.mockImplementationOnce(() => firstPage.promise);
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -662,7 +633,7 @@ describe('usePlaybackRecords', () => {
       )
       .mockImplementationOnce(() => appendPage.promise);
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
     await act(async () => {
       jest.advanceTimersByTime(200);
       await flushAsyncWork();
@@ -720,7 +691,7 @@ describe('usePlaybackRecords', () => {
         }),
       );
 
-    const { result } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { result } = renderHook(() => usePlaybackRecords());
 
     await act(async () => {
       jest.advanceTimersByTime(200);
@@ -744,7 +715,7 @@ describe('usePlaybackRecords', () => {
   it('cancels scheduled initial loading after unmount', async () => {
     getPlayRecordsPage.mockResolvedValue(createPage({}));
 
-    const { unmount } = renderHook(() => usePlaybackRecords(jest.fn()));
+    const { unmount } = renderHook(() => usePlaybackRecords());
     unmount();
 
     await act(async () => {

@@ -37,7 +37,6 @@ interface PlaybackDataContextType {
   loadingWatchingUpdates: boolean;
 
   // 手动刷新方法
-  refreshPlayRecords: () => Promise<void>;
   refreshWatchingUpdates: () => Promise<void>;
 }
 
@@ -92,10 +91,9 @@ export function PlaybackDataProvider({
     markAllPlayRecordsDeleted,
     playRecords,
     playRecordsLoadError,
-    refreshPlayRecords,
     retryPlayRecords,
     setPlayRecords,
-  } = usePlaybackRecords(refreshWatchingUpdates, firstPagePlayRecordKeys);
+  } = usePlaybackRecords(firstPagePlayRecordKeys);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(
@@ -115,7 +113,6 @@ export function PlaybackDataProvider({
       setWatchingUpdates,
       loadingWatchingUpdates,
 
-      refreshPlayRecords,
       refreshWatchingUpdates,
     }),
     [
@@ -132,7 +129,6 @@ export function PlaybackDataProvider({
       watchingUpdates,
       loadingWatchingUpdates,
       setWatchingUpdates,
-      refreshPlayRecords,
       refreshWatchingUpdates,
     ],
   );

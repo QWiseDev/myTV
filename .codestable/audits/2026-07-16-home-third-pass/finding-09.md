@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 09：数据库模式前台切换会高频读取追更 API
@@ -33,3 +33,11 @@ visibility 调度只限制 15 秒，而数据库模式的检查每次都直接 G
 ## 建议动作
 
 `cs-refactor`，因为这是轮询所有权与节流边界收口。
+
+## 修复记录（2026-07-16）
+
+- idle 与 visibility 普通检查共用 30 分钟间隔；invalidated 强制检查继续绕过该门控。
+- 时间戳只在检查成功后记录，失败尝试可由下一次触发立即重试。
+- 组件卸载后不再刷新 snapshot，也不会执行排队的 invalidation 重检；底层请求取消统一留给 finding #7 的 `AbortSignal` 契约。
+- 回归继续覆盖跨 tab pending、检查中再次失效排队、`force=true` 透传和订阅清理。
+- 修复记录见 `.codestable/issues/2026-07-16-home-p2-cleanup/home-p2-cleanup-fix-note.md`。

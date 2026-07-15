@@ -38,7 +38,6 @@ describe('PlaybackDataProvider', () => {
       markPlayRecordDeleted: jest.fn(),
       playRecords: {},
       playRecordsLoadError: null,
-      refreshPlayRecords: jest.fn(),
       retryPlayRecords: jest.fn(),
       setPlayRecords: jest.fn(),
     });
@@ -51,9 +50,9 @@ describe('PlaybackDataProvider', () => {
       </PlaybackDataProvider>,
     );
 
-    expect(mockUsePlaybackRecords).toHaveBeenCalledWith(
-      mockRefreshWatchingUpdates,
-      ['route-source+route-id', 'update-source+update-id'],
-    );
+    expect(mockUsePlaybackRecords).toHaveBeenCalledWith([
+      'route-source+route-id',
+      'update-source+update-id',
+    ]);
   });
 });
