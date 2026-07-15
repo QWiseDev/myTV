@@ -14,6 +14,14 @@ jest.mock('@/lib/db.client', () => ({
   deletePlayRecord: jest.fn(),
 }));
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function createSource(
   source: string,
   id: string,
@@ -71,6 +79,11 @@ describe('useSourceSwitcher', () => {
       '',
       '/play?source=source-a&id=id-a&title=Old&stitle=Search&stype=tv&prefer=true',
     );
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
   test('an existing failover callback reads the latest available sources', async () => {
@@ -304,5 +317,57 @@ describe('useSourceSwitcher', () => {
     expect(params.resumeTimeRef.current).toBe(37);
     expect(params.isSourceChangingRef.current).toBe(true);
     expect(params.setIsVideoLoading).toHaveBeenLastCalledWith(true);
+  });
+
+  test('does not render a source-switch result after danmaku is disabled', async () => {
+    jest.useFakeTimers();
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', { douban_id: 2 });
+    const pendingDanmaku = createDeferred<never[]>();
+    const params = createParams([sourceA, sourceB]);
+    const plugin = {
+      reset: jest.fn(),
+      load: jest.fn(),
+      show: jest.fn(),
+      hide: jest.fn(),
+    };
+    const art = {
+      plugins: { artplayerPluginDanmuku: plugin },
+      notice: { show: '' },
+    };
+    params.artPlayerRef.current = art;
+    params.externalDanmuEnabledRef.current = true;
+    params.loadExternalDanmu = jest.fn(() => pendingDanmaku.promise);
+
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    await act(async () => {
+      await result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'fallback title',
+      );
+    });
+
+    plugin.reset.mockClear();
+    plugin.load.mockClear();
+    plugin.show.mockClear();
+    plugin.hide.mockClear();
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(params.loadExternalDanmu).toHaveBeenCalledTimes(1);
+
+    params.externalDanmuEnabledRef.current = false;
+    await act(async () => {
+      pendingDanmaku.resolve([]);
+      await pendingDanmaku.promise;
+    });
+
+    expect(plugin.reset).not.toHaveBeenCalled();
+    expect(plugin.load).not.toHaveBeenCalled();
+    expect(plugin.show).not.toHaveBeenCalled();
+    expect(plugin.hide).not.toHaveBeenCalled();
+    expect(art.notice.show).toBe('');
   });
 });

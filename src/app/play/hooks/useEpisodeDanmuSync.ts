@@ -35,6 +35,7 @@ interface UseEpisodeDanmuSyncParams {
   episodeSwitchTimeoutRef: MutableRefObject<NodeJS.Timeout | null>;
   artPlayerRef: MutableRefObject<ArtPlayerLike | null>;
   danmuPluginStateRef: MutableRefObject<DanmakuPluginStateSnapshot | null>;
+  externalDanmuEnabledRef: MutableRefObject<boolean>;
   loadExternalDanmu: () => Promise<DanmakuItemLike[]>;
 }
 
@@ -51,6 +52,7 @@ export function useEpisodeDanmuSync({
   episodeSwitchTimeoutRef,
   artPlayerRef,
   danmuPluginStateRef,
+  externalDanmuEnabledRef,
   loadExternalDanmu,
 }: UseEpisodeDanmuSyncParams) {
   const syncGenerationRef = useRef(0);
@@ -80,6 +82,7 @@ export function useEpisodeDanmuSync({
     danmuLoadingRef.current = false;
 
     if (
+      externalDanmuEnabledRef.current &&
       artPlayerRef.current &&
       artPlayerRef.current.plugins?.artplayerPluginDanmuku
     ) {
@@ -95,12 +98,19 @@ export function useEpisodeDanmuSync({
         const art = artPlayerRef.current;
 
         try {
-          if (!art?.plugins?.artplayerPluginDanmuku) {
+          if (
+            !externalDanmuEnabledRef.current ||
+            !art?.plugins?.artplayerPluginDanmuku
+          ) {
             return;
           }
 
           const danmaku = await loadExternalDanmu();
-          if (!isCurrentGeneration() || artPlayerRef.current !== art) {
+          if (
+            !isCurrentGeneration() ||
+            artPlayerRef.current !== art ||
+            !externalDanmuEnabledRef.current
+          ) {
             return;
           }
 
@@ -109,7 +119,11 @@ export function useEpisodeDanmuSync({
             showNotice: true,
           });
         } catch (error) {
-          if (!isCurrentGeneration() || artPlayerRef.current !== art) {
+          if (
+            !isCurrentGeneration() ||
+            artPlayerRef.current !== art ||
+            !externalDanmuEnabledRef.current
+          ) {
             return;
           }
           if (isDanmakuAbortError(error)) return;
@@ -139,6 +153,7 @@ export function useEpisodeDanmuSync({
     danmuPluginStateRef,
     detail,
     episodeSwitchTimeoutRef,
+    externalDanmuEnabledRef,
     isEpisodeChangingRef,
     isSkipControllerTriggeredRef,
     isSourceChangingRef,

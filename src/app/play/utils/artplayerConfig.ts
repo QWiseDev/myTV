@@ -7,7 +7,6 @@ import type Artplayer from 'artplayer';
 import type { MutableRefObject } from 'react';
 
 import type { ArtPlayerLike } from './danmakuRuntime';
-import { readExternalDanmuPref } from './danmuPreference';
 
 type ArtplayerControlConfig = {
   position: 'top' | 'left' | 'right';
@@ -41,7 +40,7 @@ interface ArtplayerConfigOptions {
   // 状态和回调
   blockAdEnabled: boolean;
   blockAdEnabledRef: MutableRefObject<boolean>;
-  externalDanmuEnabled: boolean;
+  externalDanmuEnabledRef: MutableRefObject<boolean>;
   onBlockAdToggle: (enabled: boolean) => void;
   onDanmuToggle: (enabled: boolean) => void;
   onNextEpisode: () => void;
@@ -127,15 +126,10 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
   const {
     blockAdEnabled,
     blockAdEnabledRef,
-    externalDanmuEnabled,
+    externalDanmuEnabledRef,
     onBlockAdToggle,
     onDanmuToggle,
   } = options;
-
-  const getStoredDanmuEnabled = () => {
-    const pref = readExternalDanmuPref();
-    return pref === null ? externalDanmuEnabled : pref;
-  };
 
   return [
     // 去广告开关
@@ -158,9 +152,10 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
     {
       html: '弹幕',
       icon: '<text x="50%" y="50%" font-size="18" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="#ffffff">DM</text>',
-      tooltip: externalDanmuEnabled ? '已开启' : '已关闭',
+      tooltip: externalDanmuEnabledRef.current ? '已开启' : '已关闭',
       onClick() {
-        const newVal = !getStoredDanmuEnabled();
+        const newVal = !externalDanmuEnabledRef.current;
+        externalDanmuEnabledRef.current = newVal;
         onDanmuToggle(newVal);
         return newVal ? '当前开启' : '当前关闭';
       },

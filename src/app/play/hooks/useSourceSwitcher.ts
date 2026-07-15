@@ -17,7 +17,7 @@ import {
   clearDanmakuDisplay,
   DanmakuItemLike,
   isDanmakuAbortError,
-  loadAndRenderDanmaku,
+  renderDanmakuList,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
 import {
@@ -265,11 +265,27 @@ export function useSourceSwitcher({
             danmuLoadingRef.current = false;
 
             try {
-              await loadAndRenderDanmaku(art, loadExternalDanmu, {
+              const danmaku = await loadExternalDanmu();
+              if (
+                !canCommitOperation() ||
+                artPlayerRef.current !== art ||
+                !externalDanmuEnabledRef.current
+              ) {
+                return;
+              }
+
+              renderDanmakuList(art, danmaku, {
                 preserveHidden: false,
                 showNotice: true,
               });
             } catch (error) {
+              if (
+                !canCommitOperation() ||
+                artPlayerRef.current !== art ||
+                !externalDanmuEnabledRef.current
+              ) {
+                return;
+              }
               if (isDanmakuAbortError(error)) return;
               console.error('换源后弹幕加载失败:', error);
               showDanmakuErrorNotice(art, error);

@@ -6,9 +6,10 @@ import {
   ArtPlayerLike,
   clearDanmakuDisplay,
   createDanmakuLoadManager,
+  createDanmakuRequest,
   DanmakuItemLike,
   isDanmakuAbortError,
-  loadAndRenderDanmaku,
+  renderDanmakuList,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
 import { writeExternalDanmuPref } from '../utils/danmuPreference';
@@ -55,26 +56,39 @@ export function useDanmuController({
   const loadExternalDanmu = useCallback(async (): Promise<
     DanmakuItemLike[]
   > => {
-    const latestEpisodeIndex = currentEpisodeIndexRef.current;
-    const latestOffset = danmuEpisodeOffsetRef.current;
-
-    danmuLoadingRef.current = true;
-
-    const loadPromise = loadManagerRef.current.load({
+    const getCurrentRequestInput = () => ({
       enabled: externalDanmuEnabledRef.current,
       videoTitle: videoTitleRef.current,
       videoYear: videoYearRef.current,
       videoDoubanId: videoDoubanIdRef.current,
       videoUrl: videoUrlRef.current,
-      episodeIndex: latestEpisodeIndex,
-      episodeOffset: latestOffset,
+      episodeIndex: currentEpisodeIndexRef.current,
+      episodeOffset: danmuEpisodeOffsetRef.current,
       source: currentSourceRef.current,
     });
+    const requestInput = getCurrentRequestInput();
+    const requestIdentity = createDanmakuRequest(requestInput);
+
+    danmuLoadingRef.current = true;
+
+    const loadPromise = loadManagerRef.current.load(requestInput);
     const requestKey = loadManagerRef.current.activeKey;
     lastDanmuLoadKeyRef.current = requestKey;
 
     try {
-      return await loadPromise;
+      const danmaku = await loadPromise;
+      const currentIdentity = createDanmakuRequest(getCurrentRequestInput());
+
+      if (
+        currentIdentity?.key !== requestIdentity?.key ||
+        currentIdentity?.source !== requestIdentity?.source
+      ) {
+        const error = new Error('弹幕请求媒体已变化');
+        error.name = 'AbortError';
+        throw error;
+      }
+
+      return danmaku;
     } catch (error) {
       if (isDanmakuAbortError(error)) {
         throw error;
@@ -126,11 +140,25 @@ export function useDanmuController({
             return;
           }
 
-          await loadAndRenderDanmaku(art, loadExternalDanmu, {
+          const danmaku = await loadExternalDanmu();
+          if (
+            !externalDanmuEnabledRef.current ||
+            artPlayerRef.current !== art
+          ) {
+            return;
+          }
+
+          renderDanmakuList(art, danmaku, {
             preserveHidden: false,
             showNotice: true,
           });
         } catch (error) {
+          if (
+            !externalDanmuEnabledRef.current ||
+            artPlayerRef.current !== art
+          ) {
+            return;
+          }
           if (isDanmakuAbortError(error)) return;
           console.error('弹幕开关操作失败:', error);
           showDanmakuErrorNotice(art, error);

@@ -294,16 +294,6 @@ export function renderDanmakuList(
   return true;
 }
 
-export async function loadAndRenderDanmaku(
-  art: ArtPlayerLike | null | undefined,
-  loadDanmaku: () => Promise<DanmakuItemLike[]>,
-  options: { preserveHidden?: boolean; showNotice?: boolean } = {},
-) {
-  const danmaku = await loadDanmaku();
-  renderDanmakuList(art, danmaku, options);
-  return danmaku;
-}
-
 export function showDanmakuLoadNotice(
   art: ArtPlayerLike | null | undefined,
   count: number,

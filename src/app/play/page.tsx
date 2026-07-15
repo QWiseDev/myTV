@@ -321,13 +321,6 @@ function PlayPageClient() {
     blockAdEnabledRef.current = blockAdEnabled;
   }, [blockAdEnabled]);
 
-  // 外部弹幕开关 - 需要从 localStorage 加载初始值
-  useEffect(() => {
-    const pref = readExternalDanmuPref();
-    if (pref !== null) {
-      actions.setDanmakuConfig({ enabled: pref });
-    }
-  }, [actions]);
   const externalDanmuEnabledRef = useRef(externalDanmuEnabled);
   useEffect(() => {
     externalDanmuEnabledRef.current = externalDanmuEnabled;
@@ -843,6 +836,7 @@ function PlayPageClient() {
     episodeSwitchTimeoutRef,
     artPlayerRef,
     danmuPluginStateRef,
+    externalDanmuEnabledRef,
     loadExternalDanmu,
   });
 
@@ -973,7 +967,6 @@ function PlayPageClient() {
     currentEpisodeIndexRef,
     resumeTimeRef,
     memoryPressure,
-    externalDanmuEnabled,
     externalDanmuEnabledRef,
     throttledTimeUpdate,
     saveCurrentPlayProgress,

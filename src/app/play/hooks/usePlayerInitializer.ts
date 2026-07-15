@@ -135,7 +135,6 @@ interface UsePlayerInitializerParams {
   currentEpisodeIndexRef: MutableRefObject<number>;
   resumeTimeRef: MutableRefObject<number | null>;
   memoryPressure: MemoryPressure;
-  externalDanmuEnabled: boolean;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
   throttledTimeUpdate: (duration: number) => void;
   saveCurrentPlayProgress: () => Promise<void> | void;
@@ -304,7 +303,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       currentEpisodeIndexRef,
       resumeTimeRef,
       memoryPressure,
-      externalDanmuEnabled,
+      externalDanmuEnabledRef,
       throttledTimeUpdate,
       saveCurrentPlayProgress,
       lastSaveTimeRef,
@@ -674,7 +673,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           isMobile,
           blockAdEnabled,
           blockAdEnabledRef,
-          externalDanmuEnabled,
+          externalDanmuEnabledRef,
           onBlockAdToggle: setBlockAdEnabled,
           onDanmuToggle: handleDanmuOperationOptimized,
           onNextEpisode: handleNextEpisode,
@@ -802,35 +801,41 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             artPlayer.on('video:play', handleFirstPlay);
           }
 
-          setTimeout(async () => {
-            if (!isActivePlayer()) return;
+          if (externalDanmuEnabledRef.current) {
+            setTimeout(async () => {
+              if (!isActivePlayer() || !externalDanmuEnabledRef.current) return;
 
-            try {
-              // 🔥 使用 ref.current 获取最新的弹幕加载函数，避免闭包过期
-              const loadDanmuFn = loadExternalDanmuRef.current;
-              if (!loadDanmuFn) {
-                console.warn('⚠️ loadExternalDanmu 函数未初始化');
-                return;
+              try {
+                // 🔥 使用 ref.current 获取最新的弹幕加载函数，避免闭包过期
+                const loadDanmuFn = loadExternalDanmuRef.current;
+                if (!loadDanmuFn) {
+                  console.warn('⚠️ loadExternalDanmu 函数未初始化');
+                  return;
+                }
+
+                if (!artPlayer.plugins?.artplayerPluginDanmuku) {
+                  return;
+                }
+
+                const danmaku = await loadDanmuFn();
+                if (!isActivePlayer() || !externalDanmuEnabledRef.current) {
+                  return;
+                }
+
+                renderDanmakuList(artPlayer, danmaku, {
+                  preserveHidden: false,
+                  showNotice: true,
+                });
+              } catch (error) {
+                if (!isActivePlayer() || !externalDanmuEnabledRef.current) {
+                  return;
+                }
+                if (isDanmakuAbortError(error)) return;
+                console.error('加载外部弹幕失败:', error);
+                showDanmakuErrorNotice(artPlayer, error);
               }
-
-              if (!artPlayer.plugins?.artplayerPluginDanmuku) {
-                return;
-              }
-
-              const danmaku = await loadDanmuFn();
-              if (!isActivePlayer()) return;
-
-              renderDanmakuList(artPlayer, danmaku, {
-                preserveHidden: false,
-                showNotice: true,
-              });
-            } catch (error) {
-              if (!isActivePlayer()) return;
-              if (isDanmakuAbortError(error)) return;
-              console.error('加载外部弹幕失败:', error);
-              showDanmakuErrorNotice(artPlayer, error);
-            }
-          }, 1000);
+            }, 1000);
+          }
 
           artPlayer.on('artplayerPluginDanmuku:show', () => {
             if (!isActivePlayer()) return;

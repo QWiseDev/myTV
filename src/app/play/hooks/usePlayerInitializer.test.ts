@@ -114,7 +114,6 @@ function createParams(videoUrl: string) {
     currentEpisodeIndexRef: { current: 0 },
     resumeTimeRef: { current: null },
     memoryPressure: 'low',
-    externalDanmuEnabled: false,
     externalDanmuEnabledRef: { current: false },
     throttledTimeUpdate: jest.fn(),
     saveCurrentPlayProgress: jest.fn(),
@@ -333,6 +332,81 @@ describe('usePlayerInitializer', () => {
     });
 
     expect(params.cleanupPlayer).not.toHaveBeenCalled();
+  });
+
+  test('does not load or render external danmaku when it is disabled at ready', async () => {
+    jest.useFakeTimers();
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    const loadExternalDanmu = jest.fn().mockResolvedValue([]);
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+
+    const params = createParams('https://example.com/episode-1.m3u8');
+    params.externalDanmuEnabledRef.current = false;
+    params.loadExternalDanmuRef.current = loadExternalDanmu;
+
+    renderHook(() => usePlayerInitializer(params));
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      expect(handlers.has('ready')).toBe(true);
+    });
+
+    act(() => {
+      handlers.get('ready')?.();
+      expect(jest.getTimerCount()).toBe(0);
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(loadExternalDanmu).not.toHaveBeenCalled();
+    expect(player.plugins.artplayerPluginDanmuku.reset).not.toHaveBeenCalled();
+    expect(player.plugins.artplayerPluginDanmuku.load).not.toHaveBeenCalled();
+    expect(player.notice.show).not.toBe('暂无弹幕数据');
+  });
+
+  test('does not render an in-flight danmaku result after it is disabled', async () => {
+    jest.useFakeTimers();
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    const pendingDanmaku = createDeferred<never[]>();
+    const loadExternalDanmu = jest.fn(() => pendingDanmaku.promise);
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+
+    const params = createParams('https://example.com/episode-1.m3u8');
+    params.externalDanmuEnabledRef.current = true;
+    params.loadExternalDanmuRef.current = loadExternalDanmu;
+
+    renderHook(() => usePlayerInitializer(params));
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      expect(handlers.has('ready')).toBe(true);
+    });
+
+    await act(async () => {
+      handlers.get('ready')?.();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    expect(loadExternalDanmu).toHaveBeenCalledTimes(1);
+
+    params.externalDanmuEnabledRef.current = false;
+    await act(async () => {
+      pendingDanmaku.resolve([]);
+      await pendingDanmaku.promise;
+    });
+
+    expect(player.plugins.artplayerPluginDanmuku.reset).not.toHaveBeenCalled();
+    expect(player.plugins.artplayerPluginDanmuku.load).not.toHaveBeenCalled();
+    expect(player.notice.show).not.toBe('暂无弹幕数据');
   });
 
   test('waits for the selected episode URL before switching media', async () => {
