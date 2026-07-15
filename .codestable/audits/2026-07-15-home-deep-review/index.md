@@ -3,7 +3,8 @@ doc_type: audit-index
 audit: 2026-07-15-home-deep-review
 scope: 首页入口、聚合数据、继续观看、收藏夹、Bangumi、横滑卡片及其与播放页续播的直接链路
 created: 2026-07-15
-status: completed
+status: superseded
+superseded-by: 2026-07-16-home-second-pass
 total_findings: 9
 ---
 
