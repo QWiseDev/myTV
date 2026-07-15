@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 05：收藏补全任务可越过 tab 与组件生命周期
@@ -32,3 +32,11 @@ status: open
 ## 建议动作
 
 `cs-issue`，因为这是明确的异步生命周期竞态。
+
+## 修复记录（2026-07-16）
+
+- 初始读取、事件订阅、防抖 timer、pending payload 与补全 worker 全部收进同一个 effect generation。
+- 每个异步边界都检查 `cancelled`；切 tab 或卸载后，旧 generation 不再调度补全、读取播放记录或写入 state。
+- 先订阅再读取初始收藏，并使用 revision 阻止旧 GET 覆盖较新的 `favoritesUpdated`；新 tab generation 不等待旧 worker。
+- 空收藏直接进入 loaded-empty，不读取全量播放记录。
+- 定向 Jest 2 suites / 18 tests、全量 Jest 69 suites / 305 tests、typecheck、production build 与目标 ESLint 通过。

@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 08：清空收藏失败会形成未处理 Promise rejection
@@ -32,3 +32,9 @@ status: open
 ## 建议动作
 
 `cs-issue`，因为失败路径的 Promise 所有权缺失已经可静态确认。
+
+## 修复记录（2026-07-16）
+
+- `FavoritesSection` 在点击事件边界消费 `clearAllFavorites()` rejection，避免形成未处理 Promise。
+- 只有持久层清空成功后才调用 `onClearAll()`；失败时保留当前本地收藏列表。
+- 新增清空失败回归；定向 Jest 2 suites / 18 tests、全量 Jest 69 suites / 305 tests、typecheck、production build 与目标 ESLint 通过。

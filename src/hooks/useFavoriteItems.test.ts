@@ -117,8 +117,11 @@ describe('useFavoriteItems', () => {
 
     expect(mockGetAllFavorites).not.toHaveBeenCalled();
     expect(result.current.favoriteItems).toEqual([]);
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(false);
 
     rerender({ activeTab: 'favorites' });
+    expect(result.current.loadingFavorites).toBe(true);
     await act(async () => {
       await flushAsyncWork();
     });
@@ -137,6 +140,8 @@ describe('useFavoriteItems', () => {
         title: '收藏影片',
       }),
     ]);
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(false);
   });
 
   it('debounces favorite update events and applies the latest favorites payload', async () => {
@@ -268,5 +273,161 @@ describe('useFavoriteItems', () => {
     await runFavoriteDebounce();
 
     expect(mockGetAllPlayRecords).not.toHaveBeenCalled();
+  });
+
+  it('ignores an initial favorites read that resolves after unmount', async () => {
+    const pendingFavorites = createDeferred<Record<string, Favorite>>();
+    mockGetAllFavorites.mockReturnValue(pendingFavorites.promise);
+    const { unmount } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    unmount();
+
+    await act(async () => {
+      pendingFavorites.resolve({
+        [favoriteKey]: createFavorite({ title: '卸载后收藏' }),
+      });
+      await flushAsyncWork();
+      jest.advanceTimersByTime(300);
+      await flushAsyncWork();
+    });
+
+    expect(mockGetAllPlayRecords).not.toHaveBeenCalled();
+  });
+
+  it('does not apply record enrichment after leaving the favorites tab', async () => {
+    const pendingPlayRecords = createDeferred<Record<string, PlayRecord>>();
+    mockGetAllFavorites.mockResolvedValue({
+      [favoriteKey]: createFavorite({ title: '旧收藏' }),
+    });
+    mockGetAllPlayRecords.mockReturnValue(pendingPlayRecords.promise);
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useFavoriteItems(activeTab),
+      { initialProps: { activeTab: 'favorites' } },
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+      jest.advanceTimersByTime(300);
+      await flushAsyncWork();
+    });
+    rerender({ activeTab: 'home' });
+
+    await act(async () => {
+      pendingPlayRecords.resolve({});
+      await flushAsyncWork();
+    });
+
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({
+        currentEpisode: undefined,
+        title: '旧收藏',
+      }),
+    ]);
+  });
+
+  it('reports a favorite load error without treating it as loaded empty data', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockGetAllFavorites.mockRejectedValue(new Error('load failed'));
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(true);
+    expect(result.current.favoriteItems).toEqual([]);
+    consoleError.mockRestore();
+  });
+
+  it('does not let an older initial read overwrite a newer favorite event', async () => {
+    const pendingFavorites = createDeferred<Record<string, Favorite>>();
+    mockGetAllFavorites.mockReturnValue(pendingFavorites.promise);
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    act(() => {
+      favoriteUpdateHandler?.({
+        [favoriteKey]: createFavorite({ save_time: 300, title: '事件收藏' }),
+      });
+    });
+
+    await act(async () => {
+      pendingFavorites.resolve({
+        [favoriteKey]: createFavorite({ title: '旧请求收藏' }),
+      });
+      await flushAsyncWork();
+    });
+
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '事件收藏' }),
+    ]);
+  });
+
+  it('starts a new enrichment worker without waiting for an older tab generation', async () => {
+    const oldPlayRecords = createDeferred<Record<string, PlayRecord>>();
+    mockGetAllFavorites
+      .mockResolvedValueOnce({
+        [favoriteKey]: createFavorite({ title: '旧标签收藏' }),
+      })
+      .mockResolvedValueOnce({
+        [favoriteKey]: createFavorite({ save_time: 300, title: '新标签收藏' }),
+      });
+    mockGetAllPlayRecords
+      .mockReturnValueOnce(oldPlayRecords.promise)
+      .mockResolvedValueOnce({});
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useFavoriteItems(activeTab),
+      { initialProps: { activeTab: 'favorites' } },
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(1);
+
+    rerender({ activeTab: 'home' });
+    rerender({ activeTab: 'favorites' });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(2);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '新标签收藏' }),
+    ]);
+
+    await act(async () => {
+      oldPlayRecords.resolve({});
+      await flushAsyncWork();
+    });
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '新标签收藏' }),
+    ]);
+  });
+
+  it('does not load play records for a confirmed empty favorite list', async () => {
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    expect(mockGetAllPlayRecords).not.toHaveBeenCalled();
+    expect(result.current.favoriteItems).toEqual([]);
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(false);
   });
 });

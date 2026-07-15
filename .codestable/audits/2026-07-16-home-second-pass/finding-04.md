@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 04：收藏首次加载与失败都会被误显示为真实空态
@@ -33,3 +33,10 @@ lazy chunk 先于收藏补全完成时会短暂闪出伪空态；请求失败时
 ## 建议动作
 
 `cs-issue`，因为当前 UI 会向用户报告错误的数据状态。
+
+## 修复记录（2026-07-16）
+
+- 收藏加载改为 `idle/loading/loaded/error` 四态；首次进入收藏 tab 时不再把未决数据解释成最终空态。
+- 收藏基础 payload 到达后立即展示，播放记录仅作为 300ms 防抖的 best-effort 补全，不再阻塞主加载态。
+- 刷新失败时保留已有卡片并显示错误提示；首次失败显示明确错误态，真实空收藏仍显示原空态。
+- 定向 Jest 2 suites / 18 tests、全量 Jest 69 suites / 305 tests、typecheck、production build 与目标 ESLint 通过。

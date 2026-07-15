@@ -21,7 +21,7 @@ total_findings: 8
 
 ## 总评
 
-共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。3 条 P1 已全部解决：Bangumi 跨日、继续观看分页整行重挂和重复图片 priority 均已收口。剩余 5 条 P2 集中在收藏夹状态/生命周期、追更 idle 任务和新 SSR initialData 同步。
+共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。3 条 P1 已全部解决；收藏夹加载状态、异步生命周期和清空失败也已在同一可靠性阶段收口。当前剩余 2 条 P2，分别是追更 idle 任务所有权和新 SSR initialData 同步。
 
 未发现新的安全问题。`.codestable/architecture/ARCHITECTURE.md` 仍是骨架，因此本轮不产 `arch-drift` finding。
 
@@ -60,7 +60,8 @@ total_findings: 8
 - **#1 resolved**：Bangumi weekday 改为显式 `Asia/Shanghai` 契约，并移除会锁住旧日期的 memo；全量 Jest 更新为 68 suites / 293 tests，typecheck 与 production build 通过。
 - **#2 resolved**：继续观看分页前后保持同一个动画容器；12→13 条不再切换父结构。全量 Jest 更新为 69 suites / 294 tests。
 - **#3 resolved**：播放记录未决时不再给热门电影 priority；确认无续播记录后才分配电影优先级。全量 Jest 更新为 69 suites / 295 tests。
-- **其余 5 条 open**：继续按同域边界分阶段处理。
+- **#4、#5、#8 resolved**：收藏基础 payload 立即可见，loading/error/loaded-empty 明确区分；补全 worker 绑定 effect generation，旧 GET 不覆盖新事件；清空失败在点击边界消费且不清本地列表。全量 Jest 更新为 69 suites / 305 tests，typecheck 与 production build 通过。
+- **#6、#7 open**：继续按独立生命周期边界处理。
 
 ## 下一步建议
 

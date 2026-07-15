@@ -72,7 +72,8 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     refreshWatchingUpdates,
   } = usePlaybackData();
 
-  const { favoriteItems, clearFavorites } = useFavoriteItems(activeTab);
+  const { favoriteItems, favoriteLoadError, loadingFavorites, clearFavorites } =
+    useFavoriteItems(activeTab);
   const { homeData, loading: homeLoading } = useHomeData({
     activeTab,
     refreshWatchingUpdates,
@@ -151,6 +152,8 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
           <Suspense fallback={null}>
             <FavoritesSection
               favoriteItems={favoriteItems}
+              loadError={favoriteLoadError}
+              loading={loadingFavorites}
               onClearAll={clearFavorites}
             />
           </Suspense>

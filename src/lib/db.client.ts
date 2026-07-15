@@ -1259,7 +1259,7 @@ export async function getAllFavorites(): Promise<Record<string, Favorite>> {
       } catch (err) {
         console.error('获取收藏失败:', err);
         triggerGlobalError('获取收藏失败');
-        return {};
+        throw err;
       }
     }
   }
@@ -1272,7 +1272,7 @@ export async function getAllFavorites(): Promise<Record<string, Favorite>> {
   } catch (err) {
     console.error('读取收藏失败:', err);
     triggerGlobalError('读取收藏失败');
-    return {};
+    throw err;
   }
 }
 

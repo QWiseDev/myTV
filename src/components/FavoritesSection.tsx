@@ -13,6 +13,8 @@ import VideoCard from './VideoCard';
 
 interface FavoritesSectionProps {
   favoriteItems: FavoriteItem[];
+  loadError: boolean;
+  loading: boolean;
   onClearAll: () => void;
 }
 
@@ -21,11 +23,17 @@ interface FavoritesSectionProps {
  */
 export default function FavoritesSection({
   favoriteItems,
+  loadError,
+  loading,
   onClearAll,
 }: FavoritesSectionProps) {
   const handleClearAll = async () => {
-    await clearAllFavorites();
-    onClearAll();
+    try {
+      await clearAllFavorites();
+      onClearAll();
+    } catch {
+      // 持久层失败时保留当前列表，并消费事件处理器返回的 Promise。
+    }
   };
 
   return (
@@ -45,6 +53,14 @@ export default function FavoritesSection({
         }
       />
       <div className={HOME_FAVORITES_GRID_CLASS}>
+        {loadError && favoriteItems.length > 0 && (
+          <div
+            className='col-span-full text-sm text-red-500 dark:text-red-400'
+            role='alert'
+          >
+            收藏刷新失败，当前显示已有内容
+          </div>
+        )}
         {favoriteItems.map((item) => (
           <div key={item.id + item.source} className='w-full'>
             <VideoCard
@@ -55,7 +71,24 @@ export default function FavoritesSection({
             />
           </div>
         ))}
-        {favoriteItems.length === 0 && <EmptyFavorites />}
+        {favoriteItems.length === 0 &&
+          (loading ? (
+            <div
+              className='col-span-full py-16 text-center text-sm text-gray-500 dark:text-gray-400'
+              role='status'
+            >
+              正在加载收藏...
+            </div>
+          ) : loadError ? (
+            <div
+              className='col-span-full py-16 text-center text-sm text-red-500 dark:text-red-400'
+              role='alert'
+            >
+              收藏加载失败，请稍后重试
+            </div>
+          ) : (
+            <EmptyFavorites />
+          ))}
       </div>
     </section>
   );
