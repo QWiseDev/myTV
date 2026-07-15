@@ -515,6 +515,100 @@ describe('VideoCard behavior', () => {
     expect(await screen.findByText('取消收藏')).not.toBeNull();
   });
 
+  it('consumes a desktop favorite failure at the card event boundary', async () => {
+    mockSaveFavorite.mockRejectedValue(new Error('favorite failed'));
+    const { container } = renderSourceBackedCard();
+    const favoriteButton = container.querySelector('.lucide-heart');
+
+    expect(favoriteButton).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(favoriteButton as SVGElement);
+      await flushAsyncWork();
+    });
+
+    expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes a desktop favorite removal failure', async () => {
+    mockDeleteFavorite.mockRejectedValue(new Error('favorite removal failed'));
+    const { container } = renderSourceBackedCard();
+
+    act(() => {
+      favoriteUpdateHandler?.({
+        'source-a+video-a': { title: '测试影片' },
+      });
+    });
+
+    const favoriteButton = container.querySelector('.lucide-heart');
+    expect(favoriteButton).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(favoriteButton as SVGElement);
+      await flushAsyncWork();
+    });
+
+    expect(mockDeleteFavorite).toHaveBeenCalledWith('source-a', 'video-a');
+  });
+
+  it('consumes a desktop play-record deletion failure', async () => {
+    mockDeletePlayRecord.mockRejectedValue(new Error('delete failed'));
+    const { container } = renderSourceBackedCard();
+    const deleteButton = container.querySelector('.lucide-trash-2');
+
+    expect(deleteButton).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(deleteButton as SVGElement);
+      await flushAsyncWork();
+    });
+
+    expect(mockDeletePlayRecord).toHaveBeenCalledWith('source-a', 'video-a');
+  });
+
+  it('consumes a custom play-record deletion failure without falling back', async () => {
+    const onDelete = jest
+      .fn()
+      .mockRejectedValue(new Error('custom delete failed'));
+    const { container } = render(
+      <VideoCard
+        from='playrecord'
+        id='video-a'
+        onDelete={onDelete}
+        source='source-a'
+        title='测试影片'
+      />,
+    );
+    const deleteButton = container.querySelector('.lucide-trash-2');
+
+    expect(deleteButton).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(deleteButton as SVGElement);
+      await flushAsyncWork();
+    });
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeletePlayRecord).not.toHaveBeenCalled();
+  });
+
+  it('consumes a mobile favorite failure before closing the action sheet', async () => {
+    mockSaveFavorite.mockRejectedValue(new Error('mobile favorite failed'));
+    renderSourceBackedCard();
+    openActionSheet();
+
+    const favoriteAction = await screen.findByRole('button', {
+      name: '添加收藏',
+    });
+
+    await act(async () => {
+      fireEvent.click(favoriteAction);
+      await flushAsyncWork();
+    });
+
+    expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
+  });
+
   it('deduplicates aggregate sources in the action sheet', async () => {
     render(
       <VideoCard

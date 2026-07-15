@@ -3,21 +3,14 @@ import Image from 'next/image';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-interface ActionItem {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  onClick: (e?: React.MouseEvent) => void | Promise<void>;
-  color?: 'default' | 'danger' | 'primary';
-  disabled?: boolean;
-}
+import type { MobileAction } from '@/hooks/useMobileActions';
 
 interface MobileActionSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onExited: () => void;
   title: string;
-  actions: ActionItem[];
+  actions: MobileAction[];
   poster?: string;
   sources?: string[]; // 播放源信息
   isAggregate?: boolean; // 是否为聚合内容
@@ -246,7 +239,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
                     action.disabled
                       ? 'opacity-50 cursor-not-allowed'
                       : `${getActionHoverColor(
-                          action.color
+                          action.color,
                         )} active:scale-[0.98]`
                   }
                 `}
@@ -330,7 +323,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
     </div>
   );
 
-  const getActionColor = (color: ActionItem['color']) => {
+  const getActionColor = (color: MobileAction['color']) => {
     switch (color) {
       case 'danger':
         return 'text-red-600 dark:text-red-400';
@@ -341,7 +334,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
     }
   };
 
-  const getActionHoverColor = (color: ActionItem['color']) => {
+  const getActionHoverColor = (color: MobileAction['color']) => {
     switch (color) {
       case 'danger':
         return 'hover:bg-red-50/50 dark:hover:bg-red-900/10';

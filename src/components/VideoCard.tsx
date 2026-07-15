@@ -483,8 +483,8 @@ const VideoCard = memo(function VideoCard(
             });
             setCurrentFavoriteState(true);
           }
-        } catch (err) {
-          throw new Error('切换收藏状态失败');
+        } catch {
+          // 持久层已触发全局错误提示；事件边界在此消费 rejection。
         }
       },
       [
@@ -514,8 +514,8 @@ const VideoCard = memo(function VideoCard(
           }
 
           await deletePlayRecord(actualSource, actualId);
-        } catch (err) {
-          throw new Error('删除播放记录失败');
+        } catch {
+          // db.client 或上层 onDelete 已负责提示/回滚，避免 React 丢弃的 Promise 继续抛错。
         }
       },
       [from, actualSource, actualId, onDelete],

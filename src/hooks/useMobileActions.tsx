@@ -13,7 +13,7 @@ const createMobileActionEvent = (): React.MouseEvent =>
   ({
     preventDefault: () => undefined,
     stopPropagation: () => undefined,
-  } as React.MouseEvent);
+  }) as React.MouseEvent;
 
 export interface MobileAction {
   id: string;
@@ -37,8 +37,8 @@ interface UseMobileActionsParams {
   searchFavorited: boolean | null;
   onPlay: () => void;
   onPlayNewTab: () => void;
-  onToggleFavorite: (e: React.MouseEvent) => void;
-  onDeleteRecord: (e: React.MouseEvent) => void;
+  onToggleFavorite: (e: React.MouseEvent) => Promise<void>;
+  onDeleteRecord: (e: React.MouseEvent) => Promise<void>;
 }
 
 /**
@@ -96,7 +96,7 @@ export function useMobileActions({
               <Heart size={20} className='fill-transparent stroke-red-500' />
             ),
             onClick: () => {
-              onToggleFavorite(createMobileActionEvent());
+              void onToggleFavorite(createMobileActionEvent());
             },
             color: currentFavorited ? 'danger' : 'default',
           });
@@ -119,7 +119,7 @@ export function useMobileActions({
             <Heart size={20} className='fill-transparent stroke-red-500' />
           ),
           onClick: () => {
-            onToggleFavorite(createMobileActionEvent());
+            void onToggleFavorite(createMobileActionEvent());
           },
           color: currentFavorited ? 'danger' : 'default',
         });
@@ -133,7 +133,7 @@ export function useMobileActions({
         label: '删除记录',
         icon: <Trash2 size={20} />,
         onClick: () => {
-          onDeleteRecord(createMobileActionEvent());
+          void onDeleteRecord(createMobileActionEvent());
         },
         color: 'danger',
       });
