@@ -1,10 +1,9 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
-import { useMemo } from 'react';
 
 import type { BangumiCalendarData } from '@/lib/bangumi.client';
-import { HOME_RENDER_LIMITS, WEEKDAY_NAMES } from '@/lib/constants/home';
+import { HOME_RENDER_LIMITS } from '@/lib/constants/home';
 import { selectUsableImageUrl } from '@/lib/utils';
 
 import HomeCardShell from './HomeCardShell';
@@ -18,8 +17,16 @@ interface BangumiSectionProps {
   loading: boolean;
 }
 
-function getTodayAnimes(bangumiCalendarData: BangumiCalendarData[]) {
-  const currentWeekday = WEEKDAY_NAMES[new Date().getDay()];
+const bangumiWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Shanghai',
+  weekday: 'short',
+});
+
+function getTodayAnimes(
+  bangumiCalendarData: BangumiCalendarData[],
+  now = new Date(),
+) {
+  const currentWeekday = bangumiWeekdayFormatter.format(now);
   return (
     bangumiCalendarData.find((item) => item.weekday.en === currentWeekday)
       ?.items || []
@@ -48,10 +55,10 @@ export default function BangumiSection({
   bangumiCalendarData,
   loading,
 }: BangumiSectionProps) {
-  const todayAnimes = useMemo(() => {
-    const items = getTodayAnimes(bangumiCalendarData);
-    return items.slice(0, HOME_RENDER_LIMITS.BANGUMI);
-  }, [bangumiCalendarData]);
+  const todayAnimes = getTodayAnimes(bangumiCalendarData).slice(
+    0,
+    HOME_RENDER_LIMITS.BANGUMI,
+  );
 
   return (
     <section className='mb-8'>

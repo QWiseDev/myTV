@@ -21,7 +21,7 @@ total_findings: 8
 
 ## 总评
 
-共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。最优先的是 Bangumi 服务端 UTC 与中国浏览器跨日导致的水合/日期错误，以及继续观看加载更多时整行卡片重挂、播放记录未决时重复分配图片 priority。收藏夹还存在伪空态、异步任务越过生命周期和清空失败未处理问题。
+共发现 8 条：3 条 P1、5 条 P2；其中 5 条 bug、3 条 performance。Bangumi 服务端 UTC 与中国浏览器跨日导致的水合/日期错误已解决；当前最优先的是继续观看加载更多时整行卡片重挂、播放记录未决时重复分配图片 priority。收藏夹还存在伪空态、异步任务越过生命周期和清空失败未处理问题。
 
 未发现新的安全问题。`.codestable/architecture/ARCHITECTURE.md` 仍是骨架，因此本轮不产 `arch-drift` finding。
 
@@ -55,8 +55,13 @@ total_findings: 8
 - UI 定向基线 3 suites / 7 tests、数据链路定向基线 10 suites / 56 tests 通过，但均未覆盖本轮列出的阈值切树、跨时区、prop 刷新、失败与卸载竞态。
 - 上一阶段全量门禁仍为 68 suites / 291 tests、typecheck 与 production build 通过；本轮审计阶段未修改源码。
 
+## 修复进展
+
+- **#1 resolved**：Bangumi weekday 改为显式 `Asia/Shanghai` 契约，并移除会锁住旧日期的 memo；全量 Jest 更新为 68 suites / 293 tests，typecheck 与 production build 通过。
+- **其余 7 条 open**：继续按严重度和同域边界分阶段处理。
+
 ## 下一步建议
 
-- **P1 先处理**：#1 走 `cs-issue`；#2、#3 走 `cs-refactor`，每条独立验证和提交。
+- **P1 继续处理**：#2、#3 走 `cs-refactor`，每条独立验证和提交。
 - **P2 按同域收口**：#4、#5、#8 合并为收藏夹可靠性阶段；#6 独立收回 idle 任务所有权；#7 补 `router.refresh`/prop rerender 回归后修复。
 - 聚合缓存“完整才缓存”的故障隔离粒度已在上一轮明确列为运行数据观察项，本轮没有新证据证明应立即扩大为分区缓存重构，因此不重复立项。
