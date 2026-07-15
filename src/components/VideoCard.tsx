@@ -3,11 +3,9 @@
 import { Heart, Link, PlayCircleIcon, Radio, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import React, {
-  forwardRef,
   memo,
   useCallback,
   useEffect,
-  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -78,24 +76,6 @@ export interface VideoCardProps {
   remarks?: string; // 备注信息（如"已完结"、"更新至20集"等）
   priority?: boolean; // 是否优先加载（用于LCP优化）
   sizes?: string;
-}
-
-export type VideoCardHandle = {
-  setEpisodes: (episodes?: number) => void;
-  setSourceNames: (names?: string[]) => void;
-  setDoubanId: (id?: number) => void;
-};
-
-function useSyncedState<T>(
-  value: T,
-): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState(value);
-
-  useEffect(() => {
-    setState(value);
-  }, [value]);
-
-  return [state, setState];
 }
 
 let imageProxyVersion = 0;
@@ -349,8 +329,7 @@ function useVideoCardImageState(poster: string) {
   };
 }
 
-const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
-  function VideoCard(
+const VideoCard = memo(function VideoCard(
     {
       id,
       title = '',
@@ -375,29 +354,16 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       priority = false,
       sizes,
     }: VideoCardProps,
-    ref,
   ) {
     const [showMobileActions, setShowMobileActions] = useState(false);
     const hasOpenedMobileActionsRef = useRef(false);
-
-    // 可外部修改的可控字段
-    const [dynamicEpisodes, setDynamicEpisodes] = useSyncedState(episodes);
-    const [dynamicSourceNames, setDynamicSourceNames] =
-      useSyncedState(source_names);
-    const [dynamicDoubanId, setDynamicDoubanId] = useSyncedState(douban_id);
-
-    useImperativeHandle(ref, () => ({
-      setEpisodes: (eps?: number) => setDynamicEpisodes(eps),
-      setSourceNames: (names?: string[]) => setDynamicSourceNames(names),
-      setDoubanId: (id?: number) => setDynamicDoubanId(id),
-    }));
 
     const actualTitle = title;
     const actualPoster = poster;
     const actualSource = source;
     const actualId = id;
-    const actualDoubanId = dynamicDoubanId;
-    const actualEpisodes = dynamicEpisodes;
+    const actualDoubanId = douban_id;
+    const actualEpisodes = episodes;
     const actualYear = year;
     const actualQuery = query || '';
     const subjectUrl = buildVideoCardSubjectUrl(actualDoubanId, isBangumi);
@@ -606,10 +572,10 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     );
     const actionSheetSources = useMemo(
       () =>
-        isAggregate && dynamicSourceNames
-          ? Array.from(new Set(dynamicSourceNames))
+        isAggregate && source_names
+          ? Array.from(new Set(source_names))
           : undefined,
-      [isAggregate, dynamicSourceNames],
+      [isAggregate, source_names],
     );
 
     // 移动端操作菜单配置
@@ -784,9 +750,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
 
             {/* 聚合播放源指示器 */}
             {isAggregate &&
-              dynamicSourceNames &&
-              dynamicSourceNames.length > 0 && (
-                <AggregateSourceIndicator sourceNames={dynamicSourceNames} />
+              source_names &&
+              source_names.length > 0 && (
+                <AggregateSourceIndicator sourceNames={source_names} />
               )}
           </div>
 
@@ -907,4 +873,4 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
   },
 );
 
-export default memo(VideoCard);
+export default VideoCard;

@@ -31,7 +31,7 @@ import SearchResultFilter, {
 } from '@/components/SearchResultFilter';
 import SearchSuggestions from '@/components/SearchSuggestions';
 import TMDBFilterPanel, { TMDBFilterState } from '@/components/TMDBFilterPanel';
-import VideoCard, { VideoCardHandle } from '@/components/VideoCard';
+import VideoCard from '@/components/VideoCard';
 import VirtualSearchGrid from '@/components/VirtualSearchGrid';
 import YouTubeVideoCard from '@/components/YouTubeVideoCard';
 
@@ -112,26 +112,6 @@ function SearchPageClient() {
 
   // TMDB筛选面板显示状态
   const [tmdbFilterVisible, setTmdbFilterVisible] = useState(false);
-  // 聚合卡片 refs 与聚合统计缓存
-  const groupRefs = useRef<Map<string, React.RefObject<VideoCardHandle>>>(
-    new Map(),
-  );
-  const groupStatsRef = useRef<
-    Map<
-      string,
-      { douban_id?: number; episodes?: number; source_names: string[] }
-    >
-  >(new Map());
-
-  const getGroupRef = (key: string) => {
-    let ref = groupRefs.current.get(key);
-    if (!ref) {
-      ref = React.createRef<VideoCardHandle>();
-      groupRefs.current.set(key, ref);
-    }
-    return ref;
-  };
-
   const computeGroupStats = (group: SearchResult[]) => {
     const episodes = (() => {
       const countMap = new Map<number, number>();
@@ -282,35 +262,6 @@ function SearchPageClient() {
       (key) => [key, map.get(key)!] as [string, SearchResult[]],
     );
   }, [searchResults]);
-
-  // 当聚合结果变化时，如果某个聚合已存在，则调用其卡片 ref 的 set 方法增量更新
-  useEffect(() => {
-    aggregatedResults.forEach(([mapKey, group]) => {
-      const stats = computeGroupStats(group);
-      const prev = groupStatsRef.current.get(mapKey);
-      if (!prev) {
-        // 第一次出现，记录初始值，不调用 ref（由初始 props 渲染）
-        groupStatsRef.current.set(mapKey, stats);
-        return;
-      }
-      // 对比变化并调用对应的 set 方法
-      const ref = groupRefs.current.get(mapKey);
-      if (ref && ref.current) {
-        if (prev.episodes !== stats.episodes) {
-          ref.current.setEpisodes(stats.episodes);
-        }
-        const prevNames = (prev.source_names || []).join('|');
-        const nextNames = (stats.source_names || []).join('|');
-        if (prevNames !== nextNames) {
-          ref.current.setSourceNames(stats.source_names);
-        }
-        if (prev.douban_id !== stats.douban_id) {
-          ref.current.setDoubanId(stats.douban_id);
-        }
-        groupStatsRef.current.set(mapKey, stats);
-      }
-    });
-  }, [aggregatedResults]);
 
   // 构建筛选选项
   const filterOptions = useMemo(() => {
@@ -895,7 +846,6 @@ function SearchPageClient() {
     filterState = tmdbFilterState,
   ) => {
     if (!query.trim()) return;
-
 
     setTmdbActorLoading(true);
     setTmdbActorError(null);
@@ -1661,8 +1611,6 @@ function SearchPageClient() {
                     viewMode={viewMode}
                     searchQuery={searchQuery}
                     isLoading={isLoading}
-                    groupStatsRef={groupStatsRef}
-                    getGroupRef={getGroupRef}
                     computeGroupStats={computeGroupStats}
                   />
                 </>

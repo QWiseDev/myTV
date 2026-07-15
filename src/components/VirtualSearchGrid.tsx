@@ -31,9 +31,6 @@ interface VirtualSearchGridProps {
   searchQuery: string;
   isLoading: boolean;
 
-  // VideoCard相关props
-  groupStatsRef: React.MutableRefObject<Map<string, any>>;
-  getGroupRef: (key: string) => React.RefObject<any>;
   computeGroupStats: (group: SearchResult[]) => any;
 }
 
@@ -48,8 +45,6 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
   viewMode,
   searchQuery,
   isLoading,
-  groupStatsRef,
-  getGroupRef,
   computeGroupStats,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,7 +74,6 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
     const checkContainer = () => {
       const element = containerRef.current;
       const _actualWidth = element?.offsetWidth || 0;
-
     };
 
     checkContainer();
@@ -121,8 +115,6 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
       searchQuery: cellSearchQuery,
       columnCount: cellColumnCount,
       displayItemCount: cellDisplayItemCount,
-      groupStatsRef: cellGroupStatsRef,
-      getGroupRef: cellGetGroupRef,
       computeGroupStats: cellComputeGroupStats,
     }: any) => {
       const index = rowIndex * cellColumnCount + columnIndex;
@@ -140,7 +132,7 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
 
       // 根据视图模式渲染不同内容
       if (cellViewMode === 'agg') {
-        const [mapKey, group] = item as [string, SearchResult[]];
+        const [, group] = item as [string, SearchResult[]];
         const title = group[0]?.title || '';
         const poster = group[0]?.poster || '';
         const year = group[0]?.year || 'unknown';
@@ -148,19 +140,9 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
           cellComputeGroupStats(group);
         const type = episodes === 1 ? 'movie' : 'tv';
 
-        // 如果该聚合第一次出现，写入初始统计
-        if (!cellGroupStatsRef.current.has(mapKey)) {
-          cellGroupStatsRef.current.set(mapKey, {
-            episodes,
-            source_names,
-            douban_id,
-          });
-        }
-
         return (
           <div style={{ ...style, padding: '8px' }} {...ariaAttributes}>
             <VideoCard
-              ref={cellGetGroupRef(mapKey)}
               from='search'
               isAggregate={true}
               title={title}
@@ -235,8 +217,6 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
             searchQuery,
             columnCount,
             displayItemCount,
-            groupStatsRef,
-            getGroupRef,
             computeGroupStats,
           }}
           columnCount={columnCount}

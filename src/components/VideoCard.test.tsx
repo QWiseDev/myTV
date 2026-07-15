@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import React from 'react';
 
 const mockDeleteFavorite = jest.fn();
@@ -132,9 +138,7 @@ describe('VideoCard behavior', () => {
   });
 
   it('falls back to the next poster URL after an image error', async () => {
-    render(
-      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
-    );
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
 
     const image = screen.getByAltText('测试影片');
     expect(image.getAttribute('src')).toBe(
@@ -149,9 +153,7 @@ describe('VideoCard behavior', () => {
   });
 
   it('resets image fallback after the image proxy config changes', async () => {
-    render(
-      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
-    );
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
 
     const image = screen.getByAltText('测试影片');
     fireEvent.error(image);
@@ -214,9 +216,7 @@ describe('VideoCard behavior', () => {
   it('does not mount action sheet timers before the first open', () => {
     jest.useFakeTimers();
 
-    render(
-      <VideoCard from='douban' poster={bangumiPoster} title='测试影片' />,
-    );
+    render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
 
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -373,5 +373,46 @@ describe('VideoCard behavior', () => {
     expect(await screen.findByText('共 2 个播放源')).not.toBeNull();
     expect(screen.getAllByText('源 A').length).toBeGreaterThan(0);
     expect(screen.getAllByText('源 B').length).toBeGreaterThan(0);
+  });
+
+  it('applies aggregate prop updates without an extra mirrored-state commit', async () => {
+    const commits: string[] = [];
+    const renderCard = (
+      episodes: number,
+      sourceNames: string[],
+      doubanId: number,
+    ) => (
+      <React.Profiler
+        id='aggregate-video-card'
+        onRender={(_id, phase) => commits.push(phase)}
+      >
+        <VideoCard
+          from='search'
+          isAggregate
+          poster='https://cdn.example/poster.jpg'
+          source_names={sourceNames}
+          title='测试影片'
+          episodes={episodes}
+          douban_id={doubanId}
+        />
+      </React.Profiler>
+    );
+    const { container, rerender } = render(renderCard(1, ['源 A'], 100));
+
+    commits.length = 0;
+    rerender(renderCard(12, ['源 A', '源 B'], 200));
+
+    await waitFor(() => {
+      expect(screen.getByText('12集')).not.toBeNull();
+      expect(
+        container.querySelector(
+          'a[href="https://movie.douban.com/subject/200"]',
+        ),
+      ).not.toBeNull();
+    });
+    expect(commits).toHaveLength(1);
+
+    openActionSheet();
+    expect(await screen.findByText('共 2 个播放源')).not.toBeNull();
   });
 });

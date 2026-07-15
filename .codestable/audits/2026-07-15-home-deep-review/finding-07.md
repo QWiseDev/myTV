@@ -40,6 +40,14 @@ status: partially-resolved
 - 已补共享监听、按需挂载和 deferred 收藏查询竞态测试；`VideoCard.test.tsx` 10 个 tests、目标 ESLint 和 typecheck 已知通过。
 - 每卡的 props 镜像 state、普通收藏/搜索收藏两套 hook、逐卡 `favoritesUpdated` 订阅以及“打开过后每卡各自保留 ActionSheet”仍未拆分，所以 finding 保持 partially-resolved。
 
+## 本轮进展（2026-07-16）
+
+- 已确认搜索聚合的最新 `episodes/source_names/douban_id` 本来就通过 `react-window cellProps` 直达 `VideoCard`；`VideoCardHandle + groupRefs/groupStatsRef` 是重复写入通道。
+- 删除 3 份 `useSyncedState`、同步 effect、imperative handle 与搜索页 ref/cache 补丁后，所有卡片直接以 props 为事实源；首页约 48-60 张卡不再承担约 144-180 份无用镜像 state/effect。
+- Profiler 回归测试确认聚合字段更新从 2 次 commit 降为 1 次；最新集数、来源与豆瓣 ID 同一 render 生效。
+- 全量 Jest 68 suites / 287 tests、typecheck、production build 与目标 ESLint 通过；`/search` First Load JS 从约 213 kB 降至 212 kB。
+- 普通收藏/搜索收藏两套 hook、逐卡 `favoritesUpdated` 底层监听和关闭后隐藏 ActionSheet fiber 仍待处理，finding 保持 partially-resolved。
+
 ## 建议动作
 
 `cs-refactor`，因为这是保持功能不变的组件状态边界重划。
