@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { scheduleIdleTask } from '@/lib/browser-scheduler';
 import { DELAYS } from '@/lib/constants/home';
 import {
+  type HomeErrorState,
   type HomeLoadingState,
+  type HomeSectionKey,
   createHomeDataSnapshot,
+  createHomeErrorState,
   createHomeLoadingState,
   mergeHomeData,
   patchHomeData,
   patchHomeLoadingState,
 } from '@/lib/home-data-client';
 import {
+  type HomeLoadResult,
   loadCriticalData,
   loadHomeDataFromApi,
   loadSecondaryData,
@@ -29,13 +33,25 @@ interface UseHomeDataOptions {
   initialData?: HomeData;
 }
 
-const ignoreAsyncError = () => undefined;
+type HomeSectionData = HomeData[keyof HomeData];
+type HomeRetryRequest = {
+  controller: AbortController;
+  promise: Promise<void>;
+};
 
-function reportHomeDataError(message: string, error: unknown) {
-  if (process.env.NODE_ENV !== 'production') {
-    console.error(message, error);
-  }
-}
+const HOME_DATA_KEYS: Record<HomeSectionKey, keyof HomeData> = {
+  critical: 'hotMovies',
+  tertiary: 'bangumiCalendarData',
+  tv: 'hotTvShows',
+  variety: 'hotVarietyShows',
+};
+
+const HOME_LOADING_KEYS: Record<HomeSectionKey, keyof HomeLoadingState> = {
+  critical: 'criticalLoading',
+  tertiary: 'tertiaryLoading',
+  tv: 'tvLoading',
+  variety: 'varietyLoading',
+};
 
 export function useHomeData({
   activeTab,
@@ -48,23 +64,142 @@ export function useHomeData({
   const [loading, setLoading] = useState<HomeLoadingState>(() =>
     createHomeLoadingState(initialData),
   );
+  const [errors, setErrors] = useState<HomeErrorState>(() =>
+    createHomeErrorState(),
+  );
   const previousInitialDataRef = useRef(initialData);
+  const loadGenerationRef = useRef(0);
+  const retryRequestsRef = useRef<
+    Partial<Record<HomeSectionKey, HomeRetryRequest>>
+  >({});
 
   const { scheduleWatchingUpdatesCheck } = useWatchingUpdatesRefresh({
     activeTab,
     refreshWatchingUpdates,
   });
 
+  const beginSectionLoad = useCallback((section: HomeSectionKey) => {
+    const loadingKey = HOME_LOADING_KEYS[section];
+    setLoading((current) =>
+      patchHomeLoadingState(current, { [loadingKey]: true }),
+    );
+    setErrors((current) => ({ ...current, [section]: false }));
+  }, []);
+
+  const applySectionResult = useCallback(
+    (
+      section: HomeSectionKey,
+      result: HomeLoadResult<HomeSectionData>,
+      isCurrent: () => boolean,
+    ) => {
+      if (!isCurrent()) return;
+
+      if (result.ok) {
+        const dataKey = HOME_DATA_KEYS[section];
+        setHomeData((current) =>
+          patchHomeData(current, {
+            [dataKey]: result.data,
+          } as Partial<HomeData>),
+        );
+      }
+
+      const loadingKey = HOME_LOADING_KEYS[section];
+      setErrors((current) => ({ ...current, [section]: !result.ok }));
+      setLoading((current) =>
+        patchHomeLoadingState(current, { [loadingKey]: false }),
+      );
+    },
+    [],
+  );
+
+  const loadSingleSection = useCallback(
+    async (
+      section: HomeSectionKey,
+      signal: AbortSignal,
+    ): Promise<HomeLoadResult<HomeSectionData>> => {
+      if (section === 'critical') {
+        return loadCriticalData(signal);
+      }
+      if (section === 'tertiary') {
+        return loadTertiaryData(signal);
+      }
+
+      const secondaryData = await loadSecondaryData({
+        loadTvShows: section === 'tv',
+        loadVarietyShows: section === 'variety',
+        signal,
+      });
+      const result =
+        section === 'tv'
+          ? secondaryData.hotTvShows
+          : secondaryData.hotVarietyShows;
+
+      return (
+        result || {
+          ok: false,
+          error: new Error(`首页 ${section} loader 未返回结果`),
+        }
+      );
+    },
+    [],
+  );
+
+  const abortRetryRequests = useCallback(() => {
+    Object.values(retryRequestsRef.current).forEach((request) =>
+      request?.controller.abort(),
+    );
+    retryRequestsRef.current = {};
+  }, []);
+
+  const retrySection = useCallback(
+    (section: HomeSectionKey): Promise<void> => {
+      const existingRetry = retryRequestsRef.current[section];
+      if (existingRetry) return existingRetry.promise;
+
+      const controller = new AbortController();
+      const generation = loadGenerationRef.current;
+      beginSectionLoad(section);
+
+      const isCurrent = () =>
+        loadGenerationRef.current === generation && !controller.signal.aborted;
+      const retryPromise = loadSingleSection(section, controller.signal)
+        .then((result) => applySectionResult(section, result, isCurrent))
+        .catch((error) =>
+          applySectionResult(section, { ok: false, error }, isCurrent),
+        )
+        .finally(() => {
+          if (retryRequestsRef.current[section]?.promise === retryPromise) {
+            delete retryRequestsRef.current[section];
+          }
+        });
+
+      retryRequestsRef.current[section] = {
+        controller,
+        promise: retryPromise,
+      };
+      return retryPromise;
+    },
+    [applySectionResult, beginSectionLoad, loadSingleSection],
+  );
+
   useEffect(() => {
     const initialDataChanged = previousInitialDataRef.current !== initialData;
     previousInitialDataRef.current = initialData;
 
+    const generation = ++loadGenerationRef.current;
+    const controller = new AbortController();
     let cancelled = false;
     let cancelTertiaryLoad: (() => void) | undefined;
     let cancelWatchingUpdatesCheck: (() => void) | undefined;
+    abortRetryRequests();
+
+    const isCurrent = () =>
+      !cancelled &&
+      loadGenerationRef.current === generation &&
+      !controller.signal.aborted;
 
     const applyHomeData = (nextData: HomeData) => {
-      if (cancelled) return;
+      if (!isCurrent()) return;
 
       const availability = getHomeDataAvailability(nextData);
       setHomeData(nextData);
@@ -82,26 +217,21 @@ export function useHomeData({
             : prev.varietyLoading,
         }),
       );
+      setErrors((current) => ({
+        critical: availability.hasCriticalData ? false : current.critical,
+        tertiary: availability.hasTertiaryData ? false : current.tertiary,
+        tv: availability.hasTvData ? false : current.tv,
+        variety: availability.hasVarietyData ? false : current.variety,
+      }));
     };
 
     const loadMissingTertiaryData = () => {
-      loadTertiaryData()
-        .then((tertiaryData) => {
-          if (cancelled) return;
-          setHomeData((prev) =>
-            patchHomeData(prev, {
-              bangumiCalendarData: tertiaryData.bangumiCalendarData || [],
-            }),
-          );
-        })
-        .catch(ignoreAsyncError)
-        .finally(() => {
-          if (!cancelled) {
-            setLoading((prev) =>
-              patchHomeLoadingState(prev, { tertiaryLoading: false }),
-            );
-          }
-        });
+      beginSectionLoad('tertiary');
+      void loadTertiaryData(controller.signal)
+        .then((result) => applySectionResult('tertiary', result, isCurrent))
+        .catch((error) =>
+          applySectionResult('tertiary', { ok: false, error }, isCurrent),
+        );
     };
 
     const scheduleTertiaryLoad = () => {
@@ -120,23 +250,13 @@ export function useHomeData({
       const loadingTasks: Promise<void>[] = [];
 
       if (!availability.hasCriticalData) {
+        beginSectionLoad('critical');
         loadingTasks.push(
-          loadCriticalData().then(async ({ hotMoviesPromise }) => {
-            try {
-              const moviesData = await hotMoviesPromise;
-              if (!cancelled && moviesData?.code === 200) {
-                setHomeData((prev) =>
-                  patchHomeData(prev, { hotMovies: moviesData.list }),
-                );
-              }
-            } finally {
-              if (!cancelled) {
-                setLoading((prev) =>
-                  patchHomeLoadingState(prev, { criticalLoading: false }),
-                );
-              }
-            }
-          }),
+          loadCriticalData(controller.signal)
+            .then((result) => applySectionResult('critical', result, isCurrent))
+            .catch((error) =>
+              applySectionResult('critical', { ok: false, error }, isCurrent),
+            ),
         );
       }
 
@@ -144,37 +264,45 @@ export function useHomeData({
         const loadTvShows = !availability.hasTvData;
         const loadVarietyShows = !availability.hasVarietyData;
 
+        if (loadTvShows) beginSectionLoad('tv');
+        if (loadVarietyShows) beginSectionLoad('variety');
+
         loadingTasks.push(
-          loadSecondaryData({ loadTvShows, loadVarietyShows }).then(
-            (secondaryData) => {
-              try {
-                if (!cancelled) {
-                  setHomeData((prev) =>
-                    patchHomeData(prev, {
-                      hotTvShows:
-                        loadTvShows && secondaryData.hotTvShows?.code === 200
-                          ? secondaryData.hotTvShows.list
-                          : undefined,
-                      hotVarietyShows:
-                        loadVarietyShows &&
-                        secondaryData.hotVarietyShows?.code === 200
-                          ? secondaryData.hotVarietyShows.list
-                          : undefined,
-                    }),
-                  );
-                }
-              } finally {
-                if (!cancelled) {
-                  setLoading((prev) =>
-                    patchHomeLoadingState(prev, {
-                      ...(loadTvShows ? { tvLoading: false } : {}),
-                      ...(loadVarietyShows ? { varietyLoading: false } : {}),
-                    }),
-                  );
-                }
+          loadSecondaryData({
+            loadTvShows,
+            loadVarietyShows,
+            signal: controller.signal,
+          })
+            .then((secondaryData) => {
+              if (loadTvShows) {
+                applySectionResult(
+                  'tv',
+                  secondaryData.hotTvShows || {
+                    ok: false,
+                    error: new Error('首页 tv loader 未返回结果'),
+                  },
+                  isCurrent,
+                );
               }
-            },
-          ),
+              if (loadVarietyShows) {
+                applySectionResult(
+                  'variety',
+                  secondaryData.hotVarietyShows || {
+                    ok: false,
+                    error: new Error('首页 variety loader 未返回结果'),
+                  },
+                  isCurrent,
+                );
+              }
+            })
+            .catch((error) => {
+              if (loadTvShows) {
+                applySectionResult('tv', { ok: false, error }, isCurrent);
+              }
+              if (loadVarietyShows) {
+                applySectionResult('variety', { ok: false, error }, isCurrent);
+              }
+            }),
         );
       }
 
@@ -182,7 +310,7 @@ export function useHomeData({
         scheduleTertiaryLoad();
       }
 
-      await Promise.allSettled(loadingTasks);
+      await Promise.all(loadingTasks);
     };
 
     const loadAllData = async () => {
@@ -214,11 +342,7 @@ export function useHomeData({
       if (cancelled) return;
 
       if (!availability.isComplete) {
-        try {
-          await loadFallbackBatches(availability);
-        } catch (error) {
-          reportHomeDataError('加载首页分批数据失败:', error);
-        }
+        await loadFallbackBatches(availability);
       }
 
       if (cancelled) return;
@@ -229,13 +353,26 @@ export function useHomeData({
 
     return () => {
       cancelled = true;
+      controller.abort();
+      if (loadGenerationRef.current === generation) {
+        loadGenerationRef.current += 1;
+      }
+      abortRetryRequests();
       cancelTertiaryLoad?.();
       cancelWatchingUpdatesCheck?.();
     };
-  }, [initialData, scheduleWatchingUpdatesCheck]);
+  }, [
+    abortRetryRequests,
+    applySectionResult,
+    beginSectionLoad,
+    initialData,
+    scheduleWatchingUpdatesCheck,
+  ]);
 
   return {
+    errors,
     homeData,
     loading,
+    retrySection,
   };
 }

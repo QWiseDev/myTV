@@ -11,6 +11,10 @@ export interface HomeLoadingState {
   varietyLoading: boolean;
 }
 
+export type HomeSectionKey = 'critical' | 'tv' | 'variety' | 'tertiary';
+
+export type HomeErrorState = Record<HomeSectionKey, boolean>;
+
 function preferNonEmptyArray<T>(incoming: T[], current: T[]): T[] {
   return incoming.length ? incoming : current;
 }
@@ -36,6 +40,15 @@ export function createHomeLoadingState(
     tertiaryLoading: !availability.hasTertiaryData,
     tvLoading: !availability.hasTvData,
     varietyLoading: !availability.hasVarietyData,
+  };
+}
+
+export function createHomeErrorState(): HomeErrorState {
+  return {
+    critical: false,
+    tertiary: false,
+    tv: false,
+    variety: false,
   };
 }
 

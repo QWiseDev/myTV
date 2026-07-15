@@ -50,6 +50,8 @@ total_findings: 11
 - **#2 resolved**：收藏 DELETE 成功后才发布空缓存；DELETE 与补偿 GET 同时失败时仍保留旧缓存和 UI。
 - **#3 resolved**：loading 时关闭卡片动画；真实 `ScrollableRow → SkeletonRow` 组合验证骨架直接展开为横向卡片。
 - **#4 resolved**：普通外图和豆瓣代理链统一以 `/logo.svg` 收尾；操作菜单复用卡片当前 fallback 图片。
+- **#5 resolved**：聚合失败返回 502；四个首页内容区分成功空数据与失败，支持独立重试并在失败时保留已有数据。
+- **#7 resolved**：分项 timeout、effect cleanup 和单区重试统一透传 `AbortSignal` 到 Douban/Bangumi 上游；共享 aggregate inflight 不受单消费者取消影响。
 - **#8 resolved**：动画 wrapper 使用业务 key，并保持跨 `maxAnimatedItems` 边界的 wrapper 类型稳定；重排不再卸载卡片。
 - **#9 resolved**：idle/visibility 普通检查统一为 30 分钟成功间隔；强制失效仍绕过节流，失败可重试，卸载后不再回写或重检。
 - **#10 resolved**：删除播放记录无消费者 refresh API、空 listener/debug 通道和镜像布尔状态，只保留真实 Context 与 DOM event 契约。
@@ -58,8 +60,7 @@ total_findings: 11
 ## 下一步建议
 
 - **P1 已完成**：#1、#2、#3、#4、#11 均已修复并通过全量测试、类型检查、production build 与浏览器冒烟。
-- **P2 下一阶段**：#5 增加 section 级错误/重试契约；#7 为 loader、Douban、Bangumi 补齐 `AbortSignal`，让 timeout 与 effect cleanup 真正取消请求。
-- **P2 独立决策**：#6 恢复聚合缓存写入会重新引入 Bangumi 阻塞 TV/综艺的风险，必须用独立时序测试和独立提交验证，不与 #5/#7 混改。
+- **P2 唯一未关闭项**：#6 恢复聚合缓存写入会重新引入 Bangumi 阻塞 TV/综艺的风险，必须用独立时序测试和独立提交验证；若无法同时守住完整缓存与首显时延，应删除冗余聚合层而不是恢复串行等待。
 
 ## 范围外线索
 

@@ -8,14 +8,15 @@ jest.mock('./client-cache', () => ({
   },
 }));
 
+let fetchBangumiCalendarData: typeof import('./bangumi.client').fetchBangumiCalendarData;
 let GetBangumiCalendarData: typeof import('./bangumi.client').GetBangumiCalendarData;
 
 describe('GetBangumiCalendarData', () => {
   let originalFetch: typeof global.fetch;
 
   beforeAll(async () => {
-    GetBangumiCalendarData = (await import('./bangumi.client'))
-      .GetBangumiCalendarData;
+    ({ fetchBangumiCalendarData, GetBangumiCalendarData } =
+      await import('./bangumi.client'));
   });
 
   beforeEach(() => {
@@ -24,6 +25,7 @@ describe('GetBangumiCalendarData', () => {
     mockCacheGet.mockReset().mockResolvedValue(null);
     mockCacheSet.mockReset().mockResolvedValue(undefined);
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -66,6 +68,54 @@ describe('GetBangumiCalendarData', () => {
 
     await expect(GetBangumiCalendarData()).resolves.toBe(cached);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('exposes upstream failures through the abortable fetch API', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 503,
+    });
+
+    await expect(fetchBangumiCalendarData()).rejects.toThrow(
+      'Bangumi API 请求失败: HTTP 503',
+    );
+    expect(mockCacheSet).not.toHaveBeenCalled();
+  });
+
+  it('does not write cache after the parent request is aborted', async () => {
+    const controller = new AbortController();
+    const calendar = [
+      {
+        weekday: { en: 'Tue', cn: '周二', ja: '火' },
+        items: [],
+      },
+    ];
+    let resolveJson!: (value: unknown) => void;
+    const json = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveJson = resolve;
+        }),
+    );
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json,
+    });
+
+    const result = fetchBangumiCalendarData(controller.signal);
+    const rejection = expect(result).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(json).toHaveBeenCalledTimes(1);
+
+    controller.abort();
+    resolveJson(calendar);
+
+    await rejection;
+    await Promise.resolve();
+    expect(mockCacheSet).not.toHaveBeenCalled();
   });
 });
 

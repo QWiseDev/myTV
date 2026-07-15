@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
 import type { BangumiCalendarData } from '@/lib/bangumi.client';
@@ -58,7 +58,14 @@ describe('BangumiSection', () => {
   });
 
   it('shows the data loading skeleton without rendering cards', async () => {
-    render(<BangumiSection bangumiCalendarData={[]} loading />);
+    render(
+      <BangumiSection
+        bangumiCalendarData={[]}
+        loading
+        loadError={false}
+        onRetry={jest.fn()}
+      />,
+    );
 
     expect(await screen.findByTestId('skeleton-row')).toBeTruthy();
     expect(screen.queryByTestId('video-card')).toBeNull();
@@ -72,6 +79,8 @@ describe('BangumiSection', () => {
       <BangumiSection
         bangumiCalendarData={createCalendar('Thu', 13)}
         loading={false}
+        loadError={false}
+        onRetry={jest.fn()}
       />,
     );
 
@@ -89,7 +98,14 @@ describe('BangumiSection', () => {
       ...createCalendar('Thu', 1, '上海周四'),
     ];
 
-    render(<BangumiSection bangumiCalendarData={calendar} loading={false} />);
+    render(
+      <BangumiSection
+        bangumiCalendarData={calendar}
+        loading={false}
+        loadError={false}
+        onRetry={jest.fn()}
+      />,
+    );
 
     expect(screen.getByText('上海周四 1')).toBeTruthy();
     expect(screen.queryByText('UTC 周三 1')).toBeNull();
@@ -103,15 +119,94 @@ describe('BangumiSection', () => {
       ...createCalendar('Fri', 1, '周五'),
     ];
     const { rerender } = render(
-      <BangumiSection bangumiCalendarData={calendar} loading={false} />,
+      <BangumiSection
+        bangumiCalendarData={calendar}
+        loading={false}
+        loadError={false}
+        onRetry={jest.fn()}
+      />,
     );
 
     expect(screen.getByText('周四 1')).toBeTruthy();
 
     jest.setSystemTime(new Date('2026-07-16T17:00:00.000Z'));
-    rerender(<BangumiSection bangumiCalendarData={calendar} loading={false} />);
+    rerender(
+      <BangumiSection
+        bangumiCalendarData={calendar}
+        loading={false}
+        loadError={false}
+        onRetry={jest.fn()}
+      />,
+    );
 
     expect(screen.getByText('周五 1')).toBeTruthy();
     expect(screen.queryByText('周四 1')).toBeNull();
+  });
+
+  it('keeps stale cards visible and retries a failed refresh', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-15T17:00:00.000Z'));
+    const onRetry = jest.fn();
+
+    render(
+      <BangumiSection
+        bangumiCalendarData={createCalendar('Thu', 1)}
+        loading={false}
+        loadError
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByText('动画 1')).toBeTruthy();
+    expect(screen.getByText('刷新失败，当前显示已有内容')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '重试加载新番放送' }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an actionable failure when no calendar data is available', () => {
+    const onRetry = jest.fn();
+
+    render(
+      <BangumiSection
+        bangumiCalendarData={[]}
+        loading={false}
+        loadError
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByText('新番放送加载失败，请稍后重试')).toBeTruthy();
+    expect(screen.queryByTestId('scrollable-row')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '重试加载新番放送' }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cover stale cards with skeletons while retrying', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-15T17:00:00.000Z'));
+
+    render(
+      <BangumiSection
+        bangumiCalendarData={createCalendar('Thu', 1)}
+        loading
+        loadError={false}
+        onRetry={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText('动画 1')).toBeTruthy();
+    expect(screen.getByText('正在重试，当前显示已有内容')).toBeTruthy();
+    expect(screen.queryByTestId('skeleton-row')).toBeNull();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '重试加载新番放送',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 });

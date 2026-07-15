@@ -35,7 +35,7 @@ export async function GET() {
   } catch (error) {
     console.error('获取首页聚合数据失败:', error);
     return NextResponse.json(EMPTY_HOME_DATA, {
-      status: 200,
+      status: 502,
       // 失败结果不缓存，尽快重试
       headers: HOME_NO_STORE_HEADERS,
     });

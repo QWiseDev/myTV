@@ -1,4 +1,5 @@
 import { fetchDoubanWithVerification } from './douban-anti-crawler';
+import { withAbortableTimeout } from './promise-timeout';
 
 // 用户代理池
 const USER_AGENTS = [
@@ -28,10 +29,49 @@ function getSmartDelay(url: string): { min: number; max: number } {
   return { min: 200, max: 500 }; // 默认：200-500ms
 }
 
-function smartRandomDelay(url: string): Promise<void> {
+function getAbortReason(signal: AbortSignal): unknown {
+  if (signal.reason !== undefined) {
+    return signal.reason;
+  }
+
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw getAbortReason(signal);
+  }
+}
+
+function waitForDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      cleanup();
+      reject(getAbortReason(signal));
+    };
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function smartRandomDelay(url: string, signal?: AbortSignal): Promise<void> {
   const { min, max } = getSmartDelay(url);
-  const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-  return new Promise((resolve) => setTimeout(resolve, delay));
+  const delayMs = Math.floor(Math.random() * (max - min + 1)) + min;
+  return waitForDelay(delayMs, signal);
 }
 
 /**
@@ -43,52 +83,44 @@ export async function fetchDoubanData<T>(
   url: string,
   signal?: AbortSignal,
 ): Promise<T> {
+  throwIfAborted(signal);
+
   // 请求限流：确保请求间隔
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest),
-    );
+    await waitForDelay(MIN_REQUEST_INTERVAL - timeSinceLastRequest, signal);
   }
   lastRequestTime = Date.now();
 
   // 智能延时：根据API类型调整
-  await smartRandomDelay(url);
+  await smartRandomDelay(url, signal);
+  throwIfAborted(signal);
 
-  // 添加超时控制
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 优化到10秒
-  const abortFromParent = () => controller.abort();
-  signal?.addEventListener('abort', abortFromParent, { once: true });
+  return withAbortableTimeout(
+    async (requestSignal) => {
+      const response = await fetchDoubanWithVerification(url, {
+        signal: requestSignal,
+        headers: {
+          'User-Agent': getRandomUserAgent(),
+          Accept: 'application/json, text/plain, */*',
+          Referer: 'https://movie.douban.com/',
+          // 随机添加Origin，但概率更低以减少复杂性
+          ...(Math.random() > 0.8
+            ? { Origin: 'https://movie.douban.com' }
+            : {}),
+        },
+      });
 
-  // 设置请求选项
-  const fetchOptions = {
-    signal: controller.signal,
-    headers: {
-      'User-Agent': getRandomUserAgent(),
-      Accept: 'application/json, text/plain, */*',
-      Referer: 'https://movie.douban.com/',
-      // 随机添加Origin，但概率更低以减少复杂性
-      ...(Math.random() > 0.8 ? { Origin: 'https://movie.douban.com' } : {}),
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      return await response.json();
     },
-  };
-
-  try {
-    const response = await fetchDoubanWithVerification(url, fetchOptions);
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  } finally {
-    signal?.removeEventListener('abort', abortFromParent);
-  }
+    10000,
+    signal,
+  );
 }
 
 /**

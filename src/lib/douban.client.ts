@@ -8,6 +8,7 @@ import {
 } from '@/lib/douban-shared';
 
 import { ClientCache } from './client-cache';
+import { withAbortableTimeout } from './promise-timeout';
 import { DoubanCommentsResult, DoubanItem, DoubanResult } from './types';
 
 // 豆瓣数据缓存配置（秒）
@@ -213,39 +214,40 @@ interface DoubanRecommendApiResponse {
 /**
  * 带超时的 fetch 请求
  */
-async function fetchWithTimeout(
+async function fetchJsonWithTimeout<T>(
   url: string,
-  proxyUrl: string
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
-
+  proxyUrl: string,
+  signal?: AbortSignal,
+): Promise<T> {
   // 检查是否使用代理
   const finalUrl =
     proxyUrl === 'https://cors-anywhere.com/'
       ? `${proxyUrl}${url}`
       : proxyUrl
-      ? `${proxyUrl}${encodeURIComponent(url)}`
-      : url;
+        ? `${proxyUrl}${encodeURIComponent(url)}`
+        : url;
 
-  const fetchOptions: RequestInit = {
-    signal: controller.signal,
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-      Referer: 'https://movie.douban.com/',
-      Accept: 'application/json, text/plain, */*',
+  return withAbortableTimeout(
+    async (requestSignal) => {
+      const response = await fetch(finalUrl, {
+        signal: requestSignal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          Referer: 'https://movie.douban.com/',
+          Accept: 'application/json, text/plain, */*',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      return response.json() as Promise<T>;
     },
-  };
-
-  try {
-    const response = await fetch(finalUrl, fetchOptions);
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
+    10000,
+    signal,
+  );
 }
 
 import { getBestDataProxySync } from './douban-proxy-detector';
@@ -258,7 +260,8 @@ export async function fetchDoubanCategories(
   params: DoubanCategoriesParams,
   proxyUrl: string,
   useTencentCDN = false,
-  useAliCDN = false
+  useAliCDN = false,
+  signal?: AbortSignal,
 ): Promise<DoubanResult> {
   const { kind, category, type, pageLimit = 20, pageStart = 0 } = params;
 
@@ -282,24 +285,19 @@ export async function fetchDoubanCategories(
   const host = useTencentCDN
     ? DOUBAN_RECENT_HOT_HOSTS.tencent
     : useAliCDN
-    ? DOUBAN_RECENT_HOT_HOSTS.ali
-    : DOUBAN_RECENT_HOT_HOSTS.default;
+      ? DOUBAN_RECENT_HOT_HOSTS.ali
+      : DOUBAN_RECENT_HOT_HOSTS.default;
   const target = buildDoubanCategoryUrl(
     { kind, category, type, pageStart, pageLimit },
-    host
+    host,
   );
 
   try {
-    const response = await fetchWithTimeout(
+    const doubanData = await fetchJsonWithTimeout<DoubanRecentHotResponse>(
       target,
-      useTencentCDN || useAliCDN ? '' : proxyUrl
+      useTencentCDN || useAliCDN ? '' : proxyUrl,
+      signal,
     );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const doubanData: DoubanRecentHotResponse = await response.json();
 
     // 转换数据格式
     const list = mapDoubanRecentHotItems(doubanData);
@@ -310,12 +308,16 @@ export async function fetchDoubanCategories(
       list: list,
     };
   } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
     // 触发全局错误提示
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('globalError', {
           detail: { message: '获取豆瓣分类数据失败' },
-        })
+        }),
       );
     }
     throw new Error(`获取豆瓣分类数据失败: ${(error as Error).message}`);
@@ -326,7 +328,8 @@ export async function fetchDoubanCategories(
  * 统一的豆瓣分类数据获取函数，根据代理设置选择使用服务端 API 或客户端代理获取
  */
 export async function getDoubanCategories(
-  params: DoubanCategoriesParams
+  params: DoubanCategoriesParams,
+  signal?: AbortSignal,
 ): Promise<DoubanResult> {
   const { kind, category, type, pageLimit = 20, pageStart = 0 } = params;
 
@@ -348,28 +351,32 @@ export async function getDoubanCategories(
 
   switch (proxyType) {
     case 'cmliussss-cdn-ali':
-      result = await fetchDoubanCategories(params, '', false, true);
+      result = await fetchDoubanCategories(params, '', false, true, signal);
       break;
     case 'cmliussss-cdn-tencent':
-      result = await fetchDoubanCategories(params, '', true, false);
+      result = await fetchDoubanCategories(params, '', true, false, signal);
       break;
     case 'cors-proxy-zwei':
       result = await fetchDoubanCategories(
         params,
-        'https://ciao-cors.is-an.org/'
+        'https://ciao-cors.is-an.org/',
+        false,
+        false,
+        signal,
       );
       break;
     case 'direct':
     default:
       const response = await fetch(
-        `/api/douban/categories?kind=${kind}&category=${category}&type=${type}&limit=${pageLimit}&start=${pageStart}`
+        `/api/douban/categories?kind=${kind}&category=${category}&type=${type}&limit=${pageLimit}&start=${pageStart}`,
+        { signal },
       );
       result = await response.json();
       break;
   }
 
   // 保存到缓存
-  if (result.code === 200) {
+  if (result.code === 200 && !signal?.aborted) {
     await setCache(cacheKey, result, DOUBAN_CACHE_EXPIRE.categories);
   }
 
@@ -457,16 +464,10 @@ export async function fetchDoubanList(
     : `https://movie.douban.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`;
 
   try {
-    const response = await fetchWithTimeout(
+    const doubanData = await fetchJsonWithTimeout<DoubanListApiResponse>(
       target,
-      useTencentCDN || useAliCDN ? '' : proxyUrl
+      useTencentCDN || useAliCDN ? '' : proxyUrl,
     );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const doubanData: DoubanListApiResponse = await response.json();
 
     // 转换数据格式
     const list: DoubanItem[] = doubanData.subjects.map((item) => ({
@@ -730,16 +731,11 @@ async function fetchDoubanRecommends(
   }
   const target = `${baseUrl}?${reqParams.toString()}`;
   try {
-    const response = await fetchWithTimeout(
+    const doubanData = await fetchJsonWithTimeout<DoubanRecommendApiResponse>(
       target,
-      useTencentCDN || useAliCDN ? '' : proxyUrl
+      useTencentCDN || useAliCDN ? '' : proxyUrl,
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const doubanData: DoubanRecommendApiResponse = await response.json();
     const list: DoubanItem[] = doubanData.items
       .filter((item) => item.type == 'movie' || item.type == 'tv')
       .map((item) => ({

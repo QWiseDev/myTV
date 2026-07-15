@@ -2,7 +2,10 @@
  * 首页数据加载模块 - 按优先级分批加载数据
  */
 
-import { GetBangumiCalendarData } from '@/lib/bangumi.client';
+import {
+  type BangumiCalendarData,
+  fetchBangumiCalendarData,
+} from '@/lib/bangumi.client';
 import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
 import { getDoubanCategories } from '@/lib/douban.client';
 import {
@@ -10,7 +13,8 @@ import {
   EMPTY_HOME_DATA,
   getHomeDataAvailability,
 } from '@/lib/home-data-types';
-import { withTimeout } from '@/lib/promise-timeout';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
+import type { DoubanItem } from '@/lib/types';
 
 const CLIENT_HOME_DATA_TTL_MS = 60_000;
 
@@ -21,6 +25,43 @@ type ClientHomeDataCache = {
 
 let clientHomeDataCache: ClientHomeDataCache | null = null;
 let inflightClientHomeData: Promise<HomeData> | null = null;
+
+export type HomeLoadResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: unknown };
+
+async function loadSection<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): Promise<HomeLoadResult<T>> {
+  try {
+    return {
+      ok: true,
+      data: await withAbortableTimeout(task, timeoutMs, parentSignal),
+    };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+async function loadDoubanSection(
+  params: Parameters<typeof getDoubanCategories>[0],
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): Promise<HomeLoadResult<DoubanItem[]>> {
+  return loadSection(
+    async (signal) => {
+      const result = await getDoubanCategories(params, signal);
+      if (result.code !== 200) {
+        throw new Error(result.message || '豆瓣分类加载失败');
+      }
+      return result.list;
+    },
+    timeoutMs,
+    parentSignal,
+  );
+}
 
 function readClientHomeDataCache(): HomeData | null {
   if (!clientHomeDataCache) return null;
@@ -85,19 +126,14 @@ export async function loadHomeDataFromApi(): Promise<HomeData> {
 /**
  * 加载关键数据 - 热门电影
  */
-export const loadCriticalData = async () => {
-  const hotMoviesPromise = withTimeout(
-    getDoubanCategories({ kind: 'movie', category: '热门', type: '全部' }),
+export const loadCriticalData = (
+  signal?: AbortSignal,
+): Promise<HomeLoadResult<DoubanItem[]>> =>
+  loadDoubanSection(
+    { kind: 'movie', category: '热门', type: '全部' },
     DATA_FETCH_TIMEOUTS.CRITICAL,
-    {
-      code: 200,
-      message: 'fallback',
-      list: [],
-    },
+    signal,
   );
-
-  return { hotMoviesPromise };
-};
 
 /**
  * 加载次要数据 - 电视剧和综艺
@@ -105,31 +141,25 @@ export const loadCriticalData = async () => {
 export const loadSecondaryData = async ({
   loadTvShows,
   loadVarietyShows,
+  signal,
 }: {
   loadTvShows: boolean;
   loadVarietyShows: boolean;
+  signal?: AbortSignal;
 }) => {
   const [hotTvShows, hotVarietyShows] = await Promise.all([
     loadTvShows
-      ? withTimeout(
-          getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
+      ? loadDoubanSection(
+          { kind: 'tv', category: 'tv', type: 'tv' },
           DATA_FETCH_TIMEOUTS.SECONDARY,
-          {
-            code: 200,
-            message: 'fallback',
-            list: [],
-          },
+          signal,
         )
       : Promise.resolve(undefined),
     loadVarietyShows
-      ? withTimeout(
-          getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
+      ? loadDoubanSection(
+          { kind: 'tv', category: 'show', type: 'show' },
           DATA_FETCH_TIMEOUTS.SECONDARY,
-          {
-            code: 200,
-            message: 'fallback',
-            list: [],
-          },
+          signal,
         )
       : Promise.resolve(undefined),
   ]);
@@ -143,11 +173,11 @@ export const loadSecondaryData = async ({
 /**
  * 加载第三级数据 - 番剧
  */
-export const loadTertiaryData = async () => {
-  const bangumiCalendarData = await withTimeout(
-    GetBangumiCalendarData(),
+export const loadTertiaryData = (
+  signal?: AbortSignal,
+): Promise<HomeLoadResult<BangumiCalendarData[]>> =>
+  loadSection(
+    (requestSignal) => fetchBangumiCalendarData(requestSignal),
     DATA_FETCH_TIMEOUTS.TERTIARY,
+    signal,
   );
-
-  return { bangumiCalendarData };
-};

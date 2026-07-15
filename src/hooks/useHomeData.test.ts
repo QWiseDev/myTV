@@ -81,6 +81,12 @@ describe('useHomeData', () => {
     mockLoadHomeDataFromApi.mockReset();
     mockLoadSecondaryData.mockReset();
     mockLoadTertiaryData.mockReset();
+    mockLoadCriticalData.mockResolvedValue({ ok: true, data: [] });
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { ok: true, data: [] },
+      hotVarietyShows: { ok: true, data: [] },
+    });
+    mockLoadTertiaryData.mockResolvedValue({ ok: true, data: [] });
     mockCancelWatchingUpdatesCheck.mockReset();
     mockScheduleWatchingUpdatesCheck.mockReset();
     mockScheduleWatchingUpdatesCheck.mockReturnValue(
@@ -172,8 +178,11 @@ describe('useHomeData', () => {
 
   it('does not let an older secondary response overwrite a new complete snapshot', async () => {
     const staleSecondaryData = {
-      hotTvShows: { code: 200, list: [{ ...item, id: 'tv-stale' }] },
-      hotVarietyShows: { code: 200, list: [{ ...item, id: 'show-stale' }] },
+      hotTvShows: { ok: true, data: [{ ...item, id: 'tv-stale' }] },
+      hotVarietyShows: {
+        ok: true,
+        data: [{ ...item, id: 'show-stale' }],
+      },
     };
     const deferredSecondary = createDeferred<typeof staleSecondaryData>();
     mockLoadSecondaryData.mockReturnValue(deferredSecondary.promise);
@@ -205,8 +214,8 @@ describe('useHomeData', () => {
 
   it('loads only the missing variety section and preserves existing TV data', async () => {
     mockLoadSecondaryData.mockResolvedValue({
-      hotTvShows: { code: 200, list: [] },
-      hotVarietyShows: { code: 200, list: [] },
+      hotTvShows: undefined,
+      hotVarietyShows: { ok: true, data: [] },
     });
     const initialData = {
       hotMovies: [item],
@@ -235,6 +244,7 @@ describe('useHomeData', () => {
       expect(mockLoadSecondaryData).toHaveBeenCalledWith({
         loadTvShows: false,
         loadVarietyShows: true,
+        signal: expect.any(AbortSignal),
       });
       expect(result.current.homeData.hotTvShows).toEqual([
         { ...item, id: 'tv-existing' },
@@ -246,8 +256,11 @@ describe('useHomeData', () => {
 
   it('loads missing batches directly when SSR already provides critical movies', async () => {
     const secondaryData = {
-      hotTvShows: { code: 200, list: [{ ...item, id: 'tv-direct' }] },
-      hotVarietyShows: { code: 200, list: [{ ...item, id: 'show-direct' }] },
+      hotTvShows: { ok: true, data: [{ ...item, id: 'tv-direct' }] },
+      hotVarietyShows: {
+        ok: true,
+        data: [{ ...item, id: 'show-direct' }],
+      },
     };
     const deferredSecondary = createDeferred<typeof secondaryData>();
     mockLoadSecondaryData.mockReturnValue(deferredSecondary.promise);
@@ -278,6 +291,7 @@ describe('useHomeData', () => {
       expect(mockLoadSecondaryData).toHaveBeenCalledWith({
         loadTvShows: true,
         loadVarietyShows: true,
+        signal: expect.any(AbortSignal),
       });
     });
     expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
@@ -290,10 +304,10 @@ describe('useHomeData', () => {
     await waitFor(() => {
       expect(result.current.homeData.hotMovies).toEqual([item]);
       expect(result.current.homeData.hotTvShows).toEqual(
-        secondaryData.hotTvShows.list,
+        secondaryData.hotTvShows.data,
       );
       expect(result.current.homeData.hotVarietyShows).toEqual(
-        secondaryData.hotVarietyShows.list,
+        secondaryData.hotVarietyShows.data,
       );
       expect(result.current.loading.tvLoading).toBe(false);
       expect(result.current.loading.varietyLoading).toBe(false);
@@ -347,8 +361,8 @@ describe('useHomeData', () => {
 
   it('does not start fallback work from a cancelled StrictMode effect', async () => {
     mockLoadSecondaryData.mockResolvedValue({
-      hotTvShows: { code: 200, list: [] },
-      hotVarietyShows: { code: 200, list: [] },
+      hotTvShows: { ok: true, data: [] },
+      hotVarietyShows: { ok: true, data: [] },
     });
     const initialData = {
       hotMovies: [item],
@@ -374,5 +388,118 @@ describe('useHomeData', () => {
       expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
     });
     expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps sibling data and exposes only the failed secondary section', async () => {
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { ok: false, error: new Error('tv failed') },
+      hotVarietyShows: {
+        ok: true,
+        data: [{ ...item, id: 'show-success' }],
+      },
+    });
+    const initialData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const { result } = renderHomeDataHook(initialData);
+
+    await waitFor(() => {
+      expect(result.current.loading.tvLoading).toBe(false);
+      expect(result.current.loading.varietyLoading).toBe(false);
+    });
+
+    expect(result.current.homeData.hotTvShows).toEqual([]);
+    expect(result.current.homeData.hotVarietyShows).toEqual([
+      { ...item, id: 'show-success' },
+    ]);
+    expect(result.current.errors).toEqual({
+      critical: false,
+      tertiary: false,
+      tv: true,
+      variety: false,
+    });
+  });
+
+  it('preserves existing data when a section retry fails, then replaces it on success', async () => {
+    const refreshedMovie = { ...item, id: 'movie-refreshed' };
+    mockLoadCriticalData
+      .mockResolvedValueOnce({
+        ok: false,
+        error: new Error('movie failed'),
+      })
+      .mockResolvedValueOnce({ ok: true, data: [refreshedMovie] });
+    const { result } = renderHomeDataHook(completeInitialData);
+
+    await act(async () => {
+      await result.current.retrySection('critical');
+    });
+
+    expect(result.current.homeData.hotMovies).toEqual(
+      completeInitialData.hotMovies,
+    );
+    expect(result.current.errors.critical).toBe(true);
+
+    await act(async () => {
+      await result.current.retrySection('critical');
+    });
+
+    expect(result.current.homeData.hotMovies).toEqual([refreshedMovie]);
+    expect(result.current.errors.critical).toBe(false);
+  });
+
+  it('deduplicates concurrent retries for the same section', async () => {
+    const deferredRetry = createDeferred<{
+      ok: true;
+      data: typeof completeInitialData.hotMovies;
+    }>();
+    mockLoadCriticalData.mockReturnValue(deferredRetry.promise);
+    const { result } = renderHomeDataHook(completeInitialData);
+
+    let firstRetry!: Promise<void>;
+    let duplicateRetry!: Promise<void>;
+    act(() => {
+      firstRetry = result.current.retrySection('critical');
+      duplicateRetry = result.current.retrySection('critical');
+    });
+
+    expect(firstRetry).toBe(duplicateRetry);
+    expect(mockLoadCriticalData).toHaveBeenCalledTimes(1);
+    expect(result.current.loading.criticalLoading).toBe(true);
+    expect(result.current.errors.critical).toBe(false);
+
+    await act(async () => {
+      deferredRetry.resolve({
+        ok: true,
+        data: completeInitialData.hotMovies,
+      });
+      await firstRetry;
+    });
+  });
+
+  it('aborts in-flight section requests when the effect is cleaned up', async () => {
+    let requestSignal: AbortSignal | undefined;
+    mockLoadSecondaryData.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) => {
+        requestSignal = signal;
+        return new Promise(() => undefined);
+      },
+    );
+    const initialData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const { unmount } = renderHomeDataHook(initialData);
+
+    await waitFor(() => {
+      expect(requestSignal).toBeDefined();
+    });
+    unmount();
+
+    expect(requestSignal?.aborted).toBe(true);
   });
 });

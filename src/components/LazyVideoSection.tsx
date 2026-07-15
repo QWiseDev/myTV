@@ -1,13 +1,14 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { type ReactNode,useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 
 import { HOME_RENDER_LIMITS } from '@/lib/constants/home';
 import type { DoubanItem } from '@/lib/types';
 
 import HomeCardShell from './HomeCardShell';
 import HomeSectionHeader from './HomeSectionHeader';
+import HomeSectionLoadFeedback from './HomeSectionLoadFeedback';
 import ScrollableRow from './ScrollableRow';
 import SkeletonRow from './SkeletonRow';
 
@@ -17,6 +18,8 @@ interface LazyVideoSectionProps {
   linkHref: string;
   data: DoubanItem[];
   loading: boolean;
+  loadError: boolean;
+  onRetry: () => void | Promise<void>;
   renderItem: (item: DoubanItem, index: number) => ReactNode;
   enableAnimation?: boolean;
   /** 首页横向列表渲染上限，控制图片并发 */
@@ -32,6 +35,8 @@ export default function LazyVideoSection({
   linkHref,
   data,
   loading,
+  loadError,
+  onRetry,
   renderItem,
   enableAnimation = true,
   limit = HOME_RENDER_LIMITS.HOT_SECTION,
@@ -40,21 +45,33 @@ export default function LazyVideoSection({
     () => (limit > 0 ? data.slice(0, limit) : data),
     [data, limit],
   );
+  const hasData = data.length > 0;
+  const showSkeleton = loading && !hasData;
+  const showEmptyFailure = loadError && !hasData && !loading;
 
   return (
     <section className='mb-8'>
       <HomeSectionHeader title={title} icon={icon} linkHref={linkHref} />
-      <ScrollableRow enableAnimation={!loading && enableAnimation}>
-        {loading ? (
-          <SkeletonRow />
-        ) : (
-          visibleData.map((item, index) => (
-            <HomeCardShell key={item.id || index}>
-              {renderItem(item, index)}
-            </HomeCardShell>
-          ))
-        )}
-      </ScrollableRow>
+      <HomeSectionLoadFeedback
+        title={title}
+        hasData={hasData}
+        loading={loading}
+        loadError={loadError}
+        onRetry={onRetry}
+      />
+      {!showEmptyFailure && (
+        <ScrollableRow enableAnimation={!showSkeleton && enableAnimation}>
+          {showSkeleton ? (
+            <SkeletonRow />
+          ) : (
+            visibleData.map((item, index) => (
+              <HomeCardShell key={item.id || index}>
+                {renderItem(item, index)}
+              </HomeCardShell>
+            ))
+          )}
+        </ScrollableRow>
+      )}
     </section>
   );
 }

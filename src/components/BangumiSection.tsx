@@ -8,6 +8,7 @@ import { selectUsableImageUrl } from '@/lib/utils';
 
 import HomeCardShell from './HomeCardShell';
 import HomeSectionHeader from './HomeSectionHeader';
+import HomeSectionLoadFeedback from './HomeSectionLoadFeedback';
 import ScrollableRow from './ScrollableRow';
 import SkeletonRow from './SkeletonRow';
 import VideoCard from './VideoCard';
@@ -15,6 +16,8 @@ import VideoCard from './VideoCard';
 interface BangumiSectionProps {
   bangumiCalendarData: BangumiCalendarData[];
   loading: boolean;
+  loadError: boolean;
+  onRetry: () => void | Promise<void>;
 }
 
 const bangumiWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
@@ -54,11 +57,16 @@ function resolveBangumiPoster(
 export default function BangumiSection({
   bangumiCalendarData,
   loading,
+  loadError,
+  onRetry,
 }: BangumiSectionProps) {
   const todayAnimes = getTodayAnimes(bangumiCalendarData).slice(
     0,
     HOME_RENDER_LIMITS.BANGUMI,
   );
+  const hasData = bangumiCalendarData.length > 0;
+  const showSkeleton = loading && !hasData;
+  const showEmptyFailure = loadError && !hasData && !loading;
 
   return (
     <section className='mb-8'>
@@ -67,25 +75,34 @@ export default function BangumiSection({
         icon={Calendar}
         linkHref='/douban?type=anime'
       />
-      <ScrollableRow enableAnimation={false}>
-        {loading ? (
-          <SkeletonRow />
-        ) : (
-          todayAnimes.map((anime, index) => (
-            <HomeCardShell key={`${anime.id}-${index}`}>
-              <VideoCard
-                from='douban'
-                title={anime.name_cn || anime.name}
-                poster={resolveBangumiPoster(anime.images)}
-                douban_id={anime.id}
-                rate={anime.rating?.score?.toFixed(1) || ''}
-                year={anime.air_date?.split('-')?.[0] || ''}
-                isBangumi={true}
-              />
-            </HomeCardShell>
-          ))
-        )}
-      </ScrollableRow>
+      <HomeSectionLoadFeedback
+        title='新番放送'
+        hasData={hasData}
+        loading={loading}
+        loadError={loadError}
+        onRetry={onRetry}
+      />
+      {!showEmptyFailure && (
+        <ScrollableRow enableAnimation={false}>
+          {showSkeleton ? (
+            <SkeletonRow />
+          ) : (
+            todayAnimes.map((anime, index) => (
+              <HomeCardShell key={`${anime.id}-${index}`}>
+                <VideoCard
+                  from='douban'
+                  title={anime.name_cn || anime.name}
+                  poster={resolveBangumiPoster(anime.images)}
+                  douban_id={anime.id}
+                  rate={anime.rating?.score?.toFixed(1) || ''}
+                  year={anime.air_date?.split('-')?.[0] || ''}
+                  isBangumi={true}
+                />
+              </HomeCardShell>
+            ))
+          )}
+        </ScrollableRow>
+      )}
     </section>
   );
 }

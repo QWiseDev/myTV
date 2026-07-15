@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 05：热门区块失败被伪装成真实空数据
@@ -33,3 +33,11 @@ status: open
 ## 建议动作
 
 `cs-issue`，因为错误被转成了错误的可见业务状态。
+
+## 修复记录（2026-07-16）
+
+- 聚合 route 异常改为 HTTP 502 + `no-store`，监控不再把失败记成成功 2xx。
+- 分项 loader 用 `{ ok, data/error }` 区分成功空数据与失败；失败不再 patch 空数组覆盖已有内容。
+- 热门电影、剧集、综艺和新番拥有独立 error/loading/retry 状态，同区重复重试复用一个 in-flight Promise。
+- 有旧数据时失败或重试继续显示旧卡片；无数据失败时显示可访问的错误与重试入口。
+- 修复记录见 `.codestable/issues/2026-07-16-home-section-reliability/home-section-reliability-fix-note.md`。

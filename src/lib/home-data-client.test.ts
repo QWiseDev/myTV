@@ -1,5 +1,6 @@
 import {
   createHomeDataSnapshot,
+  createHomeErrorState,
   createHomeLoadingState,
   mergeHomeData,
   patchHomeData,
@@ -61,6 +62,15 @@ describe('home data client helpers', () => {
       tertiaryLoading: true,
       tvLoading: false,
       varietyLoading: true,
+    });
+  });
+
+  it('creates independent cleared error flags for every home section', () => {
+    expect(createHomeErrorState()).toEqual({
+      critical: false,
+      tertiary: false,
+      tv: false,
+      variety: false,
     });
   });
 

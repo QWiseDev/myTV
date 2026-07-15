@@ -1,10 +1,10 @@
 import { EMPTY_HOME_DATA } from './home-data-types';
 
-const mockGetBangumiCalendarData = jest.fn();
+const mockFetchBangumiCalendarData = jest.fn();
 const mockGetDoubanCategories = jest.fn();
 
 jest.mock('@/lib/bangumi.client', () => ({
-  GetBangumiCalendarData: mockGetBangumiCalendarData,
+  fetchBangumiCalendarData: mockFetchBangumiCalendarData,
 }));
 
 jest.mock('@/lib/douban.client', () => ({
@@ -12,6 +12,7 @@ jest.mock('@/lib/douban.client', () => ({
 }));
 
 let loadSecondaryData: typeof import('./home-data-loader').loadSecondaryData;
+let loadCriticalData: typeof import('./home-data-loader').loadCriticalData;
 let loadHomeDataFromApi: typeof import('./home-data-loader').loadHomeDataFromApi;
 let loadTertiaryData: typeof import('./home-data-loader').loadTertiaryData;
 
@@ -37,13 +38,17 @@ const completeHomeData = {
 
 describe('home-data-loader', () => {
   beforeAll(async () => {
-    ({ loadHomeDataFromApi, loadSecondaryData, loadTertiaryData } =
-      await import('./home-data-loader'));
+    ({
+      loadCriticalData,
+      loadHomeDataFromApi,
+      loadSecondaryData,
+      loadTertiaryData,
+    } = await import('./home-data-loader'));
   });
 
   beforeEach(() => {
-    mockGetBangumiCalendarData.mockReset();
-    mockGetBangumiCalendarData.mockResolvedValue([]);
+    mockFetchBangumiCalendarData.mockReset();
+    mockFetchBangumiCalendarData.mockResolvedValue([]);
     mockGetDoubanCategories.mockReset();
     mockGetDoubanCategories.mockResolvedValue({
       code: 200,
@@ -81,11 +86,14 @@ describe('home-data-loader', () => {
     });
 
     expect(mockGetDoubanCategories).toHaveBeenCalledTimes(1);
-    expect(mockGetDoubanCategories).toHaveBeenCalledWith({
-      kind: 'tv',
-      category: 'show',
-      type: 'show',
-    });
+    expect(mockGetDoubanCategories).toHaveBeenCalledWith(
+      {
+        kind: 'tv',
+        category: 'show',
+        type: 'show',
+      },
+      expect.any(AbortSignal),
+    );
     expect(result.hotTvShows).toBeUndefined();
   });
 
@@ -102,18 +110,32 @@ describe('home-data-loader', () => {
     await expect(
       loadSecondaryData({ loadTvShows: true, loadVarietyShows: true }),
     ).resolves.toEqual({
-      hotTvShows: { code: 200, message: 'fallback', list: [] },
-      hotVarietyShows: varietyResult,
+      hotTvShows: {
+        ok: false,
+        error: expect.any(Error),
+      },
+      hotVarietyShows: {
+        ok: true,
+        data: varietyResult.list,
+      },
     });
   });
 
-  it('normalizes a tertiary rejection without rejecting the loader', async () => {
-    mockGetBangumiCalendarData.mockRejectedValueOnce(
+  it('preserves a tertiary rejection as an error result', async () => {
+    mockFetchBangumiCalendarData.mockRejectedValueOnce(
       new Error('bangumi failed'),
     );
 
     await expect(loadTertiaryData()).resolves.toEqual({
-      bangumiCalendarData: undefined,
+      ok: false,
+      error: expect.any(Error),
+    });
+  });
+
+  it('keeps a successful empty section distinct from a failed section', async () => {
+    await expect(loadCriticalData()).resolves.toEqual({
+      ok: true,
+      data: [],
     });
   });
 

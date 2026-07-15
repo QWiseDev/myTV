@@ -86,7 +86,7 @@ describe('GET /api/home', () => {
     try {
       const response = await GET();
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(502);
       expect(response.headers.get('cache-control')).toBe('no-store');
       expect(response.headers.get('cdn-cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual({

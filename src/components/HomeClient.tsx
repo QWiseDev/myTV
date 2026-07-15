@@ -76,7 +76,12 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
   const { favoriteItems, favoriteLoadError, loadingFavorites, clearFavorites } =
     useFavoriteItems(activeTab);
-  const { homeData, loading: homeLoading } = useHomeData({
+  const {
+    errors: homeErrors,
+    homeData,
+    loading: homeLoading,
+    retrySection,
+  } = useHomeData({
     activeTab,
     refreshWatchingUpdates,
     initialData: initialHomeData,
@@ -166,8 +171,10 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
         ) : (
           <HomeTabContent
             continueWatching={continueWatching}
+            errors={homeErrors}
             homeData={homeData}
             loading={homeLoading}
+            retrySection={retrySection}
           />
         )}
       </div>

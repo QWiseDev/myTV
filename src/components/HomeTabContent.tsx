@@ -4,7 +4,11 @@ import { Film, Sparkles, Tv } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
 import { HOME_VIDEO_CARD_SIZES } from '@/lib/constants/home';
-import type { HomeLoadingState } from '@/lib/home-data-client';
+import type {
+  HomeErrorState,
+  HomeLoadingState,
+  HomeSectionKey,
+} from '@/lib/home-data-client';
 import type { HomeData } from '@/lib/home-data-types';
 import type { DoubanItem, PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
@@ -33,8 +37,10 @@ export interface HomeContinueWatchingState {
 
 interface HomeTabContentProps {
   continueWatching: HomeContinueWatchingState;
+  errors: HomeErrorState;
   homeData: HomeData;
   loading: HomeLoadingState;
+  retrySection: (section: HomeSectionKey) => Promise<void>;
 }
 
 function renderDoubanCard(
@@ -64,8 +70,10 @@ function renderDoubanCard(
  */
 export default function HomeTabContent({
   continueWatching,
+  errors,
   homeData,
   loading,
+  retrySection,
 }: HomeTabContentProps) {
   const hasContinueWatching =
     Object.keys(continueWatching.playRecords).length > 0;
@@ -99,6 +107,8 @@ export default function HomeTabContent({
         linkHref='/douban?type=movie'
         data={hotMovies}
         loading={criticalLoading}
+        loadError={errors.critical}
+        onRetry={() => retrySection('critical')}
         renderItem={(movie, index) =>
           renderDoubanCard(movie, {
             type: 'movie',
@@ -115,6 +125,8 @@ export default function HomeTabContent({
         linkHref='/douban?type=tv'
         data={hotTvShows}
         loading={tvLoading}
+        loadError={errors.tv}
+        onRetry={() => retrySection('tv')}
         enableAnimation={false}
         renderItem={(show) => renderDoubanCard(show)}
       />
@@ -123,6 +135,8 @@ export default function HomeTabContent({
       <BangumiSection
         bangumiCalendarData={bangumiCalendarData}
         loading={tertiaryLoading}
+        loadError={errors.tertiary}
+        onRetry={() => retrySection('tertiary')}
       />
 
       {/* 热门综艺 */}
@@ -132,6 +146,8 @@ export default function HomeTabContent({
         linkHref='/douban?type=show'
         data={hotVarietyShows}
         loading={varietyLoading}
+        loadError={errors.variety}
+        onRetry={() => retrySection('variety')}
         enableAnimation={false}
         renderItem={(show) => renderDoubanCard(show)}
       />

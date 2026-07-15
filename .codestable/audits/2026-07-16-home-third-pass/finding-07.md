@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 07：客户端分项超时不取消底层请求
@@ -33,3 +33,11 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为需要调整请求取消契约但不应改变成功数据行为。
+
+## 修复记录（2026-07-16）
+
+- 新增 task-factory 形式的 `withAbortableTimeout()`；timeout 与父 signal 都会 reject 并真实 abort task signal，旧 `withTimeout()` 保持兼容。
+- `useHomeData` 每批分项加载共用父 controller，effect cleanup 会取消电影、TV、综艺和 Bangumi；共享 `/api/home` inflight 不绑定组件 signal。
+- Douban signal 已贯通客户端直连/代理、categories route、服务端限流/随机 delay 与上游 fetch；取消后不继续请求或写分类缓存。
+- Bangumi 提供可抛错的 signal-aware fetch，兼容 wrapper 仍保持失败转空数组；取消后不写缓存。
+- 修复记录见 `.codestable/issues/2026-07-16-home-section-reliability/home-section-reliability-fix-note.md`。

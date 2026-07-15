@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
+import type { HomeErrorState, HomeSectionKey } from '@/lib/home-data-client';
 import type { DoubanItem } from '@/lib/types';
 
 import type { HomeContinueWatchingState } from './HomeTabContent';
@@ -10,6 +11,31 @@ const mockNeverResolve = new Promise<void>(() => undefined);
 const mockVideoCard = jest.fn(({ title }: { title: string }) => (
   <div>{title}</div>
 ));
+const mockBangumiSection = jest.fn(
+  (_props: { loadError: boolean; onRetry: () => Promise<void> }) => (
+    <div data-testid='新番放送'>新番放送</div>
+  ),
+);
+const mockLazyVideoSection = jest.fn(
+  ({
+    data,
+    loading,
+    renderItem,
+    title,
+  }: {
+    data: DoubanItem[];
+    loading: boolean;
+    loadError: boolean;
+    onRetry: () => Promise<void>;
+    renderItem: (item: DoubanItem, index: number) => React.ReactNode;
+    title: string;
+  }) => (
+    <div data-testid={title}>
+      {String(loading)}
+      {data[0] ? renderItem(data[0], 0) : null}
+    </div>
+  ),
+);
 
 jest.mock('./ContinueWatching', () => ({
   __esModule: true,
@@ -28,27 +54,14 @@ jest.mock('./VideoCard', () => ({
 
 jest.mock('./BangumiSection', () => ({
   __esModule: true,
-  default: () => <div data-testid='新番放送'>新番放送</div>,
+  default: (props: { loadError: boolean; onRetry: () => Promise<void> }) =>
+    mockBangumiSection(props),
 }));
 
 jest.mock('./LazyVideoSection', () => ({
   __esModule: true,
-  default: ({
-    data,
-    loading,
-    renderItem,
-    title,
-  }: {
-    data: DoubanItem[];
-    loading: boolean;
-    renderItem: (item: DoubanItem, index: number) => React.ReactNode;
-    title: string;
-  }) => (
-    <div data-testid={title}>
-      {String(loading)}
-      {data[0] ? renderItem(data[0], 0) : null}
-    </div>
-  ),
+  default: (props: Parameters<typeof mockLazyVideoSection>[0]) =>
+    mockLazyVideoSection(props),
 }));
 
 jest.mock('./SectionSkeleton', () => ({
@@ -70,17 +83,30 @@ const continueWatching: HomeContinueWatchingState = {
   onLoadMore: jest.fn().mockResolvedValue(undefined),
   onRetry: jest.fn().mockResolvedValue(undefined),
 };
+const noErrors: HomeErrorState = {
+  critical: false,
+  tertiary: false,
+  tv: false,
+  variety: false,
+};
+const retrySection = jest.fn<Promise<void>, [HomeSectionKey]>(() =>
+  Promise.resolve(),
+);
 
 describe('HomeTabContent', () => {
   beforeEach(() => {
     mockSuspendContinueWatching = false;
+    mockBangumiSection.mockClear();
+    mockLazyVideoSection.mockClear();
     mockVideoCard.mockClear();
+    retrySection.mockClear();
   });
 
   it('passes independent loading state to TV and variety sections', async () => {
     render(
       <HomeTabContent
         continueWatching={continueWatching}
+        errors={noErrors}
         homeData={{
           hotMovies: [],
           hotTvShows: [],
@@ -93,6 +119,7 @@ describe('HomeTabContent', () => {
           tvLoading: false,
           varietyLoading: true,
         }}
+        retrySection={retrySection}
       />,
     );
 
@@ -107,6 +134,7 @@ describe('HomeTabContent', () => {
     render(
       <HomeTabContent
         continueWatching={continueWatching}
+        errors={noErrors}
         homeData={{
           hotMovies: [],
           hotTvShows: [],
@@ -119,6 +147,7 @@ describe('HomeTabContent', () => {
           tvLoading: true,
           varietyLoading: true,
         }}
+        retrySection={retrySection}
       />,
     );
 
@@ -156,8 +185,10 @@ describe('HomeTabContent', () => {
     const { rerender } = render(
       <HomeTabContent
         continueWatching={loadingContinueWatching}
+        errors={noErrors}
         homeData={homeData}
         loading={loading}
+        retrySection={retrySection}
       />,
     );
 
@@ -168,13 +199,68 @@ describe('HomeTabContent', () => {
     rerender(
       <HomeTabContent
         continueWatching={continueWatching}
+        errors={noErrors}
         homeData={homeData}
         loading={loading}
+        retrySection={retrySection}
       />,
     );
 
     expect(mockVideoCard.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({ priority: true, title: '热门电影 1' }),
     );
+  });
+
+  it('maps section errors and retry actions to their data sources', async () => {
+    render(
+      <HomeTabContent
+        continueWatching={continueWatching}
+        errors={{
+          critical: true,
+          tertiary: true,
+          tv: false,
+          variety: true,
+        }}
+        homeData={{
+          hotMovies: [],
+          hotTvShows: [],
+          hotVarietyShows: [],
+          bangumiCalendarData: [],
+        }}
+        loading={{
+          criticalLoading: false,
+          tertiaryLoading: false,
+          tvLoading: false,
+          varietyLoading: false,
+        }}
+        retrySection={retrySection}
+      />,
+    );
+
+    const sectionProps = Object.fromEntries(
+      mockLazyVideoSection.mock.calls.map(([props]) => [props.title, props]),
+    );
+    const bangumiCall = mockBangumiSection.mock.calls[0];
+    if (!bangumiCall) {
+      throw new Error('新番放送区块未渲染');
+    }
+    const [bangumiProps] = bangumiCall;
+
+    expect(sectionProps['热门电影'].loadError).toBe(true);
+    expect(sectionProps['热门剧集'].loadError).toBe(false);
+    expect(sectionProps['热门综艺'].loadError).toBe(true);
+    expect(bangumiProps.loadError).toBe(true);
+
+    await sectionProps['热门电影'].onRetry();
+    await sectionProps['热门剧集'].onRetry();
+    await sectionProps['热门综艺'].onRetry();
+    await bangumiProps.onRetry();
+
+    expect(retrySection.mock.calls).toEqual([
+      ['critical'],
+      ['tv'],
+      ['variety'],
+      ['tertiary'],
+    ]);
   });
 });
