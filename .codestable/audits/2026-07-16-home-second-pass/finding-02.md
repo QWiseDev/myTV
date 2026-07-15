@@ -6,7 +6,7 @@ nature: performance
 severity: P1
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 02：继续观看从 12 增至 13 条会整行卸载重挂
@@ -32,3 +32,9 @@ status: open
 ## 建议动作
 
 `cs-refactor`，因为可以在保持交互结果不变的前提下移除阈值切树。
+
+## 修复记录（2026-07-16）
+
+- `ContinueWatching` 不再按 12 条阈值切换 `enableAnimation`，分页前后始终复用同一个 `AnimatedCardGrid` 父结构。
+- 新增 12→13 条 rerender 回归，确认第二页追加后动画容器仍保持启用。
+- 全量 Jest 69 suites / 294 tests、typecheck、production build 与目标 ESLint 通过。

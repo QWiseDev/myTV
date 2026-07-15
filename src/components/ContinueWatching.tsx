@@ -197,7 +197,7 @@ export default function ContinueWatching({
         </div>
       )}
 
-      <ScrollableRow enableAnimation={displayItems.length <= 12}>
+      <ScrollableRow>
         {loading ? (
           <SkeletonRow count={SKELETON_CONFIG.CONTINUE_WATCHING_COUNT} />
         ) : (
