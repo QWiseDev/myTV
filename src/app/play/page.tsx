@@ -169,10 +169,6 @@ function PlayPageClient() {
       loadingMovie: false,
       loadingBangumi: false,
     },
-    favorite: {
-      isFavorited: false,
-      loading: false,
-    },
     danmaku: {
       enabled: initialExternalDanmuEnabled,
       loading: false,

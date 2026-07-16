@@ -128,22 +128,6 @@ export interface PlayRecord {
   timestamp: number;
 }
 
-// ==================== 播放源类型 ====================
-
-export interface PlaySource {
-  name: string;
-  url: string;
-  quality?: string;
-  type?: string;
-}
-
-export interface SourceTestResult {
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-  score?: number;
-}
-
 // ==================== 集数类型 ====================
 
 export interface Episode {

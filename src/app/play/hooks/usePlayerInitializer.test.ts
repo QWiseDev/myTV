@@ -145,7 +145,10 @@ function createParams(videoUrl: string) {
   } as Parameters<typeof usePlayerInitializer>[0];
 }
 
-function createMockPlayer(handlers: Map<string, (...args: unknown[]) => void>) {
+function createMockPlayer(
+  handlers: Map<string, (...args: unknown[]) => void>,
+  handlerLists?: Map<string, Array<(...args: unknown[]) => void>>,
+) {
   const video = document.createElement('video');
 
   return {
@@ -160,6 +163,11 @@ function createMockPlayer(handlers: Map<string, (...args: unknown[]) => void>) {
     notice: { show: '' },
     on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
       handlers.set(event, handler);
+      if (handlerLists) {
+        const eventHandlers = handlerLists.get(event) || [];
+        eventHandlers.push(handler);
+        handlerLists.set(event, eventHandlers);
+      }
     }),
     off: jest.fn(),
     destroy: jest.fn(),
@@ -192,6 +200,35 @@ function mockAdaptiveHlsSessions() {
   });
 
   return { callbacks, instances };
+}
+
+async function renderPlayerAndGetEventHandlers(
+  params: Parameters<typeof usePlayerInitializer>[0],
+  eventName: string,
+) {
+  const handlers = new Map<string, (...args: unknown[]) => void>();
+  const handlerLists = new Map<string, Array<(...args: unknown[]) => void>>();
+  const player = createMockPlayer(handlers, handlerLists);
+  mockArtplayerConstructor.mockImplementation(() => player);
+  (loadArtplayerModules as jest.Mock).mockResolvedValue({
+    Artplayer: mockArtplayerConstructor,
+    artplayerPluginDanmuku: jest.fn(() => ({})),
+  });
+
+  renderHook(() => usePlayerInitializer(params));
+
+  await waitFor(() => {
+    expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+  });
+
+  return handlerLists.get(eventName) || [];
+}
+
+function emitPlayerEvent(
+  handlers: Array<(...args: unknown[]) => void>,
+  ...args: unknown[]
+) {
+  [...handlers].forEach((handler) => handler(...args));
 }
 
 describe('usePlayerInitializer', () => {
@@ -260,6 +297,136 @@ describe('usePlayerInitializer', () => {
     });
 
     expect(mockArtplayerConstructor).not.toHaveBeenCalled();
+  });
+
+  test('runs ended analytics before scheduling the next episode once', async () => {
+    jest.useFakeTimers();
+    const params = createParams('https://example.com/episode-1.m3u8');
+    if (!params.detail) throw new Error('expected test detail');
+    const detail = {
+      ...params.detail,
+      episodes: [
+        'https://example.com/episode-1.m3u8',
+        'https://example.com/episode-2.m3u8',
+      ],
+    };
+    params.detail = detail;
+    params.detailRef.current = detail;
+    params.totalEpisodes = 2;
+
+    const endedHandlers = await renderPlayerAndGetEventHandlers(
+      params,
+      'video:ended',
+    );
+    expect(endedHandlers).toHaveLength(1);
+
+    act(() => {
+      emitPlayerEvent(endedHandlers);
+      emitPlayerEvent(endedHandlers);
+    });
+
+    const releaseWakeLock = params.releaseWakeLock as jest.Mock;
+    const trackProgress = params.analytics.trackProgress as jest.Mock;
+    expect(releaseWakeLock).toHaveBeenCalledTimes(2);
+    expect(trackProgress).toHaveBeenCalledTimes(2);
+    expect(trackProgress).toHaveBeenNthCalledWith(1, 100);
+    expect(trackProgress).toHaveBeenNthCalledWith(2, 100);
+    expect(releaseWakeLock.mock.invocationCallOrder[0]).toBeLessThan(
+      trackProgress.mock.invocationCallOrder[0],
+    );
+    expect(params.videoEndedHandledRef.current).toBe(true);
+    expect(params.setCurrentEpisodeIndex).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(params.setCurrentEpisodeIndex).toHaveBeenCalledTimes(1);
+    expect(params.setCurrentEpisodeIndex).toHaveBeenCalledWith(1);
+  });
+
+  test('keeps ended analytics while skip-controller completion suppresses auto-next', async () => {
+    jest.useFakeTimers();
+    const params = createParams('https://example.com/episode-1.m3u8');
+    params.isSkipControllerTriggeredRef.current = true;
+
+    const endedHandlers = await renderPlayerAndGetEventHandlers(
+      params,
+      'video:ended',
+    );
+    expect(endedHandlers).toHaveLength(1);
+
+    act(() => {
+      emitPlayerEvent(endedHandlers);
+    });
+
+    expect(params.releaseWakeLock).toHaveBeenCalledTimes(1);
+    expect(params.analytics.trackProgress).toHaveBeenCalledWith(100);
+    expect(params.videoEndedHandledRef.current).toBe(true);
+    expect(params.setCurrentEpisodeIndex).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(1999);
+    });
+    expect(params.isSkipControllerTriggeredRef.current).toBe(true);
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(params.isSkipControllerTriggeredRef.current).toBe(false);
+  });
+
+  test('does not schedule auto-next when analytics replaces the active player', async () => {
+    jest.useFakeTimers();
+    const params = createParams('https://example.com/episode-1.m3u8');
+    if (!params.detail) throw new Error('expected test detail');
+    const detail = {
+      ...params.detail,
+      episodes: [
+        'https://example.com/episode-1.m3u8',
+        'https://example.com/episode-2.m3u8',
+      ],
+    };
+    params.detail = detail;
+    params.detailRef.current = detail;
+    params.totalEpisodes = 2;
+    params.analytics.trackProgress = jest.fn(() => {
+      params.artPlayerRef.current = null;
+    });
+
+    const endedHandlers = await renderPlayerAndGetEventHandlers(
+      params,
+      'video:ended',
+    );
+
+    act(() => {
+      emitPlayerEvent(endedHandlers);
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(params.releaseWakeLock).toHaveBeenCalledTimes(1);
+    expect(params.analytics.trackProgress).toHaveBeenCalledWith(100);
+    expect(params.videoEndedHandledRef.current).toBe(false);
+    expect(params.setCurrentEpisodeIndex).not.toHaveBeenCalled();
+  });
+
+  test('keeps the final episode eligible for a later ended event', async () => {
+    jest.useFakeTimers();
+    const params = createParams('https://example.com/final-episode.m3u8');
+    const endedHandlers = await renderPlayerAndGetEventHandlers(
+      params,
+      'video:ended',
+    );
+
+    act(() => {
+      emitPlayerEvent(endedHandlers);
+      jest.advanceTimersByTime(2000);
+    });
+
+    expect(params.releaseWakeLock).toHaveBeenCalledTimes(1);
+    expect(params.analytics.trackProgress).toHaveBeenCalledWith(100);
+    expect(params.videoEndedHandledRef.current).toBe(false);
+    expect(params.setCurrentEpisodeIndex).not.toHaveBeenCalled();
   });
 
   test('keeps committed player events active and clears completed switch ownership', async () => {

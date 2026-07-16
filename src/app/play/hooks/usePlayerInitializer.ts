@@ -895,11 +895,40 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           analytics.handlePause(currentTime, 'user');
         });
 
-        artPlayer.on('video:ended', () => {
+        const handleVideoEnded = () => {
           if (!isActivePlayer()) return;
           releaseWakeLock();
           analytics.trackProgress(100);
-        });
+
+          if (!isActivePlayer()) return;
+          const idx = currentEpisodeIndexRef.current;
+
+          if (videoEndedHandledRef.current) {
+            return;
+          }
+
+          if (isSkipControllerTriggeredRef.current) {
+            videoEndedHandledRef.current = true;
+            setTimeout(() => {
+              if (isActivePlayer()) {
+                isSkipControllerTriggeredRef.current = false;
+              }
+            }, 2000);
+            return;
+          }
+
+          const d = detailRef.current;
+          if (d && d.episodes && idx < d.episodes.length - 1) {
+            videoEndedHandledRef.current = true;
+            setTimeout(() => {
+              if (isActivePlayer()) {
+                setCurrentEpisodeIndex(idx + 1);
+              }
+            }, 1000);
+          }
+        };
+
+        artPlayer.on('video:ended', handleVideoEnded);
 
         if (!artPlayer.paused) {
           requestWakeLock();
@@ -1087,35 +1116,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           handleCurrentSourceFailure('播放失败，没有更多播放源了');
-        });
-
-        artPlayer.on('video:ended', () => {
-          if (!isActivePlayer()) return;
-          const idx = currentEpisodeIndexRef.current;
-
-          if (videoEndedHandledRef.current) {
-            return;
-          }
-
-          if (isSkipControllerTriggeredRef.current) {
-            videoEndedHandledRef.current = true;
-            setTimeout(() => {
-              if (isActivePlayer()) {
-                isSkipControllerTriggeredRef.current = false;
-              }
-            }, 2000);
-            return;
-          }
-
-          const d = detailRef.current;
-          if (d && d.episodes && idx < d.episodes.length - 1) {
-            videoEndedHandledRef.current = true;
-            setTimeout(() => {
-              if (isActivePlayer()) {
-                setCurrentEpisodeIndex(idx + 1);
-              }
-            }, 1000);
-          }
         });
 
         artPlayer.on('video:timeupdate', () => {

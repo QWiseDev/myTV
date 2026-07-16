@@ -3,7 +3,7 @@
  * 使用 useReducer 管理播放页面的所有状态
  */
 
-import { Dispatch,useMemo, useReducer } from 'react';
+import { Dispatch, useMemo, useReducer } from 'react';
 
 import type {
   BangumiDetails,
@@ -11,8 +11,6 @@ import type {
   MovieDetails,
   PlaybackInfo,
   PlayerState,
-  PlaySource,
-  SourceTestResult,
   SpeedTestProgress,
   VideoInfo,
 } from '../types';
@@ -34,14 +32,6 @@ export interface PlayPageState {
   // 弹幕状态
   danmaku: DanmakuConfig;
 
-  // 播放源状态
-  sources: {
-    list: PlaySource[];
-    currentIndex: number;
-    testResults: Record<number, SourceTestResult>;
-    isTesting: boolean;
-  };
-
   // UI 状态
   ui: {
     isSkipSettingOpen: boolean;
@@ -56,12 +46,6 @@ export interface PlayPageState {
     bangumi: BangumiDetails | null;
     loadingMovie: boolean;
     loadingBangumi: boolean;
-  };
-
-  // 收藏状态
-  favorite: {
-    isFavorited: boolean;
-    loading: boolean;
   };
 }
 
@@ -92,15 +76,6 @@ export type PlayPageAction =
   | { type: 'TOGGLE_DANMAKU' }
   | { type: 'SET_DANMAKU_LOADING'; payload: boolean }
 
-  // 播放源更新
-  | { type: 'SET_SOURCES'; payload: PlaySource[] }
-  | { type: 'SET_CURRENT_SOURCE'; payload: number }
-  | {
-      type: 'SET_SOURCE_TEST_RESULT';
-      payload: { index: number; result: SourceTestResult };
-    }
-  | { type: 'SET_SOURCE_TESTING'; payload: boolean }
-
   // UI 状态更新
   | { type: 'TOGGLE_SKIP_SETTING' }
   | { type: 'SET_SELECTED_TAB'; payload: string }
@@ -111,10 +86,6 @@ export type PlayPageAction =
   | { type: 'SET_BANGUMI_DETAILS'; payload: BangumiDetails | null }
   | { type: 'SET_LOADING_MOVIE'; payload: boolean }
   | { type: 'SET_LOADING_BANGUMI'; payload: boolean }
-
-  // 收藏状态更新
-  | { type: 'SET_FAVORITED'; payload: boolean }
-  | { type: 'SET_FAVORITE_LOADING'; payload: boolean }
 
   // 批量更新
   | { type: 'BATCH_UPDATE'; payload: Partial<PlayPageState> }
@@ -160,12 +131,6 @@ const defaultInitialState: PlayPageState = {
     unlimited: false,
     sources: [],
   },
-  sources: {
-    list: [],
-    currentIndex: 0,
-    testResults: {},
-    isTesting: false,
-  },
   ui: {
     isSkipSettingOpen: false,
     showBackToTop: false,
@@ -177,10 +142,6 @@ const defaultInitialState: PlayPageState = {
     bangumi: null,
     loadingMovie: false,
     loadingBangumi: false,
-  },
-  favorite: {
-    isFavorited: false,
-    loading: false,
   },
 };
 
@@ -273,37 +234,6 @@ function playPageReducer(
         danmaku: { ...state.danmaku, loading: action.payload },
       };
 
-    // 播放源
-    case 'SET_SOURCES':
-      return {
-        ...state,
-        sources: { ...state.sources, list: action.payload },
-      };
-
-    case 'SET_CURRENT_SOURCE':
-      return {
-        ...state,
-        sources: { ...state.sources, currentIndex: action.payload },
-      };
-
-    case 'SET_SOURCE_TEST_RESULT':
-      return {
-        ...state,
-        sources: {
-          ...state.sources,
-          testResults: {
-            ...state.sources.testResults,
-            [action.payload.index]: action.payload.result,
-          },
-        },
-      };
-
-    case 'SET_SOURCE_TESTING':
-      return {
-        ...state,
-        sources: { ...state.sources, isTesting: action.payload },
-      };
-
     // UI 状态
     case 'TOGGLE_SKIP_SETTING':
       return {
@@ -352,19 +282,6 @@ function playPageReducer(
         details: { ...state.details, loadingBangumi: action.payload },
       };
 
-    // 收藏状态
-    case 'SET_FAVORITED':
-      return {
-        ...state,
-        favorite: { ...state.favorite, isFavorited: action.payload },
-      };
-
-    case 'SET_FAVORITE_LOADING':
-      return {
-        ...state,
-        favorite: { ...state.favorite, loading: action.payload },
-      };
-
     // 批量更新
     case 'BATCH_UPDATE':
       return { ...state, ...action.payload };
@@ -405,12 +322,6 @@ export interface UsePlayerStateReturn {
     toggleDanmaku: () => void;
     setDanmakuLoading: (loading: boolean) => void;
 
-    // 播放源
-    setSources: (sources: PlaySource[]) => void;
-    setCurrentSource: (index: number) => void;
-    setSourceTestResult: (index: number, result: SourceTestResult) => void;
-    setSourceTesting: (testing: boolean) => void;
-
     // UI
     toggleSkipSetting: () => void;
     setSelectedTab: (tab: string) => void;
@@ -421,10 +332,6 @@ export interface UsePlayerStateReturn {
     setBangumiDetails: (details: BangumiDetails | null) => void;
     setLoadingMovie: (loading: boolean) => void;
     setLoadingBangumi: (loading: boolean) => void;
-
-    // 收藏
-    setFavorited: (favorited: boolean) => void;
-    setFavoriteLoading: (loading: boolean) => void;
 
     // 批量更新
     batchUpdate: (updates: Partial<PlayPageState>) => void;
@@ -477,16 +384,6 @@ export const usePlayerState = (
       setDanmakuLoading: (loading: boolean) =>
         dispatch({ type: 'SET_DANMAKU_LOADING', payload: loading }),
 
-      // 播放源
-      setSources: (sources: PlaySource[]) =>
-        dispatch({ type: 'SET_SOURCES', payload: sources }),
-      setCurrentSource: (index: number) =>
-        dispatch({ type: 'SET_CURRENT_SOURCE', payload: index }),
-      setSourceTestResult: (index: number, result: SourceTestResult) =>
-        dispatch({ type: 'SET_SOURCE_TEST_RESULT', payload: { index, result } }),
-      setSourceTesting: (testing: boolean) =>
-        dispatch({ type: 'SET_SOURCE_TESTING', payload: testing }),
-
       // UI
       toggleSkipSetting: () => dispatch({ type: 'TOGGLE_SKIP_SETTING' }),
       setSelectedTab: (tab: string) =>
@@ -503,12 +400,6 @@ export const usePlayerState = (
         dispatch({ type: 'SET_LOADING_MOVIE', payload: loading }),
       setLoadingBangumi: (loading: boolean) =>
         dispatch({ type: 'SET_LOADING_BANGUMI', payload: loading }),
-
-      // 收藏
-      setFavorited: (favorited: boolean) =>
-        dispatch({ type: 'SET_FAVORITED', payload: favorited }),
-      setFavoriteLoading: (loading: boolean) =>
-        dispatch({ type: 'SET_FAVORITE_LOADING', payload: loading }),
 
       // 批量更新
       batchUpdate: (updates: Partial<PlayPageState>) =>

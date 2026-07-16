@@ -1,0 +1,35 @@
+refactor: 2026-07-16-playback-state-cleanup
+status: done
+steps:
+  - id: characterize-ended
+    title: 固化 ended 顺序、去重与失活边界
+    status: done
+    verify: 4 条 ended 专项测试通过
+  - id: merge-ended-handler
+    title: 合并 video:ended 注册
+    status: done
+    verify: 每个播放器只注册一个 ended handler
+  - id: remove-dead-state
+    title: 删除 source/favorite reducer 假 owner
+    status: done
+    verify: 旧字段、action 与专属类型零引用
+  - id: full-verification
+    title: 完整质量门禁
+    status: done
+    verify: Jest、ESLint、typecheck、build、YAML、格式与 diff check 通过
+checks:
+  - id: ended-order
+    title: release、analytics、active 校验与去重顺序不变
+    status: passed
+  - id: source-owner
+    title: source owner 保持 state.video.source 与 availableSources
+    status: passed
+  - id: favorite-owner
+    title: favorite owner 保持 useFavorite
+    status: passed
+  - id: scope-guard
+    title: 不重构其它 playback session 和 loading 路径
+    status: passed
+  - id: full-quality-gates
+    title: 完整质量门禁通过
+    status: passed
