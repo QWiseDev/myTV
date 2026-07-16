@@ -459,6 +459,29 @@ describe('VideoCard behavior', () => {
     expect(subjectLink.className).toContain('focus:pointer-events-auto');
   });
 
+  it('runs the shimmer only while the card is hovered or focused', () => {
+    const { container } = renderSourceBackedCard();
+    const shimmer = Array.from(
+      container.querySelectorAll<HTMLDivElement>('div'),
+    ).find((element) => element.style.backgroundSize === '200% 100%');
+
+    expect(shimmer).toBeTruthy();
+    expect(shimmer?.style.animation).toBe('');
+    expect(shimmer?.className).toContain(
+      'motion-safe:animate-[card-shimmer_2.5s_ease-in-out_infinite]',
+    );
+    expect(shimmer?.className).toContain(
+      'motion-safe:[animation-play-state:paused]',
+    );
+    expect(shimmer?.className).toContain(
+      'motion-safe:group-hover:[animation-play-state:running]',
+    );
+    expect(shimmer?.className).toContain(
+      'motion-safe:group-focus-within:[animation-play-state:running]',
+    );
+    expect(shimmer?.className).toContain('motion-reduce:transition-none');
+  });
+
   it('keeps elevated visual badges inside the pointer playback boundary', () => {
     const { container } = render(
       <VideoCard

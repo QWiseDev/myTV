@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: medium
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 07：不可见卡片 shimmer 仍持续运行
@@ -27,6 +27,12 @@ status: open
 ## 修复方向
 
 默认暂停 shimmer，仅在 hover/focus 且允许 motion 时运行；补样式断言或浏览器 computed-style 回归。
+
+## 处理进展（2026-07-16）
+
+- shimmer 动画从无条件 inline style 移到 `motion-safe` 样式门禁。
+- 动画默认暂停，仅在卡片 hover 或 focus-within 时运行；减少动态效果模式不创建动画，并关闭透明度过渡。
+- 组件回归覆盖无 inline animation、默认暂停以及 hover/focus 运行类。
 
 ## 建议动作
 

@@ -732,12 +732,11 @@ const VideoCard = memo(function VideoCard(
           >
             {/* 渐变光泽动画层 */}
             <div
-              className='absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-10'
+              className='absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500 motion-reduce:transition-none pointer-events-none z-10 motion-safe:animate-[card-shimmer_2.5s_ease-in-out_infinite] motion-safe:[animation-play-state:paused] motion-safe:group-hover:[animation-play-state:running] motion-safe:group-focus-within:[animation-play-state:running]'
               style={{
                 background:
                   'linear-gradient(110deg, transparent 30%, rgba(250,249,245,0.12) 45%, rgba(250,249,245,0.34) 50%, rgba(250,249,245,0.12) 55%, transparent 70%)',
                 backgroundSize: '200% 100%',
-                animation: 'card-shimmer 2.5s ease-in-out infinite',
               }}
             />
 
