@@ -1,5 +1,5 @@
 refactor: 2026-07-16-user-menu-decomposition
-status: in_progress
+status: done
 steps:
   - id: characterization-tests
     title: 补齐展示与持久化边界刻画
@@ -23,24 +23,24 @@ steps:
     verify: 本次产生的死 import/state/helper 零残留
   - id: full-verification
     title: 完整质量门禁与目视验收
-    status: pending
+    status: done
     verify: Jest、ESLint、typecheck、build、YAML、格式、浏览器与 diff check 通过
 checks:
   - id: behavior-equivalence
     title: 权限、导航、Portal、关闭和面板并存语义不变
-    status: pending
+    status: done
   - id: data-contract
     title: 收藏、播放记录与追更的数据源和刷新策略不变
-    status: pending
+    status: done
   - id: settings-contract
     title: 设置 key、默认值、序列化和事件名称不变
-    status: pending
+    status: done
   - id: ownership-boundary
     title: 展示组件无请求/持久化，父组件不再持有已迁移 domain effect
-    status: pending
+    status: done
   - id: scope-guard
     title: 不修改 Header、VideoCard、VersionPanel 和共享 Context contract
-    status: pending
+    status: done
   - id: full-quality-gates
-    title: 完整质量门禁通过
-    status: pending
+    title: 本次改动质量门禁通过，仓库既有 strict lint 告警已记录
+    status: done

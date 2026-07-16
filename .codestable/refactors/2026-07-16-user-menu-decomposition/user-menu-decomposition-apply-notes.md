@@ -40,3 +40,13 @@ refactor: 2026-07-16-user-menu-decomposition
 - 改动文件：`src/components/UserMenu.tsx`、`.codestable/audits/2026-06-08-runtime-bundle-tech-debt/finding-02.md`
 - 验证结果：结构搜索与目标 ESLint 确认父组件不再持有设置 localStorage、媒体数据源或已迁移 setter/helper；移除已无对应代码的 `no-non-null-assertion` 文件级禁用。`UserMenu.tsx` 从本轮开始的 2095 行降至 548 行，剩余 state/effect 均归属菜单/Portal 编排、认证权限、版本、导航登出、改密或下拉 UI 生命周期；旧超长组件 finding 已记录 UserMenu 子项完成，其余入口仍保持 open。
 - 偏离：无。未继续拆分预存的导航、权限、版本、改密或下拉逻辑，也未改其它超长组件。
+
+## 步骤 6：完整质量门禁与目视验收
+
+- 完成时间：2026-07-16
+- 改动文件：`.codestable/refactors/2026-07-16-user-menu-decomposition/user-menu-decomposition-checklist.yaml`、`.codestable/refactors/2026-07-16-user-menu-decomposition/user-menu-decomposition-apply-notes.md`
+- 自动验证：全量 Jest `86 suites / 472 tests` 通过；`pnpm typecheck` 与 production build 通过；UserMenu 目标 ESLint 零 warning；Prettier、YAML 校验和 `git diff --check` 通过。`pnpm lint:strict` 检出 `0 error / 145 warnings` 并因 `--max-warnings=0` 返回 1，告警集中在 Admin、SlotMachine、SourceTest 和既有类型声明等未改路径，本阶段未越界清理。
+- 浏览器验收：使用 `136.175.83.3` Redis 的本地 SSH tunnel 启动 production server。桌面 `1440×900` 下依次验证设置、更新提醒、继续观看、收藏和版本面板；移动 `390×844` 下验证用户菜单、设置和四个子面板。所有面板均位于视口内；移动设置内容区 `scrollHeight 1133 / clientHeight 760`，实际滚动由 `scrollTop 0` 到 `373.5`；版本内容区 `scrollHeight 12671 / clientHeight 662`。模态打开时 `body/html overflowY=hidden`，关闭后恢复 `auto`，浏览器 console 无 error。
+- 环境清理：未修改远端 Redis 监听、防火墙或 `.env`；验收后关闭 production server 与 SSH tunnel，并确认本地 `3000`、`16379` 无监听。production build 未改动 `public/manifest.json`。
+- 行为等价复核：三个独立只读审查分别覆盖媒体 Hook、设置 Controller 和父组件 ownership，均未发现迁移导致的请求时点、事件、持久化、权限、导航或 Portal 行为漂移。
+- 偏离：仓库级 strict lint 被既有 warning 阻断，已如实保留为仓库基线问题；本次目标文件 ESLint 与所有直接验证均通过。用户已明确要求“提交本阶段后继续处理首页”，因此按该 checkpoint 收尾提交并进入下一项首页审查。
