@@ -456,10 +456,8 @@ const VideoCard = memo(function VideoCard(
       [from],
     );
 
-    const handleToggleFavorite = useCallback(
-      (e: React.MouseEvent): Promise<void> => {
-        e.preventDefault();
-        e.stopPropagation();
+    const toggleFavorite = useCallback(
+      (): Promise<void> => {
         const favoriteToggleParams = {
           from,
           source: actualSource,
@@ -502,7 +500,7 @@ const VideoCard = memo(function VideoCard(
               }
             }
           } catch {
-            // 持久层已触发全局错误提示；事件边界在此消费 rejection。
+            // 持久层已触发全局错误提示；业务命令边界在此消费 rejection。
           }
         })();
 
@@ -531,10 +529,17 @@ const VideoCard = memo(function VideoCard(
       ],
     );
 
-    const handleDeleteRecord = useCallback(
-      (e: React.MouseEvent): Promise<void> => {
-        e.preventDefault();
-        e.stopPropagation();
+    const handleToggleFavorite = useCallback(
+      (event: React.MouseEvent): Promise<void> => {
+        event.preventDefault();
+        event.stopPropagation();
+        return toggleFavorite();
+      },
+      [toggleFavorite],
+    );
+
+    const deleteRecord = useCallback(
+      (): Promise<void> => {
         if (from !== 'playrecord' || !actualSource || !actualId) {
           return Promise.resolve();
         }
@@ -564,6 +569,15 @@ const VideoCard = memo(function VideoCard(
         });
       },
       [from, actualSource, actualId, onDelete, cardIdentity],
+    );
+
+    const handleDeleteRecord = useCallback(
+      (event: React.MouseEvent): Promise<void> => {
+        event.preventDefault();
+        event.stopPropagation();
+        return deleteRecord();
+      },
+      [deleteRecord],
     );
 
     const playUrl = useMemo(
@@ -696,8 +710,8 @@ const VideoCard = memo(function VideoCard(
       searchFavorited,
       onPlay: handleClick,
       onPlayNewTab: handlePlayInNewTab,
-      onToggleFavorite: handleToggleFavorite,
-      onDeleteRecord: handleDeleteRecord,
+      onToggleFavorite: toggleFavorite,
+      onDeleteRecord: deleteRecord,
     });
 
     return (

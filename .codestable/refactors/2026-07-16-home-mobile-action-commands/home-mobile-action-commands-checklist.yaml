@@ -1,0 +1,32 @@
+refactor: 2026-07-16-home-mobile-action-commands
+status: done
+steps:
+  - id: characterization-tests
+    title: 固化桌面与移动入口共享 mutation 行为
+    status: done
+    verify: 旧实现 VideoCard 定向 Jest 34/34 通过
+  - id: extract-commands
+    title: 提取无事件收藏与删除命令
+    status: done
+    verify: 桌面 wrapper 保留事件阻止且目标测试通过
+  - id: remove-fake-event
+    title: 删除移动端伪 MouseEvent 适配
+    status: done
+    verify: 移动收藏删除测试通过且旧 helper 零引用
+  - id: full-verification
+    title: 完整质量门禁
+    status: done
+    verify: Jest、ESLint、typecheck、build、目标格式与 diff check 通过
+checks:
+  - id: behavior-equivalence
+    title: 收藏删除与 pending 去重行为不变
+    status: passed
+  - id: no-fake-event
+    title: 移动操作层无伪 MouseEvent 与事件型业务回调
+    status: passed
+  - id: scope-guard
+    title: 不修改公开 props、持久层和 API contract
+    status: passed
+  - id: full-quality-gates
+    title: 完整质量门禁通过
+    status: passed

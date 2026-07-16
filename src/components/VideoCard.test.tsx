@@ -545,6 +545,28 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('deduplicates a pending favorite mutation across desktop and mobile actions', async () => {
+    const favoriteMutation = createDeferred<void>();
+    mockSaveFavorite.mockReturnValue(favoriteMutation.promise);
+    const { container } = renderSourceBackedCard();
+    const favoriteButton = container.querySelector('.lucide-heart');
+
+    expect(favoriteButton).not.toBeNull();
+    fireEvent.click(favoriteButton as SVGElement);
+    expect(mockNavigateVideoCardPlayUrl).not.toHaveBeenCalled();
+    openActionSheet();
+    fireEvent.click(
+      await screen.findByRole('button', { name: '添加收藏' }),
+    );
+
+    expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      favoriteMutation.resolve();
+      await flushAsyncWork();
+    });
+  });
+
   it('deduplicates pending favorite mutations across identity round trips', async () => {
     const firstMutation = createDeferred<void>();
     const secondMutation = createDeferred<void>();
@@ -974,6 +996,31 @@ describe('VideoCard behavior', () => {
     });
 
     expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a mobile play-record deletion without falling back or playing', async () => {
+    const onDelete = jest.fn().mockResolvedValue(undefined);
+    render(
+      <VideoCard
+        from='playrecord'
+        id='video-a'
+        onDelete={onDelete}
+        source='source-a'
+        title='测试影片'
+      />,
+    );
+    openActionSheet();
+
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole('button', { name: '删除记录' }),
+      );
+      await flushAsyncWork();
+    });
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeletePlayRecord).not.toHaveBeenCalled();
+    expect(mockNavigateVideoCardPlayUrl).not.toHaveBeenCalled();
   });
 
   it('deduplicates aggregate sources in the action sheet', async () => {

@@ -6,7 +6,7 @@ nature: maintainability
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 09：移动操作依赖伪造 MouseEvent 调用业务 handler
@@ -29,6 +29,12 @@ status: open
 ## 修复方向
 
 提取无事件的 `toggleFavorite()` / `deleteRecord()` 命令，桌面点击只负责阻止事件后调用命令，移动菜单直接调用同一命令。
+
+## 处理进展（2026-07-16）
+
+- 收藏与删除 mutation 主体改为无事件业务命令，桌面 wrapper 只保留事件阻止职责。
+- 移动 action 直接调用业务命令，删除伪造 `React.MouseEvent` helper 和事件型内部参数。
+- 回归覆盖桌面/移动共享 pending 收藏去重、移动自定义删除与播放隔离。
 
 ## 建议动作
 
