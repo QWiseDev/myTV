@@ -1,8 +1,4 @@
-import {
-  EMPTY_HOME_DATA,
-  getHomeDataAvailability,
-  hasHomeData,
-} from './home-data-types';
+import { EMPTY_HOME_DATA, getHomeDataAvailability } from './home-data-types';
 
 const item = {
   id: '1',
@@ -19,7 +15,6 @@ describe('getHomeDataAvailability', () => {
       hotMovies: [item],
     });
 
-    expect(hasHomeData({ ...EMPTY_HOME_DATA, hotMovies: [item] })).toBe(true);
     expect(availability).toEqual({
       hasAnyData: true,
       hasCriticalData: true,

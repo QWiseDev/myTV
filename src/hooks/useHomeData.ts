@@ -9,22 +9,16 @@ import {
   createHomeDataSnapshot,
   createHomeErrorState,
   createHomeLoadingState,
-  mergeHomeData,
   patchHomeData,
   patchHomeLoadingState,
 } from '@/lib/home-data-client';
 import {
   type HomeLoadResult,
   loadCriticalData,
-  loadHomeDataFromApi,
   loadSecondaryData,
   loadTertiaryData,
 } from '@/lib/home-data-loader';
-import {
-  type HomeData,
-  getHomeDataAvailability,
-  hasHomeData,
-} from '@/lib/home-data-types';
+import { type HomeData, getHomeDataAvailability } from '@/lib/home-data-types';
 import { useWatchingUpdatesRefresh } from '@/hooks/useWatchingUpdatesRefresh';
 
 interface UseHomeDataOptions {
@@ -314,8 +308,8 @@ export function useHomeData({
     };
 
     const loadAllData = async () => {
-      let snapshot = createHomeDataSnapshot(initialData);
-      let availability = getHomeDataAvailability(snapshot);
+      const snapshot = createHomeDataSnapshot(initialData);
+      const availability = getHomeDataAvailability(snapshot);
 
       if (availability.isComplete) {
         if (initialDataChanged) {
@@ -325,25 +319,11 @@ export function useHomeData({
         return;
       }
 
-      if (!availability.hasCriticalData) {
-        const apiHomeData = await loadHomeDataFromApi();
-        if (cancelled) return;
-
-        if (hasHomeData(apiHomeData)) {
-          snapshot = mergeHomeData(snapshot, apiHomeData);
-          applyHomeData(snapshot);
-          availability = getHomeDataAvailability(snapshot);
-        }
-      } else {
-        // 给 StrictMode cleanup 留出取消点，避免首轮 effect 启动重复分项请求
-        await Promise.resolve();
-      }
+      // 给 StrictMode cleanup 留出取消点，避免首轮 effect 启动重复分项请求
+      await Promise.resolve();
 
       if (cancelled) return;
-
-      if (!availability.isComplete) {
-        await loadFallbackBatches(availability);
-      }
+      await loadFallbackBatches(availability);
 
       if (cancelled) return;
       cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();

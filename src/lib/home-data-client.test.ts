@@ -2,7 +2,6 @@ import {
   createHomeDataSnapshot,
   createHomeErrorState,
   createHomeLoadingState,
-  mergeHomeData,
   patchHomeData,
   patchHomeLoadingState,
 } from './home-data-client';
@@ -14,11 +13,6 @@ const item = {
   poster: '',
   rate: '',
   year: '2026',
-};
-
-const bangumiItem = {
-  weekday: { en: 'Mon', cn: '周一', ja: '月' },
-  items: [],
 };
 
 function createHomeData(overrides: Partial<HomeData> = {}): HomeData {
@@ -71,28 +65,6 @@ describe('home data client helpers', () => {
       tertiary: false,
       tv: false,
       variety: false,
-    });
-  });
-
-  it('merges only non-empty incoming sections into current home data', () => {
-    const current = createHomeData({
-      hotMovies: [{ ...item, id: 'movie-current' }],
-      hotTvShows: [{ ...item, id: 'tv-current' }],
-      hotVarietyShows: [{ ...item, id: 'show-current' }],
-      bangumiCalendarData: [bangumiItem],
-    });
-    const incoming = createHomeData({
-      hotMovies: [{ ...item, id: 'movie-incoming' }],
-      hotTvShows: [],
-      hotVarietyShows: [{ ...item, id: 'show-incoming' }],
-      bangumiCalendarData: [],
-    });
-
-    expect(mergeHomeData(current, incoming)).toEqual({
-      hotMovies: [{ ...item, id: 'movie-incoming' }],
-      hotTvShows: [{ ...item, id: 'tv-current' }],
-      hotVarietyShows: [{ ...item, id: 'show-incoming' }],
-      bangumiCalendarData: [bangumiItem],
     });
   });
 

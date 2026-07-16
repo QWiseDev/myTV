@@ -1,19 +1,11 @@
+import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
+
 import {
   clearServerHomeDataMemoryCache,
-  getServerHomeData,
   getServerInitialHomeData,
 } from './home-data.server';
 
-const mockGetCache = jest.fn();
-const mockSetCache = jest.fn();
 const mockFetchDoubanData = jest.fn();
-
-jest.mock('@/lib/db', () => ({
-  db: {
-    getCache: (...args: unknown[]) => mockGetCache(...args),
-    setCache: (...args: unknown[]) => mockSetCache(...args),
-  },
-}));
 
 jest.mock('@/lib/douban', () => ({
   fetchDoubanData: (...args: unknown[]) => mockFetchDoubanData(...args),
@@ -27,11 +19,6 @@ const movieItem = {
   year: '2026',
 };
 
-const bangumiDay = {
-  weekday: { en: 'Mon', cn: '周一', ja: '月' },
-  items: [],
-};
-
 const partialHomeData = {
   hotMovies: [movieItem],
   hotTvShows: [],
@@ -39,19 +26,12 @@ const partialHomeData = {
   bangumiCalendarData: [],
 };
 
-const completeHomeData = {
-  hotMovies: [movieItem],
-  hotTvShows: [{ ...movieItem, id: 'tv1', title: '剧集' }],
-  hotVarietyShows: [{ ...movieItem, id: 'show1', title: '综艺' }],
-  bangumiCalendarData: [bangumiDay],
-};
-
-function createDoubanResponse() {
+function createDoubanResponse(title = '电影') {
   return {
     items: [
       {
         id: 'm1',
-        title: '电影',
+        title,
         pic: { normal: 'https://img.example/m1.jpg' },
         rating: { value: 8 },
         card_subtitle: '2026 / 中国大陆',
@@ -69,250 +49,106 @@ function createDeferred<T>() {
 }
 
 describe('home data server cache', () => {
-  const originalFetch = global.fetch;
-
   beforeEach(() => {
     clearServerHomeDataMemoryCache();
-    mockGetCache.mockReset();
-    mockSetCache.mockReset();
     mockFetchDoubanData.mockReset();
-    mockSetCache.mockResolvedValue(undefined);
     mockFetchDoubanData.mockResolvedValue(createDoubanResponse());
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [bangumiDay],
-    }) as unknown as typeof fetch;
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    global.fetch = originalFetch;
-  });
-
-  it('returns complete database cache to initial and full readers', async () => {
-    mockGetCache.mockResolvedValue(completeHomeData);
-
-    const initial = await getServerInitialHomeData();
-    const full = await getServerHomeData();
-
-    expect(initial).toEqual(completeHomeData);
-    expect(full).toEqual(completeHomeData);
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
-    expect(mockFetchDoubanData).not.toHaveBeenCalled();
-    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('loads only critical movies for a cold initial request', async () => {
-    mockGetCache.mockResolvedValue(null);
-
-    const first = await getServerInitialHomeData();
-    const second = await getServerInitialHomeData();
-
-    expect(first).toEqual(partialHomeData);
-    expect(second).toEqual(partialHomeData);
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(mockSetCache).not.toHaveBeenCalled();
-  });
-
-  it('falls back to critical movies when initial database lookup exceeds its deadline', async () => {
-    jest.useFakeTimers();
-    mockGetCache.mockReturnValue(new Promise(() => undefined));
-
-    const pending = getServerInitialHomeData();
-    await Promise.resolve();
-
-    expect(mockFetchDoubanData).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(500);
-    const data = await pending;
+    const data = await getServerInitialHomeData();
 
     expect(data).toEqual(partialHomeData);
     expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
-    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('reuses initial critical movies when loading the full aggregate', async () => {
-    mockGetCache.mockResolvedValue(null);
+  it('reuses critical movies from memory for sequential initial requests', async () => {
+    const first = await getServerInitialHomeData();
+    const second = await getServerInitialHomeData();
 
-    const initial = await getServerInitialHomeData();
-    const full = await getServerHomeData();
-
-    expect(initial.hotMovies).toHaveLength(1);
-    expect(full.hotMovies).toHaveLength(1);
-    expect(full.hotTvShows).toHaveLength(1);
-    expect(full.hotVarietyShows).toHaveLength(1);
-    expect(full.bangumiCalendarData).toHaveLength(1);
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
-    // initial 一次电影；full 只补 TV/综艺，不能重复拉电影
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(3);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(mockSetCache).toHaveBeenCalledTimes(1);
-  });
-
-  it('shares the critical movie request between concurrent initial and full readers', async () => {
-    mockGetCache.mockResolvedValue(null);
-
-    const [initial, full] = await Promise.all([
-      getServerInitialHomeData(),
-      getServerHomeData(),
-    ]);
-
-    expect(initial.hotMovies).toHaveLength(1);
-    expect(full.hotMovies).toHaveLength(1);
-    expect(mockGetCache).toHaveBeenCalledTimes(2);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(3);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns initial movies without waiting for a delayed Bangumi response', async () => {
-    mockGetCache.mockResolvedValue(null);
-    const delayedBangumi = createDeferred<{
-      ok: boolean;
-      json: () => Promise<(typeof bangumiDay)[]>;
-    }>();
-    global.fetch = jest
-      .fn()
-      .mockReturnValue(delayedBangumi.promise) as unknown as typeof fetch;
-    let fullSettled = false;
-
-    const initialPromise = getServerInitialHomeData();
-    const fullPromise = getServerHomeData().finally(() => {
-      fullSettled = true;
-    });
-
-    const initial = await initialPromise;
-
-    expect(initial).toEqual(partialHomeData);
-    expect(fullSettled).toBe(false);
-
-    delayedBangumi.resolve({
-      ok: true,
-      json: async () => [bangumiDay],
-    });
-
-    const full = await fullPromise;
-    expect(full.bangumiCalendarData).toHaveLength(1);
-  });
-
-  it('prefers a newer full memory result over a delayed initial database result', async () => {
-    const delayedInitialCache = createDeferred<typeof completeHomeData>();
-    mockGetCache
-      .mockReturnValueOnce(delayedInitialCache.promise)
-      .mockResolvedValueOnce(null);
-
-    const initialPromise = getServerInitialHomeData();
-    await Promise.resolve();
-
-    const full = await getServerHomeData();
-    delayedInitialCache.resolve({
-      ...completeHomeData,
-      hotMovies: [{ ...movieItem, title: '旧缓存电影' }],
-    });
-
-    const initial = await initialPromise;
-
-    expect(initial).toEqual(full);
-    expect(initial.hotMovies[0].title).toBe('电影');
-  });
-
-  it('returns concurrent complete memory when a fresh full request is partial', async () => {
-    const delayedMovies =
-      createDeferred<ReturnType<typeof createDoubanResponse>>();
-    mockGetCache
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(completeHomeData);
-    mockFetchDoubanData
-      .mockReturnValueOnce(delayedMovies.promise)
-      .mockResolvedValue({ items: [] });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [],
-    }) as unknown as typeof fetch;
-
-    const fullPromise = getServerHomeData();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const initial = await getServerInitialHomeData();
-    delayedMovies.resolve(createDoubanResponse());
-    const full = await fullPromise;
-
-    expect(initial).toEqual(completeHomeData);
-    expect(full).toEqual(completeHomeData);
-  });
-
-  it('merges concurrent full requests and writes complete data once', async () => {
-    mockGetCache.mockResolvedValue(null);
-
-    const [first, second] = await Promise.all([
-      getServerHomeData(),
-      getServerHomeData(),
-    ]);
-
-    expect(first.hotMovies).toHaveLength(1);
     expect(second).toEqual(first);
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(3);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(mockSetCache).toHaveBeenCalledTimes(1);
-    expect(mockSetCache).toHaveBeenCalledWith('home:aggregate-v1', first, 300);
+    expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects partial database cache and replaces it with a complete aggregate', async () => {
-    mockGetCache.mockResolvedValue(partialHomeData);
+  it('shares one critical request between concurrent initial readers', async () => {
+    const deferred = createDeferred<ReturnType<typeof createDoubanResponse>>();
+    mockFetchDoubanData.mockReturnValue(deferred.promise);
 
-    const data = await getServerHomeData();
+    const firstPromise = getServerInitialHomeData();
+    const secondPromise = getServerInitialHomeData();
 
-    expect(data.hotMovies).toHaveLength(1);
-    expect(data.hotTvShows).toHaveLength(1);
-    expect(data.hotVarietyShows).toHaveLength(1);
-    expect(data.bangumiCalendarData).toHaveLength(1);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(3);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(mockSetCache).toHaveBeenCalledTimes(1);
+    expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
+    deferred.resolve(createDoubanResponse());
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(second).toEqual(first);
   });
 
-  it('does not cache a partial fresh aggregate', async () => {
-    mockGetCache.mockResolvedValue(null);
+  it('does not cache an empty failed critical result', async () => {
     mockFetchDoubanData
-      .mockResolvedValueOnce(createDoubanResponse())
-      .mockResolvedValue({ items: [] });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [],
-    }) as unknown as typeof fetch;
+      .mockRejectedValueOnce(new Error('upstream failed'))
+      .mockResolvedValueOnce(createDoubanResponse());
 
-    const first = await getServerHomeData();
-    const second = await getServerHomeData();
+    const failed = await getServerInitialHomeData();
+    const retried = await getServerInitialHomeData();
 
-    expect(first).toEqual(partialHomeData);
-    expect(second).toEqual(partialHomeData);
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
-    // 电影进入独立 critical 缓存；两轮 full 各重试 TV/综艺
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(5);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(mockSetCache).not.toHaveBeenCalled();
+    expect(failed.hotMovies).toEqual([]);
+    expect(retried).toEqual(partialHomeData);
+    expect(mockFetchDoubanData).toHaveBeenCalledTimes(2);
   });
 
-  it('starts the full aggregate when database lookup exceeds its deadline', async () => {
+  it('aborts a critical request after its deadline', async () => {
     jest.useFakeTimers();
-    mockGetCache.mockReturnValue(new Promise(() => undefined));
+    let requestSignal: AbortSignal | undefined;
+    mockFetchDoubanData.mockImplementation(
+      (_target: unknown, signal?: AbortSignal) => {
+        requestSignal = signal;
+        return new Promise((_, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new Error('aborted')),
+            { once: true },
+          );
+        });
+      },
+    );
 
-    const pending = getServerHomeData();
+    const pending = getServerInitialHomeData();
     await Promise.resolve();
+    jest.advanceTimersByTime(DATA_FETCH_TIMEOUTS.CRITICAL);
 
-    expect(mockFetchDoubanData).not.toHaveBeenCalled();
+    await expect(pending).resolves.toEqual({
+      hotMovies: [],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [],
+    });
+    expect(requestSignal?.aborted).toBe(true);
+  });
 
-    jest.advanceTimersByTime(500);
-    const data = await pending;
+  it('does not let an older request repopulate a cleared cache', async () => {
+    const older = createDeferred<ReturnType<typeof createDoubanResponse>>();
+    const newer = createDeferred<ReturnType<typeof createDoubanResponse>>();
+    mockFetchDoubanData
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
 
-    expect(data.hotMovies).toHaveLength(1);
-    expect(data.hotTvShows).toHaveLength(1);
-    expect(data.hotVarietyShows).toHaveLength(1);
-    expect(data.bangumiCalendarData).toHaveLength(1);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(3);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const olderRequest = getServerInitialHomeData();
+    clearServerHomeDataMemoryCache();
+    const newerRequest = getServerInitialHomeData();
+
+    newer.resolve(createDoubanResponse('新缓存电影'));
+    const newerData = await newerRequest;
+    older.resolve(createDoubanResponse('旧请求电影'));
+    await olderRequest;
+
+    const cached = await getServerInitialHomeData();
+    expect(cached).toEqual(newerData);
+    expect(cached.hotMovies[0].title).toBe('新缓存电影');
+    expect(mockFetchDoubanData).toHaveBeenCalledTimes(2);
   });
 });

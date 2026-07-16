@@ -1,5 +1,3 @@
-import { EMPTY_HOME_DATA } from './home-data-types';
-
 const mockFetchBangumiCalendarData = jest.fn();
 const mockGetDoubanCategories = jest.fn();
 
@@ -13,7 +11,6 @@ jest.mock('@/lib/douban.client', () => ({
 
 let loadSecondaryData: typeof import('./home-data-loader').loadSecondaryData;
 let loadCriticalData: typeof import('./home-data-loader').loadCriticalData;
-let loadHomeDataFromApi: typeof import('./home-data-loader').loadHomeDataFromApi;
 let loadTertiaryData: typeof import('./home-data-loader').loadTertiaryData;
 
 const item = {
@@ -24,26 +21,10 @@ const item = {
   year: '2026',
 };
 
-const completeHomeData = {
-  hotMovies: [item],
-  hotTvShows: [{ ...item, id: 'tv1' }],
-  hotVarietyShows: [{ ...item, id: 'show1' }],
-  bangumiCalendarData: [
-    {
-      weekday: { en: 'Mon', cn: '周一', ja: '月' },
-      items: [],
-    },
-  ],
-};
-
 describe('home-data-loader', () => {
   beforeAll(async () => {
-    ({
-      loadCriticalData,
-      loadHomeDataFromApi,
-      loadSecondaryData,
-      loadTertiaryData,
-    } = await import('./home-data-loader'));
+    ({ loadCriticalData, loadSecondaryData, loadTertiaryData } =
+      await import('./home-data-loader'));
   });
 
   beforeEach(() => {
@@ -54,29 +35,6 @@ describe('home-data-loader', () => {
       code: 200,
       list: [],
     });
-  });
-
-  it('normalizes aggregate transport and parsing failures to empty data', async () => {
-    const originalFetch = global.fetch;
-    global.fetch = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('network failed'))
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => {
-          throw new Error('invalid json');
-        },
-      })
-      .mockResolvedValueOnce({ ok: false }) as unknown as typeof fetch;
-
-    try {
-      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
-      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
-      await expect(loadHomeDataFromApi()).resolves.toEqual(EMPTY_HOME_DATA);
-      expect(global.fetch).toHaveBeenCalledTimes(3);
-    } finally {
-      global.fetch = originalFetch;
-    }
   });
 
   it('requests only the selected secondary section', async () => {
@@ -137,33 +95,6 @@ describe('home-data-loader', () => {
       ok: true,
       data: [],
     });
-  });
-
-  it('keeps only a complete aggregate in the client memory cache', async () => {
-    const originalFetch = global.fetch;
-    let responseData: typeof completeHomeData = {
-      ...completeHomeData,
-      hotTvShows: [],
-      hotVarietyShows: [],
-      bangumiCalendarData: [],
-    };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => responseData,
-    }) as unknown as typeof fetch;
-
-    try {
-      await loadHomeDataFromApi();
-      await loadHomeDataFromApi();
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-
-      responseData = completeHomeData;
-      await loadHomeDataFromApi();
-      await loadHomeDataFromApi();
-      expect(global.fetch).toHaveBeenCalledTimes(3);
-    } finally {
-      global.fetch = originalFetch;
-    }
   });
 });
 

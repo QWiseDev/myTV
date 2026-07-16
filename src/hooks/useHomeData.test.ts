@@ -4,17 +4,21 @@ import { type ReactNode, createElement, StrictMode } from 'react';
 import { type HomeData, EMPTY_HOME_DATA } from '@/lib/home-data-types';
 
 const mockLoadCriticalData = jest.fn();
-const mockLoadHomeDataFromApi = jest.fn();
 const mockLoadSecondaryData = jest.fn();
 const mockLoadTertiaryData = jest.fn();
+const mockScheduleIdleTask = jest.fn();
 const mockCancelWatchingUpdatesCheck = jest.fn();
 const mockScheduleWatchingUpdatesCheck = jest.fn();
+const mockScheduledIdleTasks: Array<() => void> = [];
 
 jest.mock('@/lib/home-data-loader', () => ({
   loadCriticalData: mockLoadCriticalData,
-  loadHomeDataFromApi: mockLoadHomeDataFromApi,
   loadSecondaryData: mockLoadSecondaryData,
   loadTertiaryData: mockLoadTertiaryData,
+}));
+
+jest.mock('@/lib/browser-scheduler', () => ({
+  scheduleIdleTask: mockScheduleIdleTask,
 }));
 
 jest.mock('@/hooks/useWatchingUpdatesRefresh', () => ({
@@ -78,7 +82,6 @@ describe('useHomeData', () => {
 
   beforeEach(() => {
     mockLoadCriticalData.mockReset();
-    mockLoadHomeDataFromApi.mockReset();
     mockLoadSecondaryData.mockReset();
     mockLoadTertiaryData.mockReset();
     mockLoadCriticalData.mockResolvedValue({ ok: true, data: [] });
@@ -87,12 +90,17 @@ describe('useHomeData', () => {
       hotVarietyShows: { ok: true, data: [] },
     });
     mockLoadTertiaryData.mockResolvedValue({ ok: true, data: [] });
+    mockScheduledIdleTasks.length = 0;
+    mockScheduleIdleTask.mockReset();
+    mockScheduleIdleTask.mockImplementation((callback: () => void) => {
+      mockScheduledIdleTasks.push(callback);
+      return jest.fn();
+    });
     mockCancelWatchingUpdatesCheck.mockReset();
     mockScheduleWatchingUpdatesCheck.mockReset();
     mockScheduleWatchingUpdatesCheck.mockReturnValue(
       mockCancelWatchingUpdatesCheck,
     );
-    mockLoadHomeDataFromApi.mockResolvedValue(EMPTY_HOME_DATA);
   });
 
   it('cancels a scheduled watching update check on unmount', () => {
@@ -146,31 +154,6 @@ describe('useHomeData', () => {
       tvLoading: false,
       varietyLoading: false,
     });
-    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
-    expect(mockLoadCriticalData).not.toHaveBeenCalled();
-    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
-    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
-  });
-
-  it('does not let an older aggregate response overwrite a new complete snapshot', async () => {
-    const staleApiData = createCompleteHomeData('stale-api');
-    const refreshedInitialData = createCompleteHomeData('refreshed');
-    const deferredApi = createDeferred<typeof staleApiData>();
-    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
-    const { result, rerender } = renderHomeDataHook(EMPTY_HOME_DATA);
-
-    await waitFor(() => {
-      expect(mockLoadHomeDataFromApi).toHaveBeenCalledTimes(1);
-    });
-
-    rerender({ initialData: refreshedInitialData });
-
-    await act(async () => {
-      deferredApi.resolve(staleApiData);
-      await deferredApi.promise;
-    });
-
-    expect(result.current.homeData).toEqual(refreshedInitialData);
     expect(mockLoadCriticalData).not.toHaveBeenCalled();
     expect(mockLoadSecondaryData).not.toHaveBeenCalled();
     expect(mockLoadTertiaryData).not.toHaveBeenCalled();
@@ -207,7 +190,6 @@ describe('useHomeData', () => {
     });
 
     expect(result.current.homeData).toEqual(refreshedInitialData);
-    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
     expect(mockLoadCriticalData).not.toHaveBeenCalled();
     expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
@@ -294,8 +276,6 @@ describe('useHomeData', () => {
         signal: expect.any(AbortSignal),
       });
     });
-    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
-
     await act(async () => {
       deferredSecondary.resolve(secondaryData);
       await deferredSecondary.promise;
@@ -316,15 +296,19 @@ describe('useHomeData', () => {
     expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
 
-  it('keeps the aggregate loader as the fallback for an empty initial snapshot', async () => {
-    const apiData = {
-      hotMovies: [item],
-      hotTvShows: [{ ...item, id: 'tv-api' }],
-      hotVarietyShows: [{ ...item, id: 'show-api' }],
-      bangumiCalendarData: [bangumiDay],
-    };
-    const deferredApi = createDeferred<typeof apiData>();
-    mockLoadHomeDataFromApi.mockReturnValue(deferredApi.promise);
+  it('loads every missing section directly from an empty initial snapshot', async () => {
+    const movies = [{ ...item, id: 'movie-direct' }];
+    const tvShows = [{ ...item, id: 'tv-direct' }];
+    const varietyShows = [{ ...item, id: 'show-direct' }];
+    mockLoadCriticalData.mockResolvedValue({ ok: true, data: movies });
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { ok: true, data: tvShows },
+      hotVarietyShows: { ok: true, data: varietyShows },
+    });
+    mockLoadTertiaryData.mockResolvedValue({
+      ok: true,
+      data: [bangumiDay],
+    });
 
     const { result } = renderHook(() =>
       useHomeData({
@@ -335,18 +319,28 @@ describe('useHomeData', () => {
     );
 
     await waitFor(() => {
-      expect(mockLoadHomeDataFromApi).toHaveBeenCalledTimes(1);
+      expect(mockLoadCriticalData).toHaveBeenCalledTimes(1);
+      expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
     });
-    expect(mockLoadCriticalData).not.toHaveBeenCalled();
-    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
-
-    await act(async () => {
-      deferredApi.resolve(apiData);
-      await deferredApi.promise;
+    expect(mockLoadSecondaryData).toHaveBeenCalledWith({
+      loadTvShows: true,
+      loadVarietyShows: true,
+      signal: expect.any(AbortSignal),
     });
+    expect(mockScheduleIdleTask).toHaveBeenCalledTimes(1);
+    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(result.current.homeData).toEqual(apiData);
+      expect(result.current.homeData.hotMovies).toEqual(movies);
+      expect(result.current.homeData.hotTvShows).toEqual(tvShows);
+      expect(result.current.homeData.hotVarietyShows).toEqual(varietyShows);
+    });
+
+    act(() => mockScheduledIdleTasks[0]());
+
+    await waitFor(() => {
+      expect(mockLoadTertiaryData).toHaveBeenCalledTimes(1);
+      expect(result.current.homeData.bangumiCalendarData).toEqual([bangumiDay]);
       expect(result.current.loading).toEqual({
         criticalLoading: false,
         tertiaryLoading: false,
@@ -354,9 +348,6 @@ describe('useHomeData', () => {
         varietyLoading: false,
       });
     });
-    expect(mockLoadCriticalData).not.toHaveBeenCalled();
-    expect(mockLoadSecondaryData).not.toHaveBeenCalled();
-    expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
 
   it('does not start fallback work from a cancelled StrictMode effect', async () => {
@@ -387,7 +378,28 @@ describe('useHomeData', () => {
       expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
       expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
     });
-    expect(mockLoadHomeDataFromApi).not.toHaveBeenCalled();
+  });
+
+  it('starts each direct fallback batch once for an empty StrictMode snapshot', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StrictMode, null, children);
+
+    renderHook(
+      () =>
+        useHomeData({
+          activeTab: 'home',
+          refreshWatchingUpdates: jest.fn(),
+          initialData: EMPTY_HOME_DATA,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mockLoadCriticalData).toHaveBeenCalledTimes(1);
+      expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+      expect(mockScheduleIdleTask).toHaveBeenCalledTimes(1);
+      expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('keeps sibling data and exposes only the failed secondary section', async () => {

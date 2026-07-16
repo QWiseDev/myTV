@@ -15,10 +15,6 @@ export type HomeSectionKey = 'critical' | 'tv' | 'variety' | 'tertiary';
 
 export type HomeErrorState = Record<HomeSectionKey, boolean>;
 
-function preferNonEmptyArray<T>(incoming: T[], current: T[]): T[] {
-  return incoming.length ? incoming : current;
-}
-
 export function createHomeDataSnapshot(initialData?: HomeData): HomeData {
   return {
     hotMovies: initialData?.hotMovies || EMPTY_HOME_DATA.hotMovies,
@@ -49,21 +45,6 @@ export function createHomeErrorState(): HomeErrorState {
     tertiary: false,
     tv: false,
     variety: false,
-  };
-}
-
-export function mergeHomeData(current: HomeData, incoming: HomeData): HomeData {
-  return {
-    hotMovies: preferNonEmptyArray(incoming.hotMovies, current.hotMovies),
-    hotTvShows: preferNonEmptyArray(incoming.hotTvShows, current.hotTvShows),
-    hotVarietyShows: preferNonEmptyArray(
-      incoming.hotVarietyShows,
-      current.hotVarietyShows,
-    ),
-    bangumiCalendarData: preferNonEmptyArray(
-      incoming.bangumiCalendarData,
-      current.bangumiCalendarData,
-    ),
   };
 }
 

@@ -46,9 +46,3 @@ export function getHomeDataAvailability(
     isComplete: hasCriticalData && hasSecondaryData && hasTertiaryData,
   };
 }
-
-export function hasHomeData(
-  data: HomeData | null | undefined,
-): data is HomeData {
-  return getHomeDataAvailability(data).hasAnyData;
-}

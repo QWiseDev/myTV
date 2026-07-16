@@ -19,30 +19,30 @@ total_findings: 11
 
 ## 发现清单
 
-| # | 性质 | 严重度 | 置信度 | 标题 | 文件 |
-|---|---|---|---|---|---|
-| 1 | bug | P1 | high | 追更刷新在两种存储模式下都可能长期陈旧 | [finding-01.md](finding-01.md) |
-| 2 | bug | P1 | high | 清空收藏失败仍可能把页面清成空态 | [finding-02.md](finding-02.md) |
-| 3 | bug | P1 | high | 加载骨架被动画容器包成纵向单列 | [finding-03.md](finding-03.md) |
-| 4 | bug | P1 | high | 封面 fallback 耗尽后显示坏图并在菜单重复失败 | [finding-04.md](finding-04.md) |
-| 5 | bug | P2 | high | 热门区块失败被伪装成真实空数据 | [finding-05.md](finding-05.md) |
-| 6 | performance | P2 | high | 完整聚合缓存退出正常首页成功链路 | [finding-06.md](finding-06.md) |
-| 7 | performance | P2 | high | 客户端分项超时不取消底层请求 | [finding-07.md](finding-07.md) |
-| 8 | performance | P2 | high | 动画 wrapper 的 index key 让排序重挂卡片 | [finding-08.md](finding-08.md) |
-| 9 | performance | P2 | high | 数据库模式前台切换会高频读取追更 API | [finding-09.md](finding-09.md) |
-| 10 | maintainability | P2 | high | 首页数据上下文与追更模块保留无消费者补丁路径 | [finding-10.md](finding-10.md) |
-| 11 | bug | P1 | high | 主 cron 可能覆盖或复活用户播放记录 | [finding-11.md](finding-11.md) |
+| #   | 性质            | 严重度 | 置信度 | 标题                                         | 文件                           |
+| --- | --------------- | ------ | ------ | -------------------------------------------- | ------------------------------ |
+| 1   | bug             | P1     | high   | 追更刷新在两种存储模式下都可能长期陈旧       | [finding-01.md](finding-01.md) |
+| 2   | bug             | P1     | high   | 清空收藏失败仍可能把页面清成空态             | [finding-02.md](finding-02.md) |
+| 3   | bug             | P1     | high   | 加载骨架被动画容器包成纵向单列               | [finding-03.md](finding-03.md) |
+| 4   | bug             | P1     | high   | 封面 fallback 耗尽后显示坏图并在菜单重复失败 | [finding-04.md](finding-04.md) |
+| 5   | bug             | P2     | high   | 热门区块失败被伪装成真实空数据               | [finding-05.md](finding-05.md) |
+| 6   | maintainability | P2     | high   | 完整聚合缓存退出正常首页成功链路             | [finding-06.md](finding-06.md) |
+| 7   | performance     | P2     | high   | 客户端分项超时不取消底层请求                 | [finding-07.md](finding-07.md) |
+| 8   | performance     | P2     | high   | 动画 wrapper 的 index key 让排序重挂卡片     | [finding-08.md](finding-08.md) |
+| 9   | performance     | P2     | high   | 数据库模式前台切换会高频读取追更 API         | [finding-09.md](finding-09.md) |
+| 10  | maintainability | P2     | high   | 首页数据上下文与追更模块保留无消费者补丁路径 | [finding-10.md](finding-10.md) |
+| 11  | bug             | P1     | high   | 主 cron 可能覆盖或复活用户播放记录           | [finding-11.md](finding-11.md) |
 
 ## 按维度分布
 
-| 性质 | P0 | P1 | P2 | 合计 |
-|---|---|---|---|---|
-| bug | 0 | 5 | 1 | 6 |
-| security | 0 | 0 | 0 | 0 |
-| performance | 0 | 0 | 3 | 3 |
-| maintainability | 0 | 0 | 2 | 2 |
-| arch-drift | 0 | 0 | 0 | 0 |
-| **合计** | **0** | **5** | **6** | **11** |
+| 性质            | P0    | P1    | P2    | 合计   |
+| --------------- | ----- | ----- | ----- | ------ |
+| bug             | 0     | 5     | 1     | 6      |
+| security        | 0     | 0     | 0     | 0      |
+| performance     | 0     | 0     | 2     | 2      |
+| maintainability | 0     | 0     | 3     | 3      |
+| arch-drift      | 0     | 0     | 0     | 0      |
+| **合计**        | **0** | **5** | **6** | **11** |
 
 ## 修复进展
 
@@ -50,8 +50,9 @@ total_findings: 11
 - **#2 resolved**：收藏 DELETE 成功后才发布空缓存；DELETE 与补偿 GET 同时失败时仍保留旧缓存和 UI。
 - **#3 resolved**：loading 时关闭卡片动画；真实 `ScrollableRow → SkeletonRow` 组合验证骨架直接展开为横向卡片。
 - **#4 resolved**：普通外图和豆瓣代理链统一以 `/logo.svg` 收尾；操作菜单复用卡片当前 fallback 图片。
-- **#5 resolved**：聚合失败返回 502；四个首页内容区分成功空数据与失败，支持独立重试并在失败时保留已有数据。
-- **#7 resolved**：分项 timeout、effect cleanup 和单区重试统一透传 `AbortSignal` 到 Douban/Bangumi 上游；共享 aggregate inflight 不受单消费者取消影响。
+- **#5 resolved**：四个首页内容区分成功空数据与失败，支持独立重试并在失败时保留已有数据；过渡期 aggregate 错误响应随后由 #6 连 route 一并删除。
+- **#6 resolved**：删除退出正常成功链路的完整 aggregate/API/Redis/CDN/client cache 双路径；空首屏统一按区块补载，StrictMode 每批最多启动一次；全量门禁与真实首页验收通过。
+- **#7 resolved**：分项 timeout、effect cleanup 和单区重试统一透传 `AbortSignal` 到 Douban/Bangumi 上游；#6 删除共享 aggregate 后，首页只剩可按 effect 取消的分项请求。
 - **#8 resolved**：动画 wrapper 使用业务 key，并保持跨 `maxAnimatedItems` 边界的 wrapper 类型稳定；重排不再卸载卡片。
 - **#9 resolved**：idle/visibility 普通检查统一为 30 分钟成功间隔；强制失效仍绕过节流，失败可重试，卸载后不再回写或重检。
 - **#10 resolved**：删除播放记录无消费者 refresh API、空 listener/debug 通道和镜像布尔状态，只保留真实 Context 与 DOM event 契约。
@@ -60,7 +61,7 @@ total_findings: 11
 ## 下一步建议
 
 - **P1 已完成**：#1、#2、#3、#4、#11 均已修复并通过全量测试、类型检查、production build 与浏览器冒烟。
-- **P2 唯一未关闭项**：#6 恢复聚合缓存写入会重新引入 Bangumi 阻塞 TV/综艺的风险，必须用独立时序测试和独立提交验证；若无法同时守住完整缓存与首显时延，应删除冗余聚合层而不是恢复串行等待。
+- **P2 已完成**：#5—#10 均已关闭；第三轮 11 条 finding 已全部完成。
 
 ## 范围外线索
 

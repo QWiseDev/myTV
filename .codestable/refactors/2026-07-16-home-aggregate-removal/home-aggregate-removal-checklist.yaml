@@ -1,0 +1,32 @@
+refactor: 2026-07-16-home-aggregate-removal
+status: done
+steps:
+  - id: characterization-tests
+    title: 固化 empty 与 StrictMode 请求时序
+    status: done
+    verify: 旧实现 2 tests failed，改动后定向 Jest 通过
+  - id: unified-client-fallback
+    title: 统一客户端 incomplete 分项补载
+    status: done
+    verify: hook empty、critical-only 与 StrictMode 测试通过
+  - id: remove-server-aggregate
+    title: 删除完整聚合 route/cache/loader
+    status: done
+    verify: aggregate 符号零残留，server/loader/page 测试与 typecheck 通过
+  - id: full-verification
+    title: 完整回归与运行态复验
+    status: done
+    verify: Jest、ESLint、typecheck、build、Redis 与浏览器验收
+checks:
+  - id: no-aggregate-path
+    title: src 中不再存在完整 aggregate 调用与缓存符号
+    status: passed
+  - id: fallback-order
+    title: TV/综艺不等待 Bangumi 且空首屏可补全
+    status: passed
+  - id: strict-mode-singleflight
+    title: StrictMode 每个分项最多启动一次
+    status: passed
+  - id: full-quality-gates
+    title: 完整质量门禁和真实页面验收通过
+    status: passed

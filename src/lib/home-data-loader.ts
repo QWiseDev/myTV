@@ -8,23 +8,8 @@ import {
 } from '@/lib/bangumi.client';
 import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
 import { getDoubanCategories } from '@/lib/douban.client';
-import {
-  type HomeData,
-  EMPTY_HOME_DATA,
-  getHomeDataAvailability,
-} from '@/lib/home-data-types';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import type { DoubanItem } from '@/lib/types';
-
-const CLIENT_HOME_DATA_TTL_MS = 60_000;
-
-type ClientHomeDataCache = {
-  data: HomeData;
-  expireAt: number;
-};
-
-let clientHomeDataCache: ClientHomeDataCache | null = null;
-let inflightClientHomeData: Promise<HomeData> | null = null;
 
 export type HomeLoadResult<T> =
   | { ok: true; data: T }
@@ -61,66 +46,6 @@ async function loadDoubanSection(
     timeoutMs,
     parentSignal,
   );
-}
-
-function readClientHomeDataCache(): HomeData | null {
-  if (!clientHomeDataCache) return null;
-  if (Date.now() >= clientHomeDataCache.expireAt) {
-    clientHomeDataCache = null;
-    return null;
-  }
-  return clientHomeDataCache.data;
-}
-
-function writeClientHomeDataCache(data: HomeData): void {
-  if (!getHomeDataAvailability(data).isComplete) return;
-  clientHomeDataCache = {
-    data,
-    expireAt: Date.now() + CLIENT_HOME_DATA_TTL_MS,
-  };
-}
-
-export async function loadHomeDataFromApi(): Promise<HomeData> {
-  const cached = readClientHomeDataCache();
-  if (cached) {
-    return cached;
-  }
-
-  if (inflightClientHomeData) {
-    return inflightClientHomeData;
-  }
-
-  inflightClientHomeData = (async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      DATA_FETCH_TIMEOUTS.AGGREGATE,
-    );
-
-    try {
-      const response = await fetch('/api/home', {
-        signal: controller.signal,
-        cache: 'default',
-      });
-      if (!response.ok) {
-        return EMPTY_HOME_DATA;
-      }
-
-      const data = (await response.json()) as HomeData;
-      writeClientHomeDataCache(data);
-      return data;
-    } catch {
-      return EMPTY_HOME_DATA;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  })();
-
-  try {
-    return await inflightClientHomeData;
-  } finally {
-    inflightClientHomeData = null;
-  }
 }
 
 /**
