@@ -11,6 +11,8 @@ import {
 
 import AnimatedCardGrid from '@/components/AnimatedCardGrid';
 
+const SCROLL_CONTROLS_MEDIA_QUERY = '(min-width: 640px)';
+
 interface ScrollableRowProps {
   children: React.ReactNode;
   scrollDistance?: number;
@@ -20,7 +22,7 @@ interface ScrollableRowProps {
 function canUseScrollControls(): boolean {
   return (
     typeof window !== 'undefined' &&
-    window.matchMedia('(min-width: 640px)').matches
+    window.matchMedia(SCROLL_CONTROLS_MEDIA_QUERY).matches
   );
 }
 
@@ -43,7 +45,7 @@ function ScrollNavButton({
 
   return (
     <div
-      className={`hidden sm:flex absolute ${isLeft ? 'left-0' : 'right-0'} top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 ${
+      className={`hidden sm:flex absolute ${isLeft ? 'left-0' : 'right-0'} top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 focus-within:opacity-100 ${
         isHovered ? 'opacity-100' : 'opacity-0'
       }`}
       style={{
@@ -62,6 +64,7 @@ function ScrollNavButton({
       >
         <button
           type='button'
+          aria-label={isLeft ? '向左滚动' : '向右滚动'}
           onClick={onClick}
           className='w-12 h-12 bg-white/95 rounded-full shadow-lg flex items-center justify-center hover:bg-white border border-gray-200 transition-transform hover:scale-105 dark:bg-gray-800/90 dark:hover:bg-gray-700 dark:border-gray-600'
         >
@@ -118,52 +121,53 @@ function ScrollableRow({
   const childrenCount = useMemo(() => Children.count(children), [children]);
 
   useEffect(() => {
-    if (!canUseScrollControls()) {
-      setShowLeftScroll(false);
-      setShowRightScroll(false);
-      return;
-    }
+    const mediaQuery = window.matchMedia(SCROLL_CONTROLS_MEDIA_QUERY);
 
-    // 延迟检查，确保内容已完全渲染
-    if (checkScrollTimeoutRef.current) {
-      clearTimeout(checkScrollTimeoutRef.current);
-      checkScrollTimeoutRef.current = null;
-    }
-    checkScrollTimeoutRef.current = setTimeout(() => {
-      checkScroll();
-    }, 100);
-
-    // 使用 ResizeObserver 监听容器大小变化
-    const resizeObserver = new ResizeObserver(() => {
-      // 使用防抖来减少不必要的检查
+    const clearScheduledCheck = () => {
       if (checkScrollTimeoutRef.current) {
         clearTimeout(checkScrollTimeoutRef.current);
         checkScrollTimeoutRef.current = null;
       }
-      checkScrollTimeoutRef.current = setTimeout(checkScroll, 100);
-    });
+    };
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
+    const scheduleCheck = () => {
+      clearScheduledCheck();
+      checkScrollTimeoutRef.current = setTimeout(checkScroll, 100);
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleCheck);
+
+    const syncScrollControls = () => {
+      if (!mediaQuery.matches) {
+        resizeObserver.disconnect();
+        clearScheduledCheck();
+        setShowLeftScroll(false);
+        setShowRightScroll(false);
+        return;
+      }
+
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current);
+      }
+      scheduleCheck();
+    };
+
+    mediaQuery.addEventListener('change', syncScrollControls);
+    syncScrollControls();
 
     return () => {
+      mediaQuery.removeEventListener('change', syncScrollControls);
       resizeObserver.disconnect();
-      if (checkScrollTimeoutRef.current) {
-        clearTimeout(checkScrollTimeoutRef.current);
-      }
+      clearScheduledCheck();
     };
   }, [childrenCount, checkScroll]);
 
-  const handleScrollBy = useCallback(
-    (distance: number) => {
-      containerRef.current?.scrollBy({
-        left: distance,
-        behavior: 'smooth',
-      });
-    },
-    [],
-  );
+  const handleScrollBy = useCallback((distance: number) => {
+    containerRef.current?.scrollBy({
+      left: distance,
+      behavior: 'smooth',
+    });
+  }, []);
 
   return (
     <div

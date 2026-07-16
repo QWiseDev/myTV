@@ -46,6 +46,7 @@ describe('FavoritesSection', () => {
         loadError={false}
         loading={false}
         onClearAll={jest.fn()}
+        onRetry={jest.fn()}
       />,
     );
 
@@ -68,6 +69,7 @@ describe('FavoritesSection', () => {
         loadError={false}
         loading={false}
         onClearAll={jest.fn()}
+        onRetry={jest.fn()}
       />,
     );
 
@@ -81,6 +83,7 @@ describe('FavoritesSection', () => {
         loadError={false}
         loading
         onClearAll={jest.fn()}
+        onRetry={jest.fn()}
       />,
     );
 
@@ -89,35 +92,45 @@ describe('FavoritesSection', () => {
   });
 
   it('shows a load error instead of treating it as an empty list', () => {
+    const onRetry = jest.fn();
     render(
       <FavoritesSection
         favoriteItems={[]}
         loadError
         loading={false}
         onClearAll={jest.fn()}
+        onRetry={onRetry}
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toBe(
-      '收藏加载失败，请稍后重试',
-    );
+    expect(screen.getByRole('alert').textContent).toContain('收藏加载失败');
     expect(screen.queryByText('收藏夹空空如也')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('keeps stale favorites visible when a refresh fails', () => {
+    const onRetry = jest.fn();
     render(
       <FavoritesSection
         favoriteItems={[favorite]}
         loadError
         loading={false}
         onClearAll={jest.fn()}
+        onRetry={onRetry}
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toBe(
+    expect(screen.getByRole('alert').textContent).toContain(
       '收藏刷新失败，当前显示已有内容',
     );
     expect(screen.getByText('测试剧集')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('clears storage before updating the local favorite state', async () => {
@@ -134,6 +147,7 @@ describe('FavoritesSection', () => {
         loadError={false}
         loading={false}
         onClearAll={onClearAll}
+        onRetry={jest.fn()}
       />,
     );
 
@@ -152,6 +166,7 @@ describe('FavoritesSection', () => {
         loadError={false}
         loading={false}
         onClearAll={onClearAll}
+        onRetry={jest.fn()}
       />,
     );
 

@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DELAYS } from '@/lib/constants/home';
 import type { Favorite } from '@/lib/db.client';
@@ -16,6 +16,8 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
   const [favoriteLoadState, setFavoriteLoadState] =
     useState<FavoriteLoadState>('idle');
+  const [retryVersion, setRetryVersion] = useState(0);
+  const retryRequestedRef = useRef(false);
 
   // 加载收藏夹数据
   useEffect(() => {
@@ -115,14 +117,18 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
       applyFavorites(allFavorites);
     };
 
-    loadFavorites().catch((error) => {
-      if (cancelled) return;
+    loadFavorites()
+      .catch((error) => {
+        if (cancelled) return;
 
-      console.error('加载收藏夹失败:', error);
-      if (!hasAppliedFavorites) {
-        setFavoriteLoadState('error');
-      }
-    });
+        console.error('加载收藏夹失败:', error);
+        if (!hasAppliedFavorites) {
+          setFavoriteLoadState('error');
+        }
+      })
+      .finally(() => {
+        retryRequestedRef.current = false;
+      });
 
     return () => {
       cancelled = true;
@@ -130,7 +136,21 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
       pendingEnrichment = null;
       if (enrichmentTimer) clearTimeout(enrichmentTimer);
     };
-  }, [activeTab]);
+  }, [activeTab, retryVersion]);
+
+  const retryFavorites = useCallback(() => {
+    if (
+      activeTab !== 'favorites' ||
+      favoriteLoadState !== 'error' ||
+      retryRequestedRef.current
+    ) {
+      return;
+    }
+
+    retryRequestedRef.current = true;
+    setFavoriteLoadState('loading');
+    setRetryVersion((current) => current + 1);
+  }, [activeTab, favoriteLoadState]);
 
   const clearFavorites = useCallback(() => {
     setFavoriteItems([]);
@@ -147,6 +167,7 @@ export function useFavoriteItems(activeTab: 'home' | 'favorites') {
     favoriteItems,
     favoriteLoadError,
     loadingFavorites,
+    retryFavorites,
     clearFavorites,
   };
 }

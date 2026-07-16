@@ -16,6 +16,7 @@ interface FavoritesSectionProps {
   loadError: boolean;
   loading: boolean;
   onClearAll: () => void;
+  onRetry: () => void;
 }
 
 /**
@@ -26,6 +27,7 @@ export default function FavoritesSection({
   loadError,
   loading,
   onClearAll,
+  onRetry,
 }: FavoritesSectionProps) {
   const handleClearAll = async () => {
     try {
@@ -59,6 +61,13 @@ export default function FavoritesSection({
             role='alert'
           >
             收藏刷新失败，当前显示已有内容
+            <button
+              type='button'
+              className='ml-2 underline underline-offset-2 hover:text-red-600 dark:hover:text-red-300'
+              onClick={onRetry}
+            >
+              重试
+            </button>
           </div>
         )}
         {favoriteItems.map((item) => (
@@ -84,7 +93,14 @@ export default function FavoritesSection({
               className='col-span-full py-16 text-center text-sm text-red-500 dark:text-red-400'
               role='alert'
             >
-              收藏加载失败，请稍后重试
+              收藏加载失败
+              <button
+                type='button'
+                className='ml-2 underline underline-offset-2 hover:text-red-600 dark:hover:text-red-300'
+                onClick={onRetry}
+              >
+                重试
+              </button>
             </div>
           ) : (
             <EmptyFavorites />

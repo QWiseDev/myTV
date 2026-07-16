@@ -78,7 +78,7 @@ function CornerBadge({
 }) {
   return (
     <div
-      className={`absolute -top-2 -right-2 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-[502] font-semibold ${CORNER_BADGE_STYLES[tone]}`}
+      className={`pointer-events-none absolute -top-2 -right-2 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-[502] font-semibold ${CORNER_BADGE_STYLES[tone]}`}
     >
       {children}
     </div>

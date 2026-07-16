@@ -74,8 +74,13 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     retryPlayRecords,
   } = usePlaybackData();
 
-  const { favoriteItems, favoriteLoadError, loadingFavorites, clearFavorites } =
-    useFavoriteItems(activeTab);
+  const {
+    favoriteItems,
+    favoriteLoadError,
+    loadingFavorites,
+    retryFavorites,
+    clearFavorites,
+  } = useFavoriteItems(activeTab);
   const {
     errors: homeErrors,
     homeData,
@@ -166,6 +171,7 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
               loadError={favoriteLoadError}
               loading={loadingFavorites}
               onClearAll={clearFavorites}
+              onRetry={retryFavorites}
             />
           </Suspense>
         ) : (

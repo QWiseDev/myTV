@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
 import type { PlayRecord } from '@/lib/types';
+import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
 import ContinueWatching from './ContinueWatching';
 
@@ -100,6 +101,40 @@ describe('ContinueWatching', () => {
     );
 
     expect(screen.getByTestId('scrollable-row').dataset.animation).toBe('true');
+  });
+
+  it('keeps corner badges outside pointer hit testing', () => {
+    const watchingUpdates: WatchingUpdatesCache = {
+      continueWatchingCount: 1,
+      hasUpdates: true,
+      timestamp: 1,
+      updatedCount: 1,
+      updatedSeries: [
+        {
+          title: '影片 1',
+          source_name: '测试源',
+          year: '2026',
+          cover: 'https://example.com/1.jpg',
+          sourceKey: 'source',
+          videoId: 'video-1',
+          currentEpisode: 1,
+          totalEpisodes: 13,
+          hasNewEpisode: true,
+          hasContinueWatching: true,
+          newEpisodes: 1,
+        },
+      ],
+    };
+
+    render(
+      <ContinueWatching
+        {...defaultProps}
+        playRecords={createPlayRecords(1)}
+        watchingUpdates={watchingUpdates}
+      />,
+    );
+
+    expect(screen.getByText('+1集').className).toContain('pointer-events-none');
   });
 
   it('keeps the next-page entry visible after the loaded records are deleted', () => {

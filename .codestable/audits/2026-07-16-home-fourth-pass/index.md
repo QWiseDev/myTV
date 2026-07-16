@@ -3,7 +3,8 @@ doc_type: audit-index
 audit: 2026-07-16-home-fourth-pass
 scope: 首页播放记录、移动卡片操作、分区数据合并与追更调度边界
 created: 2026-07-16
-status: resolved
+status: superseded
+superseded-by: 2026-07-16-home-fifth-pass
 total_findings: 7
 supersedes: 2026-07-16-home-third-pass
 ---

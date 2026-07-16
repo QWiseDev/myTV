@@ -346,6 +346,106 @@ describe('useFavoriteItems', () => {
     consoleError.mockRestore();
   });
 
+  it('retries an initial load failure in place and deduplicates rapid retries', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockGetAllFavorites
+      .mockRejectedValueOnce(new Error('load failed'))
+      .mockResolvedValueOnce({
+        [favoriteKey]: createFavorite({ title: '重试成功收藏' }),
+      });
+    const { result } = renderHook(() => useFavoriteItems('favorites'));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(result.current.favoriteLoadError).toBe(true);
+
+    act(() => {
+      result.current.retryFavorites();
+      result.current.retryFavorites();
+    });
+
+    expect(result.current.loadingFavorites).toBe(true);
+    expect(result.current.favoriteLoadError).toBe(false);
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    expect(mockGetAllFavorites).toHaveBeenCalledTimes(2);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '重试成功收藏' }),
+    ]);
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  it('keeps stale favorites visible while an in-place refresh retry recovers', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const retryFavorites = createDeferred<Record<string, Favorite>>();
+    mockGetAllFavorites
+      .mockResolvedValueOnce({
+        [favoriteKey]: createFavorite({ title: '已有收藏' }),
+      })
+      .mockRejectedValueOnce(new Error('refresh failed'))
+      .mockReturnValueOnce(retryFavorites.promise);
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useFavoriteItems(activeTab),
+      { initialProps: { activeTab: 'favorites' } },
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    rerender({ activeTab: 'home' });
+    rerender({ activeTab: 'favorites' });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(result.current.favoriteLoadError).toBe(true);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '已有收藏' }),
+    ]);
+
+    act(() => {
+      result.current.retryFavorites();
+    });
+
+    expect(result.current.loadingFavorites).toBe(true);
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '已有收藏' }),
+    ]);
+
+    await act(async () => {
+      retryFavorites.resolve({
+        [favoriteKey]: createFavorite({
+          save_time: 300,
+          title: '恢复后的收藏',
+        }),
+      });
+      await flushAsyncWork();
+    });
+    await runFavoriteDebounce();
+
+    expect(result.current.favoriteItems).toEqual([
+      expect.objectContaining({ title: '恢复后的收藏' }),
+    ]);
+    expect(result.current.loadingFavorites).toBe(false);
+    expect(result.current.favoriteLoadError).toBe(false);
+    consoleError.mockRestore();
+  });
+
   it('does not let an older initial read overwrite a newer favorite event', async () => {
     const pendingFavorites = createDeferred<Record<string, Favorite>>();
     mockGetAllFavorites.mockReturnValue(pendingFavorites.promise);

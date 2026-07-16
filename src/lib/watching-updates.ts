@@ -134,12 +134,12 @@ export async function fetchWatchingUpdatesFromServer(
     });
 
     if (!response.ok) {
-      return getDetailedWatchingUpdates();
+      throw new Error(`获取追更提醒失败: ${response.status}`);
     }
 
     const data = (await response.json()) as WatchingUpdate;
     if (!data || !Array.isArray(data.updatedSeries)) {
-      return getDetailedWatchingUpdates();
+      throw new Error('获取追更提醒失败: invalid payload');
     }
 
     cacheWatchingUpdates(data);
@@ -152,7 +152,7 @@ export async function fetchWatchingUpdatesFromServer(
     return data;
   } catch (error) {
     console.error('从服务端获取追更提醒失败:', error);
-    return getDetailedWatchingUpdates();
+    throw error;
   }
 }
 
