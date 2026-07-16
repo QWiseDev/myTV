@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: medium
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 08：追更首次调度被 TV 与综艺请求串行阻塞
@@ -29,6 +29,12 @@ status: open
 ## 修复方向
 
 在 StrictMode 取消点之后独立调度追更，或只等待 critical 首屏准备；保留 secondary/tertiary 的现有加载优先级与取消句柄。
+
+## 处理进展（2026-07-16）
+
+- 保留 StrictMode 微任务取消点，门禁通过后立即创建追更 idle task，再继续等待 fallback 批次。
+- TV/综艺加载、tertiary 调度、4 秒追更延迟与 effect cleanup 取消语义保持不变。
+- deferred secondary 回归确认 fallback 未完成时已完成追更调度，卸载会取消对应任务。
 
 ## 建议动作
 

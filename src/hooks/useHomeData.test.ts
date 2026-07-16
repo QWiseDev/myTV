@@ -382,6 +382,33 @@ describe('useHomeData', () => {
     expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
 
+  it('schedules and cancels watching updates before secondary fallback finishes', async () => {
+    const deferredSecondary = createDeferred<{
+      hotTvShows: { ok: true; data: typeof completeInitialData.hotTvShows };
+      hotVarietyShows: {
+        ok: true;
+        data: typeof completeInitialData.hotVarietyShows;
+      };
+    }>();
+    mockLoadSecondaryData.mockReturnValue(deferredSecondary.promise);
+    const initialData = {
+      hotMovies: [item],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const { unmount } = renderHomeDataHook(initialData);
+
+    await waitFor(() => {
+      expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+      expect(mockScheduleWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+    });
+
+    unmount();
+
+    expect(mockCancelWatchingUpdatesCheck).toHaveBeenCalledTimes(1);
+  });
+
   it('loads every missing section directly from an empty initial snapshot', async () => {
     const movies = [{ ...item, id: 'movie-direct' }];
     const tvShows = [{ ...item, id: 'tv-direct' }];

@@ -56,9 +56,9 @@ supersedes: 2026-07-16-home-fourth-pass
 ## 下一步建议
 
 - **P1 待处理**：#2 收藏清空持久化边界、#3 播放记录乐观并发；两项都涉及共享写入契约，需单独确认方案。
-- **P2 随后处理**：#6、#8 在保留现有加载优先级的前提下减少重复请求与无效工作。
+- **P2 随后处理**：#6 在保留现有加载优先级的前提下减少重复请求。
 - **结构收口**：#9、#10 走行为等价重构，先补刻画测试，再删除伪事件和双编排补丁。
-- **本阶段已完成**：#1 追更失败语义、#4 横滑覆盖层交互、#5 收藏原地重试、#7 卡片动画门禁。
+- **本阶段已完成**：#1 追更失败语义、#4 横滑覆盖层交互、#5 收藏原地重试、#7 卡片动画门禁、#8 追更调度解耦。
 
 ## 修复进展
 
@@ -66,4 +66,5 @@ supersedes: 2026-07-16-home-fourth-pass
 - **#4 resolved**：横滑按钮具名且键盘聚焦可见，断点变化会重测；继续观看角标不再拦截播放命中。
 - **#5 resolved**：收藏首次/刷新失败均可原地重试，重复点击去重并保留 stale content。
 - **#7 resolved**：卡片 shimmer 默认暂停，仅在 hover/focus 且允许 motion 时运行；reduced-motion 不创建动画。
-- **当前验证**：全量 82 suites / 421 tests、目标 ESLint、typecheck 与 production build 通过；#7 浏览器 computed style 回归通过。
+- **#8 resolved**：追更 idle task 在 StrictMode 门禁后立即创建，不再等待 TV/综艺 fallback 完成，并保留卸载取消。
+- **当前验证**：全量 82 suites / 422 tests、目标 ESLint、typecheck 与 production build 通过；#7 浏览器 computed style 回归通过。

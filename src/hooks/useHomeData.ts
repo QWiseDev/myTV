@@ -349,10 +349,8 @@ export function useHomeData({
       await Promise.resolve();
 
       if (cancelled) return;
-      await loadFallbackBatches(availability);
-
-      if (cancelled) return;
       cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();
+      await loadFallbackBatches(availability);
     };
 
     loadAllData();
