@@ -7,7 +7,7 @@ steps:
     verify: 导航、版本、reset、条件设置和改密错误测试通过
   - id: presentation-components
     title: 拆出 UserMenu 面板展示组件
-    status: pending
+    status: done
     verify: 六棵面板 JSX 不再内联，Portal 与状态 owner 不变
   - id: media-data-hooks
     title: 迁移追更、继续观看和收藏数据 Hook

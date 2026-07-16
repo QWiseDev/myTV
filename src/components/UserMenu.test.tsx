@@ -148,11 +148,13 @@ async function renderMenu({
     username: 'alice',
   });
 
-  render(<UserMenu />);
+  const renderResult = render(<UserMenu />);
 
   await waitFor(() => {
     expect(mockGetAuthInfoFromBrowserCookie).toHaveBeenCalledTimes(1);
   });
+
+  return renderResult;
 }
 
 async function openMenu() {
@@ -207,10 +209,11 @@ describe('UserMenu', () => {
   });
 
   it('opens the menu in a portal and keeps owner-only visibility rules', async () => {
-    await renderMenu({ role: 'owner' });
+    const { container } = await renderMenu({ role: 'owner' });
 
     await openMenu();
 
+    expect(within(container).queryByText('当前用户')).not.toBeInTheDocument();
     expect(screen.getByText('站长')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: '管理面板' }),
@@ -247,6 +250,16 @@ describe('UserMenu', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/play-stats');
     expect(screen.queryByText('当前用户')).not.toBeInTheDocument();
+  });
+
+  it('keeps the menu open for the existing admin navigation path', async () => {
+    await renderMenu({ role: 'owner' });
+    await openMenu();
+
+    fireEvent.click(screen.getByRole('button', { name: '管理面板' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/admin');
+    expect(screen.getByText('当前用户')).toBeInTheDocument();
   });
 
   it('opens and closes the version panel from the menu footer', async () => {
