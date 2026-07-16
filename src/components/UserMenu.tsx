@@ -9,12 +9,6 @@ import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { debug } from '@/lib/debug';
-import {
-  type UserMenuSettingsSnapshot,
-  buildDefaultUserMenuSettings,
-  readUserMenuSettings,
-  writeUserMenuSettings,
-} from '@/lib/user-menu-settings';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 
 import { UserMenuChangePasswordPanel } from './user-menu/UserMenuChangePasswordPanel';
@@ -27,6 +21,7 @@ import {
 import { UserMenuSettingsPanel } from './user-menu/UserMenuSettingsPanel';
 import { useUserMenuContinueWatching } from './user-menu/useUserMenuContinueWatching';
 import { useUserMenuFavorites } from './user-menu/useUserMenuFavorites';
+import { useUserMenuSettingsController } from './user-menu/useUserMenuSettingsController';
 import { useUserMenuWatchingUpdates } from './user-menu/useUserMenuWatchingUpdates';
 import { VersionPanel } from './VersionPanel';
 
@@ -62,21 +57,6 @@ function useCloseDropdownOnOutsideMouseDown(
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [dropdownSelector, isOpen, setOpen]);
-}
-
-function persistUserMenuSetting(
-  key: string,
-  value: string,
-  eventName?: string,
-) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  localStorage.setItem(key, value);
-  if (eventName) {
-    window.dispatchEvent(new Event(eventName));
-  }
 }
 
 export const UserMenu: React.FC = () => {
@@ -132,27 +112,10 @@ export const UserMenu: React.FC = () => {
     isFavoritesOpen,
   ]);
 
-  // 设置相关状态
-  const [defaultAggregateSearch, setDefaultAggregateSearch] = useState(true);
-  const [doubanProxyUrl, setDoubanProxyUrl] = useState('');
-  const [enableOptimization, setEnableOptimization] = useState(false);
-  const [fluidSearch, setFluidSearch] = useState(true);
-  const [liveDirectConnect, setLiveDirectConnect] = useState(false);
-  const [doubanDataSource, setDoubanDataSource] = useState('direct');
-  const [doubanImageProxyType, setDoubanImageProxyType] = useState('direct');
-  const [doubanImageProxyUrl, setDoubanImageProxyUrl] = useState('');
-  const [continueWatchingMinProgress, setContinueWatchingMinProgress] =
-    useState(5);
-  const [continueWatchingMaxProgress, setContinueWatchingMaxProgress] =
-    useState(100);
-  const [enableContinueWatchingFilter, setEnableContinueWatchingFilter] =
-    useState(false);
+  // 设置面板下拉框状态
   const [isDoubanDropdownOpen, setIsDoubanDropdownOpen] = useState(false);
   const [isDoubanImageProxyDropdownOpen, setIsDoubanImageProxyDropdownOpen] =
     useState(false);
-  // 跳过片头片尾相关设置
-  const [enableAutoSkip, setEnableAutoSkip] = useState(false);
-  const [enableAutoNextEpisode, setEnableAutoNextEpisode] = useState(true);
 
   // 修改密码相关状态
   const [newPassword, setNewPassword] = useState('');
@@ -163,22 +126,6 @@ export const UserMenu: React.FC = () => {
   // 版本检查相关状态
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isChecking, setIsChecking] = useState(true);
-
-  const applySettingsSnapshot = (settings: UserMenuSettingsSnapshot) => {
-    setDefaultAggregateSearch(settings.defaultAggregateSearch);
-    setDoubanDataSource(settings.doubanDataSource);
-    setDoubanProxyUrl(settings.doubanProxyUrl);
-    setDoubanImageProxyType(settings.doubanImageProxyType);
-    setDoubanImageProxyUrl(settings.doubanImageProxyUrl);
-    setEnableOptimization(settings.enableOptimization);
-    setFluidSearch(settings.fluidSearch);
-    setLiveDirectConnect(settings.liveDirectConnect);
-    setContinueWatchingMinProgress(settings.continueWatchingMinProgress);
-    setContinueWatchingMaxProgress(settings.continueWatchingMaxProgress);
-    setEnableContinueWatchingFilter(settings.enableContinueWatchingFilter);
-    setEnableAutoSkip(settings.enableAutoSkip);
-    setEnableAutoNextEpisode(settings.enableAutoNextEpisode);
-  };
 
   // 确保组件已挂载
   useEffect(() => {
@@ -193,17 +140,28 @@ export const UserMenu: React.FC = () => {
     }
   }, []);
 
-  // 从 localStorage 读取设置
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      applySettingsSnapshot(
-        readUserMenuSettings(
-          localStorage,
-          (window as any).RUNTIME_CONFIG || {},
-        ),
-      );
-    }
-  }, []);
+  const {
+    handleAggregateToggle,
+    handleContinueWatchingMaxProgressChange,
+    handleContinueWatchingMinProgressChange,
+    handleDoubanDataSourceChange,
+    handleDoubanImageProxyTypeChange,
+    handleDoubanImageProxyUrlChange,
+    handleDoubanProxyUrlChange,
+    handleEnableAutoNextEpisodeToggle,
+    handleEnableAutoSkipToggle,
+    handleEnableContinueWatchingFilterToggle,
+    handleFluidSearchToggle,
+    handleLiveDirectConnectToggle,
+    handleOptimizationToggle,
+    handleResetSettings,
+    settings: settingsSnapshot,
+  } = useUserMenuSettingsController();
+  const {
+    continueWatchingMaxProgress,
+    continueWatchingMinProgress,
+    enableContinueWatchingFilter,
+  } = settingsSnapshot;
 
   // 版本检查
   useEffect(() => {
@@ -409,104 +367,6 @@ export const UserMenu: React.FC = () => {
     setIsSettingsOpen(false);
   };
 
-  // 设置相关的处理函数
-  const handleAggregateToggle = (value: boolean) => {
-    setDefaultAggregateSearch(value);
-    persistUserMenuSetting('defaultAggregateSearch', JSON.stringify(value));
-  };
-
-  const handleDoubanProxyUrlChange = (value: string) => {
-    setDoubanProxyUrl(value);
-    persistUserMenuSetting('doubanProxyUrl', value);
-  };
-
-  const handleOptimizationToggle = (value: boolean) => {
-    setEnableOptimization(value);
-    persistUserMenuSetting('enableOptimization', JSON.stringify(value));
-  };
-
-  const handleFluidSearchToggle = (value: boolean) => {
-    setFluidSearch(value);
-    persistUserMenuSetting('fluidSearch', JSON.stringify(value));
-  };
-
-  const handleLiveDirectConnectToggle = (value: boolean) => {
-    setLiveDirectConnect(value);
-    persistUserMenuSetting('liveDirectConnect', JSON.stringify(value));
-  };
-
-  const handleContinueWatchingMinProgressChange = (value: number) => {
-    setContinueWatchingMinProgress(value);
-    persistUserMenuSetting('continueWatchingMinProgress', value.toString());
-  };
-
-  const handleContinueWatchingMaxProgressChange = (value: number) => {
-    setContinueWatchingMaxProgress(value);
-    persistUserMenuSetting('continueWatchingMaxProgress', value.toString());
-  };
-
-  const handleEnableContinueWatchingFilterToggle = (value: boolean) => {
-    setEnableContinueWatchingFilter(value);
-    persistUserMenuSetting(
-      'enableContinueWatchingFilter',
-      JSON.stringify(value),
-    );
-  };
-
-  const handleEnableAutoSkipToggle = (value: boolean) => {
-    setEnableAutoSkip(value);
-    persistUserMenuSetting(
-      'enableAutoSkip',
-      JSON.stringify(value),
-      'localStorageChanged',
-    );
-  };
-
-  const handleEnableAutoNextEpisodeToggle = (value: boolean) => {
-    setEnableAutoNextEpisode(value);
-    persistUserMenuSetting(
-      'enableAutoNextEpisode',
-      JSON.stringify(value),
-      'localStorageChanged',
-    );
-  };
-
-  const handleDoubanDataSourceChange = (value: string) => {
-    setDoubanDataSource(value);
-    persistUserMenuSetting('doubanDataSource', value);
-  };
-
-  const handleDoubanImageProxyTypeChange = (value: string) => {
-    setDoubanImageProxyType(value);
-    persistUserMenuSetting(
-      'doubanImageProxyType',
-      value,
-      'doubanImageProxyChanged',
-    );
-  };
-
-  const handleDoubanImageProxyUrlChange = (value: string) => {
-    setDoubanImageProxyUrl(value);
-    persistUserMenuSetting(
-      'doubanImageProxyUrl',
-      value,
-      'doubanImageProxyChanged',
-    );
-  };
-
-  const handleResetSettings = () => {
-    const settings = buildDefaultUserMenuSettings(
-      typeof window !== 'undefined' ? (window as any).RUNTIME_CONFIG || {} : {},
-    );
-
-    applySettingsSnapshot(settings);
-
-    if (typeof window !== 'undefined') {
-      writeUserMenuSettings(localStorage, settings);
-      window.dispatchEvent(new Event('doubanImageProxyChanged'));
-    }
-  };
-
   const currentRole = authInfo?.role || 'user';
   const isAdminUser = isAdminRole(authInfo?.role);
 
@@ -529,22 +389,6 @@ export const UserMenu: React.FC = () => {
 
   // 计算更新数量（只统计新剧集更新）
   const totalUpdates = watchingUpdatesState.totalUpdates;
-
-  const settingsSnapshot: UserMenuSettingsSnapshot = {
-    continueWatchingMaxProgress,
-    continueWatchingMinProgress,
-    defaultAggregateSearch,
-    doubanDataSource,
-    doubanImageProxyType,
-    doubanImageProxyUrl,
-    doubanProxyUrl,
-    enableAutoNextEpisode,
-    enableAutoSkip,
-    enableContinueWatchingFilter,
-    enableOptimization,
-    fluidSearch,
-    liveDirectConnect,
-  };
 
   return (
     <>

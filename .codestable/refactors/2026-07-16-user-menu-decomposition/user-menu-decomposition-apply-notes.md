@@ -26,3 +26,10 @@ refactor: 2026-07-16-user-menu-decomposition
 - 改动文件：`src/components/UserMenu.tsx`、`src/components/UserMenu.test.tsx`、`src/components/user-menu/useUserMenuWatchingUpdates.ts`、`src/components/user-menu/useUserMenuContinueWatching.ts`、`src/components/user-menu/useUserMenuFavorites.ts`、`src/components/user-menu/UserMenuDataHooks.test.ts`
 - 验证结果：追更、继续观看和收藏的数据 state/effect 已迁入三个独立 Hook；保留 boolean cache gate、60 秒未读边界、`invalidated` 忽略、`playRecordsUpdated` / `favoritesUpdated` 刷新、100ms timer 合并、两个 active guard、晚到响应隔离和原日志语义。定向 Jest 3 suites / 35 tests、目标 ESLint、`pnpm typecheck`、Prettier 与 `git diff --check` 通过。
 - 偏离：测试初始 props 的 `null` 被 TypeScript 过度收窄，显式扩宽为 `HookProps['authInfo']` 后通过；仅修测试类型，不改变生产逻辑。步骤 2 已完成桌面/移动媒体面板目视，本步最终事件刷新目视仍并入步骤 6。
+
+## 步骤 4：提取设置 Controller
+
+- 完成时间：2026-07-16
+- 改动文件：`src/components/UserMenu.tsx`、`src/components/user-menu/useUserMenuSettingsController.ts`、`src/components/user-menu/useUserMenuSettingsController.test.ts`
+- 验证结果：13 项持久化设置、一次性 hydration、13 个显式命令与 reset 已迁入零参数 Controller；两个豆瓣下拉 open state、Portal、滚动锁和面板开关仍归父组件。Hook 测试逐项固定 key/序列化、写入后同步派发、点击时 runtime default、只 hydration 一次，以及 reset 全量写回但只派发 `doubanImageProxyChanged` 的既有语义。定向 Jest 4 suites / 29 tests、目标 ESLint、`pnpm typecheck`、Prettier 与 `git diff --check` 通过。
+- 偏离：无。未改 `src/lib/user-menu-settings.ts`、Panel props、数值校验或事件契约，也未将命令收敛为通用配置 map。

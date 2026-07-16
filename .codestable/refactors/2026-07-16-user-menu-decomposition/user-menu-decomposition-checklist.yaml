@@ -15,7 +15,7 @@ steps:
     verify: 请求、订阅、timer 与 cleanup 时点测试通过
   - id: settings-controller
     title: 提取设置状态与持久化 Controller
-    status: pending
+    status: done
     verify: 逐 key 序列化与条件事件保持不变
   - id: parent-cleanup
     title: 收口父组件与审计记录
