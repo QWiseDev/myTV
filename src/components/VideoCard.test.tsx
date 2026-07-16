@@ -14,6 +14,7 @@ const mockSaveFavorite = jest.fn();
 const mockSubscribeToDataUpdates = jest.fn();
 const mockMobileActionSheetExited = jest.fn();
 const mockMobileActionSheetUnmount = jest.fn();
+const mockNavigateVideoCardPlayUrl = jest.fn();
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -44,6 +45,11 @@ jest.mock('@/lib/db.client', () => ({
   isFavorited: mockIsFavorited,
   saveFavorite: mockSaveFavorite,
   subscribeToDataUpdates: mockSubscribeToDataUpdates,
+}));
+
+jest.mock('@/lib/video-card-utils', () => ({
+  ...jest.requireActual('@/lib/video-card-utils'),
+  navigateVideoCardPlayUrl: mockNavigateVideoCardPlayUrl,
 }));
 
 jest.mock('./MobileActionSheet', () => {
@@ -98,6 +104,17 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 function openActionSheet() {
   fireEvent.contextMenu(screen.getAllByText('测试影片')[0]);
 }
@@ -137,6 +154,7 @@ describe('VideoCard behavior', () => {
     mockIsFavorited.mockReset();
     mockMobileActionSheetExited.mockReset();
     mockMobileActionSheetUnmount.mockReset();
+    mockNavigateVideoCardPlayUrl.mockReset();
     mockSaveFavorite.mockReset();
     mockSubscribeToDataUpdates.mockReset();
     mockSubscribeToDataUpdates.mockImplementation(
@@ -357,6 +375,276 @@ describe('VideoCard behavior', () => {
     render(<VideoCard from='douban' poster={bangumiPoster} title='测试影片' />);
 
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('activates the named playback link exactly once', () => {
+    renderSourceBackedCard();
+
+    const playLink = screen.getByRole('link', { name: '播放 测试影片' });
+    expect(playLink.getAttribute('href')).toBe(
+      '/play?source=source-a&id=video-a&title=%E6%B5%8B%E8%AF%95%E5%BD%B1%E7%89%87',
+    );
+    playLink.focus();
+    expect(document.activeElement).toBe(playLink);
+    fireEvent.click(playLink);
+    expect(mockNavigateVideoCardPlayUrl).toHaveBeenCalledTimes(1);
+    expect(mockNavigateVideoCardPlayUrl).toHaveBeenCalledWith(
+      '/play?source=source-a&id=video-a&title=%E6%B5%8B%E8%AF%95%E5%BD%B1%E7%89%87',
+    );
+
+    mockNavigateVideoCardPlayUrl.mockClear();
+    fireEvent.click(playLink, { detail: 0 });
+    expect(mockNavigateVideoCardPlayUrl).toHaveBeenCalledTimes(1);
+
+    const favoriteButton = screen.getByRole('button', {
+      name: '收藏 测试影片',
+    });
+    expect(favoriteButton.getAttribute('aria-pressed')).toBe('false');
+    expect(
+      screen.getByRole('button', { name: '删除 测试影片 的播放记录' }),
+    ).not.toBeNull();
+  });
+
+  it('preserves native modified-link behavior without triggering card navigation', () => {
+    const { container } = renderSourceBackedCard();
+
+    const playLink = screen.getByRole('link', { name: '播放 测试影片' });
+    const defaultPreventedByComponent: boolean[] = [];
+    const preventJsdomNavigation = (event: MouseEvent) => {
+      defaultPreventedByComponent.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    container.addEventListener('click', preventJsdomNavigation);
+
+    fireEvent.click(playLink, { ctrlKey: true });
+    fireEvent.click(playLink, { metaKey: true });
+
+    container.removeEventListener('click', preventJsdomNavigation);
+
+    expect(defaultPreventedByComponent).toEqual([false, false]);
+    expect(mockNavigateVideoCardPlayUrl).not.toHaveBeenCalled();
+  });
+
+  it('keeps hover-only controls outside pointer hit testing while hidden', () => {
+    render(
+      <>
+        <VideoCard
+          from='playrecord'
+          id='video-a'
+          source='source-a'
+          title='播放记录影片'
+        />
+        <VideoCard from='douban' douban_id={100} title='豆瓣影片' />
+      </>,
+    );
+
+    const favoriteButton = screen.getByRole('button', {
+      name: '收藏 播放记录影片',
+    });
+    expect(favoriteButton.parentElement?.className).toContain(
+      'pointer-events-none',
+    );
+    expect(favoriteButton.parentElement?.className).toContain(
+      'sm:group-hover:pointer-events-auto',
+    );
+    expect(favoriteButton.parentElement?.className).toContain(
+      'group-focus-within:pointer-events-auto',
+    );
+
+    const subjectLink = screen.getByRole('link', { name: '打开豆瓣详情' });
+    expect(subjectLink.className).toContain('pointer-events-none');
+    expect(subjectLink.className).toContain(
+      'sm:group-hover:pointer-events-auto',
+    );
+    expect(subjectLink.className).toContain('focus:pointer-events-auto');
+  });
+
+  it('keeps elevated visual badges inside the pointer playback boundary', () => {
+    const { container } = render(
+      <VideoCard
+        episodes={10}
+        from='playrecord'
+        id='video-a'
+        isAggregate
+        source='source-a'
+        source_names={['源 A', '源 B']}
+        title='测试影片'
+      />,
+    );
+
+    const episodeBadge = screen.getByText('10集').parentElement;
+    const sourceIndicator = screen.getByRole('link', {
+      name: '2 个播放源，播放 测试影片',
+    });
+    const playLink = screen.getByRole('link', { name: '播放 测试影片' });
+    expect(episodeBadge?.className).toContain('pointer-events-none');
+    expect(sourceIndicator?.className).toContain('pointer-events-none');
+    expect(sourceIndicator?.className).toContain(
+      'sm:group-hover:pointer-events-auto',
+    );
+    expect(sourceIndicator.getAttribute('href')).toBe(
+      playLink.getAttribute('href'),
+    );
+
+    fireEvent.click(screen.getByText('10集'));
+
+    expect(mockNavigateVideoCardPlayUrl).toHaveBeenCalledTimes(1);
+
+    mockNavigateVideoCardPlayUrl.mockReset();
+    const defaultPreventedByComponent: boolean[] = [];
+    const preventJsdomNavigation = (event: MouseEvent) => {
+      defaultPreventedByComponent.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    container.addEventListener('click', preventJsdomNavigation);
+    fireEvent.click(sourceIndicator, { metaKey: true });
+    container.removeEventListener('click', preventJsdomNavigation);
+
+    expect(defaultPreventedByComponent).toEqual([false]);
+    expect(mockNavigateVideoCardPlayUrl).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates a pending favorite mutation', async () => {
+    const favoriteMutation = createDeferred<void>();
+    mockSaveFavorite.mockReturnValue(favoriteMutation.promise);
+    renderSourceBackedCard();
+    const favoriteButton = screen.getByRole('button', {
+      name: '收藏 测试影片',
+    });
+
+    fireEvent.click(favoriteButton);
+    fireEvent.click(favoriteButton);
+    expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      favoriteMutation.resolve();
+      await flushAsyncWork();
+    });
+  });
+
+  it('deduplicates pending favorite mutations across identity round trips', async () => {
+    const firstMutation = createDeferred<void>();
+    const secondMutation = createDeferred<void>();
+    mockSaveFavorite
+      .mockReturnValueOnce(firstMutation.promise)
+      .mockReturnValueOnce(secondMutation.promise);
+    const renderCard = (id: string, title: string) => (
+      <VideoCard
+        from='playrecord'
+        id={id}
+        source='source-a'
+        title={title}
+      />
+    );
+    const { rerender } = render(renderCard('video-a', '影片 A'));
+
+    fireEvent.click(screen.getByRole('button', { name: '收藏 影片 A' }));
+    rerender(renderCard('video-b', '影片 B'));
+    fireEvent.click(screen.getByRole('button', { name: '收藏 影片 B' }));
+    rerender(renderCard('video-a', '影片 A'));
+    fireEvent.click(screen.getByRole('button', { name: '收藏 影片 A' }));
+
+    expect(mockSaveFavorite).toHaveBeenCalledTimes(2);
+    expect(mockSaveFavorite).toHaveBeenNthCalledWith(
+      1,
+      'source-a',
+      'video-a',
+      expect.objectContaining({ title: '影片 A' }),
+    );
+    expect(mockSaveFavorite).toHaveBeenNthCalledWith(
+      2,
+      'source-a',
+      'video-b',
+      expect.objectContaining({ title: '影片 B' }),
+    );
+
+    await act(async () => {
+      secondMutation.resolve();
+      await flushAsyncWork();
+    });
+    expect(
+      screen.getByRole('button', { name: '收藏 影片 A' }).getAttribute(
+        'aria-pressed',
+      ),
+    ).toBe('false');
+
+    await act(async () => {
+      firstMutation.resolve();
+      await flushAsyncWork();
+    });
+    expect(
+      screen.getByRole('button', { name: '取消收藏 影片 A' }).getAttribute(
+        'aria-pressed',
+      ),
+    ).toBe('true');
+  });
+
+  it('deduplicates a pending play-record deletion', async () => {
+    const deleteMutation = createDeferred<void>();
+    const onDelete = jest.fn(() => deleteMutation.promise);
+    render(
+      <VideoCard
+        from='playrecord'
+        id='video-a'
+        onDelete={onDelete}
+        source='source-a'
+        title='测试影片'
+      />,
+    );
+    const deleteButton = screen.getByRole('button', {
+      name: '删除 测试影片 的播放记录',
+    });
+
+    fireEvent.click(deleteButton);
+    fireEvent.click(deleteButton);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      deleteMutation.resolve();
+      await flushAsyncWork();
+    });
+  });
+
+  it('deduplicates pending deletions across identity round trips', async () => {
+    const firstMutation = createDeferred<void>();
+    const secondMutation = createDeferred<void>();
+    const firstDelete = jest.fn(() => firstMutation.promise);
+    const secondDelete = jest.fn(() => secondMutation.promise);
+    const renderCard = (
+      id: string,
+      title: string,
+      onDelete: () => Promise<void>,
+    ) => (
+      <VideoCard
+        from='playrecord'
+        id={id}
+        onDelete={onDelete}
+        source='source-a'
+        title={title}
+      />
+    );
+    const { rerender } = render(renderCard('video-a', '影片 A', firstDelete));
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '删除 影片 A 的播放记录' }),
+    );
+    rerender(renderCard('video-b', '影片 B', secondDelete));
+    fireEvent.click(
+      screen.getByRole('button', { name: '删除 影片 B 的播放记录' }),
+    );
+    rerender(renderCard('video-a', '影片 A', firstDelete));
+    fireEvent.click(
+      screen.getByRole('button', { name: '删除 影片 A 的播放记录' }),
+    );
+
+    expect(firstDelete).toHaveBeenCalledTimes(1);
+    expect(secondDelete).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstMutation.resolve();
+      secondMutation.resolve();
+      await flushAsyncWork();
+    });
   });
 
   it('unmounts the action sheet after its closing animation', () => {

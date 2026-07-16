@@ -9,7 +9,9 @@ import {
 } from '@/lib/video-card-utils';
 
 interface AggregateSourceIndicatorProps {
+  href: string;
   sourceNames: string[];
+  title: string;
   maxDisplayCount?: number;
 }
 
@@ -17,7 +19,9 @@ interface AggregateSourceIndicatorProps {
  * 聚合播放源指示器 - 显示可用播放源数量和悬浮详情
  */
 export const AggregateSourceIndicator = memo(function AggregateSourceIndicator({
+  href,
   sourceNames,
+  title,
   maxDisplayCount = 6,
 }: AggregateSourceIndicatorProps) {
   if (!sourceNames || sourceNames.length === 0) return null;
@@ -30,12 +34,15 @@ export const AggregateSourceIndicator = memo(function AggregateSourceIndicator({
   const remainingCount = sortedSources.length - maxDisplayCount;
 
   return (
-    <div
-      className='absolute bottom-2 right-2 opacity-0 transition-all duration-300 ease-in-out delay-75 sm:group-hover:opacity-100'
+    <a
+      href={href}
+      aria-label={`${sourceCount} 个播放源，播放 ${title}`}
+      className='group/sources pointer-events-none absolute bottom-2 right-2 z-[30] opacity-0 transition-all duration-300 ease-in-out delay-75 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full'
       style={noSelectStyle}
+      onClick={(event) => event.stopPropagation()}
       onContextMenu={preventContextMenu}
     >
-      <div className='relative group/sources' style={noSelectStyle}>
+      <div className='relative' style={noSelectStyle}>
         {/* 源数量徽章 */}
         <div
           className='bg-gradient-to-br from-orange-500/95 via-amber-500/95 to-yellow-500/95 backdrop-blur-md text-white text-xs font-bold w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shadow-lg ring-2 ring-white/30 hover:scale-[1.15] transition-all duration-300 ease-out cursor-pointer hover:shadow-orange-500/50'
@@ -52,7 +59,7 @@ export const AggregateSourceIndicator = memo(function AggregateSourceIndicator({
 
         {/* 播放源详情悬浮框 */}
         <div
-          className='absolute bottom-full mb-2 opacity-0 invisible group-hover/sources:opacity-100 group-hover/sources:visible transition-all duration-200 ease-out delay-100 pointer-events-none z-50 right-0 sm:right-0 -translate-x-0 sm:translate-x-0'
+          className='absolute bottom-full mb-2 opacity-0 invisible group-hover/sources:opacity-100 group-hover/sources:visible group-focus/sources:opacity-100 group-focus/sources:visible transition-all duration-200 ease-out delay-100 pointer-events-none z-50 right-0 sm:right-0 -translate-x-0 sm:translate-x-0'
           style={noSelectStyle}
           onContextMenu={preventContextMenu}
         >
@@ -92,7 +99,7 @@ export const AggregateSourceIndicator = memo(function AggregateSourceIndicator({
           </div>
         </div>
       </div>
-    </div>
+    </a>
   );
 });
 

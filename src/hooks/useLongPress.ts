@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface UseLongPressOptions {
   onLongPress: () => void;
@@ -22,7 +22,6 @@ export const useLongPress = ({
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   const startPosition = useRef<TouchPosition | null>(null);
   const isActive = useRef(false); // 防止重复触发
-  const wasButton = useRef(false); // 记录触摸开始时是否是按钮
 
   const clearTimer = useCallback(() => {
     if (pressTimer.current) {
@@ -31,8 +30,15 @@ export const useLongPress = ({
     }
   }, []);
 
+  const resetGesture = useCallback(() => {
+    clearTimer();
+    isLongPress.current = false;
+    startPosition.current = null;
+    isActive.current = false;
+  }, [clearTimer]);
+
   const handleStart = useCallback(
-    (clientX: number, clientY: number, isButton = false) => {
+    (clientX: number, clientY: number) => {
       // 如果已经有活跃的手势，忽略新的开始
       if (isActive.current) {
         return;
@@ -42,13 +48,11 @@ export const useLongPress = ({
       isLongPress.current = false;
       startPosition.current = { x: clientX, y: clientY };
 
-      // 记录触摸开始时是否是按钮
-      wasButton.current = isButton;
-
       pressTimer.current = setTimeout(() => {
         // 再次检查是否仍然活跃
         if (!isActive.current) return;
 
+        pressTimer.current = null;
         isLongPress.current = true;
 
         if (navigator.vibrate) {
@@ -59,7 +63,7 @@ export const useLongPress = ({
         onLongPress();
       }, longPressDelay);
     },
-    [onLongPress, longPressDelay]
+    [longPressDelay, onLongPress],
   );
 
   const handleMove = useCallback(
@@ -68,76 +72,77 @@ export const useLongPress = ({
 
       const distance = Math.sqrt(
         Math.pow(clientX - startPosition.current.x, 2) +
-          Math.pow(clientY - startPosition.current.y, 2)
+          Math.pow(clientY - startPosition.current.y, 2),
       );
 
       // 如果移动距离超过阈值，取消长按
       if (distance > moveThreshold) {
-        clearTimer();
-        isActive.current = false;
+        resetGesture();
       }
     },
-    [clearTimer, moveThreshold]
+    [moveThreshold, resetGesture],
   );
 
   const handleEnd = useCallback(() => {
-    clearTimer();
+    if (!isActive.current) return;
 
     // 根据情况决定是否触发点击事件：
     // 1. 如果是长按，不触发点击
-    // 2. 如果不是长按且触摸开始时是按钮，不触发点击
-    // 3. 否则触发点击
-    const shouldClick =
-      !isLongPress.current && !wasButton.current && onClick && isActive.current;
+    // 2. 否则触发点击
+    const shouldClick = !isLongPress.current && Boolean(onClick);
 
+    resetGesture();
     if (shouldClick) {
-      onClick();
+      onClick?.();
     }
+  }, [onClick, resetGesture]);
 
-    // 重置所有状态
-    isLongPress.current = false;
-    startPosition.current = null;
-    isActive.current = false;
-    wasButton.current = false;
-  }, [clearTimer, onClick]);
+  useEffect(() => resetGesture, [resetGesture]);
 
   // 触摸事件处理器
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
-      // 检查是否触摸的是按钮或其他交互元素
       const target = e.target as HTMLElement;
-      const buttonElement = target.closest('[data-button]');
-
-      // 更精确的按钮检测：只有当触摸目标直接是按钮元素或其直接子元素时才认为是按钮
-      const isDirectButton = target.hasAttribute('data-button');
-      const isButton = !!buttonElement && isDirectButton;
+      const interactiveElement = target.closest(
+        'button, a, input, select, textarea, [role="button"], [role="link"]',
+      );
+      if (interactiveElement && interactiveElement !== e.currentTarget) return;
 
       // 阻止默认的长按行为，但不阻止触摸开始事件
       const touch = e.touches[0];
-      handleStart(touch.clientX, touch.clientY, !!isButton);
+      if (!touch) return;
+      handleStart(touch.clientX, touch.clientY);
     },
-    [handleStart]
+    [handleStart],
   );
 
   const onTouchMove = useCallback(
     (e: React.TouchEvent) => {
       const touch = e.touches[0];
+      if (!touch) return;
       handleMove(touch.clientX, touch.clientY);
     },
-    [handleMove]
+    [handleMove],
   );
 
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
+      if (!isActive.current) return;
+
       // 始终阻止默认行为，避免任何系统长按菜单
       e.preventDefault();
       e.stopPropagation();
       handleEnd();
     },
-    [handleEnd]
+    [handleEnd],
   );
 
+  const onTouchCancel = useCallback(() => {
+    resetGesture();
+  }, [resetGesture]);
+
   return {
+    onTouchCancel,
     onTouchStart,
     onTouchMove,
     onTouchEnd,

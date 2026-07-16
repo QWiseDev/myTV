@@ -1,6 +1,6 @@
 import { Radio, X } from 'lucide-react';
 import Image from 'next/image';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { shouldUseUnoptimizedImage } from '@/lib/video-card-utils';
@@ -22,6 +22,14 @@ interface MobileActionSheetProps {
 }
 
 const EXIT_ANIMATION_DURATION_MS = 200;
+const FOCUSABLE_ELEMENT_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_ELEMENT_SELECTOR),
+  );
+}
 
 const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   isOpen,
@@ -38,6 +46,43 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
   origin = 'vod',
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
+  const actionTriggeredRef = useRef(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const closeRequestedRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const scrollRestoreAnimationRef = useRef<number | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+
+  const restoreFocus = useCallback(() => {
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (opener?.isConnected) {
+      opener.focus();
+    }
+  }, []);
+
+  const requestClose = useCallback(() => {
+    if (!isOpen || closeRequestedRef.current) return;
+
+    closeRequestedRef.current = true;
+    onClose();
+  }, [isOpen, onClose]);
+
+  const runAction = useCallback(
+    (action: MobileAction) => {
+      if (!isOpen || action.disabled || actionTriggeredRef.current) return;
+
+      actionTriggeredRef.current = true;
+      try {
+        action.onClick();
+      } finally {
+        requestClose();
+      }
+    },
+    [isOpen, requestClose],
+  );
 
   // 控制动画状态
   useEffect(() => {
@@ -45,15 +90,35 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (isOpen) {
+      actionTriggeredRef.current = false;
+      closeRequestedRef.current = false;
+      const activeElement = document.activeElement;
+      if (
+        !openerRef.current &&
+        activeElement instanceof HTMLElement &&
+        !dialogRef.current?.contains(activeElement)
+      ) {
+        openerRef.current = activeElement;
+      }
+
       // 使用双重 requestAnimationFrame 确保DOM完全渲染
       animationId = requestAnimationFrame(() => {
         animationId = requestAnimationFrame(() => {
           setIsAnimating(true);
+          const firstAction =
+            dialogRef.current?.querySelector<HTMLButtonElement>(
+              '[data-action-sheet-action]:not([disabled])',
+            );
+          (firstAction || closeButtonRef.current || dialogRef.current)?.focus();
         });
       });
     } else {
+      dialogRef.current?.focus();
       setIsAnimating(false);
-      exitTimer = setTimeout(onExited, EXIT_ANIMATION_DURATION_MS);
+      exitTimer = setTimeout(() => {
+        restoreFocus();
+        onExited();
+      }, EXIT_ANIMATION_DURATION_MS);
     }
 
     return () => {
@@ -64,10 +129,17 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
         clearTimeout(exitTimer);
       }
     };
-  }, [isOpen, onExited]);
+  }, [isOpen, onExited, restoreFocus]);
+
+  useEffect(() => restoreFocus, [restoreFocus]);
 
   // 阻止背景滚动
   useEffect(() => {
+    if (scrollRestoreAnimationRef.current !== null) {
+      cancelAnimationFrame(scrollRestoreAnimationRef.current);
+      scrollRestoreAnimationRef.current = null;
+    }
+
     // 保存当前滚动位置
     const scrollY = window.scrollY;
     const scrollX = window.scrollX;
@@ -108,34 +180,60 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
       body.style.overflow = originalBodyStyle.overflow;
 
       // 使用 requestAnimationFrame 确保样式恢复后再滚动
-      requestAnimationFrame(() => {
+      scrollRestoreAnimationRef.current = requestAnimationFrame(() => {
+        scrollRestoreAnimationRef.current = null;
         window.scrollTo(scrollX, scrollY);
       });
     };
   }, []);
 
-  // ESC键关闭
+  // 模态焦点圈定与 ESC 关闭
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        e.preventDefault();
+        requestClose();
+        return;
+      }
+
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusableElements = getFocusableElements(dialogRef.current);
+      if (focusableElements.length === 0) {
+        e.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (!dialogRef.current.contains(activeElement)) {
+        e.preventDefault();
+        (e.shiftKey ? lastElement : firstElement).focus();
+        return;
+      }
+
+      if (e.shiftKey && activeElement === firstElement) {
+        e.preventDefault();
+        lastElement.focus();
+      } else if (!e.shiftKey && activeElement === lastElement) {
+        e.preventDefault();
+        firstElement.focus();
       }
     };
 
-    document.addEventListener('keydown', handleEsc);
-    return () => document.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, requestClose]);
 
   const renderContent = () => (
     <div
-      className='fixed inset-0 z-[9999] flex items-end justify-center'
-      onTouchMove={(e) => {
-        // 阻止最外层容器的触摸移动，防止背景滚动
-        e.preventDefault();
-        e.stopPropagation();
-      }}
+      className='fixed inset-0 z-[9999] flex items-end justify-center px-4'
       style={{
-        touchAction: 'none', // 禁用所有触摸操作
+        paddingLeft: 'calc(1rem + env(safe-area-inset-left, 0px))',
+        paddingRight: 'calc(1rem + env(safe-area-inset-right, 0px))',
       }}
     >
       {/* 背景遮罩 */}
@@ -143,7 +241,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
         className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ease-out ${
           isAnimating ? 'opacity-100' : 'opacity-0'
         }`}
-        onClick={onClose}
+        onClick={requestClose}
         onTouchMove={(e) => {
           // 只阻止滚动，允许其他触摸事件（包括点击）
           e.preventDefault();
@@ -161,13 +259,23 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
 
       {/* 操作表单 */}
       <div
-        className='relative w-full max-w-lg mx-4 mb-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl transition-all duration-200 ease-out'
+        ref={dialogRef}
+        role='dialog'
+        aria-modal='true'
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        className={`relative flex w-full max-w-lg flex-col overflow-hidden mb-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl transition-all duration-200 ease-out ${
+          isOpen ? '' : 'pointer-events-none'
+        }`}
         onTouchMove={(e) => {
           // 允许操作表单内部滚动，阻止事件冒泡到外层
           e.stopPropagation();
         }}
         style={{
           marginBottom: 'calc(1rem + env(safe-area-inset-bottom))',
+          maxHeight:
+            'calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
           willChange: 'transform, opacity',
           backfaceVisibility: 'hidden', // 避免闪烁
           transform: isAnimating
@@ -178,7 +286,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
         }}
       >
         {/* 头部 */}
-        <div className='flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800'>
+        <div className='flex flex-shrink-0 items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800'>
           <div className='flex items-center gap-3 flex-1 min-w-0'>
             {poster && (
               <div className='relative w-12 h-16 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0'>
@@ -197,7 +305,10 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
             )}
             <div className='min-w-0 flex-1'>
               <div className='flex items-center gap-2 mb-1'>
-                <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 truncate'>
+                <h3
+                  id={titleId}
+                  className='text-lg font-semibold text-gray-900 dark:text-gray-100 truncate'
+                >
                   {title}
                 </h3>
                 {sourceName && (
@@ -212,100 +323,113 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
                   </span>
                 )}
               </div>
-              <p className='text-sm text-gray-500 dark:text-gray-400'>
+              <p
+                id={descriptionId}
+                className='text-sm text-gray-500 dark:text-gray-400'
+              >
                 选择操作
               </p>
             </div>
           </div>
 
           <button
-            onClick={onClose}
+            ref={closeButtonRef}
+            type='button'
+            aria-label='关闭操作菜单'
+            onClick={requestClose}
+            disabled={!isOpen}
             className='p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150'
           >
-            <X size={20} className='text-gray-500 dark:text-gray-400' />
+            <X
+              aria-hidden='true'
+              size={20}
+              className='text-gray-500 dark:text-gray-400'
+            />
           </button>
         </div>
 
-        {/* 操作列表 */}
-        <div className='px-4 py-2'>
-          {actions.map((action, index) => (
-            <div key={action.id}>
-              <button
-                onClick={() => {
-                  action.onClick();
-                  onClose();
-                }}
-                disabled={action.disabled}
-                className={`
+        <div
+          className='min-h-0 flex-1 overflow-y-auto overscroll-contain'
+          style={{ touchAction: 'pan-y' }}
+        >
+          {/* 操作列表 */}
+          <div className='px-4 py-2'>
+            {actions.map((action, index) => (
+              <div key={action.id}>
+                <button
+                  type='button'
+                  data-action-sheet-action='true'
+                  onClick={() => runAction(action)}
+                  disabled={action.disabled || !isOpen}
+                  className={`
                   w-full flex items-center gap-4 py-4 px-2 transition-all duration-150 ease-out
                   ${
-                    action.disabled
+                    action.disabled || !isOpen
                       ? 'opacity-50 cursor-not-allowed'
                       : `${getActionHoverColor(
                           action.color,
                         )} active:scale-[0.98]`
                   }
                 `}
-                style={{ willChange: 'transform, background-color' }}
-              >
-                {/* 图标 - 使用线条风格 */}
-                <div className='w-6 h-6 flex items-center justify-center flex-shrink-0'>
-                  <span
-                    className={`transition-colors duration-150 ${
-                      action.disabled
-                        ? 'text-gray-400 dark:text-gray-600'
-                        : getActionColor(action.color)
-                    }`}
-                  >
-                    {action.icon}
-                  </span>
-                </div>
+                  style={{ willChange: 'transform, background-color' }}
+                >
+                  {/* 图标 - 使用线条风格 */}
+                  <div className='w-6 h-6 flex items-center justify-center flex-shrink-0'>
+                    <span
+                      className={`transition-colors duration-150 ${
+                        action.disabled || !isOpen
+                          ? 'text-gray-400 dark:text-gray-600'
+                          : getActionColor(action.color)
+                      }`}
+                    >
+                      {action.icon}
+                    </span>
+                  </div>
 
-                {/* 文字 */}
-                <span
-                  className={`
+                  {/* 文字 */}
+                  <span
+                    className={`
                   text-left font-medium text-base flex-1
                   ${
-                    action.disabled
+                    action.disabled || !isOpen
                       ? 'text-gray-400 dark:text-gray-600'
                       : 'text-gray-900 dark:text-gray-100'
                   }
                 `}
-                >
-                  {action.label}
-                </span>
-
-                {/* 播放进度 - 只在播放按钮且有播放记录时显示 */}
-                {action.id === 'play' && currentEpisode && totalEpisodes && (
-                  <span className='text-sm text-gray-500 dark:text-gray-400 font-medium'>
-                    {currentEpisode}/{totalEpisodes}
+                  >
+                    {action.label}
                   </span>
+
+                  {/* 播放进度 - 只在播放按钮且有播放记录时显示 */}
+                  {action.id === 'play' && currentEpisode && totalEpisodes && (
+                    <span className='text-sm text-gray-500 dark:text-gray-400 font-medium'>
+                      {currentEpisode}/{totalEpisodes}
+                    </span>
+                  )}
+                </button>
+
+                {/* 分割线 - 最后一项不显示 */}
+                {index < actions.length - 1 && (
+                  <div className='border-b border-gray-100 dark:border-gray-800 ml-10'></div>
                 )}
-              </button>
+              </div>
+            ))}
+          </div>
 
-              {/* 分割线 - 最后一项不显示 */}
-              {index < actions.length - 1 && (
-                <div className='border-b border-gray-100 dark:border-gray-800 ml-10'></div>
-              )}
-            </div>
-          ))}
-        </div>
+          {/* 播放源信息展示区域 */}
+          {isAggregate && sources && sources.length > 0 && (
+            <div className='px-4 py-3 border-t border-gray-100 dark:border-gray-800'>
+              {/* 标题区域 */}
+              <div className='mb-3'>
+                <h4 className='text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
+                  可用播放源
+                </h4>
+                <p className='text-xs text-gray-500 dark:text-gray-400'>
+                  共 {sources.length} 个播放源
+                </p>
+              </div>
 
-        {/* 播放源信息展示区域 */}
-        {isAggregate && sources && sources.length > 0 && (
-          <div className='px-4 py-3 border-t border-gray-100 dark:border-gray-800'>
-            {/* 标题区域 */}
-            <div className='mb-3'>
-              <h4 className='text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                可用播放源
-              </h4>
-              <p className='text-xs text-gray-500 dark:text-gray-400'>
-                共 {sources.length} 个播放源
-              </p>
-            </div>
-
-            {/* 播放源列表 */}
-            <div className='max-h-32 overflow-y-auto'>
+              {/* 播放源列表 */}
               <div className='grid grid-cols-2 gap-2'>
                 {sources.map((source, index) => (
                   <div
@@ -320,8 +444,8 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

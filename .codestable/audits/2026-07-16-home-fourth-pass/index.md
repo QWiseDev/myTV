@@ -43,7 +43,7 @@ supersedes: 2026-07-16-home-third-pass
 
 ## 下一步建议
 
-- **P1 修复中**：#1 已 resolved；#2—#4 继续补失败回归测试，再完成键盘、矮屏与动作时序验证。
+- **P1 已完成**：#1—#4 均已 resolved，并通过全量、production build 与浏览器门禁。
 - **P2 下一阶段修**：#5—#7 分别收口区块级 state reconcile、tab 返回调度和分页会话语义。
 
 ## 审计关系

@@ -30,7 +30,7 @@ export const EpisodeBadge = memo(function EpisodeBadge({
 
   return (
     <div
-      className='absolute top-2 left-2 z-30 rounded-full bg-[#141413]/88 px-3 py-1.5 text-xs font-bold text-[#faf9f5] shadow-sm ring-1 ring-white/25 backdrop-blur-md transition-all duration-300 ease-out group-hover:scale-105 dark:bg-[#f8f6f0]/90 dark:text-[#141413]'
+      className='pointer-events-none absolute top-2 left-2 z-30 rounded-full bg-[#141413]/88 px-3 py-1.5 text-xs font-bold text-[#faf9f5] shadow-sm ring-1 ring-white/25 backdrop-blur-md transition-all duration-300 ease-out group-hover:scale-105 dark:bg-[#f8f6f0]/90 dark:text-[#141413]'
       style={noSelectStyle}
       onContextMenu={preventContextMenu}
     >

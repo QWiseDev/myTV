@@ -404,6 +404,15 @@ const VideoCard = memo(function VideoCard(
     const actualEpisodes = episodes;
     const actualYear = year;
     const actualQuery = query || '';
+    const cardIdentity = JSON.stringify([
+      from,
+      actualSource ?? null,
+      actualId ?? null,
+    ]);
+    const latestCardIdentityRef = useRef(cardIdentity);
+    const favoriteMutationsRef = useRef(new Map<string, Promise<void>>());
+    const deleteMutationsRef = useRef(new Map<string, Promise<void>>());
+    latestCardIdentityRef.current = cardIdentity;
     const subjectUrl = buildVideoCardSubjectUrl(actualDoubanId, isBangumi);
     const actualSearchType = getVideoCardSearchType({
       isAggregate,
@@ -448,7 +457,7 @@ const VideoCard = memo(function VideoCard(
     );
 
     const handleToggleFavorite = useCallback(
-      async (e: React.MouseEvent) => {
+      (e: React.MouseEvent): Promise<void> => {
         e.preventDefault();
         e.stopPropagation();
         const favoriteToggleParams = {
@@ -458,34 +467,53 @@ const VideoCard = memo(function VideoCard(
         };
 
         if (!canToggleVideoCardFavorite(favoriteToggleParams)) {
-          return;
+          return Promise.resolve();
         }
+        const pendingMutation = favoriteMutationsRef.current.get(cardIdentity);
+        if (pendingMutation) return pendingMutation;
+
         const { source: favoriteSource, id: favoriteId } = favoriteToggleParams;
+        const mutationIdentity = cardIdentity;
 
-        try {
-          // 确定当前收藏状态
-          const currentFavorited =
-            from === 'search' ? searchFavorited : favorited;
+        const mutation = (async () => {
+          try {
+            // 确定当前收藏状态
+            const currentFavorited =
+              from === 'search' ? searchFavorited : favorited;
 
-          if (currentFavorited) {
-            // 如果已收藏，删除收藏
-            await deleteFavorite(favoriteSource, favoriteId);
-            setCurrentFavoriteState(false);
-          } else {
-            // 如果未收藏，添加收藏
-            await saveFavorite(favoriteSource, favoriteId, {
-              title: actualTitle,
-              source_name: source_name || '',
-              year: actualYear || '',
-              cover: actualPoster,
-              total_episodes: actualEpisodes ?? 1,
-              save_time: Date.now(),
-            });
-            setCurrentFavoriteState(true);
+            if (currentFavorited) {
+              // 如果已收藏，删除收藏
+              await deleteFavorite(favoriteSource, favoriteId);
+              if (latestCardIdentityRef.current === mutationIdentity) {
+                setCurrentFavoriteState(false);
+              }
+            } else {
+              // 如果未收藏，添加收藏
+              await saveFavorite(favoriteSource, favoriteId, {
+                title: actualTitle,
+                source_name: source_name || '',
+                year: actualYear || '',
+                cover: actualPoster,
+                total_episodes: actualEpisodes ?? 1,
+                save_time: Date.now(),
+              });
+              if (latestCardIdentityRef.current === mutationIdentity) {
+                setCurrentFavoriteState(true);
+              }
+            }
+          } catch {
+            // 持久层已触发全局错误提示；事件边界在此消费 rejection。
           }
-        } catch {
-          // 持久层已触发全局错误提示；事件边界在此消费 rejection。
-        }
+        })();
+
+        favoriteMutationsRef.current.set(mutationIdentity, mutation);
+        return mutation.finally(() => {
+          if (
+            favoriteMutationsRef.current.get(mutationIdentity) === mutation
+          ) {
+            favoriteMutationsRef.current.delete(mutationIdentity);
+          }
+        });
       },
       [
         from,
@@ -499,26 +527,43 @@ const VideoCard = memo(function VideoCard(
         favorited,
         searchFavorited,
         setCurrentFavoriteState,
+        cardIdentity,
       ],
     );
 
     const handleDeleteRecord = useCallback(
-      async (e: React.MouseEvent) => {
+      (e: React.MouseEvent): Promise<void> => {
         e.preventDefault();
         e.stopPropagation();
-        if (from !== 'playrecord' || !actualSource || !actualId) return;
-        try {
-          if (onDelete) {
-            await onDelete();
-            return;
-          }
-
-          await deletePlayRecord(actualSource, actualId);
-        } catch {
-          // db.client 或上层 onDelete 已负责提示/回滚，避免 React 丢弃的 Promise 继续抛错。
+        if (from !== 'playrecord' || !actualSource || !actualId) {
+          return Promise.resolve();
         }
+        const pendingMutation = deleteMutationsRef.current.get(cardIdentity);
+        if (pendingMutation) return pendingMutation;
+
+        const mutationIdentity = cardIdentity;
+
+        const mutation = (async () => {
+          try {
+            if (onDelete) {
+              await onDelete();
+              return;
+            }
+
+            await deletePlayRecord(actualSource, actualId);
+          } catch {
+            // db.client 或上层 onDelete 已负责提示/回滚，避免 React 丢弃的 Promise 继续抛错。
+          }
+        })();
+
+        deleteMutationsRef.current.set(mutationIdentity, mutation);
+        return mutation.finally(() => {
+          if (deleteMutationsRef.current.get(mutationIdentity) === mutation) {
+            deleteMutationsRef.current.delete(mutationIdentity);
+          }
+        });
       },
-      [from, actualSource, actualId, onDelete],
+      [from, actualSource, actualId, onDelete, cardIdentity],
     );
 
     const playUrl = useMemo(
@@ -554,6 +599,25 @@ const VideoCard = memo(function VideoCard(
     const handleClick = useCallback(() => {
       navigateVideoCardPlayUrl(playUrl);
     }, [playUrl]);
+
+    const handlePrimaryLinkClick = useCallback(
+      (event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.stopPropagation();
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        handleClick();
+      },
+      [handleClick],
+    );
 
     // 新标签页播放处理函数
     const handlePlayInNewTab = useCallback(() => {
@@ -641,11 +705,21 @@ const VideoCard = memo(function VideoCard(
         <div
           className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-[500]'
           onClick={handleClick}
-          {...longPressProps}
           style={cardContainerStyle}
           onContextMenu={handleContextMenu}
           onDragStart={preventDragStart}
         >
+          {playUrl && (
+            <a
+              href={playUrl}
+              aria-label={`播放 ${actualTitle}`}
+              className='absolute inset-0 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d97757] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#1f1d1a]'
+              onClick={handlePrimaryLinkClick}
+              onDragStart={preventDragStart}
+              {...longPressProps}
+            />
+          )}
+
           {/* 海报容器 */}
           <div
             className={`relative aspect-[2/3] overflow-hidden rounded-lg ${
@@ -703,7 +777,6 @@ const VideoCard = memo(function VideoCard(
             {/* 播放按钮 */}
             {config.showPlayButton && (
               <div
-                data-button='true'
                 className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'
                 style={noSelectStyle}
                 onContextMenu={preventContextMenu}
@@ -721,32 +794,44 @@ const VideoCard = memo(function VideoCard(
             {/* 操作按钮 */}
             {(config.showHeart || config.showCheckCircle) && (
               <div
-                data-button='true'
-                className='absolute bottom-3 right-3 flex gap-3 opacity-0 translate-y-2 transition-all duration-300 ease-in-out sm:group-hover:opacity-100 sm:group-hover:translate-y-0'
+                className='pointer-events-none absolute bottom-3 right-3 z-[30] flex gap-2 opacity-0 translate-y-2 transition-all duration-300 ease-in-out sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0'
                 style={noSelectStyle}
                 onContextMenu={preventContextMenu}
               >
                 {config.showCheckCircle && (
-                  <Trash2
+                  <button
+                    type='button'
+                    data-button='true'
+                    aria-label={`删除 ${actualTitle} 的播放记录`}
                     onClick={handleDeleteRecord}
-                    size={20}
-                    className='text-white transition-all duration-300 ease-out hover:stroke-[#d97757] hover:scale-[1.1]'
+                    className='inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-300 ease-out hover:text-[#d97757] hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
                     style={noSelectStyle}
                     onContextMenu={preventContextMenu}
-                  />
+                  >
+                    <Trash2 aria-hidden='true' size={20} />
+                  </button>
                 )}
                 {config.showHeart && from !== 'search' && (
-                  <Heart
+                  <button
+                    type='button'
+                    data-button='true'
+                    aria-label={`${favorited ? '取消收藏' : '收藏'} ${actualTitle}`}
+                    aria-pressed={favorited}
                     onClick={handleToggleFavorite}
-                    size={20}
-                    className={`transition-all duration-300 ease-out ${
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                       favorited
-                        ? 'fill-red-600 stroke-red-600'
-                        : 'fill-transparent stroke-white hover:stroke-red-400'
-                    } hover:scale-[1.1]`}
+                        ? 'text-red-600'
+                        : 'text-white hover:text-red-400'
+                    }`}
                     style={noSelectStyle}
                     onContextMenu={preventContextMenu}
-                  />
+                  >
+                    <Heart
+                      aria-hidden='true'
+                      size={20}
+                      className={favorited ? 'fill-current' : 'fill-transparent'}
+                    />
+                  </button>
                 )}
               </div>
             )}
@@ -772,10 +857,11 @@ const VideoCard = memo(function VideoCard(
             {config.showDoubanLink && subjectUrl && (
               <a
                 href={subjectUrl}
+                aria-label={isBangumi ? '打开 Bangumi 详情' : '打开豆瓣详情'}
                 target='_blank'
                 rel='noopener noreferrer'
                 onClick={(e) => e.stopPropagation()}
-                className='absolute top-2 left-2 opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:opacity-100 sm:group-hover:translate-x-0'
+                className='pointer-events-none absolute top-2 left-2 z-[30] opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-x-0 focus:pointer-events-auto focus:opacity-100 focus:translate-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full'
                 style={noSelectStyle}
                 onContextMenu={preventContextMenu}
               >
@@ -790,10 +876,15 @@ const VideoCard = memo(function VideoCard(
             )}
 
             {/* 聚合播放源指示器 */}
-            {isAggregate &&
+            {playUrl &&
+              isAggregate &&
               source_names &&
               source_names.length > 0 && (
-                <AggregateSourceIndicator sourceNames={source_names} />
+                <AggregateSourceIndicator
+                  href={playUrl}
+                  sourceNames={source_names}
+                  title={actualTitle}
+                />
               )}
           </div>
 

@@ -6,7 +6,7 @@ nature: bug
 severity: P1
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 02：移动操作面板在矮屏下存在不可达内容
@@ -28,6 +28,14 @@ status: open
 ## 修复方向
 
 把面板约束在 `100dvh` 内，固定头部、让内容主体滚动，并只在遮罩层阻止背景滚动。
+
+## 处理进展（2026-07-16）
+
+- 面板改为 `100dvh` 上限的纵向 flex 容器，头部固定，操作与来源共用唯一 `overflow-y-auto` 主体。
+- 移除全屏祖先的 `touchAction: 'none'` 与 `touchmove preventDefault()`，保留遮罩和 body 锁滚动。
+- 增加左右、顶部与底部 safe-area 约束；独立组件回归覆盖滚动结构。
+- 关闭动画期间把焦点留在 dialog 并持续圈定；body 锁滚动的恢复 RAF 可被 StrictMode 下一轮 setup 取消。
+- 667×320 浏览器验证：面板 top=16、bottom=304、height=288；滚动区 `scrollHeight=243 > clientHeight=191`，底部操作可聚焦。
 
 ## 建议动作
 
