@@ -3,7 +3,8 @@ doc_type: audit-index
 audit: 2026-07-16-home-third-pass
 scope: 首页数据刷新、收藏操作、加载占位、卡片图片与共享缓存边界
 created: 2026-07-16
-status: active
+status: superseded
+superseded-by: 2026-07-16-home-fourth-pass
 total_findings: 11
 ---
 

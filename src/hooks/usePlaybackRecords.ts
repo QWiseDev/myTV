@@ -217,8 +217,6 @@ export function usePlaybackRecords(
       return;
     }
 
-    if (!isInitialLoad) return;
-
     const cancelLoad = scheduleIdleTask(
       () => {
         void loadPlayRecordsPage(false);

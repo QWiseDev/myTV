@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import React, { StrictMode } from 'react';
 
 import type { PlayRecord } from '@/lib/types';
 
@@ -57,6 +58,10 @@ function createDeferred<T>() {
   return { promise, reject, resolve };
 }
 
+function StrictModeWrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(StrictMode, null, children);
+}
+
 describe('usePlaybackRecords', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
@@ -98,6 +103,32 @@ describe('usePlaybackRecords', () => {
     expect(result.current.loadingPlayRecords).toBe(false);
   });
 
+  it('loads recent play records exactly once in StrictMode', async () => {
+    const records = {
+      'source+strict-mode': createRecord(),
+    };
+    getPlayRecordsPage.mockResolvedValue(createPage(records));
+
+    const { result } = renderHook(
+      () => usePlaybackRecords(['source+strict-mode']),
+      { wrapper: StrictModeWrapper },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
+    expect(getPlayRecordsPage).toHaveBeenCalledWith({
+      cursor: null,
+      includeKeys: ['source+strict-mode'],
+      pageSize: 12,
+    });
+    expect(result.current.playRecords).toBe(records);
+    expect(result.current.loadingPlayRecords).toBe(false);
+  });
+
   it('includes priority play record keys on the first page request', async () => {
     getPlayRecordsPage.mockResolvedValue(createPage({}));
 
@@ -115,6 +146,35 @@ describe('usePlaybackRecords', () => {
       includeKeys: ['source+new-update', 'source+old-update'],
       pageSize: 12,
     });
+  });
+
+  it('loads changed priority keys immediately before the initial idle task', async () => {
+    getPlayRecordsPage.mockResolvedValue(createPage({}));
+
+    const { rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
+    expect(getPlayRecordsPage).toHaveBeenCalledWith({
+      cursor: null,
+      includeKeys: ['source+priority'],
+      pageSize: 12,
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
   });
 
   it('loads more play records by cursor and appends the next page', async () => {
