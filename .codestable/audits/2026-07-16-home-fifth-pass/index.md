@@ -3,9 +3,10 @@ doc_type: audit-index
 audit: 2026-07-16-home-fifth-pass
 scope: 首页刷新可靠性、收藏与播放记录并发、横滑交互、首屏调度及多轮补丁冗余
 created: 2026-07-16
-status: active
+status: superseded
 total_findings: 10
 supersedes: 2026-07-16-home-fourth-pass
+superseded-by: 2026-07-16-home-sixth-pass
 ---
 
 # 首页第五轮审计报告

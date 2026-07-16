@@ -215,7 +215,9 @@ function useVideoCardFavoriteStatus({
   boolean,
   React.Dispatch<React.SetStateAction<boolean>>,
 ] {
-  const [favorited, setFavorited] = useState(false);
+  const [favorited, setFavorited] = useState(
+    from === 'favorite' && Boolean(source) && Boolean(id),
+  );
   const favoriteRevisionRef = useRef(0);
   const updateFavorited = useCallback<
     React.Dispatch<React.SetStateAction<boolean>>

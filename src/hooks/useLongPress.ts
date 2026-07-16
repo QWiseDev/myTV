@@ -22,6 +22,11 @@ export const useLongPress = ({
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   const startPosition = useRef<TouchPosition | null>(null);
   const isActive = useRef(false); // 防止重复触发
+  const activeTouchIdentifier = useRef<number | null>(null);
+  const globalTouchStartListener = useRef<((event: TouchEvent) => void) | null>(
+    null,
+  );
+  const suppressClick = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (pressTimer.current) {
@@ -30,15 +35,33 @@ export const useLongPress = ({
     }
   }, []);
 
+  const detachGlobalTouchGuard = useCallback(() => {
+    if (!globalTouchStartListener.current) return;
+
+    document.removeEventListener(
+      'touchstart',
+      globalTouchStartListener.current,
+      true,
+    );
+    globalTouchStartListener.current = null;
+  }, []);
+
   const resetGesture = useCallback(() => {
     clearTimer();
+    detachGlobalTouchGuard();
     isLongPress.current = false;
     startPosition.current = null;
     isActive.current = false;
-  }, [clearTimer]);
+    activeTouchIdentifier.current = null;
+  }, [clearTimer, detachGlobalTouchGuard]);
+
+  const cancelMultiTouchGesture = useCallback(() => {
+    suppressClick.current = true;
+    resetGesture();
+  }, [resetGesture]);
 
   const handleStart = useCallback(
-    (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number, touchIdentifier: number) => {
       // 如果已经有活跃的手势，忽略新的开始
       if (isActive.current) {
         return;
@@ -47,6 +70,18 @@ export const useLongPress = ({
       isActive.current = true;
       isLongPress.current = false;
       startPosition.current = { x: clientX, y: clientY };
+      activeTouchIdentifier.current = touchIdentifier;
+
+      const handleAdditionalTouch = (event: TouchEvent) => {
+        if (event.touches.length > 1) {
+          cancelMultiTouchGesture();
+        }
+      };
+      globalTouchStartListener.current = handleAdditionalTouch;
+      document.addEventListener('touchstart', handleAdditionalTouch, {
+        capture: true,
+        passive: true,
+      });
 
       pressTimer.current = setTimeout(() => {
         // 再次检查是否仍然活跃
@@ -63,7 +98,7 @@ export const useLongPress = ({
         onLongPress();
       }, longPressDelay);
     },
-    [longPressDelay, onLongPress],
+    [cancelMultiTouchGesture, longPressDelay, onLongPress],
   );
 
   const handleMove = useCallback(
@@ -97,11 +132,26 @@ export const useLongPress = ({
     }
   }, [onClick, resetGesture]);
 
-  useEffect(() => resetGesture, [resetGesture]);
+  useEffect(
+    () => () => {
+      suppressClick.current = false;
+      resetGesture();
+    },
+    [resetGesture],
+  );
 
   // 触摸事件处理器
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      if (suppressClick.current && e.touches.length === 1) {
+        suppressClick.current = false;
+      }
+
+      if (e.touches.length !== 1) {
+        cancelMultiTouchGesture();
+        return;
+      }
+
       const target = e.target as HTMLElement;
       const interactiveElement = target.closest(
         'button, a, input, select, textarea, [role="button"], [role="link"]',
@@ -111,33 +161,76 @@ export const useLongPress = ({
       // 阻止默认的长按行为，但不阻止触摸开始事件
       const touch = e.touches[0];
       if (!touch) return;
-      handleStart(touch.clientX, touch.clientY);
+      handleStart(touch.clientX, touch.clientY, touch.identifier);
     },
-    [handleStart],
+    [cancelMultiTouchGesture, handleStart],
   );
 
   const onTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      const touch = e.touches[0];
-      if (!touch) return;
+      if (!isActive.current) return;
+
+      if (e.touches.length !== 1) {
+        cancelMultiTouchGesture();
+        return;
+      }
+
+      const touch = Array.from(e.touches).find(
+        ({ identifier }) => identifier === activeTouchIdentifier.current,
+      );
+      if (!touch) {
+        cancelMultiTouchGesture();
+        return;
+      }
+
       handleMove(touch.clientX, touch.clientY);
     },
-    [handleMove],
+    [cancelMultiTouchGesture, handleMove],
   );
 
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
+      if (suppressClick.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.touches.length === 0) {
+          suppressClick.current = false;
+        }
+        return;
+      }
+
       if (!isActive.current) return;
+
+      const touchEnded = Array.from(e.changedTouches).some(
+        ({ identifier }) => identifier === activeTouchIdentifier.current,
+      );
+      if (!touchEnded) {
+        const activeTouchStillPresent = Array.from(e.touches).some(
+          ({ identifier }) => identifier === activeTouchIdentifier.current,
+        );
+        if (!activeTouchStillPresent || e.touches.length !== 1) {
+          cancelMultiTouchGesture();
+        }
+        return;
+      }
+
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelMultiTouchGesture();
+        return;
+      }
 
       // 始终阻止默认行为，避免任何系统长按菜单
       e.preventDefault();
       e.stopPropagation();
       handleEnd();
     },
-    [handleEnd],
+    [cancelMultiTouchGesture, handleEnd],
   );
 
   const onTouchCancel = useCallback(() => {
+    suppressClick.current = false;
     resetGesture();
   }, [resetGesture]);
 

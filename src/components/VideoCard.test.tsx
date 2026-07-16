@@ -820,6 +820,42 @@ describe('VideoCard behavior', () => {
     });
   });
 
+  it('treats favorite cards as favorited before syncing the delayed status', async () => {
+    jest.useFakeTimers();
+    Reflect.deleteProperty(window, 'requestIdleCallback');
+    mockIsFavorited.mockResolvedValue(false);
+
+    render(
+      <VideoCard
+        from='favorite'
+        id='video-a'
+        poster='https://cdn.example/poster.jpg'
+        source='source-a'
+        source_name='测试源'
+        title='测试影片'
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole('button', { name: '取消收藏 测试影片' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(mockIsFavorited).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+      await flushAsyncWork();
+    });
+
+    expect(mockIsFavorited).toHaveBeenCalledWith('source-a', 'video-a');
+    expect(
+      screen
+        .getByRole('button', { name: '收藏 测试影片' })
+        .getAttribute('aria-pressed'),
+    ).toBe('false');
+  });
+
   it('does not let an older favorite query overwrite a newer update event', async () => {
     jest.useFakeTimers();
     Reflect.deleteProperty(window, 'requestIdleCallback');

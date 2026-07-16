@@ -192,7 +192,9 @@ describe('UserMenu data hooks', () => {
       jest.spyOn(Date, 'now').mockReturnValue(100000);
       localStorage.setItem('watchingUpdatesLastViewed', lastViewed);
       mockGetCachedWatchingUpdates.mockReturnValue(true);
-      mockGetDetailedWatchingUpdates.mockReturnValue(createWatchingUpdate());
+      mockGetDetailedWatchingUpdates.mockReturnValue(
+        createWatchingUpdate({ timestamp: 100000 }),
+      );
 
       const { result } = renderHook(() =>
         useUserMenuWatchingUpdates({
@@ -241,6 +243,49 @@ describe('UserMenu data hooks', () => {
       });
       expect(result.current.watchingUpdatesState.totalUpdates).toBe(2);
       expect(result.current.hasUnreadUpdates).toBe(false);
+    });
+
+    it('recomputes unread only for a newer snapshot with update payload', () => {
+      const now = jest.spyOn(Date, 'now').mockReturnValue(100000);
+      const initialUpdate = createWatchingUpdate({ timestamp: 100000 });
+      const refreshedUpdate = createWatchingUpdate({
+        timestamp: 160001,
+        updatedCount: 2,
+      });
+      mockGetCachedWatchingUpdates.mockReturnValue(true);
+      mockGetDetailedWatchingUpdates.mockReturnValue(initialUpdate);
+
+      const { result } = renderHook(() =>
+        useUserMenuWatchingUpdates({
+          authInfo: AUTH_INFO,
+          storageType: 'redis',
+        }),
+      );
+
+      act(() => {
+        result.current.markWatchingUpdatesViewed();
+      });
+      expect(result.current.hasUnreadUpdates).toBe(false);
+
+      now.mockReturnValue(160001);
+      act(() => {
+        watchingUpdatesHandler?.(true, 1, false);
+      });
+      expect(result.current.hasUnreadUpdates).toBe(false);
+
+      mockGetDetailedWatchingUpdates.mockReturnValue(refreshedUpdate);
+      act(() => {
+        watchingUpdatesHandler?.(false, 0, false);
+      });
+      expect(result.current.watchingUpdatesState.totalUpdates).toBe(2);
+      expect(result.current.hasUnreadUpdates).toBe(false);
+
+      act(() => {
+        watchingUpdatesHandler?.(true, 2, false);
+      });
+
+      expect(result.current.watchingUpdatesState.totalUpdates).toBe(2);
+      expect(result.current.hasUnreadUpdates).toBe(true);
     });
   });
 

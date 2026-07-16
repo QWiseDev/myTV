@@ -31,9 +31,15 @@ function LongPressHarness({
   );
 }
 
-function touchStart(target: Element) {
+function createTouch(identifier: number, clientX = 10, clientY = 10) {
+  return { clientX, clientY, identifier };
+}
+
+function touchStart(target: Element, identifier = 1) {
+  const touch = createTouch(identifier);
   fireEvent.touchStart(target, {
-    touches: [{ clientX: 10, clientY: 10 }],
+    changedTouches: [touch],
+    touches: [touch],
   });
 }
 
@@ -118,5 +124,151 @@ describe('useLongPress', () => {
 
     expect(onLongPress).not.toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not start a gesture when multiple touches are already present', () => {
+    const onClick = jest.fn();
+    const onLongPress = jest.fn();
+    render(<LongPressHarness onClick={onClick} onLongPress={onLongPress} />);
+    const target = screen.getByTestId('long-press-target');
+    const firstTouch = createTouch(1);
+    const secondTouch = createTouch(2, 20, 20);
+
+    fireEvent.touchStart(target, {
+      changedTouches: [firstTouch, secondTouch],
+      touches: [firstTouch, secondTouch],
+    });
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+    fireEvent.touchEnd(target, {
+      changedTouches: [firstTouch],
+      touches: [secondTouch],
+    });
+
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('cancels the gesture when a second touch joins', () => {
+    const onClick = jest.fn();
+    const onLongPress = jest.fn();
+    render(
+      <>
+        <LongPressHarness onClick={onClick} onLongPress={onLongPress} />
+        <div data-testid='outside-touch-target' />
+      </>,
+    );
+    const target = screen.getByTestId('long-press-target');
+    const secondTouchTarget = screen.getByTestId('outside-touch-target');
+    const firstTouch = createTouch(1);
+    const secondTouch = createTouch(2, 20, 20);
+
+    touchStart(target);
+    fireEvent.touchStart(secondTouchTarget, {
+      changedTouches: [secondTouch],
+      touches: [firstTouch, secondTouch],
+    });
+    fireEvent.touchEnd(secondTouchTarget, {
+      changedTouches: [secondTouch],
+      touches: [firstTouch],
+    });
+    fireEvent.touchEnd(target, {
+      changedTouches: [firstTouch],
+      touches: [],
+    });
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('allows the next tap when the external touch ends after the active touch', () => {
+    const onClick = jest.fn();
+    const onLongPress = jest.fn();
+    render(
+      <>
+        <LongPressHarness onClick={onClick} onLongPress={onLongPress} />
+        <div data-testid='outside-touch-target' />
+      </>,
+    );
+    const target = screen.getByTestId('long-press-target');
+    const outsideTarget = screen.getByTestId('outside-touch-target');
+    const firstTouch = createTouch(1);
+    const secondTouch = createTouch(2, 20, 20);
+
+    touchStart(target);
+    fireEvent.touchStart(outsideTarget, {
+      changedTouches: [secondTouch],
+      touches: [firstTouch, secondTouch],
+    });
+    fireEvent.touchEnd(target, {
+      changedTouches: [firstTouch],
+      touches: [secondTouch],
+    });
+    fireEvent.touchEnd(outsideTarget, {
+      changedTouches: [secondTouch],
+      touches: [],
+    });
+
+    touchStart(target, 3);
+    fireEvent.touchEnd(target, {
+      changedTouches: [createTouch(3)],
+      touches: [],
+    });
+
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the gesture when the active touch is missing', () => {
+    const onClick = jest.fn();
+    const onLongPress = jest.fn();
+    render(<LongPressHarness onClick={onClick} onLongPress={onLongPress} />);
+    const target = screen.getByTestId('long-press-target');
+    const replacementTouch = createTouch(2);
+
+    touchStart(target);
+    fireEvent.touchMove(target, {
+      changedTouches: [replacementTouch],
+      touches: [replacementTouch],
+    });
+    fireEvent.touchEnd(target, {
+      changedTouches: [replacementTouch],
+      touches: [],
+    });
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('ignores the end of a non-active touch', () => {
+    const onClick = jest.fn();
+    const onLongPress = jest.fn();
+    render(<LongPressHarness onClick={onClick} onLongPress={onLongPress} />);
+    const target = screen.getByTestId('long-press-target');
+    const activeTouch = createTouch(1);
+    const otherTouch = createTouch(2, 20, 20);
+
+    touchStart(target);
+    fireEvent.touchEnd(target, {
+      changedTouches: [otherTouch],
+      touches: [activeTouch],
+    });
+
+    expect(onClick).not.toHaveBeenCalled();
+
+    fireEvent.touchEnd(target, {
+      changedTouches: [activeTouch],
+      touches: [],
+    });
+
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

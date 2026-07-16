@@ -48,18 +48,21 @@ export function useUserMenuWatchingUpdates({
 
     debug.log('开始加载 watching-updates 数据...');
 
-    const updateWatchingUpdates = () => {
+    const updateWatchingUpdates = (eventHasEpisodeUpdates?: boolean) => {
       const updates = getDetailedWatchingUpdates();
       debug.log('getDetailedWatchingUpdates 返回:', updates);
       setWatchingUpdates(updates);
 
-      if (updates && (updates.updatedCount || 0) > 0) {
+      const hasEpisodeUpdates =
+        eventHasEpisodeUpdates ?? Boolean((updates?.updatedCount || 0) > 0);
+      if (updates && hasEpisodeUpdates) {
         const lastViewed = parseInt(
           localStorage.getItem('watchingUpdatesLastViewed') || '0',
         );
         const currentTime = Date.now();
         const hasNewUpdates =
-          lastViewed === 0 || currentTime - lastViewed > 60000;
+          lastViewed === 0 ||
+          (updates.timestamp > lastViewed && currentTime - lastViewed > 60000);
         setHasUnreadUpdates(hasNewUpdates);
       } else {
         setHasUnreadUpdates(false);
@@ -72,11 +75,11 @@ export function useUserMenuWatchingUpdates({
     }
 
     const unsubscribe = subscribeToWatchingUpdatesEvent(
-      (_hasUpdates, _updatedCount, invalidated) => {
+      (hasUpdates, updatedCount, invalidated) => {
         if (invalidated) return;
 
         debug.log('收到 watching-updates 事件，更新数据...');
-        setWatchingUpdates(getDetailedWatchingUpdates());
+        updateWatchingUpdates(hasUpdates && updatedCount > 0);
       },
     );
 
