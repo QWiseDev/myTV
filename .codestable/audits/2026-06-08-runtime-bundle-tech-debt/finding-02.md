@@ -31,6 +31,13 @@ status: open
 
 按模块逐个处理，优先抽纯函数和无副作用展示组件；每轮只拆一个入口，不和性能修复混做。
 
+## 处理进展（2026-07-16）
+
+- `UserMenu.tsx` 已完成独立 refactor：六棵面板迁为纯 props 展示组件，追更/继续观看/收藏迁入三个数据 Hook，13 项设置与持久化迁入显式 Controller。
+- `UserMenu.tsx` 从本 finding 记录的 2282 行降至 548 行；父组件仅保留菜单/Portal 编排、认证权限、导航登出、版本检查、改密和下拉 UI 生命周期。
+- 对应刻画、Hook 与 Controller 测试已补齐；桌面/移动面板目视、定向 Jest、ESLint 与 typecheck 通过。
+- `SlotMachine.tsx`、`SourceTestModule.tsx`、`search/page.tsx`、`live/page.tsx` 尚未在本专项处理，因此 finding 继续保持 open。
+
 ## 建议动作
 
 `cs-refactor`，因为这是行为等价的结构优化，需要 scan/design/apply 分阶段推进。

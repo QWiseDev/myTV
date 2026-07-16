@@ -33,3 +33,10 @@ refactor: 2026-07-16-user-menu-decomposition
 - 改动文件：`src/components/UserMenu.tsx`、`src/components/user-menu/useUserMenuSettingsController.ts`、`src/components/user-menu/useUserMenuSettingsController.test.ts`
 - 验证结果：13 项持久化设置、一次性 hydration、13 个显式命令与 reset 已迁入零参数 Controller；两个豆瓣下拉 open state、Portal、滚动锁和面板开关仍归父组件。Hook 测试逐项固定 key/序列化、写入后同步派发、点击时 runtime default、只 hydration 一次，以及 reset 全量写回但只派发 `doubanImageProxyChanged` 的既有语义。定向 Jest 4 suites / 29 tests、目标 ESLint、`pnpm typecheck`、Prettier 与 `git diff --check` 通过。
 - 偏离：无。未改 `src/lib/user-menu-settings.ts`、Panel props、数值校验或事件契约，也未将命令收敛为通用配置 map。
+
+## 步骤 5：收口父组件与审计记录
+
+- 完成时间：2026-07-16
+- 改动文件：`src/components/UserMenu.tsx`、`.codestable/audits/2026-06-08-runtime-bundle-tech-debt/finding-02.md`
+- 验证结果：结构搜索与目标 ESLint 确认父组件不再持有设置 localStorage、媒体数据源或已迁移 setter/helper；移除已无对应代码的 `no-non-null-assertion` 文件级禁用。`UserMenu.tsx` 从本轮开始的 2095 行降至 548 行，剩余 state/effect 均归属菜单/Portal 编排、认证权限、版本、导航登出、改密或下拉 UI 生命周期；旧超长组件 finding 已记录 UserMenu 子项完成，其余入口仍保持 open。
+- 偏离：无。未继续拆分预存的导航、权限、版本、改密或下拉逻辑，也未改其它超长组件。

@@ -19,7 +19,7 @@ steps:
     verify: 逐 key 序列化与条件事件保持不变
   - id: parent-cleanup
     title: 收口父组件与审计记录
-    status: pending
+    status: done
     verify: 本次产生的死 import/state/helper 零残留
   - id: full-verification
     title: 完整质量门禁与目视验收
