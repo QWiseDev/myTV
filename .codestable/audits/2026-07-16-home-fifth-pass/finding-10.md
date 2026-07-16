@@ -6,7 +6,7 @@ nature: maintainability
 severity: P2
 confidence: high
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 10：首页初载与重试保留两套 section 编排
@@ -29,6 +29,14 @@ status: open
 ## 修复方向
 
 建立 typed section descriptor，让初载和重试共用同一“开始 → 加载 → 提交”原语；批次层只决定并发/idle 顺序，不再复制区块实现。
+
+## 处理进展（2026-07-16）
+
+- 新增唯一 `executeSections()`，初载、单区 retry 与 tertiary idle 共用 begin/load/apply/catch 编排。
+- TV/综艺保留一次 secondary batch；critical/tertiary 结果独立 settle，不等待慢 sibling 才提交。
+- section/result 改为 typed descriptor 与泛型映射并显式提交数据，Hook 不再依赖动态 data key、联合 data cast 或 `patchHomeData()`。
+- controller、generation、StrictMode 微任务门禁、#8 追更顺序与 idle cleanup 保持原入口所有权。
+- `patchHomeData()` 导出已无生产调用，但删除导出属于共享接口清理，留待 finding #6 contract 决策后处理。
 
 ## 建议动作
 

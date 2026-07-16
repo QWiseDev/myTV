@@ -1,0 +1,35 @@
+refactor: 2026-07-16-home-section-orchestration
+status: done
+steps:
+  - id: characterization-tests
+    title: 固化 retry 映射、独立 settle、错误隔离与取消
+    status: done
+    verify: 旧实现 Hook 定向 Jest 通过
+  - id: unified-executor
+    title: 建立唯一 section 执行器
+    status: done
+    verify: loader 分派和结果提交集中到 executeSections
+  - id: migrate-entrypoints
+    title: 迁移 retry、initial 与 tertiary idle 入口
+    status: done
+    verify: StrictMode、abort、idle 与追更顺序测试通过
+  - id: full-verification
+    title: 完整质量门禁
+    status: done
+    verify: Jest、ESLint、typecheck、build、YAML、格式与 diff check 通过
+checks:
+  - id: behavior-equivalence
+    title: section 数据、loading、error 与 retry 行为不变
+    status: passed
+  - id: secondary-single-batch
+    title: TV 与综艺同时缺失时只请求一次 secondary batch
+    status: passed
+  - id: cancellation-boundary
+    title: controller、generation 与 idle cleanup 所有权不变
+    status: passed
+  - id: finding-06-separated
+    title: 不修改 SSR loaded-success 与空数组 contract
+    status: passed
+  - id: full-quality-gates
+    title: 完整质量门禁通过
+    status: passed
