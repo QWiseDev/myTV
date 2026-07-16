@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 import { CURRENT_VERSION } from '@/lib/version';
-import { UpdateStatus } from '@/lib/version_check';
 
 type UserRole = 'owner' | 'admin' | 'user';
 
@@ -22,7 +21,6 @@ interface UserMenuDropdownPanelProps {
   favoritesCount: number;
   hasUnreadUpdates: boolean;
   isAdminUser: boolean;
-  isChecking: boolean;
   onAdminPanel: () => void;
   onChangePassword: () => void;
   onClose: () => void;
@@ -44,7 +42,6 @@ interface UserMenuDropdownPanelProps {
   showWatchingUpdates: boolean;
   storageType: string;
   totalUpdates: number;
-  updateStatus: UpdateStatus | null;
   username?: string;
 }
 
@@ -75,7 +72,6 @@ export function UserMenuDropdownPanel({
   favoritesCount,
   hasUnreadUpdates,
   isAdminUser,
-  isChecking,
   onAdminPanel,
   onChangePassword,
   onClose,
@@ -97,7 +93,6 @@ export function UserMenuDropdownPanel({
   showWatchingUpdates,
   storageType,
   totalUpdates,
-  updateStatus,
   username,
 }: UserMenuDropdownPanelProps) {
   return (
@@ -266,19 +261,7 @@ export function UserMenuDropdownPanel({
           >
             <div className='flex items-center gap-1'>
               <span className='font-mono'>v{CURRENT_VERSION}</span>
-              {!isChecking &&
-                updateStatus &&
-                updateStatus !== UpdateStatus.FETCH_FAILED && (
-                  <div
-                    className={`w-2 h-2 rounded-full -translate-y-2 ${
-                      updateStatus === UpdateStatus.HAS_UPDATE
-                        ? 'bg-yellow-500'
-                        : updateStatus === UpdateStatus.NO_UPDATE
-                          ? 'bg-green-400'
-                          : ''
-                    }`}
-                  ></div>
-                )}
+              <div className='w-2 h-2 rounded-full -translate-y-2 bg-green-400'></div>
             </div>
           </button>
         </div>

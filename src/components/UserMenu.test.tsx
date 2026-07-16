@@ -13,7 +13,6 @@ import type { Favorite, PlayRecord } from '@/lib/types';
 const mockPush = jest.fn();
 const mockGetAuthInfoFromBrowserCookie = jest.fn();
 const mockGetAllPlayRecords = jest.fn();
-const mockCheckForUpdates = jest.fn();
 const mockGetCachedWatchingUpdates = jest.fn();
 const mockGetDetailedWatchingUpdates = jest.fn();
 const mockSubscribeToWatchingUpdatesEvent = jest.fn();
@@ -35,15 +34,6 @@ jest.mock('@/lib/debug', () => ({
     error: jest.fn(),
     log: jest.fn(),
     warn: jest.fn(),
-  },
-}));
-
-jest.mock('@/lib/version_check', () => ({
-  checkForUpdates: mockCheckForUpdates,
-  UpdateStatus: {
-    FETCH_FAILED: 'fetch-failed',
-    HAS_UPDATE: 'has-update',
-    NO_UPDATE: 'no-update',
   },
 }));
 
@@ -191,7 +181,6 @@ describe('UserMenu', () => {
     mockPush.mockReset();
     mockGetAuthInfoFromBrowserCookie.mockReset();
     mockGetAllPlayRecords.mockReset();
-    mockCheckForUpdates.mockReset().mockResolvedValue('no-update');
     mockGetCachedWatchingUpdates.mockReset().mockReturnValue(null);
     mockGetDetailedWatchingUpdates.mockReset().mockReturnValue(null);
     mockSubscribeToWatchingUpdatesEvent

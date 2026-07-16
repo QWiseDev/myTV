@@ -9,7 +9,6 @@ import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { debug } from '@/lib/debug';
-import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
 
 import { UserMenuChangePasswordPanel } from './user-menu/UserMenuChangePasswordPanel';
 import { UserMenuDropdownPanel } from './user-menu/UserMenuDropdownPanel';
@@ -123,10 +122,6 @@ export const UserMenu: React.FC = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
-  // 版本检查相关状态
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
-  const [isChecking, setIsChecking] = useState(true);
-
   // 确保组件已挂载
   useEffect(() => {
     setMounted(true);
@@ -162,22 +157,6 @@ export const UserMenu: React.FC = () => {
     continueWatchingMinProgress,
     enableContinueWatchingFilter,
   } = settingsSnapshot;
-
-  // 版本检查
-  useEffect(() => {
-    const checkUpdate = async () => {
-      try {
-        const status = await checkForUpdates();
-        setUpdateStatus(status);
-      } catch (error) {
-        debug.warn('版本检查失败:', error);
-      } finally {
-        setIsChecking(false);
-      }
-    };
-
-    checkUpdate();
-  }, []);
 
   const { hasUnreadUpdates, markWatchingUpdatesViewed, watchingUpdatesState } =
     useUserMenuWatchingUpdates({
@@ -403,9 +382,8 @@ export const UserMenu: React.FC = () => {
 
           <User className='w-full h-full relative z-10 group-hover:scale-110 transition-transform duration-300' />
         </button>
-        {/* 统一更新提醒点：版本更新或剧集更新都显示橙色点 */}
-        {(updateStatus === UpdateStatus.HAS_UPDATE ||
-          (hasUnreadUpdates && totalUpdates > 0)) && (
+        {/* 剧集更新提醒点 */}
+        {hasUnreadUpdates && totalUpdates > 0 && (
           <div className='absolute top-[2px] right-[2px] w-2 h-2 bg-yellow-500 rounded-full animate-pulse shadow-lg shadow-yellow-500/50'></div>
         )}
       </div>
@@ -419,7 +397,6 @@ export const UserMenu: React.FC = () => {
             favoritesCount={favorites.length}
             hasUnreadUpdates={hasUnreadUpdates}
             isAdminUser={isAdminUser}
-            isChecking={isChecking}
             onAdminPanel={handleAdminPanel}
             onChangePassword={handleChangePassword}
             onClose={handleCloseMenu}
@@ -441,7 +418,6 @@ export const UserMenu: React.FC = () => {
             showWatchingUpdates={Boolean(showWatchingUpdates)}
             storageType={storageType}
             totalUpdates={totalUpdates}
-            updateStatus={updateStatus}
             username={authInfo?.username}
           />,
           document.body,

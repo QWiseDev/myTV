@@ -1,0 +1,32 @@
+refactor: 2026-07-16-version-panel-cleanup
+status: done
+steps:
+  - id: characterization-tests
+    title: 固化当前本地版本行为
+    status: done
+    verify: 旧实现 2 suites / 9 tests 通过
+  - id: simplify-version-panel
+    title: 收口 VersionPanel 为本地 changelog 面板
+    status: done
+    verify: VersionPanel 2 tests、目标 ESLint、typecheck 通过
+  - id: remove-version-check-chain
+    title: 移除 UserMenu 版本检查状态与废弃模块
+    status: done
+    verify: 3 suites / 23 tests 通过且相关符号零引用
+  - id: full-verification
+    title: 完整回归与页面复验
+    status: done
+    verify: 88 suites / 508 tests、目标 ESLint、typecheck、build 与浏览器验收通过
+checks:
+  - id: local-version-only
+    title: VersionPanel 只依赖 CURRENT_VERSION 与本地 changelog
+    status: passed
+  - id: no-version-check-chain
+    title: 远程版本状态、解析器、比较器和模块零残留
+    status: passed
+  - id: visible-contract-preserved
+    title: 版本入口、绿色点、固定状态卡、关闭和滚动行为保持不变
+    status: passed
+  - id: full-quality-gates
+    title: 完整质量门禁与真实页面验收通过
+    status: passed

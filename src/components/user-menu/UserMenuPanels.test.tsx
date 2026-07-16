@@ -7,7 +7,6 @@ import {
   type UserMenuWatchingUpdatesState,
   buildUserMenuWatchingUpdatesState,
 } from '@/lib/user-menu-watching-updates';
-import { UpdateStatus } from '@/lib/version_check';
 
 import { UserMenuChangePasswordPanel } from './UserMenuChangePasswordPanel';
 import { UserMenuDropdownPanel } from './UserMenuDropdownPanel';
@@ -112,7 +111,6 @@ describe('UserMenu presentation panels', () => {
         favoritesCount={3}
         hasUnreadUpdates
         isAdminUser
-        isChecking={false}
         onAdminPanel={jest.fn()}
         onChangePassword={jest.fn()}
         onClose={jest.fn()}
@@ -134,7 +132,6 @@ describe('UserMenu presentation panels', () => {
         showWatchingUpdates
         storageType='redis'
         totalUpdates={120}
-        updateStatus={UpdateStatus.NO_UPDATE}
         username='alice'
       />,
     );
@@ -154,6 +151,7 @@ describe('UserMenu presentation panels', () => {
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
     const versionButton = screen.getByText(/^v/).closest('button');
     if (!versionButton) throw new Error('找不到版本入口');
+    expect(versionButton.querySelector('.bg-green-400')).toBeInTheDocument();
     fireEvent.click(versionButton);
 
     expect(onSettings).toHaveBeenCalledTimes(1);
