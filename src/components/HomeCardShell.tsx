@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import {
-  HOME_CARD_WIDTH_CLASS,
-} from '@/lib/constants/home';
+// 布局类需保留在 Tailwind content 扫描范围内，避免生产 CSS 被裁剪。
+export const HOME_CARD_WIDTH_CLASS =
+  'flex-shrink-0 min-w-[7.5rem] w-[7.5rem] sm:min-w-[11rem] sm:w-[11rem] md:min-w-[12.5rem] md:w-[12.5rem] lg:min-w-[13.75rem] lg:w-[13.75rem]';
 
 interface HomeCardShellProps {
   children: ReactNode;

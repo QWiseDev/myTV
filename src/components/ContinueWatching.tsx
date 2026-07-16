@@ -4,7 +4,6 @@ import { ChevronRight, Clock, Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import {
-  HOME_CARD_WIDTH_CLASS,
   HOME_SECTION_ACTION_CLASS,
   HOME_VIDEO_CARD_SIZES,
   SKELETON_CONFIG,
@@ -17,7 +16,9 @@ import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
 
-import HomeCardShell from '@/components/HomeCardShell';
+import HomeCardShell, {
+  HOME_CARD_WIDTH_CLASS,
+} from '@/components/HomeCardShell';
 import HomeSectionHeader from '@/components/HomeSectionHeader';
 import ScrollableRow from '@/components/ScrollableRow';
 import SkeletonRow from '@/components/SkeletonRow';

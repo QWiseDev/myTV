@@ -31,17 +31,8 @@ export const HOME_RENDER_LIMITS = {
   CONTINUE_WATCHING_PAGE: 12,
 } as const;
 
-// 首页卡片尺寸与操作样式（统一避免各区块 class 漂移）
-// 影视海报以「可辨识封面」优先：手机约 3 张、平板约 4-5 张、桌面约 5-6 张
-export const HOME_CARD_WIDTH_CLASS =
-  'flex-shrink-0 min-w-[7.5rem] w-[7.5rem] sm:min-w-[11rem] sm:w-[11rem] md:min-w-[12.5rem] md:w-[12.5rem] lg:min-w-[13.75rem] lg:w-[13.75rem]';
-
 export const HOME_VIDEO_CARD_SIZES =
   '(max-width: 640px) 120px, (max-width: 768px) 176px, (max-width: 1024px) 200px, 220px';
-
-/** 收藏夹等网格布局 */
-export const HOME_FAVORITES_GRID_CLASS =
-  'justify-start grid grid-cols-2 gap-x-3 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(12.5rem,_1fr))] sm:gap-x-8';
 
 /** 区块操作按钮/链接的中性文字色（清空等） */
 export const HOME_SECTION_ACTION_CLASS =

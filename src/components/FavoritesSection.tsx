@@ -1,9 +1,6 @@
 'use client';
 
-import {
-  HOME_FAVORITES_GRID_CLASS,
-  HOME_SECTION_ACTION_CLASS,
-} from '@/lib/constants/home';
+import { HOME_SECTION_ACTION_CLASS } from '@/lib/constants/home';
 import { clearAllFavorites } from '@/lib/db.client';
 import type { FavoriteItem } from '@/lib/types';
 
@@ -54,7 +51,7 @@ export default function FavoritesSection({
           ) : null
         }
       />
-      <div className={HOME_FAVORITES_GRID_CLASS}>
+      <div className='justify-start grid grid-cols-2 gap-x-3 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(12.5rem,_1fr))] sm:gap-x-8'>
         {loadError && favoriteItems.length > 0 && (
           <div
             className='col-span-full text-sm text-red-500 dark:text-red-400'
