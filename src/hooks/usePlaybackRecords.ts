@@ -10,6 +10,11 @@ const EMPTY_PRIORITY_PLAY_RECORD_KEYS: string[] = [];
 export type PlayRecordsLoadError = 'initial' | 'refresh' | 'append' | null;
 type PlayRecordsLoadMode = 'replace' | 'append' | 'priority';
 
+interface PlayRecordsClearMutation {
+  commit: () => void;
+  rollback: () => void;
+}
+
 function debugError(...args: unknown[]) {
   if (process.env.NODE_ENV !== 'production') {
     console.error(...args);
@@ -50,6 +55,10 @@ export function usePlaybackRecords(
   const appendLoadPromiseRef = useRef<Promise<void> | null>(null);
   const retryLoadPromiseRef = useRef<Promise<void> | null>(null);
   const firstPageLoadingRef = useRef(false);
+  const activeClearMutationRef = useRef<number | null>(null);
+  const clearMutationIdRef = useRef(0);
+  const priorityIntentRevisionRef = useRef(0);
+  const pendingPriorityRefreshRef = useRef(false);
   const deletedKeysRef = useRef<Set<string>>(new Set());
   const playRecordsRef = useRef<Record<string, PlayRecord> | null>(null);
   const lastPriorityKeySignatureRef = useRef<string | null>(null);
@@ -63,9 +72,16 @@ export function usePlaybackRecords(
 
   const loadPlayRecordsPage = useCallback(
     async (mode: PlayRecordsLoadMode = 'replace') => {
+      if (activeClearMutationRef.current !== null) return;
+
       const append = mode === 'append';
       const priority = mode === 'priority';
       const replace = mode === 'replace';
+      if (priority) {
+        pendingPriorityRefreshRef.current = true;
+      }
+      const priorityIntentRevision =
+        priority || replace ? priorityIntentRevisionRef.current : null;
       const requestId = replace
         ? ++loadRequestRef.current
         : loadRequestRef.current;
@@ -160,13 +176,21 @@ export function usePlaybackRecords(
           append && currentError === 'refresh' ? currentError : loadErrorStage,
         );
       } finally {
+        const isCurrent = isCurrentRequest();
         if (append) {
-          if (isCurrentRequest()) {
+          if (isCurrent) {
             setLoadingMorePlayRecords(false);
           }
-        } else if (replace && isCurrentRequest()) {
+        } else if (replace && isCurrent) {
           firstPageLoadingRef.current = false;
           setLoadingPlayRecords(false);
+        }
+        if (
+          (priority || replace) &&
+          isCurrent &&
+          priorityIntentRevision === priorityIntentRevisionRef.current
+        ) {
+          pendingPriorityRefreshRef.current = false;
         }
       }
     },
@@ -184,6 +208,7 @@ export function usePlaybackRecords(
 
     if (
       !hasMorePlayRecords ||
+      activeClearMutationRef.current !== null ||
       firstPageLoadingRef.current ||
       loadingPlayRecords ||
       loadingMorePlayRecords ||
@@ -229,39 +254,110 @@ export function usePlaybackRecords(
   }, [loadPlayRecordsPage, playRecordsLoadError]);
 
   const markPlayRecordDeleted = useCallback((key: string) => {
+    const alreadyDeleted = deletedKeysRef.current.has(key);
+    const deletedRecord = playRecordsRef.current?.[key];
     deletedKeysRef.current.add(key);
     setPlayRecords((currentRecords) => {
       if (!currentRecords || !currentRecords[key]) return currentRecords;
 
       const nextRecords = { ...currentRecords };
       delete nextRecords[key];
+      playRecordsRef.current = nextRecords;
       return nextRecords;
     });
+
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      if (!alreadyDeleted) {
+        deletedKeysRef.current.delete(key);
+      }
+      if (!deletedRecord) return;
+
+      setPlayRecords((currentRecords) => {
+        if (currentRecords?.[key]) return currentRecords;
+
+        const nextRecords = {
+          ...(currentRecords || {}),
+          [key]: deletedRecord,
+        };
+        playRecordsRef.current = nextRecords;
+        return nextRecords;
+      });
+    };
   }, []);
 
-  const markAllPlayRecordsDeleted = useCallback(() => {
-    loadRequestRef.current += 1;
-    appendRequestRef.current += 1;
-    priorityRefreshRequestRef.current += 1;
-    appendLoadPromiseRef.current = null;
-    retryLoadPromiseRef.current = null;
-    firstPageLoadingRef.current = false;
-    deletedKeysRef.current.clear();
-    playRecordsRef.current = {};
-    setPlayRecords({});
-    setLoadingPlayRecords(false);
-    setLoadingMorePlayRecords(false);
-    nextCursorRef.current = null;
-    sessionPriorityKeysRef.current = [];
-    setHasMorePlayRecords(false);
-    setPlayRecordsLoadError(null);
-  }, []);
+  const markAllPlayRecordsDeleted =
+    useCallback((): PlayRecordsClearMutation => {
+      const mutationId = ++clearMutationIdRef.current;
+      const previousRecords = playRecordsRef.current
+        ? { ...playRecordsRef.current }
+        : playRecordsRef.current;
+      const previousDeletedKeys = new Set(deletedKeysRef.current);
+      const previousNextCursor = nextCursorRef.current;
+      const previousPriorityKeys = [...sessionPriorityKeysRef.current];
+      const previousHasMore = hasMorePlayRecords;
+      const previousLoadError = playRecordsLoadError;
+      activeClearMutationRef.current = mutationId;
+      loadRequestRef.current += 1;
+      appendRequestRef.current += 1;
+      priorityRefreshRequestRef.current += 1;
+      appendLoadPromiseRef.current = null;
+      retryLoadPromiseRef.current = null;
+      firstPageLoadingRef.current = false;
+      deletedKeysRef.current.clear();
+      playRecordsRef.current = {};
+      setPlayRecords({});
+      setLoadingPlayRecords(false);
+      setLoadingMorePlayRecords(false);
+      nextCursorRef.current = null;
+      sessionPriorityKeysRef.current = [];
+      setHasMorePlayRecords(false);
+      setPlayRecordsLoadError(null);
+
+      const finish = (restore: boolean) => {
+        if (activeClearMutationRef.current !== mutationId) return;
+        activeClearMutationRef.current = null;
+        if (!restore) {
+          pendingPriorityRefreshRef.current = false;
+          return;
+        }
+
+        deletedKeysRef.current = new Set(previousDeletedKeys);
+        playRecordsRef.current = previousRecords;
+        nextCursorRef.current = previousNextCursor;
+        sessionPriorityKeysRef.current = previousPriorityKeys;
+        setPlayRecords(previousRecords);
+        setLoadingPlayRecords(false);
+        setLoadingMorePlayRecords(false);
+        setHasMorePlayRecords(previousHasMore);
+        setPlayRecordsLoadError(previousLoadError);
+        if (pendingPriorityRefreshRef.current) {
+          lastPriorityKeySignatureRef.current =
+            priorityPlayRecordKeysRef.current.join('\0');
+          void loadPlayRecordsPage('priority');
+        }
+      };
+
+      return {
+        commit: () => finish(false),
+        rollback: () => finish(true),
+      };
+    }, [hasMorePlayRecords, loadPlayRecordsPage, playRecordsLoadError]);
 
   useEffect(() => {
     const isInitialLoad = lastPriorityKeySignatureRef.current === null;
     const isPriorityKeysChanged =
       !isInitialLoad &&
       lastPriorityKeySignatureRef.current !== priorityKeySignature;
+    if (isPriorityKeysChanged) {
+      priorityIntentRevisionRef.current += 1;
+      pendingPriorityRefreshRef.current = true;
+    }
+    if (isPriorityKeysChanged && activeClearMutationRef.current !== null) {
+      return;
+    }
     lastPriorityKeySignatureRef.current = priorityKeySignature;
 
     // priority keys 变化时立即补拉，确保新更剧集出现在首屏；

@@ -309,6 +309,43 @@ describe('UserMenu data hooks', () => {
       expect(unsubscribeWatchingUpdates).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps the newest play record response when an older request resolves later', async () => {
+      const initialRequest = createDeferred<Record<string, PlayRecord>>();
+      const refreshRequest = createDeferred<Record<string, PlayRecord>>();
+      mockGetAllPlayRecords
+        .mockReturnValueOnce(initialRequest.promise)
+        .mockReturnValueOnce(refreshRequest.promise);
+      const { result } = renderContinueWatchingHook({
+        authInfo: AUTH_INFO,
+        isOpen: true,
+        storageType: 'redis',
+      });
+
+      act(() => {
+        window.dispatchEvent(new Event('playRecordsUpdated'));
+      });
+      await act(async () => {
+        refreshRequest.resolve({
+          'source+new': createPlayRecord({ title: '最新影片' }),
+        });
+        await flushAsyncWork();
+      });
+      expect(result.current.playRecords[0]).toEqual(
+        expect.objectContaining({ key: 'source+new', title: '最新影片' }),
+      );
+
+      await act(async () => {
+        initialRequest.resolve({
+          'source+old': createPlayRecord({ title: '旧影片' }),
+        });
+        await flushAsyncWork();
+      });
+
+      expect(result.current.playRecords[0]).toEqual(
+        expect.objectContaining({ key: 'source+new', title: '最新影片' }),
+      );
+    });
+
     it('coalesces valid watching events and cancels a pending timer on close', async () => {
       jest.useFakeTimers();
       mockGetDetailedWatchingUpdates.mockReturnValue(createWatchingUpdate());

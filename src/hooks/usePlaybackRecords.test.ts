@@ -980,6 +980,369 @@ describe('usePlaybackRecords', () => {
     expect(result.current.playRecordsLoadError).toBeNull();
   });
 
+  it('restores the previous pagination session when an optimistic clear rolls back', async () => {
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          { 'source+first': createRecord() },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockImplementationOnce(() => appendPage.promise)
+      .mockResolvedValueOnce(
+        createPage({
+          'source+next': { ...createRecord(), title: '下一条' },
+        }),
+      );
+    const { result } = renderHook(() => usePlaybackRecords());
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let appendPromise!: Promise<void>;
+    act(() => {
+      appendPromise = result.current.loadMorePlayRecords();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    const clearMutation =
+      result.current.markAllPlayRecordsDeleted() as unknown as {
+        rollback: () => void;
+      };
+    expect(clearMutation).toBeDefined();
+    act(() => {
+      clearMutation.rollback();
+    });
+    await act(async () => {
+      appendPage.resolve(
+        createPage({
+          'source+stale': { ...createRecord(), title: '旧追加结果' },
+        }),
+      );
+      await appendPromise;
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({
+      'source+first': createRecord(),
+    });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: '100:source%2Bfirst',
+      includeKeys: [],
+      pageSize: 12,
+    });
+    expect(Object.keys(result.current.playRecords || {})).toEqual([
+      'source+first',
+      'source+next',
+    ]);
+  });
+
+  it('replays the latest priority refresh after clear rolls back', async () => {
+    const firstRecord = createRecord();
+    const priorityRecord = { ...createRecord(), title: '新剧提醒' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(createPage({ 'source+first': firstRecord }))
+      .mockResolvedValueOnce(createPage({ 'source+priority': priorityRecord }));
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let clearMutation!: ReturnType<
+      typeof result.current.markAllPlayRecordsDeleted
+    >;
+    act(() => {
+      clearMutation = result.current.markAllPlayRecordsDeleted();
+    });
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      clearMutation.rollback();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+initial', 'source+priority'],
+      pageSize: 12,
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority': priorityRecord,
+    });
+  });
+
+  it('replays an in-flight priority refresh after clear rolls back', async () => {
+    const stalePriorityPage = createDeferred<ReturnType<typeof createPage>>();
+    const replayedPriorityPage =
+      createDeferred<ReturnType<typeof createPage>>();
+    const firstRecord = createRecord();
+    const deletedRecord = { ...createRecord(), title: '已删除记录' };
+    const priorityRecord = { ...createRecord(), title: '新剧提醒' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          {
+            'source+first': firstRecord,
+            'source+deleted': deletedRecord,
+          },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockImplementationOnce(() => stalePriorityPage.promise)
+      .mockImplementationOnce(() => replayedPriorityPage.promise)
+      .mockResolvedValueOnce(
+        createPage({
+          'source+next': { ...createRecord(), title: '下一页' },
+        }),
+      );
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    act(() => {
+      result.current.markPlayRecordDeleted('source+deleted');
+    });
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    let clearMutation!: ReturnType<
+      typeof result.current.markAllPlayRecordsDeleted
+    >;
+    act(() => {
+      clearMutation = result.current.markAllPlayRecordsDeleted();
+    });
+    await act(async () => {
+      stalePriorityPage.resolve(
+        createPage({ 'source+priority': priorityRecord }),
+      );
+      await flushAsyncWork();
+    });
+    expect(result.current.playRecords).toEqual({});
+
+    act(() => {
+      clearMutation.rollback();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      replayedPriorityPage.resolve(
+        createPage({
+          'source+deleted': deletedRecord,
+          'source+priority': priorityRecord,
+        }),
+      );
+      await flushAsyncWork();
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority': priorityRecord,
+    });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: '100:source%2Bfirst',
+      includeKeys: ['source+initial', 'source+priority'],
+      pageSize: 12,
+    });
+  });
+
+  it('replays a priority refresh deferred before clear rolls back', async () => {
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    const replayedPriorityPage =
+      createDeferred<ReturnType<typeof createPage>>();
+    const firstRecord = createRecord();
+    const priorityRecord = { ...createRecord(), title: '新剧提醒' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage({ 'source+first': firstRecord }, true, '100:source%2Bfirst'),
+      )
+      .mockImplementationOnce(() => appendPage.promise)
+      .mockImplementationOnce(() => replayedPriorityPage.promise);
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let appendPromise!: Promise<void>;
+    act(() => {
+      appendPromise = result.current.loadMorePlayRecords();
+    });
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    let clearMutation!: ReturnType<
+      typeof result.current.markAllPlayRecordsDeleted
+    >;
+    act(() => {
+      clearMutation = result.current.markAllPlayRecordsDeleted();
+    });
+    await act(async () => {
+      appendPage.resolve(
+        createPage({ 'source+stale': { ...createRecord(), title: '旧追加' } }),
+      );
+      await appendPromise;
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      clearMutation.rollback();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      replayedPriorityPage.resolve(
+        createPage({ 'source+priority': priorityRecord }),
+      );
+      await flushAsyncWork();
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority': priorityRecord,
+    });
+  });
+
+  it('keeps a newer deferred priority intent when an older refresh settles', async () => {
+    const priorityPageA = createDeferred<ReturnType<typeof createPage>>();
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    const priorityPageB = createDeferred<ReturnType<typeof createPage>>();
+    const firstRecord = createRecord();
+    const priorityRecordA = { ...createRecord(), title: '旧优先记录' };
+    const priorityRecordB = { ...createRecord(), title: '新优先记录' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage({ 'source+first': firstRecord }, true, '100:source%2Bfirst'),
+      )
+      .mockImplementationOnce(() => priorityPageA.promise)
+      .mockImplementationOnce(() => appendPage.promise)
+      .mockImplementationOnce(() => priorityPageB.promise);
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    rerender({ includeKeys: ['source+priority-a'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    let appendPromise!: Promise<void>;
+    act(() => {
+      appendPromise = result.current.loadMorePlayRecords();
+    });
+    rerender({ includeKeys: ['source+priority-b'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      priorityPageA.resolve(
+        createPage({ 'source+priority-a': priorityRecordA }),
+      );
+      await flushAsyncWork();
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority-a': priorityRecordA,
+    });
+
+    let clearMutation!: ReturnType<
+      typeof result.current.markAllPlayRecordsDeleted
+    >;
+    act(() => {
+      clearMutation = result.current.markAllPlayRecordsDeleted();
+    });
+    await act(async () => {
+      appendPage.resolve(
+        createPage({ 'source+stale': { ...createRecord(), title: '旧追加' } }),
+      );
+      await appendPromise;
+      await flushAsyncWork();
+    });
+
+    act(() => {
+      clearMutation.rollback();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(4);
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+initial', 'source+priority-a', 'source+priority-b'],
+      pageSize: 12,
+    });
+
+    await act(async () => {
+      priorityPageB.resolve(
+        createPage({ 'source+priority-b': priorityRecordB }),
+      );
+      await flushAsyncWork();
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority-a': priorityRecordA,
+      'source+priority-b': priorityRecordB,
+    });
+  });
+
   it('does not start a deferred priority refresh after clear-all', async () => {
     const appendPage = createDeferred<ReturnType<typeof createPage>>();
     getPlayRecordsPage
@@ -1011,8 +1374,12 @@ describe('usePlaybackRecords', () => {
     });
 
     rerender({ includeKeys: ['source+priority'] });
+    let clearMutation!: ReturnType<
+      typeof result.current.markAllPlayRecordsDeleted
+    >;
     act(() => {
-      result.current.markAllPlayRecordsDeleted();
+      clearMutation = result.current.markAllPlayRecordsDeleted();
+      clearMutation.commit();
     });
     await act(async () => {
       appendPage.resolve(createPage({ 'source+stale': createRecord() }));

@@ -48,6 +48,7 @@ export function useUserMenuContinueWatching({
     }
 
     let isActive = true;
+    let latestRequestId = 0;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
     const updateContinueWatchingRecords = (
@@ -63,9 +64,10 @@ export function useUserMenuContinueWatching({
     };
 
     const loadPlayRecords = async () => {
+      const requestId = ++latestRequestId;
       try {
         const records = await getAllPlayRecords();
-        if (!isActive) return;
+        if (!isActive || requestId !== latestRequestId) return;
 
         updateContinueWatchingRecords(records);
       } catch (error) {
@@ -96,8 +98,9 @@ export function useUserMenuContinueWatching({
             clearTimeout(refreshTimer);
           }
           refreshTimer = setTimeout(async () => {
+            const requestId = ++latestRequestId;
             const freshRecords = await getAllPlayRecords();
-            if (!isActive) return;
+            if (!isActive || requestId !== latestRequestId) return;
 
             updateContinueWatchingRecords(freshRecords);
           }, 100);
@@ -107,6 +110,7 @@ export function useUserMenuContinueWatching({
 
     return () => {
       isActive = false;
+      latestRequestId += 1;
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
