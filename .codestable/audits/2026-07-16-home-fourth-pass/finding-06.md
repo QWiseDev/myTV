@@ -6,7 +6,7 @@ nature: bug
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 06：收藏夹可消费唯一一次常规追更检查
@@ -29,6 +29,13 @@ status: open
 ## 修复方向
 
 记录被 tab 门禁跳过的常规检查，并在返回 `home` 时重放一次，同时保留现有 30 分钟节流。
+
+## 处理进展（2026-07-16）
+
+- scheduled callback 先记录 `pendingRegularCheckRef`，再进入现有 tab / visibility / in-flight 门禁；被拦截时不再丢失。
+- 返回首页、恢复可见以及上一轮检查结束时统一 drain 普通 pending 与 invalidation pending。
+- 普通重放继续经过 30 分钟节流；与 invalidation 同时存在时只执行一次强制检查。
+- 新增收藏夹返回、普通 pending + invalidation 合并、隐藏页恢复与不重复执行回归。
 
 ## 建议动作
 

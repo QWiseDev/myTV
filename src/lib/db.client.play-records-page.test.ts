@@ -40,6 +40,48 @@ describe('getPlayRecordsPage', () => {
     expect(globalErrorListener).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the pinned key set on remote cursor requests', async () => {
+    const page = {
+      records: {},
+      pageSize: 12,
+      nextCursor: null,
+      hasMore: false,
+      total: 0,
+    };
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => page,
+    });
+    global.fetch = fetchMock;
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+
+    const { getPlayRecordsPage } = await import('./db.client');
+
+    await expect(
+      getPlayRecordsPage({
+        cursor: '100:source%2Bfirst',
+        includeKeys: ['source+initial', 'source+priority'],
+        pageSize: 12,
+      }),
+    ).resolves.toEqual(page);
+
+    const requestUrl = new URL(
+      fetchMock.mock.calls[0][0] as string,
+      window.location.origin,
+    );
+    expect(requestUrl.searchParams.get('cursor')).toBe('100:source%2Bfirst');
+    expect(requestUrl.searchParams.getAll('includeKey')).toEqual([
+      'source+initial',
+      'source+priority',
+    ]);
+    expect(requestUrl.searchParams.get('pageSize')).toBe('12');
+  });
+
   it('rethrows invalid local pagination data after emitting the global error', async () => {
     const globalErrorListener = jest.fn();
     (

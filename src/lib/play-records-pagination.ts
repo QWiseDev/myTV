@@ -85,22 +85,22 @@ export function paginatePlayRecords(
   const pageSize = normalizePlayRecordsPageSize(options.pageSize);
   const entries = sortPlayRecordEntries(records);
   const includeKeys = new Set(options.includeKeys || []);
+  const regularEntries = entries.filter(([key]) => !includeKeys.has(key));
   const cursor = decodePlayRecordsCursor(options.cursor);
   const cursorStartIndex = cursor
-    ? entries.findIndex((entry) => isEntryAfterCursor(entry, cursor))
+    ? regularEntries.findIndex((entry) => isEntryAfterCursor(entry, cursor))
     : 0;
   const startIndex = cursor
     ? cursorStartIndex === -1
-      ? entries.length
+      ? regularEntries.length
       : cursorStartIndex
     : 0;
-  const pageEntries = entries.slice(startIndex, startIndex + pageSize);
-  const pageKeys = new Set(pageEntries.map(([key]) => key));
-  const includedEntries = entries.filter(
-    ([key]) => includeKeys.has(key) && !pageKeys.has(key),
-  );
+  const pageEntries = regularEntries.slice(startIndex, startIndex + pageSize);
+  const includedEntries = cursor
+    ? []
+    : entries.filter(([key]) => includeKeys.has(key));
   const resultEntries = [...pageEntries, ...includedEntries];
-  const hasMore = startIndex + pageEntries.length < entries.length;
+  const hasMore = startIndex + pageEntries.length < regularEntries.length;
   const lastEntry = pageEntries[pageEntries.length - 1];
 
   return {

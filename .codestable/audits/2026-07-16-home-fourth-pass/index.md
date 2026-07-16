@@ -3,7 +3,7 @@ doc_type: audit-index
 audit: 2026-07-16-home-fourth-pass
 scope: 首页播放记录、移动卡片操作、分区数据合并与追更调度边界
 created: 2026-07-16
-status: active
+status: resolved
 total_findings: 7
 supersedes: 2026-07-16-home-third-pass
 ---
@@ -44,7 +44,16 @@ supersedes: 2026-07-16-home-third-pass
 ## 下一步建议
 
 - **P1 已完成**：#1—#4 均已 resolved，并通过全量、production build 与浏览器门禁。
-- **P2 下一阶段修**：#5—#7 分别收口区块级 state reconcile、tab 返回调度和分页会话语义。
+- **P2 已完成**：#5 收口 partial snapshot 的区块级 reconcile；#6 补回被 tab 门禁跳过的常规追更检查；#7 固定 priority/cursor 分页会话并保留已追加页面。
+- **本轮审计已关闭**：7 条 finding 全部 resolved，后续首页工作进入新的审查轮次，不在本报告继续追加无关项。
+
+## 本阶段最终验证
+
+- 全量 Jest：81 suites / 411 tests 通过。
+- 本阶段变更文件 ESLint `--max-warnings=0`、`pnpm typecheck`、Prettier 与 `git diff --check` 通过。
+- SSH 隧道 Redis `PING=PONG`，production build 通过；未开放公网 Redis。
+- 浏览器完成 partial 数据首屏、收藏夹返回后的追更重放与 priority 补全验证，console 无 error；只有既有 Next Image LCP warning。
+- `pnpm lint:strict` 仍被仓库其他区域 145 条既有 warning 阻断，本阶段变更文件不在 warning 清单内。
 
 ## 审计关系
 

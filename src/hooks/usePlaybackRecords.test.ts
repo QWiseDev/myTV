@@ -222,6 +222,84 @@ describe('usePlaybackRecords', () => {
     ]);
   });
 
+  it('keeps appended pages and the session cursor when priority keys change', async () => {
+    const firstRecord = createRecord();
+    const secondRecord = { ...createRecord(), title: '第二页' };
+    const priorityRecord = { ...createRecord(), title: '优先记录' };
+    const thirdRecord = { ...createRecord(), title: '第三页' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage({ 'source+first': firstRecord }, true, 'cursor-first'),
+      )
+      .mockResolvedValueOnce(
+        createPage({ 'source+second': secondRecord }, true, 'cursor-second'),
+      )
+      .mockResolvedValueOnce(
+        createPage(
+          {
+            'source+first': firstRecord,
+            'source+priority': priorityRecord,
+          },
+          true,
+          'ignored-priority-cursor',
+        ),
+      )
+      .mockResolvedValueOnce(
+        createPage({ 'source+third': thirdRecord }, false, null),
+      );
+
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: 'cursor-first',
+      includeKeys: ['source+initial'],
+      pageSize: 12,
+    });
+
+    rerender({ includeKeys: ['source+priority'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+second': secondRecord,
+      'source+priority': priorityRecord,
+    });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMorePlayRecords();
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: 'cursor-second',
+      includeKeys: ['source+initial', 'source+priority'],
+      pageSize: 12,
+    });
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+second': secondRecord,
+      'source+priority': priorityRecord,
+      'source+third': thirdRecord,
+    });
+    expect(result.current.hasMorePlayRecords).toBe(false);
+  });
+
   it('exposes an initial load error and retries the first page immediately', async () => {
     const retryRecord = {
       ...createRecord(),
@@ -383,15 +461,71 @@ describe('usePlaybackRecords', () => {
     expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
     expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
       cursor: null,
-      includeKeys: ['source+c'],
+      includeKeys: ['source+a', 'source+b', 'source+c'],
       pageSize: 12,
     });
   });
 
-  it('clears loading more after a priority refresh supersedes the append request', async () => {
+  it('does not retain keys from a stale priority refresh', async () => {
+    const priorityPageA = createDeferred<ReturnType<typeof createPage>>();
+    const priorityPageB = createDeferred<ReturnType<typeof createPage>>();
+    const firstRecord = createRecord();
+    const priorityRecordA = { ...createRecord(), title: '旧优先记录' };
+    const priorityRecordB = { ...createRecord(), title: '新优先记录' };
+    getPlayRecordsPage
+      .mockResolvedValueOnce(createPage({ 'source+first': firstRecord }))
+      .mockImplementationOnce(() => priorityPageA.promise)
+      .mockImplementationOnce(() => priorityPageB.promise);
+
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    rerender({ includeKeys: ['source+priority-a'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    rerender({ includeKeys: ['source+priority-b'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+initial', 'source+priority-b'],
+      pageSize: 12,
+    });
+
+    await act(async () => {
+      priorityPageB.resolve(
+        createPage({ 'source+priority-b': priorityRecordB }),
+      );
+      await flushAsyncWork();
+      priorityPageA.resolve(
+        createPage({ 'source+priority-a': priorityRecordA }),
+      );
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority-b': priorityRecordB,
+    });
+  });
+
+  it('defers a priority refresh until a concurrent append completes', async () => {
     const appendPage = createDeferred<ReturnType<typeof createPage>>();
     const refreshedPage = createDeferred<ReturnType<typeof createPage>>();
     const firstRecord = createRecord();
+    const priorityRecord = { ...createRecord(), title: '优先记录' };
+    const secondRecord = { ...createRecord(), title: '第二页' };
 
     getPlayRecordsPage
       .mockResolvedValueOnce(
@@ -423,44 +557,55 @@ describe('usePlaybackRecords', () => {
     rerender({ includeKeys: ['source+priority'] });
     await act(async () => {
       await flushAsyncWork();
-      refreshedPage.resolve(createPage({ 'source+first': firstRecord }));
-      await flushAsyncWork();
     });
 
-    expect(result.current.loadingMorePlayRecords).toBe(false);
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+    expect(result.current.loadingMorePlayRecords).toBe(true);
 
     await act(async () => {
-      appendPage.resolve(
-        createPage({
-          'source+second': {
-            ...createRecord(),
-            title: '第二页',
-          },
-        }),
-      );
+      appendPage.resolve(createPage({ 'source+second': secondRecord }));
       await loadMorePromise;
       await flushAsyncWork();
     });
 
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+initial', 'source+priority'],
+      pageSize: 12,
+    });
     expect(result.current.loadingMorePlayRecords).toBe(false);
     expect(result.current.playRecords).toEqual({
       'source+first': firstRecord,
+      'source+second': secondRecord,
+    });
+
+    await act(async () => {
+      refreshedPage.resolve(createPage({ 'source+priority': priorityRecord }));
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+second': secondRecord,
+      'source+priority': priorityRecord,
     });
   });
 
-  it('does not start loading more while a silent first-page refresh is active', async () => {
+  it('keeps unconfirmed priority keys out of an overlapping append request', async () => {
     const refreshedPage = createDeferred<ReturnType<typeof createPage>>();
     const firstRecord = createRecord();
-    const refreshedRecord = {
-      ...createRecord(),
-      title: '刷新后的首屏记录',
-    };
+    const priorityRecord = { ...createRecord(), title: '优先记录' };
+    const secondRecord = { ...createRecord(), title: '第二页' };
 
     getPlayRecordsPage
       .mockResolvedValueOnce(
         createPage({ 'source+first': firstRecord }, true, '100:source%2Bfirst'),
       )
-      .mockImplementationOnce(() => refreshedPage.promise);
+      .mockImplementationOnce(() => refreshedPage.promise)
+      .mockResolvedValueOnce(
+        createPage({ 'source+second': secondRecord }, true, 'cursor-second'),
+      );
 
     const { result, rerender } = renderHook(
       ({ includeKeys }: { includeKeys: string[] }) =>
@@ -484,19 +629,124 @@ describe('usePlaybackRecords', () => {
       await flushAsyncWork();
     });
 
-    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: '100:source%2Bfirst',
+      includeKeys: ['source+initial'],
+      pageSize: 12,
+    });
     expect(result.current.loadingMorePlayRecords).toBe(false);
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+second': secondRecord,
+    });
 
     await act(async () => {
       refreshedPage.resolve(
-        createPage({ 'source+refreshed': refreshedRecord }, true, 'next'),
+        createPage(
+          { 'source+priority': priorityRecord },
+          false,
+          'ignored-priority-cursor',
+        ),
       );
       await flushAsyncWork();
     });
 
     expect(result.current.playRecords).toEqual({
-      'source+refreshed': refreshedRecord,
+      'source+first': firstRecord,
+      'source+second': secondRecord,
+      'source+priority': priorityRecord,
     });
+    expect(result.current.hasMorePlayRecords).toBe(true);
+  });
+
+  it('does not skip an active priority key when a newer refresh supersedes it', async () => {
+    const priorityPageA = createDeferred<ReturnType<typeof createPage>>();
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    const priorityPageB = createDeferred<ReturnType<typeof createPage>>();
+    const firstRecord = createRecord();
+    const priorityRecordA = { ...createRecord(), title: '旧优先记录' };
+    const priorityRecordB = { ...createRecord(), title: '新优先记录' };
+
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage({ 'source+first': firstRecord }, true, '100:source%2Bfirst'),
+      )
+      .mockImplementationOnce(() => priorityPageA.promise)
+      .mockImplementationOnce(() => appendPage.promise)
+      .mockImplementationOnce(() => priorityPageB.promise);
+
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    rerender({ includeKeys: ['source+priority-a'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    let loadMorePromise!: Promise<void>;
+    act(() => {
+      loadMorePromise = result.current.loadMorePlayRecords();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: '100:source%2Bfirst',
+      includeKeys: ['source+initial'],
+      pageSize: 12,
+    });
+
+    rerender({ includeKeys: ['source+priority-b'] });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      appendPage.resolve(
+        createPage(
+          { 'source+priority-a': priorityRecordA },
+          true,
+          '80:source%2Bpriority-a',
+        ),
+      );
+      await loadMorePromise;
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(4);
+    expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
+      cursor: null,
+      includeKeys: ['source+initial', 'source+priority-b'],
+      pageSize: 12,
+    });
+
+    await act(async () => {
+      priorityPageB.resolve(
+        createPage({ 'source+priority-b': priorityRecordB }),
+      );
+      priorityPageA.resolve(
+        createPage({ 'source+priority-a': priorityRecordA }),
+      );
+      await flushAsyncWork();
+    });
+
+    expect(result.current.playRecords).toEqual({
+      'source+first': firstRecord,
+      'source+priority-a': priorityRecordA,
+      'source+priority-b': priorityRecordB,
+    });
+    expect(result.current.hasMorePlayRecords).toBe(true);
   });
 
   it('ignores an older first-page failure after a newer refresh succeeds', async () => {
@@ -590,7 +840,7 @@ describe('usePlaybackRecords', () => {
 
     expect(getPlayRecordsPage).toHaveBeenLastCalledWith({
       cursor: null,
-      includeKeys: ['source+priority'],
+      includeKeys: ['source+initial', 'source+priority'],
       pageSize: 12,
     });
     expect(result.current.playRecords).toEqual({
@@ -727,6 +977,51 @@ describe('usePlaybackRecords', () => {
     expect(result.current.playRecords).toEqual({});
     expect(result.current.hasMorePlayRecords).toBe(false);
     expect(result.current.loadingMorePlayRecords).toBe(false);
+    expect(result.current.playRecordsLoadError).toBeNull();
+  });
+
+  it('does not start a deferred priority refresh after clear-all', async () => {
+    const appendPage = createDeferred<ReturnType<typeof createPage>>();
+    getPlayRecordsPage
+      .mockResolvedValueOnce(
+        createPage(
+          { 'source+first': createRecord() },
+          true,
+          '100:source%2Bfirst',
+        ),
+      )
+      .mockImplementationOnce(() => appendPage.promise);
+
+    const { result, rerender } = renderHook(
+      ({ includeKeys }: { includeKeys: string[] }) =>
+        usePlaybackRecords(includeKeys),
+      { initialProps: { includeKeys: ['source+initial'] } },
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+      await flushAsyncWork();
+    });
+
+    let appendPromise!: Promise<void>;
+    act(() => {
+      appendPromise = result.current.loadMorePlayRecords();
+    });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    rerender({ includeKeys: ['source+priority'] });
+    act(() => {
+      result.current.markAllPlayRecordsDeleted();
+    });
+    await act(async () => {
+      appendPage.resolve(createPage({ 'source+stale': createRecord() }));
+      await appendPromise;
+      await flushAsyncWork();
+    });
+
+    expect(getPlayRecordsPage).toHaveBeenCalledTimes(2);
+    expect(result.current.playRecords).toEqual({});
     expect(result.current.playRecordsLoadError).toBeNull();
   });
 

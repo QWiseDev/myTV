@@ -6,7 +6,7 @@ nature: maintainability
 severity: P2
 confidence: medium
 suggested_action: cs-refactor
-status: open
+status: resolved
 ---
 
 # Finding 05：partial initialData 与现有 state 产生双重真相
@@ -28,6 +28,13 @@ RSC refresh 传入新的 critical-only snapshot 时，新电影可能不进入 s
 ## 修复方向
 
 先定义“incoming 非空区块覆盖、当前成功区块保留”的单一 reconcile 结果，再从该结果派生 state 与缺失加载。
+
+## 处理进展（2026-07-16）
+
+- 增加区块级 reconcile：incoming 非空区块覆盖，incoming 空区块保留当前成功数据。
+- 用 latest-state ref 生成唯一 reconciled snapshot；state、loading/error 收敛与 fallback availability 都从同一 snapshot 派生。
+- 未把 `homeData` 加进加载 effect 依赖，保留原 generation、abort 与 StrictMode 门禁。
+- 新增 partial snapshot 合并、客户端已加载区块保留、错误区块被新 snapshot 修复且不重复请求的 Hook 回归。
 
 ## 建议动作
 

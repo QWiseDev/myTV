@@ -263,8 +263,8 @@ describe('useWatchingUpdatesRefresh', () => {
 
     expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
 
-    rerender({ activeTab: 'home' });
     setDocumentHidden(true);
+    rerender({ activeTab: 'home' });
 
     act(() => {
       result.current.scheduleWatchingUpdatesCheck();
@@ -277,6 +277,116 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
+  });
+
+  it('replays a scheduled regular check after returning from favorites', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useWatchingUpdatesRefresh({
+          activeTab,
+          refreshWatchingUpdates,
+        }),
+      { initialProps: { activeTab: 'home' as 'home' | 'favorites' } },
+    );
+
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    rerender({ activeTab: 'favorites' });
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+    expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
+
+    rerender({ activeTab: 'home' });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('merges a skipped regular check with a pending invalidation', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useWatchingUpdatesRefresh({
+          activeTab,
+          refreshWatchingUpdates,
+        }),
+      { initialProps: { activeTab: 'home' as 'home' | 'favorites' } },
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+    const eventHandler = mockSubscribeToWatchingUpdatesEvent.mock.calls[0][0];
+
+    rerender({ activeTab: 'favorites' });
+    await act(async () => {
+      runCheck();
+      eventHandler(false, 0, true);
+      await flushAsyncWork();
+    });
+
+    rerender({ activeTab: 'home' });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a skipped regular check pending until the home tab is visible', async () => {
+    const refreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
+    const { result, rerender } = renderHook(
+      ({ activeTab }: { activeTab: 'home' | 'favorites' }) =>
+        useWatchingUpdatesRefresh({
+          activeTab,
+          refreshWatchingUpdates,
+        }),
+      { initialProps: { activeTab: 'home' as 'home' | 'favorites' } },
+    );
+
+    act(() => {
+      result.current.scheduleWatchingUpdatesCheck();
+    });
+    const runCheck = mockScheduleIdleTask.mock.calls[0][0] as () => void;
+
+    rerender({ activeTab: 'favorites' });
+    await act(async () => {
+      runCheck();
+      await flushAsyncWork();
+    });
+
+    setDocumentHidden(true);
+    rerender({ activeTab: 'home' });
+    await act(async () => {
+      await flushAsyncWork();
+    });
+    expect(mockCheckWatchingUpdates).not.toHaveBeenCalled();
+
+    setDocumentHidden(false);
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await flushAsyncWork();
+    });
+
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
   it('shares the regular check interval across idle and visibility triggers', async () => {

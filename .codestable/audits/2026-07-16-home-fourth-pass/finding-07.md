@@ -6,7 +6,7 @@ nature: performance
 severity: P2
 confidence: high
 suggested_action: cs-issue
-status: open
+status: resolved
 ---
 
 # Finding 07：priority 项与 cursor 分页状态未隔离
@@ -28,6 +28,14 @@ status: open
 ## 修复方向
 
 为一次分页会话固定 priority 排除集合，并区分“首屏权威重载”和“priority 补全”，避免重置已追加数据与 cursor。
+
+## 处理进展（2026-07-16）
+
+- `includeKeys` 作为分页会话 pinned set：普通 cursor 流先排除 pinned，首屏再额外附加 pinned，后续页不再重复。
+- Hook 在权威首屏成功后建立 session set；priority 补全成功后只增不减，append 仅携带该已确认集合，未完成的 priority key 继续留在普通 cursor 流中。
+- priority 变化改为 merge，不再替换已追加记录或写回补全请求的 cursor / `hasMore`。
+- append、priority 补全与权威首屏使用独立请求门禁；快速 priority 变化、clear-all、删除与失败重试不会被旧响应回写。
+- 新增纯分页、远端 cursor 参数、会话 cursor 保留、双向并发完成顺序、stale priority 与 priority A→B supersede 回归。
 
 ## 建议动作
 

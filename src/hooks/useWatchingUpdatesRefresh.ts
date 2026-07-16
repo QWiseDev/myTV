@@ -45,6 +45,7 @@ export function useWatchingUpdatesRefresh({
   const lastCheckAtRef = useRef<number | null>(null);
   const watchingUpdatesEventVersionRef = useRef(0);
   const pendingInvalidationRef = useRef(false);
+  const pendingRegularCheckRef = useRef(false);
 
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -56,6 +57,7 @@ export function useWatchingUpdatesRefresh({
     return () => {
       isMountedRef.current = false;
       pendingInvalidationRef.current = false;
+      pendingRegularCheckRef.current = false;
     };
   }, []);
 
@@ -70,10 +72,12 @@ export function useWatchingUpdatesRefresh({
       !isInvalidationCheck &&
       shouldThrottleWatchingUpdatesCheck(lastCheckAtRef.current, now)
     ) {
+      pendingRegularCheckRef.current = false;
       return;
     }
 
     pendingInvalidationRef.current = false;
+    pendingRegularCheckRef.current = false;
 
     try {
       isCheckingRef.current = true;
@@ -94,7 +98,7 @@ export function useWatchingUpdatesRefresh({
       isCheckingRef.current = false;
       if (
         isMountedRef.current &&
-        pendingInvalidationRef.current &&
+        (pendingInvalidationRef.current || pendingRegularCheckRef.current) &&
         canCheckWatchingUpdates(activeTabRef.current)
       ) {
         void runWatchingUpdatesCheck();
@@ -103,7 +107,10 @@ export function useWatchingUpdatesRefresh({
   }, [refreshWatchingUpdates]);
 
   useEffect(() => {
-    if (activeTab === 'home' && pendingInvalidationRef.current) {
+    if (
+      activeTab === 'home' &&
+      (pendingInvalidationRef.current || pendingRegularCheckRef.current)
+    ) {
       void runWatchingUpdatesCheck();
     }
   }, [activeTab, runWatchingUpdatesCheck]);
@@ -112,7 +119,7 @@ export function useWatchingUpdatesRefresh({
     if (typeof window === 'undefined') return () => undefined;
 
     const runCheck = () => {
-      if (!canCheckWatchingUpdates(activeTabRef.current)) return;
+      pendingRegularCheckRef.current = true;
       void runWatchingUpdatesCheck();
     };
 

@@ -159,6 +159,92 @@ describe('useHomeData', () => {
     expect(mockLoadTertiaryData).not.toHaveBeenCalled();
   });
 
+  it('reconciles a new partial snapshot with sections already loaded on the client', async () => {
+    const loadedTvShows = [{ ...item, id: 'tv-client' }];
+    const loadedVarietyShows = [{ ...item, id: 'show-client' }];
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { ok: true, data: loadedTvShows },
+      hotVarietyShows: { ok: true, data: loadedVarietyShows },
+    });
+    const initialData = {
+      hotMovies: [{ ...item, id: 'movie-initial' }],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const refreshedInitialData = {
+      hotMovies: [{ ...item, id: 'movie-refreshed' }],
+      hotTvShows: [],
+      hotVarietyShows: [],
+      bangumiCalendarData: [],
+    };
+    const { result, rerender } = renderHomeDataHook(initialData);
+
+    await waitFor(() => {
+      expect(result.current.homeData.hotTvShows).toEqual(loadedTvShows);
+      expect(result.current.homeData.hotVarietyShows).toEqual(
+        loadedVarietyShows,
+      );
+    });
+    expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+    expect(mockScheduleIdleTask).not.toHaveBeenCalled();
+
+    rerender({ initialData: refreshedInitialData });
+
+    await waitFor(() => {
+      expect(result.current.homeData).toEqual({
+        hotMovies: refreshedInitialData.hotMovies,
+        hotTvShows: loadedTvShows,
+        hotVarietyShows: loadedVarietyShows,
+        bangumiCalendarData: [bangumiDay],
+      });
+      expect(result.current.loading).toEqual({
+        criticalLoading: false,
+        tertiaryLoading: false,
+        tvLoading: false,
+        varietyLoading: false,
+      });
+    });
+    expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+    expect(mockScheduleIdleTask).not.toHaveBeenCalled();
+  });
+
+  it('accepts a newly provided partial section and clears its previous error', async () => {
+    mockLoadSecondaryData.mockResolvedValue({
+      hotTvShows: { ok: false, error: new Error('tv failed') },
+      hotVarietyShows: undefined,
+    });
+    const initialData = {
+      hotMovies: [{ ...item, id: 'movie-initial' }],
+      hotTvShows: [],
+      hotVarietyShows: [{ ...item, id: 'show-existing' }],
+      bangumiCalendarData: [bangumiDay],
+    };
+    const refreshedTvShows = [{ ...item, id: 'tv-refreshed' }];
+    const { result, rerender } = renderHomeDataHook(initialData);
+
+    await waitFor(() => {
+      expect(result.current.errors.tv).toBe(true);
+      expect(result.current.loading.tvLoading).toBe(false);
+    });
+
+    rerender({
+      initialData: {
+        hotMovies: [],
+        hotTvShows: refreshedTvShows,
+        hotVarietyShows: [],
+        bangumiCalendarData: [],
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.homeData.hotTvShows).toEqual(refreshedTvShows);
+      expect(result.current.errors.tv).toBe(false);
+      expect(result.current.loading.tvLoading).toBe(false);
+    });
+    expect(mockLoadSecondaryData).toHaveBeenCalledTimes(1);
+  });
+
   it('does not let an older secondary response overwrite a new complete snapshot', async () => {
     const staleSecondaryData = {
       hotTvShows: { ok: true, data: [{ ...item, id: 'tv-stale' }] },

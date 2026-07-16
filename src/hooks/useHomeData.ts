@@ -47,6 +47,23 @@ const HOME_LOADING_KEYS: Record<HomeSectionKey, keyof HomeLoadingState> = {
   variety: 'varietyLoading',
 };
 
+function reconcileHomeData(current: HomeData, incoming: HomeData): HomeData {
+  return {
+    hotMovies: incoming.hotMovies.length
+      ? incoming.hotMovies
+      : current.hotMovies,
+    hotTvShows: incoming.hotTvShows.length
+      ? incoming.hotTvShows
+      : current.hotTvShows,
+    hotVarietyShows: incoming.hotVarietyShows.length
+      ? incoming.hotVarietyShows
+      : current.hotVarietyShows,
+    bangumiCalendarData: incoming.bangumiCalendarData.length
+      ? incoming.bangumiCalendarData
+      : current.bangumiCalendarData,
+  };
+}
+
 export function useHomeData({
   activeTab,
   refreshWatchingUpdates,
@@ -61,6 +78,8 @@ export function useHomeData({
   const [errors, setErrors] = useState<HomeErrorState>(() =>
     createHomeErrorState(),
   );
+  const homeDataRef = useRef(homeData);
+  homeDataRef.current = homeData;
   const previousInitialDataRef = useRef(initialData);
   const loadGenerationRef = useRef(0);
   const retryRequestsRef = useRef<
@@ -90,11 +109,13 @@ export function useHomeData({
 
       if (result.ok) {
         const dataKey = HOME_DATA_KEYS[section];
-        setHomeData((current) =>
-          patchHomeData(current, {
+        setHomeData((current) => {
+          const nextData = patchHomeData(current, {
             [dataKey]: result.data,
-          } as Partial<HomeData>),
-        );
+          } as Partial<HomeData>);
+          homeDataRef.current = nextData;
+          return nextData;
+        });
       }
 
       const loadingKey = HOME_LOADING_KEYS[section];
@@ -196,6 +217,7 @@ export function useHomeData({
       if (!isCurrent()) return;
 
       const availability = getHomeDataAvailability(nextData);
+      homeDataRef.current = nextData;
       setHomeData(nextData);
       setLoading((prev) =>
         patchHomeLoadingState(prev, {
@@ -308,13 +330,17 @@ export function useHomeData({
     };
 
     const loadAllData = async () => {
-      const snapshot = createHomeDataSnapshot(initialData);
+      const incomingSnapshot = createHomeDataSnapshot(initialData);
+      const snapshot = initialDataChanged
+        ? reconcileHomeData(homeDataRef.current, incomingSnapshot)
+        : homeDataRef.current;
       const availability = getHomeDataAvailability(snapshot);
 
+      if (initialDataChanged) {
+        applyHomeData(snapshot);
+      }
+
       if (availability.isComplete) {
-        if (initialDataChanged) {
-          applyHomeData(snapshot);
-        }
         cancelWatchingUpdatesCheck = scheduleWatchingUpdatesCheck();
         return;
       }
