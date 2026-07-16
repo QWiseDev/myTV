@@ -1,0 +1,46 @@
+refactor: 2026-07-16-user-menu-decomposition
+status: in_progress
+steps:
+  - id: characterization-tests
+    title: 补齐展示与持久化边界刻画
+    status: done
+    verify: 导航、版本、reset、条件设置和改密错误测试通过
+  - id: presentation-components
+    title: 拆出 UserMenu 面板展示组件
+    status: pending
+    verify: 六棵面板 JSX 不再内联，Portal 与状态 owner 不变
+  - id: media-data-hooks
+    title: 迁移追更、继续观看和收藏数据 Hook
+    status: pending
+    verify: 请求、订阅、timer 与 cleanup 时点测试通过
+  - id: settings-controller
+    title: 提取设置状态与持久化 Controller
+    status: pending
+    verify: 逐 key 序列化与条件事件保持不变
+  - id: parent-cleanup
+    title: 收口父组件与审计记录
+    status: pending
+    verify: 本次产生的死 import/state/helper 零残留
+  - id: full-verification
+    title: 完整质量门禁与目视验收
+    status: pending
+    verify: Jest、ESLint、typecheck、build、YAML、格式、浏览器与 diff check 通过
+checks:
+  - id: behavior-equivalence
+    title: 权限、导航、Portal、关闭和面板并存语义不变
+    status: pending
+  - id: data-contract
+    title: 收藏、播放记录与追更的数据源和刷新策略不变
+    status: pending
+  - id: settings-contract
+    title: 设置 key、默认值、序列化和事件名称不变
+    status: pending
+  - id: ownership-boundary
+    title: 展示组件无请求/持久化，父组件不再持有已迁移 domain effect
+    status: pending
+  - id: scope-guard
+    title: 不修改 Header、VideoCard、VersionPanel 和共享 Context contract
+    status: pending
+  - id: full-quality-gates
+    title: 完整质量门禁通过
+    status: pending

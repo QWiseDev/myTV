@@ -1,7 +1,7 @@
 ---
 doc_type: refactor-scan
 refactor: 2026-07-16-user-menu-decomposition
-status: pending-user-selection
+status: user-reviewed
 scope: src/components/UserMenu.tsx 与 src/components/UserMenu.test.tsx
 summary: 3 条结构优化，中风险 2 条、高风险 1 条
 ---
@@ -20,7 +20,7 @@ summary: 3 条结构优化，中风险 2 条、高风险 1 条
 
 ## 条目
 
-### #1 把六棵面板子树拆成展示组件
+### #1 把六棵面板子树拆成展示组件 ✓
 
 - **位置**：`src/components/UserMenu.tsx:918-2094`
 - **分类**：结构
@@ -32,7 +32,7 @@ summary: 3 条结构优化，中风险 2 条、高风险 1 条
 - **验证**：AI 自证（apply 前先补导航/登出、版本面板、设置 reset/条件分支与改密 API 错误刻画，再新增展示组件测试；跑 `UserMenu.test.tsx`、目标 ESLint、typecheck）；HUMAN（桌面与移动端逐个打开、关闭 6 个面板，确认布局、滚动和命中区域不变）。
 - **范围**：约 1150 行搬移 / 4-5 文件。
 
-### #2 把三个数据订阅域迁入独立 Hook
+### #2 把三个数据订阅域迁入独立 Hook ✓
 
 - **位置**：`src/components/UserMenu.tsx:226-234`、`359-572`、`864-916`
 - **分类**：结构
@@ -44,7 +44,7 @@ summary: 3 条结构优化，中风险 2 条、高风险 1 条
 - **验证**：AI 自证（覆盖未开启不请求、事件重载、invalidated 忽略、晚到响应、关闭/卸载 cleanup；跑 `UserMenu.test.tsx`、Hook 测试、typecheck）；HUMAN（打开三个数据面板并触发一次收藏/播放记录更新，确认列表刷新时点不变）。
 - **范围**：约 270 行迁移 / 4-7 文件。
 
-### #3 提取设置状态与持久化 Controller
+### #3 提取设置状态与持久化 Controller ✓
 
 - **位置**：`src/components/UserMenu.tsx:270-341`、`745-842`
 - **分类**：结构

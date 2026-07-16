@@ -168,6 +168,17 @@ function closePanelFromHeading(name: string) {
   fireEvent.click(within(header).getByRole('button'));
 }
 
+function getSettingCheckbox(title: string): HTMLInputElement {
+  const settingTitle = screen.getByText(title);
+  const settingRow = settingTitle.closest('.flex.items-center.justify-between');
+  const checkbox = settingRow?.querySelector<HTMLInputElement>(
+    'input[type="checkbox"]',
+  );
+  if (!checkbox) throw new Error(`找不到 ${title} 开关`);
+
+  return checkbox;
+}
+
 describe('UserMenu', () => {
   beforeAll(async () => {
     UserMenu = (await import('./UserMenu')).UserMenu;
@@ -228,6 +239,32 @@ describe('UserMenu', () => {
     expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
   });
 
+  it('navigates from the menu and closes the portal', async () => {
+    await renderMenu();
+    await openMenu();
+
+    fireEvent.click(screen.getByRole('button', { name: '播放统计' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/play-stats');
+    expect(screen.queryByText('当前用户')).not.toBeInTheDocument();
+  });
+
+  it('opens and closes the version panel from the menu footer', async () => {
+    await renderMenu();
+    await openMenu();
+
+    const versionLabel = screen.getByText(/^v/);
+    const versionButton = versionLabel.closest('button');
+    if (!versionButton) throw new Error('找不到版本入口');
+    fireEvent.click(versionButton);
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('版本面板');
+    expect(screen.queryByText('当前用户')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭版本面板' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('locks page scrolling while settings are open and restores original styles', async () => {
     document.body.style.overflow = 'auto';
     document.documentElement.style.overflow = 'scroll';
@@ -259,18 +296,53 @@ describe('UserMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
     await screen.findByRole('heading', { name: '本地设置' });
 
-    const settingTitle = screen.getByText('启用自动跳过');
-    const settingRow = settingTitle.closest(
-      '.flex.items-center.justify-between',
-    );
-    const checkbox = settingRow?.querySelector('input[type="checkbox"]');
-    if (!checkbox) throw new Error('找不到启用自动跳过开关');
-
-    fireEvent.click(checkbox);
+    fireEvent.click(getSettingCheckbox('启用自动跳过'));
 
     expect(localStorage.getItem('enableAutoSkip')).toBe('true');
     expect(storageEvent).toHaveBeenCalledTimes(1);
     window.removeEventListener('localStorageChanged', storageEvent);
+  });
+
+  it('restores persisted settings and dispatches the image proxy event', async () => {
+    localStorage.setItem('enableAutoSkip', 'true');
+    const proxyEvent = jest.fn();
+    window.addEventListener('doubanImageProxyChanged', proxyEvent);
+    await renderMenu();
+    await openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    await screen.findByRole('heading', { name: '本地设置' });
+
+    expect(getSettingCheckbox('启用自动跳过').checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认' }));
+
+    expect(getSettingCheckbox('启用自动跳过').checked).toBe(false);
+    expect(localStorage.getItem('enableAutoSkip')).toBe('false');
+    expect(proxyEvent).toHaveBeenCalledTimes(1);
+    window.removeEventListener('doubanImageProxyChanged', proxyEvent);
+  });
+
+  it('shows the custom Douban proxy field only after selecting custom', async () => {
+    await renderMenu();
+    await openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    await screen.findByRole('heading', { name: '本地设置' });
+
+    expect(
+      screen.queryByPlaceholderText(
+        '例如: https://proxy.example.com/fetch?url=',
+      ),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '直连（服务器直接请求豆瓣）',
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '自定义代理' }));
+
+    expect(
+      screen.getByPlaceholderText('例如: https://proxy.example.com/fetch?url='),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('doubanDataSource')).toBe('custom');
   });
 
   it('loads continue-watching records only while its panel is active', async () => {
@@ -367,5 +439,33 @@ describe('UserMenu', () => {
 
     expect(await screen.findByText('两次输入的密码不一致')).toBeInTheDocument();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the password panel open when the API rejects the change', async () => {
+    mockFetch.mockResolvedValue({
+      json: async () => ({ error: '服务端拒绝修改' }),
+      ok: false,
+    });
+    await renderMenu({ role: 'user' });
+    await openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '修改密码' }));
+
+    fireEvent.change(screen.getByPlaceholderText('请输入新密码'), {
+      target: { value: 'new-password' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('请再次输入新密码'), {
+      target: { value: 'new-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '确认修改' }));
+
+    expect(await screen.findByText('服务端拒绝修改')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '修改密码' }),
+    ).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalledWith('/api/change-password', {
+      body: JSON.stringify({ newPassword: 'new-password' }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
   });
 });
