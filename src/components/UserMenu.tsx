@@ -4,35 +4,18 @@
 
 import { User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import { getAllPlayRecords } from '@/lib/db.client';
 import { debug } from '@/lib/debug';
-import {
-  type UserMenuFavoriteRecord,
-  buildUserMenuFavoriteRecords,
-} from '@/lib/favorite-items';
-import type { Favorite, PlayRecord } from '@/lib/types';
-import {
-  type UserMenuContinueWatchingRecord,
-  buildUserMenuContinueWatchingRecords,
-} from '@/lib/user-menu-continue-watching';
 import {
   type UserMenuSettingsSnapshot,
   buildDefaultUserMenuSettings,
   readUserMenuSettings,
   writeUserMenuSettings,
 } from '@/lib/user-menu-settings';
-import { buildUserMenuWatchingUpdatesState } from '@/lib/user-menu-watching-updates';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
-import {
-  type WatchingUpdate,
-  getCachedWatchingUpdates,
-  getDetailedWatchingUpdates,
-  subscribeToWatchingUpdatesEvent,
-} from '@/lib/watching-updates';
 
 import { UserMenuChangePasswordPanel } from './user-menu/UserMenuChangePasswordPanel';
 import { UserMenuDropdownPanel } from './user-menu/UserMenuDropdownPanel';
@@ -42,6 +25,9 @@ import {
   UserMenuWatchingUpdatesPanel,
 } from './user-menu/UserMenuMediaPanels';
 import { UserMenuSettingsPanel } from './user-menu/UserMenuSettingsPanel';
+import { useUserMenuContinueWatching } from './user-menu/useUserMenuContinueWatching';
+import { useUserMenuFavorites } from './user-menu/useUserMenuFavorites';
+import { useUserMenuWatchingUpdates } from './user-menu/useUserMenuWatchingUpdates';
 import { VersionPanel } from './VersionPanel';
 
 interface AuthInfo {
@@ -111,14 +97,6 @@ export const UserMenu: React.FC = () => {
     return 'localstorage';
   });
   const [mounted, setMounted] = useState(false);
-  const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
-    null,
-  );
-  const [playRecords, setPlayRecords] = useState<
-    UserMenuContinueWatchingRecord[]
-  >([]);
-  const [favorites, setFavorites] = useState<UserMenuFavoriteRecord[]>([]);
-  const [hasUnreadUpdates, setHasUnreadUpdates] = useState(false);
 
   // Body 滚动锁定 - 使用 overflow 方式避免布局问题
   useEffect(() => {
@@ -243,214 +221,24 @@ export const UserMenu: React.FC = () => {
     checkUpdate();
   }, []);
 
-  // 获取观看更新信息 - 初始化日志
-  useEffect(() => {
-    // 🔧 优化：只在条件不满足时输出日志
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage'
-    ) {
-      debug.log('watching-updates 条件不满足，跳过加载');
-    }
-  }, [authInfo?.username, storageType]); // 只在关键依赖变化时检查
-
-  // 获取观看更新信息 - 主逻辑
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage'
-    ) {
-      return;
-    }
-
-    debug.log('开始加载 watching-updates 数据...');
-
-    const updateWatchingUpdates = () => {
-      const updates = getDetailedWatchingUpdates();
-      debug.log('getDetailedWatchingUpdates 返回:', updates);
-      setWatchingUpdates(updates);
-
-      // 检测是否有新更新（只检查新剧集更新，不包括继续观看）
-      if (updates && (updates.updatedCount || 0) > 0) {
-        const lastViewed = parseInt(
-          localStorage.getItem('watchingUpdatesLastViewed') || '0',
-        );
-        const currentTime = Date.now();
-
-        // 如果从未查看过，或者距离上次查看超过1分钟，认为有新更新
-        const hasNewUpdates =
-          lastViewed === 0 || currentTime - lastViewed > 60000;
-        setHasUnreadUpdates(hasNewUpdates);
-      } else {
-        setHasUnreadUpdates(false);
-      }
-    };
-
-    // 先尝试从缓存加载
-    const cachedUpdates = getCachedWatchingUpdates();
-    if (cachedUpdates) {
-      debug.log('发现缓存数据，先加载缓存');
-      updateWatchingUpdates();
-    }
-
-    // 订阅更新事件
-    const unsubscribe = subscribeToWatchingUpdatesEvent(
-      (_hasUpdates, _updatedCount, invalidated) => {
-        if (invalidated) return;
-
-        debug.log('收到 watching-updates 事件，更新数据...');
-        // 收到事件时也从缓存获取，不主动触发检查
-        const updates = getDetailedWatchingUpdates();
-        setWatchingUpdates(updates);
-      },
-    );
-
-    // 清理函数
-    return () => {
-      unsubscribe();
-    };
-  }, [authInfo, storageType]);
-
-  // 加载播放记录（仅在继续观看面板展开时触发）
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage' ||
-      !isContinueWatchingOpen
-    ) {
-      return undefined;
-    }
-
-    let isActive = true;
-    let refreshTimer: NodeJS.Timeout | null = null;
-
-    const updateContinueWatchingRecords = (
-      records: Record<string, PlayRecord>,
-    ) => {
-      setPlayRecords(
-        buildUserMenuContinueWatchingRecords(records, {
-          enableProgressFilter: enableContinueWatchingFilter,
-          maxProgress: continueWatchingMaxProgress,
-          minProgress: continueWatchingMinProgress,
-        }),
-      );
-    };
-
-    const loadPlayRecords = async () => {
-      try {
-        const records = await getAllPlayRecords();
-        if (!isActive) return;
-
-        updateContinueWatchingRecords(records);
-      } catch (error) {
-        debug.error('加载播放记录失败:', error);
-      }
-    };
-
-    loadPlayRecords();
-
-    // 监听播放记录更新事件（修复删除记录后页面不立即更新的问题）
-    const handlePlayRecordsUpdate = () => {
-      debug.log('UserMenu: 播放记录更新，重新加载继续观看列表');
-      loadPlayRecords();
-    };
-
-    // 监听播放记录更新事件
-    window.addEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
-
-    // 与 ContinueWatching 组件保持一致，监听 watching-updates 事件
-    const unsubscribeWatchingUpdates = subscribeToWatchingUpdatesEvent(
-      (_hasUpdates, _updatedCount, invalidated) => {
-        if (invalidated) return;
-
-        debug.log('UserMenu: 收到watching-updates事件');
-
-        // 🚀 优化：移除强制刷新播放记录缓存，避免频繁调用 /api/detail
-        // 缓存系统已经有30分钟间隔，足够保证数据及时性
-        const updates = getDetailedWatchingUpdates();
-        if (updates && updates.hasUpdates && updates.updatedCount > 0) {
-          debug.log('UserMenu: 检测到新集数更新，使用现有缓存（30分钟间隔）');
-
-          // 短暂延迟后重新获取播放记录，确保缓存已刷新
-          if (refreshTimer) {
-            clearTimeout(refreshTimer);
-          }
-          refreshTimer = setTimeout(async () => {
-            const freshRecords = await getAllPlayRecords();
-            if (!isActive) return;
-
-            updateContinueWatchingRecords(freshRecords);
-          }, 100);
-        }
-      },
-    );
-
-    return () => {
-      isActive = false;
-      if (refreshTimer) {
-        clearTimeout(refreshTimer);
-      }
-      window.removeEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
-      unsubscribeWatchingUpdates(); // 🔥 清理watching-updates订阅
-    };
-  }, [
+  const { hasUnreadUpdates, markWatchingUpdatesViewed, watchingUpdatesState } =
+    useUserMenuWatchingUpdates({
+      authInfo,
+      storageType,
+    });
+  const { playRecords } = useUserMenuContinueWatching({
     authInfo,
+    enableProgressFilter: enableContinueWatchingFilter,
+    isOpen: isContinueWatchingOpen,
+    maxProgress: continueWatchingMaxProgress,
+    minProgress: continueWatchingMinProgress,
     storageType,
-    enableContinueWatchingFilter,
-    continueWatchingMinProgress,
-    continueWatchingMaxProgress,
-    isContinueWatchingOpen,
-  ]);
-
-  // 加载收藏数据（仅在收藏面板展开时触发）
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage' ||
-      !isFavoritesOpen
-    ) {
-      return undefined;
-    }
-
-    let isActive = true;
-
-    const loadFavorites = async () => {
-      try {
-        const response = await fetch('/api/favorites');
-        if (!response.ok || !isActive) return;
-
-        const favoritesData = (await response.json()) as Record<
-          string,
-          Favorite
-        >;
-        if (!isActive) return;
-
-        setFavorites(buildUserMenuFavoriteRecords(favoritesData));
-      } catch (error) {
-        debug.error('加载收藏失败:', error);
-      }
-    };
-
-    loadFavorites();
-
-    // 监听收藏更新事件（修复删除收藏后页面不立即更新的问题）
-    const handleFavoritesUpdate = () => {
-      debug.log('UserMenu: 收藏更新，重新加载收藏列表');
-      loadFavorites();
-    };
-
-    // 监听收藏更新事件
-    window.addEventListener('favoritesUpdated', handleFavoritesUpdate);
-
-    return () => {
-      isActive = false;
-      window.removeEventListener('favoritesUpdated', handleFavoritesUpdate);
-    };
-  }, [authInfo, storageType, isFavoritesOpen]);
+  });
+  const { favorites } = useUserMenuFavorites({
+    authInfo,
+    isOpen: isFavoritesOpen,
+    storageType,
+  });
 
   // 点击外部区域关闭下拉框
   useCloseDropdownOnOutsideMouseDown(
@@ -526,10 +314,7 @@ export const UserMenu: React.FC = () => {
   const handleWatchingUpdates = () => {
     setIsOpen(false);
     setIsWatchingUpdatesOpen(true);
-    // 标记为已读
-    setHasUnreadUpdates(false);
-    const currentTime = Date.now();
-    localStorage.setItem('watchingUpdatesLastViewed', currentTime.toString());
+    markWatchingUpdatesViewed();
   };
 
   const handleCloseWatchingUpdates = () => {
@@ -742,14 +527,6 @@ export const UserMenu: React.FC = () => {
   const showWatchingUpdates =
     authInfo?.username && storageType !== 'localstorage';
 
-  const watchingUpdatesState = useMemo(
-    () => buildUserMenuWatchingUpdatesState(watchingUpdates),
-    [watchingUpdates],
-  );
-
-  // 检查是否有实际更新（用于显示红点）- 只检查新剧集更新
-  const hasActualUpdates = watchingUpdatesState.hasActualUpdates;
-
   // 计算更新数量（只统计新剧集更新）
   const totalUpdates = watchingUpdatesState.totalUpdates;
 
@@ -768,43 +545,6 @@ export const UserMenu: React.FC = () => {
     fluidSearch,
     liveDirectConnect,
   };
-
-  // 🔧 优化：减少调试日志输出频率，只在关键状态变化时输出
-  const debugLoggedRef = useRef<string>('');
-  useEffect(() => {
-    const currentState = JSON.stringify({
-      username: authInfo?.username,
-      storageType,
-      showWatchingUpdates,
-      hasActualUpdates,
-      totalUpdates,
-      watchingUpdatesVersion: watchingUpdates?.updatedSeries
-        ? Object.keys(watchingUpdates.updatedSeries).length
-        : 0,
-    });
-
-    // 只在状态真正变化时输出日志
-    if (currentState !== debugLoggedRef.current) {
-      debugLoggedRef.current = currentState;
-      debug.log('UserMenu 更新提醒调试:', {
-        username: authInfo?.username,
-        storageType,
-        showWatchingUpdates,
-        hasActualUpdates,
-        totalUpdates,
-        watchingUpdatesVersion: watchingUpdates?.updatedSeries
-          ? Object.keys(watchingUpdates.updatedSeries).length
-          : 0,
-      });
-    }
-  }, [
-    authInfo?.username,
-    storageType,
-    showWatchingUpdates,
-    hasActualUpdates,
-    totalUpdates,
-    watchingUpdates?.updatedSeries,
-  ]);
 
   return (
     <>

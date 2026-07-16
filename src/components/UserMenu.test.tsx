@@ -421,7 +421,7 @@ describe('UserMenu', () => {
 
   it('opens cached watching updates and records the viewed timestamp', async () => {
     const watchingUpdate = createWatchingUpdate();
-    mockGetCachedWatchingUpdates.mockReturnValue(watchingUpdate);
+    mockGetCachedWatchingUpdates.mockReturnValue(true);
     mockGetDetailedWatchingUpdates.mockReturnValue(watchingUpdate);
     await renderMenu();
     await openMenu();

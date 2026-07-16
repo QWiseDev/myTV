@@ -19,3 +19,10 @@ refactor: 2026-07-16-user-menu-decomposition
 - 验证结果：六棵面板 JSX 全部迁为纯 props 展示组件，`UserMenu.tsx` 从 2095 行降至 964 行；Portal、面板开关、滚动锁、请求/订阅、设置持久化与改密 API owner 均保留父组件。定向 Jest 2 suites / 21 tests、目标 ESLint、`pnpm typecheck`、结构搜索和 `git diff --check` 通过；独立只读审查未发现行为漂移。
 - 浏览器验收：通过临时 SSH tunnel 启动本地 dev，桌面 1440×900 与移动 390×844 下验证菜单、设置、更新提醒、继续观看、收藏和版本面板；设置面板位于视口内且可滚动，打开时 `body/html` 锁定、关闭后恢复，浏览器 console 无 error；验收后已关闭 dev 与 tunnel。
 - 偏离：按用户“提交本阶段后继续”指令，本步以真实浏览器自动验收替代中途停顿；最终人工目视确认仍留到步骤 6。保留图片代理箭头读取数据源下拉状态、管理面板导航不先关菜单等既有语义，未顺手修复。
+
+## 步骤 3：迁移三个数据订阅 Hook
+
+- 完成时间：2026-07-16
+- 改动文件：`src/components/UserMenu.tsx`、`src/components/UserMenu.test.tsx`、`src/components/user-menu/useUserMenuWatchingUpdates.ts`、`src/components/user-menu/useUserMenuContinueWatching.ts`、`src/components/user-menu/useUserMenuFavorites.ts`、`src/components/user-menu/UserMenuDataHooks.test.ts`
+- 验证结果：追更、继续观看和收藏的数据 state/effect 已迁入三个独立 Hook；保留 boolean cache gate、60 秒未读边界、`invalidated` 忽略、`playRecordsUpdated` / `favoritesUpdated` 刷新、100ms timer 合并、两个 active guard、晚到响应隔离和原日志语义。定向 Jest 3 suites / 35 tests、目标 ESLint、`pnpm typecheck`、Prettier 与 `git diff --check` 通过。
+- 偏离：测试初始 props 的 `null` 被 TypeScript 过度收窄，显式扩宽为 `HookProps['authInfo']` 后通过；仅修测试类型，不改变生产逻辑。步骤 2 已完成桌面/移动媒体面板目视，本步最终事件刷新目视仍并入步骤 6。

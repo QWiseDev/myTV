@@ -11,7 +11,7 @@ steps:
     verify: 六棵面板 JSX 不再内联，Portal 与状态 owner 不变
   - id: media-data-hooks
     title: 迁移追更、继续观看和收藏数据 Hook
-    status: pending
+    status: done
     verify: 请求、订阅、timer 与 cleanup 时点测试通过
   - id: settings-controller
     title: 提取设置状态与持久化 Controller
