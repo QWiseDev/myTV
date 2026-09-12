@@ -12,9 +12,9 @@ import {
 } from 'react';
 
 import { logAccess } from '@/lib/access-log';
+import { danmakuMediaKey } from '@/lib/danmaku';
 import { generateStorageKey } from '@/lib/db.client';
-import { getDoubanComments } from '@/lib/douban.client';
-import type { DoubanComment, SearchResult } from '@/lib/types';
+import type { SearchResult } from '@/lib/types';
 import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 
 import PageLayout from '@/components/PageLayout';
@@ -67,6 +67,7 @@ const LoadingScreen = dynamic(() => import('@/components/play/LoadingScreen'), {
 const ErrorScreen = dynamic(() => import('@/components/play/ErrorScreen'), {
   ssr: false,
 });
+const DanmakuPanel = dynamic(() => import('@/components/play/DanmakuPanel'), { ssr: false });
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
 
@@ -427,59 +428,6 @@ function PlayPageClient() {
     setMovieDetails,
     setLoadingMovieDetails,
   });
-
-  // 豆瓣短评状态
-  const [movieComments, setMovieComments] = useState<DoubanComment[]>([]);
-  const [loadingComments, setLoadingComments] = useState(false);
-  const [commentsError, setCommentsError] = useState<string | null>(null);
-  const commentsLoadedRef = useRef<number | null>(null);
-  const isLoadingCommentsRef = useRef(false);
-
-  // 加载豆瓣短评
-  useEffect(() => {
-    const loadComments = async () => {
-      if (!videoDoubanId || videoDoubanId === 0) {
-        return;
-      }
-
-      // 如果已经为当前豆瓣ID加载过短评，不重复加载
-      if (commentsLoadedRef.current === videoDoubanId) {
-        return;
-      }
-
-      // 如果正在加载中，不重复请求
-      if (isLoadingCommentsRef.current) {
-        return;
-      }
-
-      isLoadingCommentsRef.current = true;
-      commentsLoadedRef.current = videoDoubanId;
-      setLoadingComments(true);
-      setCommentsError(null);
-      try {
-        const response = await getDoubanComments({
-          id: videoDoubanId.toString(),
-          start: 0,
-          limit: 10,
-          sort: 'new_score',
-        });
-
-        if (response.code === 200 && response.data) {
-          setMovieComments(response.data.comments);
-        } else {
-          setCommentsError(response.message);
-        }
-      } catch (err) {
-        console.error('Failed to load comments:', err);
-        setCommentsError('加载短评失败');
-      } finally {
-        setLoadingComments(false);
-        isLoadingCommentsRef.current = false;
-      }
-    };
-
-    loadComments();
-  }, [videoDoubanId]);
 
   // 收藏逻辑
   const { favorited, handleToggleFavorite } = useFavorite({
@@ -1081,6 +1029,15 @@ function PlayPageClient() {
             }}
           />
 
+          <DanmakuPanel
+            key={JSON.stringify([videoTitle, videoYear, videoDoubanId, danmuEpisodeNum])}
+            mediaKey={danmakuMediaKey(videoTitle, videoYear, videoDoubanId)}
+            title={videoTitle}
+            episodeIndex={danmuEpisodeNum - 1}
+            enabled={externalDanmuEnabled}
+            onToggle={handleDanmuOperationOptimized}
+          />
+
           <PlayDetailsSection
             detail={detail}
             videoTitle={videoTitle}
@@ -1098,9 +1055,6 @@ function PlayPageClient() {
             onNetDiskSearch={handleNetDiskSearch}
             videoCover={videoCover}
             videoDoubanId={videoDoubanId || 0}
-            movieComments={movieComments}
-            loadingComments={loadingComments}
-            commentsError={commentsError}
           />
         </div>
       </div>

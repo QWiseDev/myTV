@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic';
 
-import type { DoubanComment, SearchResult } from '@/lib/types';
+import type { SearchResult } from '@/lib/types';
 
 import type {
   BangumiDetails as BangumiDetailsData,
@@ -35,9 +35,7 @@ interface VideoDetailsPanelProps {
   netdiskTotal: number;
   onNetDiskSearch: (query: string) => void | Promise<void>;
   // 豆瓣短评相关
-  movieComments?: DoubanComment[];
-  loadingComments?: boolean;
-  commentsError?: string | null;
+  videoDoubanId?: number;
   // 演员点击回调
   onCelebrityClick?: (name: string) => void;
 }
@@ -57,12 +55,10 @@ export default function VideoDetailsPanel({
   netdiskError,
   netdiskTotal,
   onNetDiskSearch,
-  movieComments = [],
-  loadingComments = false,
-  commentsError = null,
+  videoDoubanId: resolvedDoubanId,
   onCelebrityClick,
 }: VideoDetailsPanelProps) {
-  const videoDoubanId = detail?.douban_id;
+  const videoDoubanId = resolvedDoubanId || detail?.douban_id;
 
   return (
     <div className='md:col-span-3'>
@@ -183,10 +179,8 @@ export default function VideoDetailsPanel({
 
         {/* 豆瓣短评 */}
         <CommentSection
-          comments={movieComments}
-          loading={loadingComments}
-          error={commentsError}
-          videoDoubanId={detail?.douban_id}
+          key={videoDoubanId}
+          videoDoubanId={videoDoubanId}
         />
 
         {/* 网盘资源区域 */}

@@ -6,6 +6,7 @@ import {
   bypassDoubanPowChallenge,
   isDoubanChallengePage,
 } from '@/lib/douban-challenge';
+import { parseDoubanCommentsPage } from '@/lib/douban-comments-parser';
 
 // 用户代理池
 const USER_AGENTS = [
@@ -36,23 +37,23 @@ export const revalidate = 0;
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  const start = parseInt(searchParams.get('start') || '0');
-  const limit = parseInt(searchParams.get('limit') || '10');
+  const start = Number(searchParams.get('start') || '0');
+  const limit = Number(searchParams.get('limit') || '10');
   const sort = searchParams.get('sort') || 'new_score'; // new_score 或 time
 
-  if (!id) {
+  if (!id || !/^\d+$/.test(id)) {
     return NextResponse.json({ error: '缺少必要参数: id' }, { status: 400 });
   }
 
   // 验证参数
-  if (limit < 1 || limit > 50) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
     return NextResponse.json(
       { error: 'limit 必须在 1-50 之间' },
       { status: 400 }
     );
   }
 
-  if (start < 0) {
+  if (!Number.isSafeInteger(start) || start < 0 || !['new_score', 'time'].includes(sort)) {
     return NextResponse.json({ error: 'start 不能小于 0' }, { status: 400 });
   }
 
@@ -97,8 +98,9 @@ export async function GET(request: Request) {
       },
     };
 
-    const response = await fetchDoubanWithVerification(target, fetchOptions);
-    clearTimeout(timeoutId);
+    const response = await fetchDoubanWithVerification(target, fetchOptions).finally(
+      () => clearTimeout(timeoutId),
+    );
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -112,6 +114,8 @@ export async function GET(request: Request) {
               start,
               limit,
               count: 0,
+              hasMore: false,
+              nextStart: null,
             },
           },
           {
@@ -140,7 +144,10 @@ export async function GET(request: Request) {
     }
 
     // 解析短评列表
-    const comments = parseDoubanComments(html);
+    if (isDoubanChallengePage(html)) {
+      return NextResponse.json({ error: '豆瓣暂时要求验证，请稍后重试' }, { status: 503 });
+    }
+    const { comments, hasMore, nextStart } = parseDoubanCommentsPage(html);
 
     const cacheTime = await getCacheTime();
     return NextResponse.json(
@@ -152,6 +159,8 @@ export async function GET(request: Request) {
           start,
           limit,
           count: comments.length,
+          hasMore,
+          nextStart,
         },
       },
       {
@@ -165,107 +174,8 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: '获取豆瓣短评失败', details: (error as Error).message },
+      { error: '获取豆瓣短评失败，请稍后重试' },
       { status: 500 }
     );
-  }
-}
-
-interface DoubanComment {
-  username: string;
-  user_id: string;
-  avatar: string;
-  rating: number; // 0-5, 0表示未评分
-  time: string;
-  location: string;
-  content: string;
-  useful_count: number;
-}
-
-function parseDoubanComments(html: string): DoubanComment[] {
-  const comments: DoubanComment[] = [];
-
-  try {
-    // 匹配所有 comment-item (包含 data-cid 属性)
-    const commentItemRegex =
-      /<div class="comment-item"[^>]*>([\s\S]*?)(?=<div class="comment-item"|<div id="paginator"|$)/g;
-    let match;
-
-    while ((match = commentItemRegex.exec(html)) !== null) {
-      try {
-        const item = match[0];
-
-        // 提取用户信息 - 在 comment-info 中
-        const userLinkMatch = item.match(
-          /<span class="comment-info">[\s\S]*?<a href="https:\/\/www\.douban\.com\/people\/([^/]+)\/">([^<]+)<\/a>/
-        );
-        const username = userLinkMatch ? userLinkMatch[2].trim() : '';
-        const user_id = userLinkMatch ? userLinkMatch[1] : '';
-
-        // 提取头像 - 在 avatar div 中
-        const avatarMatch = item.match(
-          /<div class="avatar">[\s\S]*?<img src="([^"]+)"/
-        );
-        const avatar = avatarMatch
-          ? avatarMatch[1].replace(/^http:/, 'https:')
-          : '';
-
-        // 提取评分 (allstar50 表示5星, allstar40 表示4星, allstar30 表示3星)
-        const ratingMatch = item.match(/<span class="allstar(\d)0 rating"/);
-        const rating = ratingMatch ? parseInt(ratingMatch[1]) : 0;
-
-        // 提取时间
-        const timeMatch = item.match(
-          /<span class="comment-time"[^>]*title="([^"]+)"/
-        );
-        const time = timeMatch ? timeMatch[1] : '';
-
-        // 提取地点
-        const locationMatch = item.match(
-          /<span class="comment-location">([^<]+)<\/span>/
-        );
-        const location = locationMatch ? locationMatch[1].trim() : '';
-
-        // 提取短评内容
-        const contentMatch = item.match(
-          /<span class="short">([\s\S]*?)<\/span>/
-        );
-        let content = '';
-        if (contentMatch) {
-          content = contentMatch[1]
-            .replace(/<br\s*\/?>/gi, '\n')
-            .replace(/<[^>]+>/g, '')
-            .trim();
-        }
-
-        // 提取有用数
-        const usefulMatch = item.match(
-          /<span class="votes vote-count">(\d+)<\/span>/
-        );
-        const useful_count = usefulMatch ? parseInt(usefulMatch[1]) : 0;
-
-        // 只添加有效的短评
-        if (username && content) {
-          comments.push({
-            username,
-            user_id,
-            avatar,
-            rating,
-            time,
-            location,
-            content,
-            useful_count,
-          });
-        }
-      } catch (e) {
-        // 跳过解析失败的单条评论
-        console.warn('解析单条评论失败:', e);
-      }
-    }
-
-    return comments;
-  } catch (error) {
-    console.error('解析豆瓣短评失败:', error);
-    return [];
   }
 }

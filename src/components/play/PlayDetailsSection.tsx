@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 
-import type { DoubanComment, SearchResult } from '@/lib/types';
+import type { SearchResult } from '@/lib/types';
 
 import type {
   BangumiDetails,
@@ -41,10 +41,6 @@ interface PlayDetailsSectionProps {
   onNetDiskSearch: (keyword: string) => void | Promise<void>;
   videoCover: string;
   videoDoubanId: number;
-  // 豆瓣短评相关
-  movieComments?: DoubanComment[];
-  loadingComments?: boolean;
-  commentsError?: string | null;
   // 演员点击回调
   onCelebrityClick?: (name: string) => void;
 }
@@ -69,9 +65,6 @@ export default function PlayDetailsSection({
   onNetDiskSearch,
   videoCover,
   videoDoubanId,
-  movieComments = [],
-  loadingComments = false,
-  commentsError = null,
   onCelebrityClick,
 }: PlayDetailsSectionProps) {
   return (
@@ -91,9 +84,7 @@ export default function PlayDetailsSection({
         netdiskError={netdiskError}
         netdiskTotal={netdiskTotal}
         onNetDiskSearch={onNetDiskSearch}
-        movieComments={movieComments}
-        loadingComments={loadingComments}
-        commentsError={commentsError}
+        videoDoubanId={videoDoubanId}
         onCelebrityClick={onCelebrityClick}
       />
 

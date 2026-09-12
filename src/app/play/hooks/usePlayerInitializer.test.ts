@@ -12,6 +12,10 @@ jest.mock('../utils/artplayerLoader', () => ({
   loadArtplayerModules: jest.fn(),
 }));
 
+jest.mock('../utils/superResolution', () => ({
+  installSuperResolution: jest.fn(),
+}));
+
 jest.mock('../utils/artplayerConfig', () => ({
   createArtplayerConfig: jest.fn(() => ({})),
   setupArtplayerGlobals: jest.fn(),

@@ -2,6 +2,8 @@
 
 import { MutableRefObject, useCallback, useRef } from 'react';
 
+import { danmakuMediaKey, readDanmakuSelection } from '@/lib/danmaku';
+
 import {
   ArtPlayerLike,
   clearDanmakuDisplay,
@@ -57,6 +59,10 @@ export function useDanmuController({
     DanmakuItemLike[]
   > => {
     const getCurrentRequestInput = () => ({
+      manualEpisodeId: readDanmakuSelection(
+        danmakuMediaKey(videoTitleRef.current, videoYearRef.current, videoDoubanIdRef.current),
+        currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current,
+      )?.episodeId,
       enabled: externalDanmuEnabledRef.current,
       videoTitle: videoTitleRef.current,
       videoYear: videoYearRef.current,
@@ -94,7 +100,7 @@ export function useDanmuController({
         throw error;
       }
       console.error('加载外部弹幕失败:', error);
-      return [];
+      throw error;
     } finally {
       const activeKey = loadManagerRef.current.activeKey;
       if (!activeKey || activeKey === requestKey) {

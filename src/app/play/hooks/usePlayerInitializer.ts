@@ -21,7 +21,7 @@ import {
 } from '../utils/artplayerConfig';
 import type { ArtplayerRuntimeModules } from '../utils/artplayerLoader';
 import { loadArtplayerModules } from '../utils/artplayerLoader';
-import { getOptimizedDanmakuConfig } from '../utils/danmakuConfig';
+import { getOptimizedDanmakuConfig, saveDanmakuConfigToStorage } from '../utils/danmakuConfig';
 import {
   type ArtPlayerLike,
   type DanmakuItemLike,
@@ -45,6 +45,7 @@ import {
   applyAllUiEnhancements,
 } from '../utils/playerUiEnhancements';
 import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
+import { installSuperResolution } from '../utils/superResolution';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
@@ -87,6 +88,7 @@ type HlsMediaVideo = HTMLVideoElement & {
   hls?: HlsRuntimeInstance | null;
 };
 type DanmakuConfigChange = {
+  [key: string]: unknown;
   fontSize?: unknown;
   opacity?: unknown;
   speed?: unknown;
@@ -690,6 +692,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         artPlayerRef.current = new Artplayer(playerConfig) as PlayArtplayer;
         const artPlayer = artPlayerRef.current;
+        installSuperResolution(artPlayer);
         // 播放器实例在换集/换源时会复用；事件监听必须跨 effect generation 保持生效。
         // generation 只约束尚未提交的异步初始化，实例事件只校验当前播放器身份。
         const isActivePlayer = () => artPlayerRef.current === artPlayer;
@@ -851,25 +854,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             'artplayerPluginDanmuku:config',
             (option: DanmakuConfigChange) => {
               if (!isActivePlayer()) return;
-              try {
-                if (typeof option.fontSize !== 'undefined') {
-                  localStorage.setItem(
-                    'danmaku_fontSize',
-                    String(option.fontSize),
-                  );
-                }
-                if (typeof option.opacity !== 'undefined') {
-                  localStorage.setItem(
-                    'danmaku_opacity',
-                    String(option.opacity),
-                  );
-                }
-                if (typeof option.speed !== 'undefined') {
-                  localStorage.setItem('danmaku_speed', String(option.speed));
-                }
-              } catch (error) {
-                console.warn('保存弹幕配置失败:', error);
-              }
+              saveDanmakuConfigToStorage(option);
             },
           );
         });

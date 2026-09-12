@@ -622,7 +622,7 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
                 time: time,
                 color:
                   '#' + colorInt.toString(16).padStart(6, '0').toUpperCase(),
-                mode: mode === 4 ? 1 : mode === 5 ? 2 : 0,
+                mode: mode === 5 ? 1 : mode === 4 ? 2 : 0,
               };
             }
             continue;
@@ -632,7 +632,7 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
             text: trimmedText,
             time: time,
             color: '#' + colorInt.toString(16).padStart(6, '0').toUpperCase(),
-            mode: mode === 4 ? 1 : mode === 5 ? 2 : 0,
+            mode: mode === 5 ? 1 : mode === 4 ? 2 : 0,
           });
 
           totalProcessed++;
@@ -731,7 +731,7 @@ function convertDecimalColor(colorValue: string | undefined): string {
 
 function convertDanmuMode(modeValue: string | undefined): number {
   const mode = Number.parseInt(modeValue || '1', 10);
-  return mode === 4 ? 1 : mode === 5 ? 2 : 0;
+  return mode === 5 ? 1 : mode === 4 ? 2 : 0;
 }
 
 function parseKlmDanmuComment(comment: KlmDanmuComment): DanmuItem | null {

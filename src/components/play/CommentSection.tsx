@@ -1,15 +1,18 @@
 'use client';
 
+import {
+  ChevronDown,
+  ExternalLink,
+  MessageSquare,
+  RotateCcw,
+} from 'lucide-react';
 import { memo } from 'react';
 
-import type { DoubanComment } from '@/lib/types';
+import { useDoubanComments } from '@/hooks/useDoubanComments';
 
 import CommentItem from './CommentItem';
 
 interface CommentSectionProps {
-  comments: DoubanComment[];
-  loading: boolean;
-  error: string | null;
   videoDoubanId?: string | number;
 }
 
@@ -18,57 +21,54 @@ interface CommentSectionProps {
  * 使用 React.memo 防止不必要的重新渲染
  */
 const CommentSection = memo(function CommentSection({
-  comments,
-  loading,
-  error,
   videoDoubanId,
 }: CommentSectionProps) {
-  // 如果正在加载，显示加载状态
-  if (loading) {
-    return (
-      <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
-        <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-          <span>💬</span>
-          <span>豆瓣短评</span>
-        </h3>
-        <div className='text-center py-8 text-gray-500 dark:text-gray-400'>
-          加载中...
-        </div>
-      </div>
-    );
-  }
-
-  // 如果有错误，显示错误信息
-  if (error) {
-    return (
-      <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
-        <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-          <span>💬</span>
-          <span>豆瓣短评</span>
-        </h3>
-        <div className='text-center py-8 text-red-500 dark:text-red-400'>
-          {error}
-        </div>
-      </div>
-    );
-  }
-
-  // 如果没有评论，不显示
-  if (!comments || comments.length === 0) {
-    return null;
-  }
+  const { comments, loading, error, hasMore, loadMore } = useDoubanComments(
+    String(videoDoubanId || ''),
+  );
+  if (!videoDoubanId || String(videoDoubanId) === '0') return null;
 
   return (
     <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
       <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-        <span>💬</span>
+        <MessageSquare size={18} aria-hidden />
         <span>豆瓣短评</span>
       </h3>
       <div className='space-y-4'>
-        {comments.slice(0, 10).map((comment, index) => (
-          <CommentItem key={index} comment={comment} />
+        {comments.map((comment) => (
+          <CommentItem
+            key={
+              comment.id ||
+              JSON.stringify([comment.user_id, comment.time, comment.content])
+            }
+            comment={comment}
+          />
         ))}
       </div>
+      {!loading && !error && comments.length === 0 && (
+        <p className='py-6 text-center text-sm text-gray-500'>暂无短评</p>
+      )}
+      {loading && (
+        <p role='status' className='py-4 text-center text-sm text-gray-500'>
+          加载中...
+        </p>
+      )}
+      {error && (
+        <p role='alert' className='mt-4 text-sm text-red-500'>
+          {error}
+        </p>
+      )}
+      {(hasMore || error) && (
+        <button
+          type='button'
+          disabled={loading}
+          onClick={() => void loadMore()}
+          className='mx-auto mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-green-600 hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-950'
+        >
+          {error ? <RotateCcw size={16} /> : <ChevronDown size={16} />}
+          {error ? '重试' : '加载更多'}
+        </button>
+      )}
 
       {/* 查看更多链接 */}
       {videoDoubanId && (
@@ -79,20 +79,8 @@ const CommentSection = memo(function CommentSection({
             rel='noopener noreferrer'
             className='inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline'
           >
-            查看更多短评
-            <svg
-              className='w-4 h-4'
-              fill='none'
-              stroke='currentColor'
-              viewBox='0 0 24 24'
-            >
-              <path
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                strokeWidth={2}
-                d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
-              />
-            </svg>
+            在豆瓣查看
+            <ExternalLink size={14} />
           </a>
         </div>
       )}

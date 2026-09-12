@@ -62,6 +62,7 @@ declare module 'artplayer' {
   }
 
   export interface Setting {
+    name?: string;
     html?: string;
     icon?: string;
     width?: number;
@@ -123,6 +124,11 @@ declare module 'artplayer' {
     template: any;
     $container: HTMLElement;
     $player: HTMLElement;
+    notice: { show: string };
+    setting: {
+      add(option: Setting): void;
+      update(option: Setting): void;
+    };
 
     // 播放状态
     playing: boolean;

@@ -61,18 +61,38 @@ export function getDevicePerformance(isMobile: boolean): DevicePerformance {
  * 从 localStorage 加载弹幕配置
  */
 export function loadDanmakuConfigFromStorage(): Partial<DanmakuPluginConfig> {
-  return {
-    speed: parseInt(localStorage.getItem('danmaku_speed') || '5'),
-    opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.5'),
-    fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '20'),
-    modes: JSON.parse(
-      localStorage.getItem('danmaku_modes') || '[0, 1, 2]',
-    ) as Array<0 | 1 | 2>,
-    margin: JSON.parse(
-      localStorage.getItem('danmaku_margin') || '[10, "75%"]',
-    ) as [number | `${number}%`, number | `${number}%`],
-    visible: localStorage.getItem('danmaku_visible') !== 'false',
+  const read = (key: string, fallback: unknown): unknown => {
+    try { return JSON.parse(localStorage.getItem(`danmaku_${key}`) || JSON.stringify(fallback)); }
+    catch { return fallback; }
   };
+  const number = (key: string, fallback: number, min: number, max: number) => {
+    const value = Number(read(key, fallback));
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+  };
+  const modes = read('modes', [0, 1, 2]);
+  const margin = read('margin', [10, '75%']);
+  const validMargin = Array.isArray(margin) && margin.length === 2 && margin.every(
+    (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0) ||
+      (typeof value === 'string' && /^\d{1,2}%$|^100%$/.test(value)),
+  );
+  return {
+    speed: number('speed', 5, 1, 10),
+    opacity: number('opacity', 0.5, 0, 1),
+    fontSize: number('fontSize', 20, 12, 60),
+    modes: Array.isArray(modes) ? modes.filter((mode): mode is 0 | 1 | 2 => [0, 1, 2].includes(mode)) : [0, 1, 2],
+    margin: validMargin ? margin as DanmakuPluginConfig['margin'] : [10, '75%'],
+    visible: read('visible', true) !== false,
+    antiOverlap: read('antiOverlap', true) !== false,
+    synchronousPlayback: read('synchronousPlayback', true) !== false,
+  };
+}
+
+export function saveDanmakuConfigToStorage(option: Record<string, unknown>) {
+  try {
+    for (const key of ['speed', 'opacity', 'fontSize', 'modes', 'margin', 'antiOverlap', 'synchronousPlayback']) {
+      if (option[key] !== undefined) localStorage.setItem(`danmaku_${key}`, JSON.stringify(option[key]));
+    }
+  } catch { /* 存储不可用时仍允许本次播放调整。 */ }
 }
 
 /**
@@ -105,8 +125,8 @@ export function getOptimizedDanmakuConfig(
     width: 300,
 
     // 🎯 激进优化配置 - 保持功能完整性
-    antiOverlap: true, // ✅ 默认开启防重叠 (用户要求)
-    synchronousPlayback: true, // ✅ 必须保持true！确保弹幕与视频播放速度同步
+    antiOverlap: storageConfig.antiOverlap,
+    synchronousPlayback: storageConfig.synchronousPlayback,
     heatmap: false, // 关闭热力图，减少DOM计算开销
 
     // 🧠 智能过滤器 - 激进性能优化，过滤影响性能的弹幕

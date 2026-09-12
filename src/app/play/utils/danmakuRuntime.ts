@@ -1,5 +1,7 @@
 'use client';
 
+import { matchesDanmakuFilters, readDanmakuFilters } from '@/lib/danmaku';
+
 import {
   DANMU_CACHE_DURATION_SECONDS,
   getDanmuCacheItem,
@@ -53,6 +55,7 @@ export type ArtPlayerLike = {
 };
 
 export type DanmakuRequestInput = {
+  manualEpisodeId?: string;
   enabled: boolean;
   videoTitle?: string;
   videoYear?: string;
@@ -105,6 +108,7 @@ export function createDanmakuRequest(
 
   const episode = input.episodeIndex + 1 + input.episodeOffset;
   const params = new URLSearchParams();
+  if (input.manualEpisodeId) params.set('manual_episode_id', input.manualEpisodeId);
 
   if (input.videoDoubanId && input.videoDoubanId > 0) {
     params.set('douban_id', String(input.videoDoubanId));
@@ -133,6 +137,7 @@ export function createDanmakuRequest(
   if (input.videoUrl) {
     keyParts.push(input.videoUrl);
   }
+  if (input.manualEpisodeId) keyParts.push(`manual:${input.manualEpisodeId}`);
 
   return {
     key: keyParts.join('_'),
@@ -146,7 +151,11 @@ export async function fetchExternalDanmaku(
   request: DanmakuRequest,
   options: { signal?: AbortSignal } = {},
 ): Promise<DanmakuItemLike[]> {
-  const response = await fetch(`/api/danmu-external?${request.params}`, {
+  const manualId = request.params.get('manual_episode_id');
+  const url = manualId
+    ? `/api/danmaku?${new URLSearchParams({ action: 'comment', id: manualId })}`
+    : `/api/danmu-external?${request.params}`;
+  const response = await fetch(url, {
     signal: options.signal,
   });
 
@@ -280,15 +289,17 @@ export function renderDanmakuList(
   if (!plugin) return false;
 
   const wasHidden = Boolean(plugin.isHide);
+  const filters = readDanmakuFilters();
+  const visibleDanmaku = danmaku.filter((item) => matchesDanmakuFilters(item, filters));
   plugin.reset?.();
-  plugin.load?.(danmaku.length > 0 ? danmaku : undefined);
+  plugin.load?.(visibleDanmaku.length > 0 ? visibleDanmaku : undefined);
 
   if (!options.preserveHidden || !wasHidden) {
     plugin.show?.();
   }
 
   if (options.showNotice) {
-    showDanmakuLoadNotice(art, danmaku.length);
+    showDanmakuLoadNotice(art, visibleDanmaku.length);
   }
 
   return true;

@@ -216,6 +216,7 @@ export interface DoubanResult {
 
 // 豆瓣短评数据结构
 export interface DoubanComment {
+  id?: string;
   username: string;
   user_id: string;
   avatar: string;
@@ -234,6 +235,8 @@ export interface DoubanCommentsResult {
     start: number;
     limit: number;
     count: number;
+    hasMore?: boolean;
+    nextStart?: number | null;
   };
 }
 
