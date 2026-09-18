@@ -16,6 +16,9 @@ import {
   buildEpisodeProbeCacheKey,
   buildEpisodeSourceKey,
   EpisodeSourceCheckResult,
+  EpisodeSourceProbeError,
+  getOptimalProbeConcurrency,
+  isEpisodeProbeResultFresh,
   planEpisodeSourceChecks,
   probePlayableMediaUrl,
   runEpisodeSourceChecks,
@@ -85,21 +88,18 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   const pageCount = Math.ceil(totalEpisodes / episodesPerPage);
   const selectedEpisodeIndex = Math.max(value - 1, 0);
 
-  // 存储每个源的视频信息
-  const [videoInfoMap, setVideoInfoMap] = useState<Map<string, VideoInfo>>(
-    new Map(),
-  );
-
-  // ==================== "检查当前集" 状态 ====================
-  const [episodeCheckResults, setEpisodeCheckResults] = useState<
+  // ==================== 检测结果统一 store ====================
+  // 自动测速与"检查当前集"共用一份结果（key: sourceKey::episode-N），
+  // TTL 内互相复用，避免对同一地址重复探测下载
+  const [probeResults, setProbeResults] = useState<
     Map<string, EpisodeSourceCheckResult>
   >(new Map());
-  const episodeCheckResultsRef = useRef<Map<string, EpisodeSourceCheckResult>>(
+  const probeResultsRef = useRef<Map<string, EpisodeSourceCheckResult>>(
     new Map(),
   );
   useEffect(() => {
-    episodeCheckResultsRef.current = episodeCheckResults;
-  }, [episodeCheckResults]);
+    probeResultsRef.current = probeResults;
+  }, [probeResults]);
 
   const [episodeCheckRun, setEpisodeCheckRun] = useState<{
     runId: number;
@@ -117,11 +117,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   });
 
   const episodeCheckAbortRef = useRef<AbortController | null>(null);
+  const autoProbeAbortRef = useRef<AbortController | null>(null);
   const episodeCheckRunIdRef = useRef(0);
   const lastEpisodeIndexRef = useRef<number>(value - 1);
 
   // 使用 ref 来避免闭包问题
-  const attemptedSourcesRef = useRef<Set<string>>(new Set());
   const sourceSearchRequestKeyRef = useRef<string>('');
 
   // 主要的 tab 状态：'episodes' 或 'sources'
@@ -160,92 +160,95 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     }
   }, [activeTab, currentPage, episodesPerPage, pageCount, value]);
 
-  // 获取视频信息的函数 - 移除 attemptedSources 依赖避免不必要的重新创建
-  const getVideoInfo = useCallback(
-    async (source: SearchResult) => {
+  // 自动探测单个源：与"检查当前集"同一套判定口径（跳过/失败带原因）
+  const runAutoProbe = useCallback(
+    async (source: SearchResult, signal: AbortSignal) => {
       const sourceKey = buildEpisodeSourceKey(source);
-      const probeCacheKey = buildEpisodeProbeCacheKey(
-        sourceKey,
-        selectedEpisodeIndex,
-      );
+      const episodeIndex = selectedEpisodeIndex;
+      const cacheKey = buildEpisodeProbeCacheKey(sourceKey, episodeIndex);
 
-      // 使用 ref 获取最新的状态，避免闭包问题
-      if (attemptedSourcesRef.current.has(probeCacheKey)) {
-        return;
-      }
-
-      // 获取当前集的地址；若不存在则回退到第一集
-      if (!source.episodes || source.episodes.length === 0) {
-        return;
-      }
-      const episodeIndex = Math.min(
-        selectedEpisodeIndex,
-        source.episodes.length - 1,
-      );
-      const episodeData = source.episodes[episodeIndex] || source.episodes[0];
-
-      const resolveProbeUrl = async (): Promise<string | null> => {
-        const raw = (episodeData || '').trim();
-        if (!raw || raw.startsWith('magnet:')) {
-          return null;
-        }
-
-        return raw;
+      const writeResult = (
+        patch: Omit<
+          EpisodeSourceCheckResult,
+          'checkedAt' | 'sourceKey' | 'episodeIndex'
+        >,
+      ) => {
+        setProbeResults(
+          (prev) =>
+            new Map(prev).set(cacheKey, {
+              sourceKey,
+              episodeIndex,
+              ...patch,
+              checkedAt: Date.now(),
+            }),
+        );
       };
+      const skip = (message: string) =>
+        writeResult({ status: 'skipped', message });
 
-      // 标记为已尝试
-      attemptedSourcesRef.current.add(probeCacheKey);
+      const episodes = source.episodes || [];
+      if (episodes.length === 0) return skip('无播放地址');
+      if (episodeIndex >= episodes.length) return skip('无此集');
+      const raw = (episodes[episodeIndex] || '').trim();
+      if (!raw) return skip('播放地址为空');
+      if (raw.startsWith('magnet:')) return skip('磁力链接不支持检测');
 
       try {
-        const probeUrl = await resolveProbeUrl();
-        if (!probeUrl || !/^https?:\/\//i.test(probeUrl)) {
-          throw new Error('播放地址无效');
-        }
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-        try {
-          const info = await probePlayableMediaUrl(probeUrl, {
-            timeoutMs: 6000,
-            signal: controller.signal,
-          });
-          setVideoInfoMap((prev) =>
-            new Map(prev).set(probeCacheKey, {
-              quality: info.quality,
-              loadSpeed: info.loadSpeed,
-              pingTime: info.pingTimeMs,
-            }),
-          );
-        } finally {
-          clearTimeout(timeoutId);
-        }
-      } catch {
-        // 使用与“检查当前集”一致的口径：探测失败即标记为异常
-        setVideoInfoMap((prev) =>
-          new Map(prev).set(probeCacheKey, {
-            quality: '错误',
-            loadSpeed: '未知',
-            pingTime: 0,
-            hasError: true,
-          }),
-        );
+        const metrics = await probePlayableMediaUrl(raw, {
+          timeoutMs: 10000,
+          signal,
+          adFilterType: source.source,
+        });
+        writeResult({
+          status: 'success',
+          url: raw,
+          quality: metrics.quality,
+          loadSpeed: metrics.loadSpeed,
+          pingTimeMs: metrics.pingTimeMs,
+          message: '可播放',
+        });
+      } catch (err) {
+        // 被手动检查/切集中止时不写入，避免把"已取消"误标为检测失败
+        if (signal.aborted) return;
+        const isProbeError = err instanceof EpisodeSourceProbeError;
+        writeResult({
+          status: 'error',
+          url: raw,
+          message: isProbeError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : '检测失败',
+          details: isProbeError ? err.details : undefined,
+        });
       }
     },
     [selectedEpisodeIndex],
   );
 
-  // 当有预计算结果时，先合并到videoInfoMap中
+  // 当有预计算结果时，先作为占位合入统一 store（checkedAt=0 不参与新鲜度复用），
+  // 后续仍会走一次真实可播探测覆盖
   useEffect(() => {
     if (precomputedVideoInfo && precomputedVideoInfo.size > 0) {
-      // 仅作为首屏占位展示，后续仍会走一次真实可播探测覆盖结果
-      setVideoInfoMap((prev) => {
+      setProbeResults((prev) => {
         const newMap = new Map(prev);
         precomputedVideoInfo.forEach((videoInfo, sourceKey) => {
-          newMap.set(
-            buildEpisodeProbeCacheKey(sourceKey, selectedEpisodeIndex),
-            videoInfo,
+          const cacheKey = buildEpisodeProbeCacheKey(
+            sourceKey,
+            selectedEpisodeIndex,
           );
+          // 不覆盖已有真实结果，避免切回旧集时被占位数据冲掉
+          if (newMap.has(cacheKey)) return;
+          newMap.set(cacheKey, {
+            sourceKey,
+            episodeIndex: selectedEpisodeIndex,
+            status: videoInfo.hasError ? 'error' : 'success',
+            quality: videoInfo.quality,
+            loadSpeed: videoInfo.loadSpeed,
+            pingTimeMs: videoInfo.pingTime,
+            message: videoInfo.hasError ? '历史测速失败' : '历史测速结果',
+            checkedAt: 0,
+          });
         });
         return newMap;
       });
@@ -267,9 +270,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     return true;
   });
 
-  // 当切换到换源tab并且有源数据时，异步获取视频信息 - 修复无限循环问题
+  // 当切换到换源tab并且有源数据时，异步获取视频信息
+  // 并发数按网络状况动态调整（与播放源优选同策略），避免与正在播放的视频抢带宽
   useEffect(() => {
-    const fetchVideoInfosInBatches = async () => {
+    // 每次重跑先中止上一轮在飞探测（切集/换源/关闭tab/手动检查期间都会走到这里）
+    if (autoProbeAbortRef.current) {
+      try {
+        autoProbeAbortRef.current.abort();
+      } catch {
+        // ignore
+      }
+      autoProbeAbortRef.current = null;
+    }
+
+    const runAutoProbes = async () => {
       if (
         !optimizationEnabled || // 若关闭测速则直接退出
         episodeCheckRun.status === 'running' ||
@@ -279,34 +293,58 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       )
         return;
 
-      // 筛选出尚未测速的播放源
+      // 筛选出尚未有新鲜结果的播放源（含手动检查写入的结果）
       const pendingSources = availableSources.filter((source) => {
         const sourceKey = buildEpisodeSourceKey(source);
-        const probeCacheKey = buildEpisodeProbeCacheKey(
+        const cacheKey = buildEpisodeProbeCacheKey(
           sourceKey,
           selectedEpisodeIndex,
         );
-        return !attemptedSourcesRef.current.has(probeCacheKey);
+        const episodes = source.episodes || [];
+        const url = (episodes[selectedEpisodeIndex] || '').trim();
+        return !isEpisodeProbeResultFresh(
+          probeResultsRef.current.get(cacheKey),
+          url,
+        );
       });
 
       if (pendingSources.length === 0) return;
 
-      const batchSize = Math.ceil(pendingSources.length / 2);
+      const controller = new AbortController();
+      autoProbeAbortRef.current = controller;
 
-      for (let start = 0; start < pendingSources.length; start += batchSize) {
-        const batch = pendingSources.slice(start, start + batchSize);
-        await Promise.all(batch.map(getVideoInfo));
+      const concurrency = Math.max(1, getOptimalProbeConcurrency());
+      let cursor = 0;
+      const worker = async () => {
+        while (
+          cursor < pendingSources.length &&
+          !controller.signal.aborted
+        ) {
+          const source = pendingSources[cursor];
+          cursor += 1;
+          await runAutoProbe(source, controller.signal);
+        }
+      };
+      await Promise.all(
+        Array.from(
+          { length: Math.min(concurrency, pendingSources.length) },
+          worker,
+        ),
+      );
+
+      if (autoProbeAbortRef.current === controller) {
+        autoProbeAbortRef.current = null;
       }
     };
 
-    fetchVideoInfosInBatches();
+    void runAutoProbes();
     // 来源数组整体变化时重新筛选，等长替换也必须触发新来源测速。
   }, [
     activeTab,
     availableSources,
     episodeCheckRun.status,
-    getVideoInfo,
     optimizationEnabled,
+    runAutoProbe,
     selectedEpisodeIndex,
   ]);
 
@@ -346,7 +384,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       episodeCheckAbortRef.current = null;
     }
 
-    setEpisodeCheckResults(new Map());
+    // 旧集的在飞自动探测由自动探测 effect 自行中止；
+    // 探测结果按集数分 key 存储，无需清空
     setEpisodeCheckRun({
       runId: episodeCheckRunIdRef.current,
       status: 'idle',
@@ -360,130 +399,178 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   useEffect(() => {
     return () => {
       cancelEpisodeCheck();
+      if (autoProbeAbortRef.current) {
+        try {
+          autoProbeAbortRef.current.abort();
+        } catch {
+          // ignore
+        }
+        autoProbeAbortRef.current = null;
+      }
     };
   }, [cancelEpisodeCheck]);
 
-  const startEpisodeCheck = useCallback(async () => {
-    // 防止重复触发
-    if (isEpisodeChecking) return;
+  const startEpisodeCheck = useCallback(
+    async (options?: { force?: boolean }) => {
+      // 防止重复触发
+      if (isEpisodeChecking) return;
+      // 重新检查时绕过缓存，强制全量重新探测
+      const force = options?.force ?? false;
 
-    // 新的 runId：用于防止异步回写污染状态
-    episodeCheckRunIdRef.current += 1;
-    const runId = episodeCheckRunIdRef.current;
-
-    const episodeIndex = value - 1;
-    const plan = planEpisodeSourceChecks({
-      sources: availableSources,
-      episodeIndex,
-      currentSource,
-      currentId,
-    });
-
-    // 初始化运行态
-    setEpisodeCheckResults(new Map());
-    setEpisodeCheckRun({
-      runId,
-      status: 'running',
-      episodeIndex,
-      total: plan.length,
-      completed: 0,
-      currentSourceKey: undefined,
-    });
-
-    const controller = new AbortController();
-    episodeCheckAbortRef.current = controller;
-
-    const isFinal = (s: EpisodeSourceCheckResult['status']) =>
-      s === 'success' || s === 'error' || s === 'skipped' || s === 'cancelled';
-
-    const onUpdate = (next: EpisodeSourceCheckResult) => {
-      if (episodeCheckRunIdRef.current !== runId) return;
-
-      setEpisodeCheckResults((prev) =>
-        new Map(prev).set(next.sourceKey, next),
-      );
-
-      // 进度更新：只在进入最终态时 +1，避免 checking -> success 重复计数
-      const prev = episodeCheckResultsRef.current.get(next.sourceKey);
-      const wasFinal = prev ? isFinal(prev.status) : false;
-      const nowFinal = isFinal(next.status);
-      if (!wasFinal && nowFinal) {
-        setEpisodeCheckRun((run) =>
-          run.runId !== runId
-            ? run
-            : {
-                ...run,
-                completed: Math.min(run.total, run.completed + 1),
-              },
-        );
+      // 手动检查串行执行以保证测速准确：先中止在飞的自动测速
+      if (autoProbeAbortRef.current) {
+        try {
+          autoProbeAbortRef.current.abort();
+        } catch {
+          // ignore
+        }
+        autoProbeAbortRef.current = null;
       }
 
-      if (next.status === 'checking') {
-        setEpisodeCheckRun((run) =>
-          run.runId !== runId
-            ? run
-            : {
-                ...run,
-                currentSourceKey: next.sourceKey,
-              },
-        );
-      }
-    };
+      // 新的 runId：用于防止异步回写污染状态
+      episodeCheckRunIdRef.current += 1;
+      const runId = episodeCheckRunIdRef.current;
 
-    try {
-      await runEpisodeSourceChecks({
-        plan,
-        signal: controller.signal,
-        resolveUrl: async (item, signal) => {
-          if (signal.aborted) {
-            return { skippedReason: '已取消' };
-          }
-          const raw = (item.episodeData || '').trim();
-          if (!raw) {
-            return { skippedReason: '播放地址为空' };
-          }
-          if (raw.startsWith('magnet:')) {
-            return { skippedReason: '磁力链接不支持检测' };
-          }
-          return { url: raw };
-        },
-        probeUrl: async (url, signal) => {
-          const metrics = await probePlayableMediaUrl(url, {
-            timeoutMs: 6000,
-            signal,
-          });
-          return metrics;
-        },
-        onUpdate,
+      const episodeIndex = value - 1;
+      const plan = planEpisodeSourceChecks({
+        sources: availableSources,
+        episodeIndex,
+        currentSource,
+        currentId,
       });
 
-      setEpisodeCheckRun((run) =>
-        run.runId !== runId
-          ? run
-          : {
-              ...run,
-              status: controller.signal.aborted ? 'cancelled' : 'done',
-              currentSourceKey: undefined,
-            },
-      );
-    } catch {
-      // 理论上 runEpisodeSourceChecks 内部不会抛出，兜底一下
-      setEpisodeCheckRun((run) =>
-        run.runId !== runId
-          ? run
-          : {
-              ...run,
-              status: controller.signal.aborted ? 'cancelled' : 'done',
-              currentSourceKey: undefined,
-            },
-      );
-    } finally {
-      // 仅清理当前 run 的 controller，避免与新 run 冲突
-      if (episodeCheckRunIdRef.current === runId) {
-        episodeCheckAbortRef.current = null;
+      // 初始化运行态
+      setEpisodeCheckRun({
+        runId,
+        status: 'running',
+        episodeIndex,
+        total: plan.length,
+        completed: 0,
+        currentSourceKey: undefined,
+      });
+
+      const controller = new AbortController();
+      episodeCheckAbortRef.current = controller;
+
+      const isFinal = (s: EpisodeSourceCheckResult['status']) =>
+        s === 'success' || s === 'error' || s === 'skipped' || s === 'cancelled';
+
+      // 结果与自动测速共用一份 store，不能以"store 里是否已有终态"判断进度
+      // （缓存命中的条目本来就是终态），改用本次 run 的已计数集合去重
+      const countedKeys = new Set<string>();
+
+      const onUpdate = (next: EpisodeSourceCheckResult) => {
+        if (episodeCheckRunIdRef.current !== runId) return;
+
+        const cacheKey = buildEpisodeProbeCacheKey(
+          next.sourceKey,
+          next.episodeIndex,
+        );
+        setProbeResults((prev) => new Map(prev).set(cacheKey, next));
+
+        if (isFinal(next.status) && !countedKeys.has(cacheKey)) {
+          countedKeys.add(cacheKey);
+          setEpisodeCheckRun((run) =>
+            run.runId !== runId
+              ? run
+              : {
+                  ...run,
+                  completed: Math.min(run.total, run.completed + 1),
+                },
+          );
+        }
+
+        if (next.status === 'checking') {
+          setEpisodeCheckRun((run) =>
+            run.runId !== runId
+              ? run
+              : {
+                  ...run,
+                  currentSourceKey: next.sourceKey,
+                },
+          );
+        }
+      };
+
+      try {
+        await runEpisodeSourceChecks({
+          plan,
+          signal: controller.signal,
+          resolveUrl: async (item, signal) => {
+            if (signal.aborted) {
+              return { skippedReason: '已取消' };
+            }
+            const raw = (item.episodeData || '').trim();
+            if (!raw) {
+              return { skippedReason: '播放地址为空' };
+            }
+            if (raw.startsWith('magnet:')) {
+              return { skippedReason: '磁力链接不支持检测' };
+            }
+            return { url: raw };
+          },
+          probeUrl: async (url, signal, item) =>
+            probePlayableMediaUrl(url, {
+              timeoutMs: 10000,
+              signal,
+              adFilterType: item.source.source,
+            }),
+          resolveCache: force
+            ? undefined
+            : (item) => {
+                const cacheKey = buildEpisodeProbeCacheKey(
+                  item.sourceKey,
+                  item.episodeIndex,
+                );
+                const cached = probeResultsRef.current.get(cacheKey);
+                if (!cached) return null;
+                const url = (item.episodeData || '').trim();
+                return isEpisodeProbeResultFresh(cached, url) ? cached : null;
+              },
+          onUpdate,
+        });
+
+        setEpisodeCheckRun((run) =>
+          run.runId !== runId
+            ? run
+            : {
+                ...run,
+                status: controller.signal.aborted ? 'cancelled' : 'done',
+                currentSourceKey: undefined,
+              },
+        );
+      } catch {
+        // 理论上 runEpisodeSourceChecks 内部不会抛出，兜底一下
+        setEpisodeCheckRun((run) =>
+          run.runId !== runId
+            ? run
+            : {
+                ...run,
+                status: controller.signal.aborted ? 'cancelled' : 'done',
+                currentSourceKey: undefined,
+              },
+        );
+      } finally {
+        // 仅清理当前 run 的 controller，避免与新 run 冲突
+        if (episodeCheckRunIdRef.current === runId) {
+          episodeCheckAbortRef.current = null;
+        }
       }
-    }
-  }, [availableSources, currentId, currentSource, isEpisodeChecking, value]);
+    },
+    [availableSources, currentId, currentSource, isEpisodeChecking, value],
+  );
+
+  // 换源列表排序与检查计划共用同一排序规则，memo 化避免每次渲染重排
+  const orderedSources = useMemo(
+    () =>
+      planEpisodeSourceChecks({
+        sources: availableSources,
+        episodeIndex: selectedEpisodeIndex,
+        currentSource,
+        currentId,
+      }).map((item) => item.source),
+    [availableSources, currentId, currentSource, selectedEpisodeIndex],
+  );
 
   // 升序分页标签
   const categoriesAsc = useMemo(() => {
@@ -905,7 +992,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                     ) : (
                       <button
                         type='button'
-                        onClick={startEpisodeCheck}
+                        onClick={() =>
+                          startEpisodeCheck({
+                            force:
+                              episodeCheckRun.status === 'done' ||
+                              episodeCheckRun.status === 'cancelled',
+                          })
+                        }
                         className='px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-sm'
                       >
                         {episodeCheckRun.status === 'done' ||
@@ -919,14 +1012,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
                 {/* 固定高度的滚动详情列表 */}
                 <div className='flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-2'>
-                  {planEpisodeSourceChecks({
-                    sources: availableSources,
-                    episodeIndex: value - 1,
-                    currentSource,
-                    currentId,
-                  })
-                    .map((item) => item.source)
-                    .map((source, index) => {
+                  {orderedSources.map((source, index) => {
                       const isCurrentSource =
                         source.source?.toString() ===
                           currentSource?.toString() &&
@@ -993,86 +1079,47 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                 )}
                               </div>
                               {(() => {
-                                const sourceKey =
-                                  buildEpisodeSourceKey(source);
-                                const check =
-                                  episodeCheckResults.get(sourceKey);
-
-                                if (check && check.episodeIndex === value - 1) {
-                                  const status = check.status;
-                                  const label =
-                                    status === 'checking'
-                                      ? '检查中'
-                                      : status === 'success'
-                                        ? check.quality &&
-                                          check.quality !== '未知'
-                                          ? `可播 ${check.quality}`
-                                          : '可播放'
-                                        : status === 'skipped'
-                                          ? check.message || '跳过'
-                                          : status === 'cancelled'
-                                            ? '已取消'
-                                            : '异常';
-
-                                  const className =
-                                    status === 'checking'
-                                      ? 'bg-blue-500/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
-                                      : status === 'success'
-                                        ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
-                                        : status === 'skipped' ||
-                                            status === 'cancelled'
-                                          ? 'bg-gray-500/10 dark:bg-gray-400/20 text-gray-600 dark:text-gray-300'
-                                          : 'bg-red-500/10 dark:bg-red-400/20 text-red-600 dark:text-red-400';
-
-                                  return (
-                                    <div
-                                      title={check.details || check.message}
-                                      className={`${className} px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[70px] sm:min-w-[80px] text-center`}
-                                    >
-                                      {label}
-                                    </div>
-                                  );
-                                }
-
-                                const videoInfo = videoInfoMap.get(
+                                const check = probeResults.get(
                                   buildEpisodeProbeCacheKey(
-                                    sourceKey,
+                                    buildEpisodeSourceKey(source),
                                     selectedEpisodeIndex,
                                   ),
                                 );
+                                if (!check) return null;
 
-                                if (videoInfo && videoInfo.quality !== '未知') {
-                                  if (videoInfo.hasError) {
-                                    return (
-                                      <div className='bg-gray-500/10 dark:bg-gray-400/20 text-red-600 dark:text-red-400 px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[40px] sm:min-w-[50px] text-center'>
-                                        检测失败
-                                      </div>
-                                    );
-                                  } else {
-                                    // 根据分辨率设置不同颜色：2K、4K为紫色，1080p、720p为绿色，其他为黄色
-                                    const isUltraHigh = ['4K', '2K'].includes(
-                                      videoInfo.quality,
-                                    );
-                                    const isHigh = ['1080p', '720p'].includes(
-                                      videoInfo.quality,
-                                    );
-                                    const textColorClasses = isUltraHigh
-                                      ? 'text-purple-600 dark:text-purple-400'
-                                      : isHigh
-                                        ? 'text-green-600 dark:text-green-400'
-                                        : 'text-yellow-600 dark:text-yellow-400';
+                                const status = check.status;
+                                const label =
+                                  status === 'checking'
+                                    ? '检查中'
+                                    : status === 'success'
+                                      ? check.quality &&
+                                        check.quality !== '未知'
+                                        ? `可播 ${check.quality}`
+                                        : '可播放'
+                                      : status === 'skipped'
+                                        ? check.message || '跳过'
+                                        : status === 'cancelled'
+                                          ? '已取消'
+                                          : '异常';
 
-                                    return (
-                                      <div
-                                        className={`bg-gray-500/10 dark:bg-gray-400/20 ${textColorClasses} px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[40px] sm:min-w-[50px] text-center`}
-                                      >
-                                        {videoInfo.quality}
-                                      </div>
-                                    );
-                                  }
-                                }
+                                const className =
+                                  status === 'checking'
+                                    ? 'bg-blue-500/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
+                                    : status === 'success'
+                                      ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
+                                      : status === 'skipped' ||
+                                          status === 'cancelled'
+                                        ? 'bg-gray-500/10 dark:bg-gray-400/20 text-gray-600 dark:text-gray-300'
+                                        : 'bg-red-500/10 dark:bg-red-400/20 text-red-600 dark:text-red-400';
 
-                                return null;
+                                return (
+                                  <div
+                                    title={check.details || check.message}
+                                    className={`${className} px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[70px] sm:min-w-[80px] text-center`}
+                                  >
+                                    {label}
+                                  </div>
+                                );
                               })()}
                             </div>
 
@@ -1091,89 +1138,61 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                             {/* 网络信息 - 底部 */}
                             <div className='flex items-end h-5 sm:h-6'>
                               {(() => {
-                                const sourceKey =
-                                  buildEpisodeSourceKey(source);
-                                const check =
-                                  episodeCheckResults.get(sourceKey);
-
-                                if (check && check.episodeIndex === value - 1) {
-                                  if (check.status === 'success') {
-                                    return (
-                                      <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
-                                        <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
-                                          {check.loadSpeed || '未知'}
-                                        </div>
-                                        <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>
-                                          {(check.pingTimeMs ?? 0) > 0
-                                            ? `${check.pingTimeMs}ms`
-                                            : '未知'}
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-
-                                  if (check.status === 'checking') {
-                                    return (
-                                      <div className='text-blue-600 dark:text-blue-400 font-medium text-[10px] sm:text-xs'>
-                                        检查中...
-                                      </div>
-                                    );
-                                  }
-
-                                  if (check.status === 'skipped') {
-                                    return (
-                                      <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
-                                        {check.message || '已跳过'}
-                                      </div>
-                                    );
-                                  }
-
-                                  if (check.status === 'cancelled') {
-                                    return (
-                                      <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
-                                        已取消
-                                      </div>
-                                    );
-                                  }
-
-                                  if (check.status === 'error') {
-                                    return (
-                                      <div
-                                        title={check.details}
-                                        className='text-red-500/90 dark:text-red-400 font-medium text-[10px] sm:text-xs truncate max-w-[160px]'
-                                      >
-                                        {check.message || '异常'}
-                                      </div>
-                                    );
-                                  }
-                                }
-
-                                const videoInfo = videoInfoMap.get(
+                                const check = probeResults.get(
                                   buildEpisodeProbeCacheKey(
-                                    sourceKey,
+                                    buildEpisodeSourceKey(source),
                                     selectedEpisodeIndex,
                                   ),
                                 );
-                                if (videoInfo) {
-                                  if (!videoInfo.hasError) {
-                                    return (
-                                      <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
-                                        <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
-                                          {videoInfo.loadSpeed}
-                                        </div>
-                                        <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>
-                                          {videoInfo.pingTime}ms
-                                        </div>
+                                if (!check) return null;
+
+                                if (check.status === 'success') {
+                                  return (
+                                    <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
+                                      <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
+                                        {check.loadSpeed || '未知'}
                                       </div>
-                                    );
-                                  } else {
-                                    return (
-                                      <div className='text-red-500/90 dark:text-red-400 font-medium text-[10px] sm:text-xs'>
-                                        无测速数据
+                                      <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>
+                                        {(check.pingTimeMs ?? 0) > 0
+                                          ? `${check.pingTimeMs}ms`
+                                          : '未知'}
                                       </div>
-                                    ); // 占位div
-                                  }
+                                    </div>
+                                  );
                                 }
+
+                                if (check.status === 'checking') {
+                                  return (
+                                    <div className='text-blue-600 dark:text-blue-400 font-medium text-[10px] sm:text-xs'>
+                                      检查中...
+                                    </div>
+                                  );
+                                }
+
+                                if (check.status === 'skipped') {
+                                  return (
+                                    <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
+                                      {check.message || '已跳过'}
+                                    </div>
+                                  );
+                                }
+
+                                if (check.status === 'cancelled') {
+                                  return (
+                                    <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
+                                      已取消
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    title={check.details}
+                                    className='text-red-500/90 dark:text-red-400 font-medium text-[10px] sm:text-xs truncate max-w-[160px]'
+                                  >
+                                    {check.message || '异常'}
+                                  </div>
+                                );
                               })()}
                             </div>
                           </div>

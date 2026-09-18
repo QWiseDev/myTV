@@ -6,6 +6,7 @@
 import { SearchResult } from '@/lib/types';
 import { getVideoResolutionFromM3u8 } from '@/lib/utils';
 
+import { getOptimalProbeConcurrency } from './episodeSourceCheck';
 import { calculateSourceScore } from './helpers';
 
 interface DeviceInfo {
@@ -25,17 +26,6 @@ interface SpeedTestProgress {
 interface PreferenceOptions {
   deviceInfo: DeviceInfo;
   setSpeedTestProgress: (progress: SpeedTestProgress | null) => void;
-}
-
-interface NetworkInformationLike {
-  downlink?: number;
-  effectiveType?: 'slow-2g' | '2g' | '3g' | '4g' | string;
-}
-
-interface NavigatorWithConnection extends Navigator {
-  connection?: NetworkInformationLike;
-  mozConnection?: NetworkInformationLike;
-  webkitConnection?: NetworkInformationLike;
 }
 
 type IPadPreferenceResult = {
@@ -190,27 +180,11 @@ export async function lightweightPreference(
 }
 
 /**
- * 获取最优并发数量（基于网络状况动态调整）
+ * 获取最优并发数量（基于网络状况动态调整），策略统一收敛在
+ * episodeSourceCheck.getOptimalProbeConcurrency
  */
 function getOptimalConcurrency(): number {
-  const networkNavigator = navigator as NavigatorWithConnection;
-  const connection =
-    networkNavigator.connection ||
-    networkNavigator.mozConnection ||
-    networkNavigator.webkitConnection;
-  if (connection) {
-    const downlink = connection.downlink ?? 0; // Mbps
-    const effectiveType = connection.effectiveType; // 4g, 3g, 2g, slow-2g
-
-    // 根据网络质量和类型调整并发数
-    if (downlink > 10) return 4; // 高速网络
-    if (downlink > 5) return 3; // 中速网络
-    if (downlink > 2) return 2; // 一般网络
-    if (effectiveType === '4g') return 3;
-    if (effectiveType === '3g') return 2;
-    return 1; // 慢速网络
-  }
-  return 2; // 默认值
+  return getOptimalProbeConcurrency();
 }
 
 /**

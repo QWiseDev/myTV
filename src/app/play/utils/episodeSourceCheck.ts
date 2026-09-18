@@ -50,6 +50,7 @@ export interface EpisodeSourceCheckResult {
   url?: string;
   quality?: string;
   loadSpeed?: string;
+  /** 首字节延迟（ms），0 表示未知 */
   pingTimeMs?: number;
   message?: string;
   details?: string;
@@ -77,6 +78,71 @@ export function buildEpisodeProbeCacheKey(
   return `${sourceKey}::episode-${episodeIndex}`;
 }
 
+/** 探测结果复用有效期：自动测速与手动检查在 TTL 内共用结果，避免重复下载 */
+export const EPISODE_PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function isFinalEpisodeProbeStatus(
+  status: EpisodeSourceCheckStatus,
+): boolean {
+  return status === 'success' || status === 'error' || status === 'skipped';
+}
+
+/**
+ * 判断探测结果是否仍可复用：
+ * - 仅终态结果可复用（checking/cancelled 不算）
+ * - checkedAt 为 0 的占位结果（如首屏预计算数据）不参与复用
+ * - 播放地址变化（如详情补全后替换了 episodes）视为过期
+ */
+export function isEpisodeProbeResultFresh(
+  result: EpisodeSourceCheckResult | undefined,
+  currentUrl?: string,
+  now: number = Date.now(),
+): boolean {
+  if (!result) return false;
+  if (!isFinalEpisodeProbeStatus(result.status)) return false;
+  if (!result.checkedAt) return false;
+  if (now - result.checkedAt > EPISODE_PROBE_CACHE_TTL_MS) return false;
+  if (currentUrl && result.url && result.url !== currentUrl) return false;
+  return true;
+}
+
+interface NetworkInformationLike {
+  downlink?: number;
+  effectiveType?: string;
+}
+
+type NavigatorWithConnection = Navigator & {
+  connection?: NetworkInformationLike;
+  mozConnection?: NetworkInformationLike;
+  webkitConnection?: NetworkInformationLike;
+};
+
+/**
+ * 探测并发数（基于 Network Information API 动态调整，默认 2）。
+ * 与播放源优选（sourcePreference）保持同一策略，避免大批量并发探测
+ * 挤占正在播放的视频带宽并导致测速数字失真。
+ */
+export function getOptimalProbeConcurrency(): number {
+  if (typeof navigator === 'undefined') return 2;
+  const networkNavigator = navigator as NavigatorWithConnection;
+  const connection =
+    networkNavigator.connection ||
+    networkNavigator.mozConnection ||
+    networkNavigator.webkitConnection;
+  if (connection) {
+    const downlink = connection.downlink ?? 0;
+    const effectiveType = connection.effectiveType;
+
+    if (downlink > 10) return 4;
+    if (downlink > 5) return 3;
+    if (downlink > 2) return 2;
+    if (effectiveType === '4g') return 3;
+    if (effectiveType === '3g') return 2;
+    return 1;
+  }
+  return 2;
+}
+
 export function isLikelyHlsUrl(url: string): boolean {
   return /\.m3u8(?:$|[?#])/i.test(url);
 }
@@ -101,6 +167,10 @@ export function formatSpeed(bytes: number, durationMs: number): string {
   return `${kbps.toFixed(2)} KB/s`;
 }
 
+/**
+ * 串行 HEAD 探活：仅在拿不到 hls.js 统计的直链场景使用。
+ * 失败/超时/中止统一返回 0（表示未知），避免把超时伪装成真实延迟。
+ */
 export async function measurePingTimeMs(
   url: string,
   options: {
@@ -110,19 +180,15 @@ export async function measurePingTimeMs(
 ): Promise<number> {
   const timeoutMs =
     typeof options.timeoutMs === 'number' ? options.timeoutMs : 2000;
-  const start = performance.now();
 
+  if (options.signal?.aborted) return 0;
+
+  const start = performance.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const onAbort = () => controller.abort();
-  if (options.signal) {
-    if (options.signal.aborted) {
-      clearTimeout(timer);
-      return Math.round(performance.now() - start);
-    }
-    options.signal.addEventListener('abort', onAbort, { once: true });
-  }
+  options.signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
     await fetch(url, {
@@ -131,12 +197,10 @@ export async function measurePingTimeMs(
       signal: controller.signal,
     });
   } catch {
-    // ignore
+    return 0;
   } finally {
     clearTimeout(timer);
-    if (options.signal) {
-      options.signal.removeEventListener('abort', onAbort);
-    }
+    options.signal?.removeEventListener('abort', onAbort);
   }
 
   return Math.round(performance.now() - start);
@@ -196,6 +260,8 @@ export async function probePlayableMediaUrl(
   options: {
     timeoutMs: number;
     signal: AbortSignal;
+    /** 传给自定义去广告代码的源类型，与主播放器的过滤口径保持一致 */
+    adFilterType?: string;
   },
 ): Promise<{
   quality: string;
@@ -208,8 +274,6 @@ export async function probePlayableMediaUrl(
   if (!/^https?:\/\//i.test(url)) {
     throw new EpisodeSourceProbeError('播放地址格式无效');
   }
-
-  const pingPromise = measurePingTimeMs(url, { signal: options.signal });
 
   // 离屏 video：避免影响当前页面播放器
   const video = document.createElement('video');
@@ -233,6 +297,8 @@ export async function probePlayableMediaUrl(
 
   let quality = '未知';
   let loadSpeed = '未知';
+  // 0 表示未知：HLS 取 manifest TTFB，直链用串行 HEAD 探活
+  let pingTimeMs = 0;
 
   // 动态导入 hls.js，避免在测试/SSR 环境下引入副作用
   let hlsInstance: { destroy: () => void } | null = null;
@@ -271,10 +337,9 @@ export async function probePlayableMediaUrl(
 
   return new Promise((resolve, reject) => {
     void (async () => {
-      const safeResolve = async () => {
+      const safeResolve = () => {
         if (done) return;
         done = true;
-        const pingTimeMs = await pingPromise;
         clearTimeout(timeoutId);
         options.signal.removeEventListener('abort', onAbort);
         video.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -284,10 +349,9 @@ export async function probePlayableMediaUrl(
         resolve({ quality, loadSpeed, pingTimeMs });
       };
 
-      const safeReject = async (message: string, details?: string) => {
+      const safeReject = (message: string, details?: string) => {
         if (done) return;
         done = true;
-        await pingPromise;
         clearTimeout(timeoutId);
         options.signal.removeEventListener('abort', onAbort);
         video.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -351,6 +415,13 @@ export async function probePlayableMediaUrl(
 
       try {
         if (shouldUseNativeHls(video, url)) {
+          pingTimeMs = await measurePingTimeMs(url, {
+            signal: options.signal,
+          });
+          if (options.signal.aborted) {
+            void safeReject('已取消');
+            return;
+          }
           video.src = url;
           video.load();
         } else if (isLikelyHlsUrl(url)) {
@@ -403,6 +474,7 @@ export async function probePlayableMediaUrl(
                       typeof response?.data === 'string'
                     ) {
                       response.data = filterAdsFromM3U8(response.data, {
+                        type: options.adFilterType,
                         customCode: customAdFilterCode,
                       });
                     }
@@ -435,6 +507,31 @@ export async function probePlayableMediaUrl(
 
           const instance = new HlsCtor(hlsConfig);
           hlsInstance = instance;
+
+          instance.on(
+            HlsCtor.Events.MANIFEST_LOADED,
+            (_evt: unknown, data: unknown) => {
+              // ping 取 manifest 请求的 TTFB（hls.js 统计）：
+              // 位于真实媒体路径上，且早于分片下载、不受其并发干扰
+              if (!data || typeof data !== 'object' || !('stats' in data))
+                return;
+              const loading = (
+                data as {
+                  stats?: { loading?: { start?: number; first?: number } };
+                }
+              ).stats?.loading;
+              const start = loading?.start;
+              const first = loading?.first;
+              if (
+                typeof start === 'number' &&
+                typeof first === 'number' &&
+                start > 0 &&
+                first >= start
+              ) {
+                pingTimeMs = Math.round(first - start);
+              }
+            },
+          );
 
           instance.on(
             HlsCtor.Events.MANIFEST_PARSED,
@@ -498,6 +595,13 @@ export async function probePlayableMediaUrl(
             // ignore
           }
         } else {
+          pingTimeMs = await measurePingTimeMs(url, {
+            signal: options.signal,
+          });
+          if (options.signal.aborted) {
+            void safeReject('已取消');
+            return;
+          }
           video.src = url;
           video.load();
         }
@@ -599,10 +703,15 @@ export async function runEpisodeSourceChecks(params: {
   probeUrl: (
     url: string,
     signal: AbortSignal,
+    item: EpisodeSourceCheckPlanItem,
   ) => Promise<{ quality: string; loadSpeed: string; pingTimeMs: number }>;
+  /** 命中未过期结果时直接复用，跳过真实探测（保留原始 checkedAt） */
+  resolveCache?: (
+    item: EpisodeSourceCheckPlanItem,
+  ) => EpisodeSourceCheckResult | null;
   onUpdate: (next: EpisodeSourceCheckResult) => void;
 }): Promise<void> {
-  const { plan, signal, resolveUrl, probeUrl, onUpdate } = params;
+  const { plan, signal, resolveUrl, probeUrl, resolveCache, onUpdate } = params;
 
   const emit = (patch: Omit<EpisodeSourceCheckResult, 'checkedAt'>) => {
     onUpdate({ ...patch, checkedAt: Date.now() });
@@ -630,6 +739,14 @@ export async function runEpisodeSourceChecks(params: {
         message: item.skippedReason,
       });
       continue;
+    }
+
+    if (resolveCache) {
+      const cached = resolveCache(item);
+      if (cached && isFinalEpisodeProbeStatus(cached.status)) {
+        onUpdate(cached);
+        continue;
+      }
     }
 
     emit({
@@ -662,7 +779,7 @@ export async function runEpisodeSourceChecks(params: {
         continue;
       }
 
-      const metrics = await probeUrl(url, signal);
+      const metrics = await probeUrl(url, signal, item);
       emit({
         sourceKey: item.sourceKey,
         episodeIndex: item.episodeIndex,

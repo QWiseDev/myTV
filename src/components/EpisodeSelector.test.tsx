@@ -100,7 +100,7 @@ describe('EpisodeSelector', () => {
     await waitFor(() =>
       expect(mockProbePlayableMediaUrl).toHaveBeenCalledWith(
         'https://a.example/1.m3u8',
-        expect.objectContaining({ timeoutMs: 6000 }),
+        expect.objectContaining({ timeoutMs: 10000 }),
       ),
     );
 
@@ -115,7 +115,7 @@ describe('EpisodeSelector', () => {
     await waitFor(() =>
       expect(mockProbePlayableMediaUrl).toHaveBeenCalledWith(
         'https://b.example/1.m3u8',
-        expect.objectContaining({ timeoutMs: 6000 }),
+        expect.objectContaining({ timeoutMs: 10000 }),
       ),
     );
 
@@ -130,8 +130,62 @@ describe('EpisodeSelector', () => {
     await waitFor(() =>
       expect(mockProbePlayableMediaUrl).toHaveBeenCalledWith(
         'https://b.example/2.m3u8',
-        expect.objectContaining({ timeoutMs: 6000 }),
+        expect.objectContaining({ timeoutMs: 10000 }),
       ),
     );
+  });
+
+  test('marks magnet sources as skipped without probing (unified with manual check)', async () => {
+    localStorage.setItem('enableOptimization', 'true');
+    const magnetSource = createSource('source-m', 'm', [
+      'magnet:?xt=urn:btih:abc',
+    ]);
+
+    // 单集内容默认展示换源 tab
+    render(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        availableSources={[magnetSource]}
+      />,
+    );
+
+    const badges = await screen.findAllByText('磁力链接不支持检测');
+    expect(badges.length).toBeGreaterThan(0);
+    expect(mockProbePlayableMediaUrl).not.toHaveBeenCalled();
+  });
+
+  test('reuses fresh probe results instead of re-probing the same url', async () => {
+    localStorage.setItem('enableOptimization', 'true');
+    const sourceA = createSource('source-a', 'a', ['https://a.example/1.m3u8']);
+
+    const { rerender } = render(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        availableSources={[sourceA]}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mockProbePlayableMediaUrl).toHaveBeenCalledTimes(1),
+    );
+
+    // 等长替换触发 effect 重跑：地址未变且结果仍新鲜，不应重复探测
+    rerender(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        availableSources={[
+          createSource('source-a', 'a', ['https://a.example/1.m3u8']),
+        ]}
+      />,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mockProbePlayableMediaUrl).toHaveBeenCalledTimes(1);
   });
 });
