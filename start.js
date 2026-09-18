@@ -65,7 +65,13 @@ function executeCronJob() {
 
   console.log(`Executing cron job: ${cronUrl}`);
 
-  const req = http.get(cronUrl, (res) => {
+  // /api/cron 已启用鉴权：配置了 CRON_SECRET 时必须携带
+  const headers = {};
+  if (process.env.CRON_SECRET) {
+    headers['Authorization'] = `Bearer ${process.env.CRON_SECRET}`;
+  }
+
+  const req = http.get(cronUrl, { headers }, (res) => {
     let data = '';
 
     res.on('data', (chunk) => {

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig, refineConfig } from '@/lib/config';
 import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshEnabledLiveChannels } from '@/lib/live';
@@ -24,7 +25,16 @@ export const revalidate = 0;
 // 添加全局锁避免并发执行
 let isRunning = false;
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+  const auth = verifyCronAuth(request);
+  if (!auth.ok) {
+    console.warn(`已拦截未授权的 cron 调用: ${auth.message}`);
+    return NextResponse.json(
+      { success: false, message: auth.message },
+      { status: auth.status }
+    );
+  }
+
   if (isRunning) {
     return NextResponse.json({
       success: false,

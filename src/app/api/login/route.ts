@@ -3,8 +3,62 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import {
+  consumeRateLimit,
+  getClientIp,
+  peekRateLimit,
+  recordRateLimitEvent,
+  resetRateLimit,
+} from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
+
+// —— 登录限速配置 ——
+const LOGIN_ATTEMPT_LIMIT = 20; // 单 IP 时间窗内最大登录请求数
+const LOGIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_FAILURE_LIMIT = 8; // 单 IP / 单用户名时间窗内最大失败次数
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+
+// 弱密码告警：PASSWORD 同时是会话签名密钥，长度不足极易被爆破
+if (process.env.PASSWORD && process.env.PASSWORD.length < 8) {
+  console.warn(
+    '⚠️ 安全警告：环境变量 PASSWORD 长度不足 8 位，存在被暴力破解的风险，请尽快更换为随机强密码'
+  );
+}
+
+function loginAttemptKey(ip: string) {
+  return `login:attempt:${ip}`;
+}
+
+function loginFailIpKey(ip: string) {
+  return `login:fail:ip:${ip}`;
+}
+
+function loginFailUserKey(username: string) {
+  return `login:fail:user:${username}`;
+}
+
+function tooManyAttempts(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: '尝试次数过多，请稍后再试' },
+    {
+      status: 429,
+      headers: { 'Retry-After': String(Math.max(1, retryAfterSeconds)) },
+    }
+  );
+}
+
+function recordLoginFailure(ip: string, username?: string) {
+  recordRateLimitEvent(loginFailIpKey(ip), LOGIN_FAILURE_WINDOW_MS);
+  if (username) {
+    recordRateLimitEvent(loginFailUserKey(username), LOGIN_FAILURE_WINDOW_MS);
+  }
+}
+
+function clearLoginFailures(ip: string, username?: string) {
+  resetRateLimit(loginFailIpKey(ip), username ? loginFailUserKey(username) : null);
+}
+
 
 
 // 强制动态渲染，避免在构建时预生成
@@ -74,6 +128,25 @@ async function generateAuthCookie(
 
 export async function POST(req: NextRequest) {
   try {
+    // 全局限速：先限制请求频率，再拦截失败次数超标的 IP
+    const ip = getClientIp(req);
+    const attemptGate = consumeRateLimit(
+      loginAttemptKey(ip),
+      LOGIN_ATTEMPT_LIMIT,
+      LOGIN_ATTEMPT_WINDOW_MS
+    );
+    if (!attemptGate.allowed) {
+      return tooManyAttempts(attemptGate.retryAfterSeconds);
+    }
+    const ipFailGate = peekRateLimit(
+      loginFailIpKey(ip),
+      LOGIN_FAILURE_LIMIT,
+      LOGIN_FAILURE_WINDOW_MS
+    );
+    if (!ipFailGate.allowed) {
+      return tooManyAttempts(ipFailGate.retryAfterSeconds);
+    }
+
     // 本地 / localStorage 模式——仅校验固定密码
     if (STORAGE_TYPE === 'localstorage') {
       const envPassword = process.env.PASSWORD;
@@ -100,6 +173,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (password !== envPassword) {
+        recordLoginFailure(ip);
         return NextResponse.json(
           { ok: false, error: '密码错误' },
           { status: 401 }
@@ -114,6 +188,7 @@ export async function POST(req: NextRequest) {
         'user',
         true
       ); // localstorage 模式包含 password
+      clearLoginFailures(ip);
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 
@@ -138,6 +213,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '密码不能为空' }, { status: 400 });
     }
 
+    // 用户名维度的失败锁定
+    const userFailGate = peekRateLimit(
+      loginFailUserKey(username),
+      LOGIN_FAILURE_LIMIT,
+      LOGIN_FAILURE_WINDOW_MS
+    );
+    if (!userFailGate.allowed) {
+      return tooManyAttempts(userFailGate.retryAfterSeconds);
+    }
+
     // 可能是站长，直接读环境变量
     if (
       username === process.env.USERNAME &&
@@ -151,6 +236,7 @@ export async function POST(req: NextRequest) {
         'owner',
         false
       ); // 数据库模式不包含 password
+      clearLoginFailures(ip, username);
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 
@@ -164,6 +250,7 @@ export async function POST(req: NextRequest) {
 
       return response;
     } else if (username === process.env.USERNAME) {
+      recordLoginFailure(ip, username);
       return NextResponse.json({ error: '用户名或密码错误' }, { status: 401 });
     }
 
@@ -177,6 +264,7 @@ export async function POST(req: NextRequest) {
     try {
       const pass = await db.verifyUser(username, password);
       if (!pass) {
+        recordLoginFailure(ip, username);
         return NextResponse.json(
           { error: '用户名或密码错误' },
           { status: 401 }
@@ -191,6 +279,7 @@ export async function POST(req: NextRequest) {
         user?.role || 'user',
         false
       ); // 数据库模式不包含 password
+      clearLoginFailures(ip, username);
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 

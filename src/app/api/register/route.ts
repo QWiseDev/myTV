@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { AdminConfig } from '@/lib/admin.types';
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -79,6 +80,22 @@ async function generateAuthCookie(
 }
 
 export async function POST(req: NextRequest) {
+  // 注册限速：防止批量注册灌库
+  const registerGate = consumeRateLimit(
+    `register:${getClientIp(req)}`,
+    5,
+    60 * 60 * 1000
+  );
+  if (!registerGate.allowed) {
+    return NextResponse.json(
+      { error: '注册过于频繁，请稍后再试' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(registerGate.retryAfterSeconds) },
+      }
+    );
+  }
+
   try {
     // localStorage 模式不支持注册
     if (STORAGE_TYPE === 'localstorage') {
@@ -125,8 +142,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ error: '密码长度至少6位' }, { status: 400 });
+    if (password.length < 8) {
+      return NextResponse.json({ error: '密码长度至少8位' }, { status: 400 });
     }
 
     // 检查是否与管理员用户名冲突
