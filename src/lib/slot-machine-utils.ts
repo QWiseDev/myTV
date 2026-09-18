@@ -15,6 +15,8 @@ export const SYMBOLS = SLOT_SYMBOLS.map((symbol) => ({
   image: SYMBOL_IMAGES[symbol.id],
 }));
 
+export type SlotSymbol = (typeof SYMBOLS)[number];
+
 // 前端专用的中奖组合配置（包含颜色信息）
 export const WIN_COMBINATIONS = {
   // 超级大奖
@@ -208,3 +210,44 @@ export interface SlotMessage {
   type: 'success' | 'error' | 'info';
   text: string;
 }
+
+// 中奖提示类型
+export type SlotWinType = 'three' | 'two' | 'special' | 'punishment' | null;
+
+// 背景音乐列表（顺序即展示顺序）
+export const BG_MUSIC_TRACKS = [
+  '/sounds/Deadman.mp3',
+  '/sounds/M5000024gAky3Rea5y.mp3',
+  '/sounds/M500002EkwTe07C94Z.mp3',
+  '/sounds/M500002PEyle3ZaThJ.mp3',
+  '/sounds/M500003HXtM72sZgql.mp3',
+  '/sounds/M500003HyuIp2qeHJL.mp3',
+  '/sounds/M500004X6Ef33lOLzx.mp3',
+  '/sounds/sjsdehjm.mp3',
+  '/sounds/mb.mp3',
+];
+
+// 背景音乐名称映射
+export const BG_MUSIC_NAMES = [
+  'Deadman',
+  'M5000024gAky3Rea5y',
+  'M500002EkwTe07C94Z',
+  'M500002PEyle3ZaThJ',
+  'M500003HXtM72sZgql',
+  'M500003HyuIp2qeHJL',
+  'M500004X6Ef33lOLzx',
+  'sjsdehjm',
+  'mb',
+];
+
+// 小米汽车系列符号ID
+export const MI_CAR_IDS = [
+  'mi_car',
+  'mi_car_fire1',
+  'mi_car_fire2',
+  'mi_car_logo',
+  'mi_car_model',
+];
+
+// 侯总系列符号ID
+export const HOUZONG_IDS = ['hz', 'hz2', 'hz3', 'hz4'];
