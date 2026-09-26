@@ -27,6 +27,19 @@ import {
   resolveDoubanId,
 } from '../utils/sourceDetails';
 
+export type SourceChangeInitiator = 'user' | 'auto';
+
+export interface SourceChangeOptions {
+  /** 发起方：用户手动点击换源，或当前源播放失败后的自动换源 */
+  initiatedBy?: SourceChangeInitiator;
+}
+
+export interface SourceChangeOwner {
+  by: SourceChangeInitiator;
+  source: string;
+  id: string;
+}
+
 interface UseSourceSwitcherParams {
   setVideoLoadingStage: (stage: 'initing' | 'sourceChanging') => void;
   setIsVideoLoading: (loading: boolean) => void;
@@ -52,6 +65,7 @@ interface UseSourceSwitcherParams {
   setAvailableSources: Dispatch<SetStateAction<SearchResult[]>>;
   setCurrentEpisodeIndex: (index: number) => void;
   isSourceChangingRef: MutableRefObject<boolean>;
+  sourceChangeOwnerRef: MutableRefObject<SourceChangeOwner | null>;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
   loadExternalDanmu: () => Promise<DanmakuItemLike[]>;
 }
@@ -81,6 +95,7 @@ export function useSourceSwitcher({
   setAvailableSources,
   setCurrentEpisodeIndex,
   isSourceChangingRef,
+  sourceChangeOwnerRef,
   externalDanmuEnabledRef,
   loadExternalDanmu,
 }: UseSourceSwitcherParams) {
@@ -92,14 +107,24 @@ export function useSourceSwitcher({
     return () => {
       operationGenerationRef.current += 1;
       isSourceChangingRef.current = false;
+      sourceChangeOwnerRef.current = null;
     };
-  }, [isSourceChangingRef]);
+  }, [isSourceChangingRef, sourceChangeOwnerRef]);
 
   const handleSourceChange = useCallback(
-    async (newSource: string, newId: string, newTitle: string) => {
-      if (isSourceChangingRef.current) {
+    async (
+      newSource: string,
+      newId: string,
+      newTitle: string,
+      options?: SourceChangeOptions,
+    ) => {
+      const initiatedBy = options?.initiatedBy ?? 'user';
+      if (isSourceChangingRef.current && initiatedBy === 'auto') {
+        // 自动换源不得打断进行中的切换（尤其是用户手动发起的换源）
         return;
       }
+      // 用户手动换源永远优先：走到下面的 ++operationGenerationRef 会作废
+      // 进行中的换源任务（含自动换源），使其 hydrate 回调无法再提交状态。
 
       const sourcePageUrl = new URL(window.location.href);
       if (sourcePageUrl.pathname !== '/play') {
@@ -117,11 +142,17 @@ export function useSourceSwitcher({
       const abandonOperation = () => {
         if (isCurrentOperation()) {
           isSourceChangingRef.current = false;
+          sourceChangeOwnerRef.current = null;
         }
       };
 
       try {
         isSourceChangingRef.current = true;
+        sourceChangeOwnerRef.current = {
+          by: initiatedBy,
+          source: newSource,
+          id: newId,
+        };
 
         setVideoLoadingStage('sourceChanging');
         setIsVideoLoading(true);
@@ -148,6 +179,7 @@ export function useSourceSwitcher({
         });
         if (!newDetail) {
           isSourceChangingRef.current = false;
+          sourceChangeOwnerRef.current = null;
           setIsVideoLoading(false);
           setError('未找到匹配结果');
           return;
@@ -295,6 +327,7 @@ export function useSourceSwitcher({
       } catch (err) {
         if (!isCurrentOperation()) return;
         isSourceChangingRef.current = false;
+        sourceChangeOwnerRef.current = null;
         if (!isStillOnSourcePage()) return;
         setIsVideoLoading(false);
         setError(err instanceof Error ? err.message : '换源失败');
@@ -325,6 +358,7 @@ export function useSourceSwitcher({
       setVideoLoadingStage,
       setVideoTitle,
       setVideoYear,
+      sourceChangeOwnerRef,
       videoDoubanIdRef,
     ],
   );

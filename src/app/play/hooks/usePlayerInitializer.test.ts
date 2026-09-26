@@ -138,6 +138,7 @@ function createParams(videoUrl: string) {
     switchPromiseRef: { current: null },
     danmuPluginStateRef: { current: null },
     isSourceChangingRef: { current: false },
+    sourceChangeOwnerRef: { current: null },
     isEpisodeChangingRef: { current: false },
     isSkipControllerTriggeredRef: { current: false },
     videoEndedHandledRef: { current: false },
@@ -1287,5 +1288,138 @@ describe('usePlayerInitializer', () => {
       expect(mockArtplayerConstructor).toHaveBeenCalledTimes(2);
     });
     expect(mockSwitchPlayerMedia).not.toHaveBeenCalled();
+  });
+
+  describe('source failure handling', () => {
+    function setupFailingPlayer() {
+      const handlers = new Map<string, (...args: unknown[]) => void>();
+      const player = createMockPlayer(handlers);
+      mockArtplayerConstructor.mockImplementation(() => player);
+      (loadArtplayerModules as jest.Mock).mockResolvedValue({
+        Artplayer: mockArtplayerConstructor,
+        artplayerPluginDanmuku: jest.fn(() => ({})),
+      });
+
+      const params = createParams('https://example.com/source-a.m3u8');
+      if (!params.detail) throw new Error('expected test detail');
+      const fallbackSource = {
+        ...params.detail,
+        id: 'id-b',
+        source: 'source-b',
+        source_name: 'source-b',
+      };
+      params.availableSourcesRef = {
+        current: [params.detail, fallbackSource],
+      };
+      return { params, player, fallbackSource };
+    }
+
+    function dispatchVideoError(player: ReturnType<typeof createMockPlayer>) {
+      const video = player.video as HTMLVideoElement;
+      Object.defineProperty(video, 'error', {
+        value: { code: 2, message: 'RESOURCE_ERROR' },
+        configurable: true,
+      });
+      act(() => {
+        video.dispatchEvent(new Event('error'));
+      });
+    }
+
+    test('keeps a manual source switch in flight when the old player errors', async () => {
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      const { params, player } = setupFailingPlayer();
+      // 用户手动换源进行中（目标 source-c），报错的是旧播放器 source
+      params.isSourceChangingRef.current = true;
+      params.sourceChangeOwnerRef.current = {
+        by: 'user',
+        source: 'source-c',
+        id: 'id-c',
+      };
+
+      renderHook(() => usePlayerInitializer(params));
+
+      await waitFor(() => {
+        expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      });
+
+      dispatchVideoError(player);
+
+      expect(params.setAvailableSources).toHaveBeenCalledWith([
+        { ...params.detail, failed: true },
+        {
+          ...params.detail,
+          id: 'id-b',
+          source: 'source-b',
+          source_name: 'source-b',
+        },
+      ]);
+      expect(params.handleSourceChange).not.toHaveBeenCalled();
+      expect(params.isSourceChangingRef.current).toBe(true);
+      expect(params.sourceChangeOwnerRef.current).toEqual({
+        by: 'user',
+        source: 'source-c',
+        id: 'id-c',
+      });
+      consoleError.mockRestore();
+    });
+
+    test('auto-switches to the next source when no manual switch is in flight', async () => {
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      const { params, player, fallbackSource } = setupFailingPlayer();
+
+      renderHook(() => usePlayerInitializer(params));
+
+      await waitFor(() => {
+        expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      });
+
+      dispatchVideoError(player);
+
+      expect(params.handleSourceChange).toHaveBeenCalledWith(
+        'source-b',
+        'id-b',
+        fallbackSource.title,
+        { initiatedBy: 'auto' },
+      );
+      expect(params.isSourceChangingRef.current).toBe(false);
+      expect(params.sourceChangeOwnerRef.current).toBeNull();
+      consoleError.mockRestore();
+    });
+
+    test('releases the switch lock when the manually chosen source itself fails', async () => {
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      const { params, player, fallbackSource } = setupFailingPlayer();
+      // 手动换源已提交（目标即当前报错的源）
+      params.isSourceChangingRef.current = true;
+      params.sourceChangeOwnerRef.current = {
+        by: 'user',
+        source: 'source',
+        id: 'id',
+      };
+
+      renderHook(() => usePlayerInitializer(params));
+
+      await waitFor(() => {
+        expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      });
+
+      dispatchVideoError(player);
+
+      expect(params.handleSourceChange).toHaveBeenCalledWith(
+        'source-b',
+        'id-b',
+        fallbackSource.title,
+        { initiatedBy: 'auto' },
+      );
+      expect(params.isSourceChangingRef.current).toBe(false);
+      expect(params.sourceChangeOwnerRef.current).toBeNull();
+      consoleError.mockRestore();
+    });
   });
 });

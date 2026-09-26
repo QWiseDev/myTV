@@ -66,6 +66,7 @@ function createParams(availableSources: SearchResult[]) {
     setAvailableSources: jest.fn(),
     setCurrentEpisodeIndex: jest.fn(),
     isSourceChangingRef: { current: false },
+    sourceChangeOwnerRef: { current: null },
     externalDanmuEnabledRef: { current: false },
     loadExternalDanmu: jest.fn(async () => []),
   } as Parameters<typeof useSourceSwitcher>[0];
@@ -316,7 +317,116 @@ describe('useSourceSwitcher', () => {
     expect(params.lastDanmuLoadKeyRef.current).toBe('');
     expect(params.resumeTimeRef.current).toBe(37);
     expect(params.isSourceChangingRef.current).toBe(true);
+    expect(params.sourceChangeOwnerRef.current).toEqual({
+      by: 'user',
+      source: 'source-b',
+      id: 'id-b',
+    });
     expect(params.setIsVideoLoading).toHaveBeenLastCalledWith(true);
+  });
+
+  test('rejects an automatic source change while another switch is in flight', async () => {
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', { douban_id: 2 });
+    const params = createParams([sourceA, sourceB]);
+    params.isSourceChangingRef.current = true;
+    params.sourceChangeOwnerRef.current = {
+      by: 'user',
+      source: 'source-c',
+      id: 'id-c',
+    };
+
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    await act(async () => {
+      await result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'fallback title',
+        { initiatedBy: 'auto' },
+      );
+    });
+
+    expect(params.setCurrentSource).not.toHaveBeenCalled();
+    expect(params.setCurrentId).not.toHaveBeenCalled();
+    expect(params.setDetail).not.toHaveBeenCalled();
+    expect(params.setError).not.toHaveBeenCalled();
+    expect(params.isSourceChangingRef.current).toBe(true);
+    expect(params.sourceChangeOwnerRef.current).toEqual({
+      by: 'user',
+      source: 'source-c',
+      id: 'id-c',
+    });
+  });
+
+  test('a manual source change overrides an in-flight automatic switch', async () => {
+    let resolveAutoDetail: (detail: SearchResult) => void = () => undefined;
+    const autoDetailPromise = new Promise<SearchResult>((resolve) => {
+      resolveAutoDetail = resolve;
+    });
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', {
+      douban_id: undefined,
+    });
+    const hydratedSourceB = createSource('source-b', 'id-b', {
+      douban_id: 222,
+    });
+    const sourceC = createSource('source-c', 'id-c', { douban_id: 3 });
+
+    const params = createParams([sourceA, sourceB, sourceC]);
+    (cachedGet as jest.Mock)
+      .mockReturnValueOnce(autoDetailPromise)
+      .mockResolvedValueOnce(sourceC);
+
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    let autoSwitchPromise: Promise<void> | void;
+    act(() => {
+      // 模拟播放失败后的自动换源（目标 source-b，hydrate 挂起中）
+      autoSwitchPromise = result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'fallback title',
+        { initiatedBy: 'auto' },
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(params.isSourceChangingRef.current).toBe(true);
+
+    // 用户在自动换源进行中点击了 source-c
+    let manualSwitchPromise: Promise<void> | void;
+    act(() => {
+      manualSwitchPromise = result.current.handleSourceChange(
+        'source-c',
+        'id-c',
+        'fallback title',
+      );
+    });
+
+    await act(async () => {
+      resolveAutoDetail(hydratedSourceB);
+      await autoSwitchPromise;
+    });
+
+    // 被作废的自动换源不得提交任何状态
+    expect(params.setCurrentSource).not.toHaveBeenCalledWith('source-b');
+    expect(params.setDetail).not.toHaveBeenCalledWith(hydratedSourceB);
+
+    await act(async () => {
+      await manualSwitchPromise;
+    });
+
+    expect(params.setCurrentSource).toHaveBeenCalledWith('source-c');
+    expect(params.setCurrentId).toHaveBeenCalledWith('id-c');
+    expect(params.setDetail).toHaveBeenCalledWith(sourceC);
+    expect(params.isSourceChangingRef.current).toBe(true);
+    expect(params.sourceChangeOwnerRef.current).toEqual({
+      by: 'user',
+      source: 'source-c',
+      id: 'id-c',
+    });
   });
 
   test('does not render a source-switch result after danmaku is disabled', async () => {
