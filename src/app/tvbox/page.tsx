@@ -86,7 +86,15 @@ interface SmartHealthResult {
       cached: boolean;
       tried_sources: number;
     };
-    cached: any;
+    cached: {
+      md5: string;
+      source: string;
+      success: boolean;
+      cached: boolean;
+      timestamp: number;
+      size: number;
+      tried: number;
+    } | null;
   };
   reachability: {
     total_tested: number;
@@ -108,6 +116,40 @@ interface SmartHealthResult {
     network_stable: boolean;
     recommendations_count: number;
   };
+  error?: string;
+}
+
+// JAR源深度诊断结果（与 /api/tvbox/jar-diagnostic 返回结构对齐）
+interface DeepDiagnosticResult {
+  timestamp: string;
+  environment: {
+    userAgent: string;
+    ip?: string;
+    timezone: string;
+    isDomestic: boolean;
+    recommendedSources: string[];
+  };
+  jarTests: Array<{
+    url: string;
+    name: string;
+    status: 'success' | 'failed' | 'timeout' | 'invalid';
+    responseTime: number;
+    fileSize?: number;
+    httpStatus?: number;
+    error?: string;
+    headers?: Record<string, string>;
+    isValidJar?: boolean;
+    md5?: string;
+  }>;
+  summary: {
+    totalTested: number;
+    successCount: number;
+    failedCount: number;
+    averageResponseTime: number;
+    fastestSource?: string;
+    recommendedSource?: string;
+  };
+  recommendations: string[];
   error?: string;
 }
 
@@ -154,6 +196,38 @@ interface JarFixResult {
   emergency_recommendations?: string[];
 }
 
+// 深度诊断 JAR 测试状态对应的容器配色、徽标配色与文案
+function getJarTestStatusStyle(status: string): {
+  containerClass: string;
+  badgeClass: string;
+  label: string;
+} {
+  if (status === 'success') {
+    return {
+      containerClass:
+        'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700',
+      badgeClass:
+        'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+      label: '✅ 可用',
+    };
+  }
+  if (status === 'timeout') {
+    return {
+      containerClass:
+        'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700',
+      badgeClass:
+        'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300',
+      label: '⏱️ 超时',
+    };
+  }
+  return {
+    containerClass:
+      'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700',
+    badgeClass: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+    label: status === 'invalid' ? '⚠️ 无效' : '❌ 失败',
+  };
+}
+
 export default function TVBoxConfigPage() {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -187,7 +261,8 @@ export default function TVBoxConfigPage() {
   const [jarFixLoading, setJarFixLoading] = useState(false);
 
   // 深度诊断状态
-  const [deepDiagnosticResult, setDeepDiagnosticResult] = useState<any>(null);
+  const [deepDiagnosticResult, setDeepDiagnosticResult] =
+    useState<DeepDiagnosticResult | null>(null);
   const [deepDiagnosticLoading, setDeepDiagnosticLoading] = useState(false);
 
   // Tab状态
@@ -382,9 +457,10 @@ export default function TVBoxConfigPage() {
       const data = await response.json();
       setDeepDiagnosticResult(data);
     } catch (error) {
+      // 错误哨兵对象：UI 依据 error 字段短路渲染错误分支，其余字段不会被访问
       setDeepDiagnosticResult({
         error: '深度诊断失败，请稍后重试',
-      });
+      } as DeepDiagnosticResult);
     } finally {
       setDeepDiagnosticLoading(false);
     }
@@ -1818,16 +1894,12 @@ export default function TVBoxConfigPage() {
                           </h3>
                           <div className='space-y-2 max-h-96 overflow-y-auto'>
                             {deepDiagnosticResult.jarTests.map(
-                              (test: any, idx: number) => (
+                              (test, idx: number) => {
+                                const statusStyle = getJarTestStatusStyle(test.status);
+                                return (
                                 <div
                                   key={idx}
-                                  className={`p-3 rounded border ${
-                                    test.status === 'success'
-                                      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
-                                      : test.status === 'timeout'
-                                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
-                                      : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
-                                  }`}
+                                  className={`p-3 rounded border ${statusStyle.containerClass}`}
                                 >
                                   <div className='flex items-center justify-between mb-2'>
                                     <div className='flex items-center gap-2'>
@@ -1841,21 +1913,9 @@ export default function TVBoxConfigPage() {
                                       </span>
                                     </div>
                                     <span
-                                      className={`text-xs px-2 py-1 rounded ${
-                                        test.status === 'success'
-                                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                                          : test.status === 'timeout'
-                                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                                      }`}
+                                      className={`text-xs px-2 py-1 rounded ${statusStyle.badgeClass}`}
                                     >
-                                      {test.status === 'success'
-                                        ? '✅ 可用'
-                                        : test.status === 'timeout'
-                                        ? '⏱️ 超时'
-                                        : test.status === 'invalid'
-                                        ? '⚠️ 无效'
-                                        : '❌ 失败'}
+                                      {statusStyle.label}
                                     </span>
                                   </div>
 
@@ -1928,7 +1988,8 @@ export default function TVBoxConfigPage() {
                                     </div>
                                   )}
                                 </div>
-                              )
+                                );
+                              }
                             )}
                           </div>
                         </div>

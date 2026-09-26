@@ -26,6 +26,21 @@ type Item = {
   remarks?: string;
 };
 
+// 执行一次分析埋点，任何异常只打印警告，不影响主功能
+function trackAnalyticsSafely(fn: () => void) {
+  try {
+    fn();
+  } catch (analyticsError) {
+    // 忽略分析错误，避免影响主要功能
+    console.warn('Analytics error:', analyticsError);
+  }
+}
+
+// 统一提取错误文案：Error 实例取 message，否则使用默认文案
+function toErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function SourceBrowserPage() {
   const router = useRouter();
 
@@ -139,30 +154,23 @@ export default function SourceBrowserPage() {
       setSources(list);
 
       // 📊 分析埋点：源列表加载
-      try {
-        analytics.handleSourceListLoad(list.length, Date.now() - startTime, list.map(s => s.name));
-      } catch (analyticsError) {
-        // 忽略分析错误，避免影响主要功能
-        console.warn('Analytics error:', analyticsError);
-      }
+      trackAnalyticsSafely(() =>
+        analytics.handleSourceListLoad(list.length, Date.now() - startTime, list.map(s => s.name))
+      );
 
       if (list.length > 0) {
         setActiveSourceKey(list[0].key);
       }
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : '获取源失败';
+      const errorMessage = toErrorMessage(e, '获取源失败');
       setSourceError(errorMessage);
 
       // 📊 分析埋点：源列表加载错误
-      try {
-        analytics.handleSourceError('network', errorMessage, '');
-      } catch (analyticsError) {
-        // 忽略分析错误，避免影响主要功能
-        console.warn('Analytics error:', analyticsError);
-      }
+      trackAnalyticsSafely(() => analytics.handleSourceError('network', errorMessage, ''));
     } finally {
       setLoadingSources(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：analytics 为每渲染重建的对象，加入依赖会使 fetchSources 每渲染重建并触发挂载 effect 重复请求；其内部 handler 均为稳定 useCallback
   }, []); // 移除 analytics 依赖
 
   const fetchCategories = useCallback(async (sourceKey: string) => {
@@ -183,7 +191,7 @@ export default function SourceBrowserPage() {
         setActiveCategory('');
       }
     } catch (e: unknown) {
-      setCategoryError(e instanceof Error ? e.message : '获取分类失败');
+      setCategoryError(toErrorMessage(e, '获取分类失败'));
       setCategories([]);
       setActiveCategory('');
     } finally {
@@ -224,7 +232,7 @@ export default function SourceBrowserPage() {
         years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
         setAvailableYears(years);
       } catch (e: unknown) {
-        setItemsError(e instanceof Error ? e.message : '获取列表失败');
+        setItemsError(toErrorMessage(e, '获取列表失败'));
         if (!append) setItems([]);
         setPage(1);
         setPageCount(1);
@@ -280,7 +288,7 @@ export default function SourceBrowserPage() {
         years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
         setAvailableYears(years);
       } catch (e: unknown) {
-        setItemsError(e instanceof Error ? e.message : '搜索失败');
+        setItemsError(toErrorMessage(e, '搜索失败'));
         if (!append) setItems([]);
         setPage(1);
         setPageCount(1);
@@ -578,7 +586,7 @@ export default function SourceBrowserPage() {
         }
       }
     } catch (e: unknown) {
-      setPreviewError(e instanceof Error ? e.message : '获取详情失败');
+      setPreviewError(toErrorMessage(e, '获取详情失败'));
     } finally {
       setPreviewLoading(false);
     }
@@ -685,7 +693,7 @@ export default function SourceBrowserPage() {
                       key={s.key}
                       onClick={() => {
                         // 📊 分析埋点：源切换
-                        try {
+                        trackAnalyticsSafely(() =>
                           analytics.handleSourceClick(
                             {
                               id: s.key,
@@ -700,11 +708,8 @@ export default function SourceBrowserPage() {
                             },
                             index,
                             'all'
-                          );
-                        } catch (analyticsError) {
-                          // 忽略分析错误，避免影响主要功能
-                          console.warn('Analytics error:', analyticsError);
-                        }
+                          )
+                        );
                         setActiveSourceKey(s.key);
                       }}
                       className={`group relative px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium border-2 transition-all duration-300 transform hover:scale-105 active:scale-95 ${
@@ -848,12 +853,9 @@ export default function SourceBrowserPage() {
                     setFilterKeyword(e.target.value);
                     // 📊 分析埋点：关键词筛选
                     if (e.target.value.trim()) {
-                      try {
-                        analytics.handleSearch(e.target.value.trim(), 0, 0);
-                      } catch (analyticsError) {
-                        // 忽略分析错误，避免影响主要功能
-                        console.warn('Analytics error:', analyticsError);
-                      }
+                      trackAnalyticsSafely(() =>
+                        analytics.handleSearch(e.target.value.trim(), 0, 0)
+                      );
                     }
                   }}
                   placeholder='地区/关键词'
@@ -905,12 +907,9 @@ export default function SourceBrowserPage() {
                         key={String(c.type_id)}
                         onClick={() => {
                           // 📊 分析埋点：分类切换
-                          try {
-                            analytics.handleFilterChange('category', c.type_name || String(c.type_id));
-                          } catch (analyticsError) {
-                            // 忽略分析错误，避免影响主要功能
-                            console.warn('Analytics error:', analyticsError);
-                          }
+                          trackAnalyticsSafely(() =>
+                            analytics.handleFilterChange('category', c.type_name || String(c.type_id))
+                          );
                           setActiveCategory(c.type_id);
                         }}
                         className={`group relative px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all duration-300 transform hover:scale-105 ${
@@ -960,7 +959,7 @@ export default function SourceBrowserPage() {
                           className='group relative rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300 bg-white dark:bg-gray-800 cursor-pointer hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-1'
                           onClick={() => {
                             // 📊 分析埋点：内容点击
-                            try {
+                            trackAnalyticsSafely(() =>
                               analytics.handleSourceClick({
                                 id: item.id,
                                 name: item.title,
@@ -971,18 +970,15 @@ export default function SourceBrowserPage() {
                                 itemCount: 0,
                                 category: activeSourceKey,
                                 language: 'unknown'
-                              }, index, 'category');
-                            } catch (analyticsError) {
-                              // 忽略分析错误，避免影响主要功能
-                              console.warn('Analytics error:', analyticsError);
-                            }
+                              }, index, 'category')
+                            );
                             openPreview(item);
                           }}
                           role='button'
                           tabIndex={0}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              try {
+                              trackAnalyticsSafely(() =>
                                 analytics.handleSourceClick({
                                   id: item.id,
                                   name: item.title,
@@ -993,11 +989,8 @@ export default function SourceBrowserPage() {
                                   itemCount: 0,
                                   category: activeSourceKey,
                                   language: 'unknown'
-                                }, index, 'category');
-                              } catch (analyticsError) {
-                                // 忽略分析错误，避免影响主要功能
-                                console.warn('Analytics error:', analyticsError);
-                              }
+                                }, index, 'category')
+                              );
                               openPreview(item);
                             }
                           }}

@@ -20,6 +20,7 @@ import {
   getSearchHistory,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
+import { safeJsonParse } from '@/lib/safe-storage';
 import { SearchResult } from '@/lib/types';
 import { useSearchPageAnalytics } from '@/hooks/useSearchPageAnalytics';
 
@@ -182,7 +183,7 @@ function SearchPageClient() {
     if (typeof window !== 'undefined') {
       const userSetting = localStorage.getItem('defaultAggregateSearch');
       if (userSetting !== null) {
-        return JSON.parse(userSetting);
+        return safeJsonParse<boolean>(userSetting, true);
       }
     }
     return true; // 默认启用聚合
@@ -425,7 +426,7 @@ function SearchPageClient() {
       const defaultFluidSearch =
         (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
       if (savedFluidSearch !== null) {
-        setUseFluidSearch(JSON.parse(savedFluidSearch));
+        setUseFluidSearch(safeJsonParse<boolean>(savedFluidSearch, true));
       } else if (defaultFluidSearch !== undefined) {
         setUseFluidSearch(defaultFluidSearch);
       }
@@ -560,7 +561,10 @@ function SearchPageClient() {
       if (typeof window !== 'undefined') {
         const savedFluidSearch = localStorage.getItem('fluidSearch');
         if (savedFluidSearch !== null) {
-          currentFluidSearch = JSON.parse(savedFluidSearch);
+          currentFluidSearch = safeJsonParse<boolean>(
+            savedFluidSearch,
+            useFluidSearch
+          );
         } else {
           const defaultFluidSearch =
             (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;

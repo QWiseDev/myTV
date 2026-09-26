@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { readJsonFromStorage } from '@/lib/safe-storage';
 import { ReleaseCalendarItem, ReleaseCalendarResult } from '@/lib/types';
 
 import PageLayout from '@/components/PageLayout';
@@ -154,26 +155,30 @@ export default function ReleaseCalendarPage() {
     }
 
     if (filterParams.region && filterParams.region !== '全部') {
+      const region = filterParams.region;
       filteredItems = filteredItems.filter((item) =>
-        item.region.includes(filterParams.region!)
+        item.region.includes(region)
       );
     }
 
     if (filterParams.genre && filterParams.genre !== '全部') {
+      const genre = filterParams.genre;
       filteredItems = filteredItems.filter((item) =>
-        item.genre.includes(filterParams.genre!)
+        item.genre.includes(genre)
       );
     }
 
     if (filterParams.dateFrom) {
+      const dateFrom = filterParams.dateFrom;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate >= filterParams.dateFrom!
+        (item) => item.releaseDate >= dateFrom
       );
     }
 
     if (filterParams.dateTo) {
+      const dateTo = filterParams.dateTo;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate <= filterParams.dateTo!
+        (item) => item.releaseDate <= dateTo
       );
     }
 
@@ -235,9 +240,12 @@ export default function ReleaseCalendarPage() {
     setCurrentPage(1);
 
     // 如果有缓存数据，使用重置后的过滤条件重新应用过滤
-    const cachedData = localStorage.getItem('release_calendar_all_data');
-    if (cachedData) {
-      const allData = JSON.parse(cachedData);
+    // 遗留缓存可能已损坏，解析失败时按无缓存处理，回退到重新拉取
+    const allData = readJsonFromStorage<ReleaseCalendarResult | null>(
+      'release_calendar_all_data',
+      null
+    );
+    if (allData) {
       // 直接使用重置后的过滤条件，而不是依赖state（state更新是异步的）
       const filteredData = applyClientSideFiltersWithParams(
         allData,
@@ -270,6 +278,7 @@ export default function ReleaseCalendarPage() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅在页面挂载时拉取一次数据；fetchData 为普通函数每次渲染重建，加入依赖会导致每次渲染重复请求
   }, []);
 
   // 监听滚动事件以显示/隐藏返回顶部按钮
