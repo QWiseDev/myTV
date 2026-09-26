@@ -2,10 +2,10 @@
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback } from 'react';
 
 import type { Celebrity } from '@/lib/types';
-import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
+import { useImageFallback } from '@/hooks/useImageFallback';
 
 interface CastSectionProps {
   celebrities: Celebrity[];
@@ -18,22 +18,9 @@ interface CastAvatarProps {
 }
 
 function CastAvatar({ avatar, name }: CastAvatarProps) {
-  const [fallbackIndex, setFallbackIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const normalizedAvatar = avatar.replace(/^http:/, 'https:');
-  const fallbackUrls = useMemo(
-    () => getImageFallbackUrls(normalizedAvatar),
-    [normalizedAvatar]
-  );
-  const imageSrc =
-    fallbackUrls[fallbackIndex] || processImageUrl(normalizedAvatar);
+  const { imageSrc, handleError } = useImageFallback(avatar);
 
-  useEffect(() => {
-    setFallbackIndex(0);
-    setFailed(false);
-  }, [normalizedAvatar]);
-
-  if (!imageSrc || failed) {
+  if (!imageSrc) {
     return null;
   }
 
@@ -50,13 +37,7 @@ function CastAvatar({ avatar, name }: CastAvatarProps) {
       }
       referrerPolicy='no-referrer'
       className='w-full h-full object-cover'
-      onError={() => {
-        if (fallbackIndex < fallbackUrls.length - 1) {
-          setFallbackIndex((index) => index + 1);
-          return;
-        }
-        setFailed(true);
-      }}
+      onError={handleError}
     />
   );
 }

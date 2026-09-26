@@ -1,10 +1,9 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
 
-import { getImageFallbackUrls, processImageUrl } from '@/lib/utils';
 import { navigateVideoCardPlayUrl } from '@/lib/video-card-utils';
+import { useImageFallback } from '@/hooks/useImageFallback';
 
 interface RecommendationItem {
   id: string;
@@ -27,22 +26,9 @@ interface RecommendationPosterProps {
 }
 
 function RecommendationPoster({ poster, title }: RecommendationPosterProps) {
-  const [fallbackIndex, setFallbackIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const normalizedPoster = poster.replace(/^http:/, 'https:');
-  const fallbackUrls = useMemo(
-    () => getImageFallbackUrls(normalizedPoster),
-    [normalizedPoster],
-  );
-  const imageSrc =
-    fallbackUrls[fallbackIndex] || processImageUrl(normalizedPoster);
+  const { imageSrc, handleError } = useImageFallback(poster);
 
-  useEffect(() => {
-    setFallbackIndex(0);
-    setFailed(false);
-  }, [normalizedPoster]);
-
-  if (!imageSrc || failed) {
+  if (!imageSrc) {
     return null;
   }
 
@@ -59,13 +45,7 @@ function RecommendationPoster({ poster, title }: RecommendationPosterProps) {
       }
       referrerPolicy='no-referrer'
       className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
-      onError={() => {
-        if (fallbackIndex < fallbackUrls.length - 1) {
-          setFallbackIndex((index) => index + 1);
-          return;
-        }
-        setFailed(true);
-      }}
+      onError={handleError}
     />
   );
 }
