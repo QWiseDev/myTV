@@ -1,8 +1,8 @@
+import type { PlayRecord } from './types';
 import {
   buildUserMenuContinueWatchingRecords,
   calculatePlayRecordProgress,
 } from './user-menu-continue-watching';
-import type { PlayRecord } from './types';
 
 function createRecord(overrides: Partial<PlayRecord> = {}): PlayRecord {
   return {

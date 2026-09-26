@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 
-interface YouTubeVideo {
+export interface YouTubeVideo {
   id: { videoId: string };
   snippet: {
     title: string;

@@ -68,7 +68,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
       source: options.source,
       referrer: document.referrer
     });
-  }, [videoId, videoTitle, videoType, episodeNumber, seasonNumber, seriesId, options.source]);
+  }, [trackPageView, videoId, videoTitle, videoType, episodeNumber, seasonNumber, seriesId, options.source]);
 
   // 播放器控制埋点
   const trackPlayerControl = useCallback((action: string, metadata?: Record<string, unknown>) => {

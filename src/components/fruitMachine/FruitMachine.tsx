@@ -140,12 +140,12 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
     let position = 0;
     const spins = 30 + Math.floor(Math.random() * 10); // 30-40圈
 
-    spinningTimer.current = setInterval(() => {
+    const intervalId = setInterval(() => {
       position++;
       setCurrentLightPosition(position % 24);
 
       if (position >= spins) {
-        clearInterval(spinningTimer.current!);
+        clearInterval(intervalId);
         spinningTimer.current = null;
 
         // 判定结果
@@ -213,6 +213,8 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
         }
       }
     }, GAME_CONFIG.lightSpeed);
+    spinningTimer.current = intervalId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：与 resetGame 相互递归（setTimeout 惰性调用），resetGame 定义在后，加入依赖数组会触发 TDZ 引用错误并改变自动模式下闭包内的下注状态快照
   }, [betButtons, autoPlay, soundManager]);
 
   // 大小游戏
@@ -243,6 +245,7 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
         }
       }, 1000);
     }, 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：resetGame 定义在本回调之后（TDZ），且其闭包快照与自动下注循环行为绑定
   }, [bigOrSmallNumber, rewardScore, autoPlay]);
 
   // 收分
@@ -260,6 +263,7 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
     setShowResult(false);
     setLastWinResult(null);
     setCurrentMultiplier(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：resetGame 定义在本回调之后（TDZ），无法列入依赖数组
   }, [rewardScore, ownedScore, updateCoins, autoPlay]);
 
   // 重置游戏
@@ -280,6 +284,7 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
     if (autoPlay && !isPlaying) {
       startGame();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：自动模式下闭包持有的 startGame 快照即当前行为，加入依赖会改变自动下注循环使用的下注状态
   }, [autoPlay, isPlaying]);
 
   // 清理定时器
@@ -289,6 +294,7 @@ export function FruitMachine({ coins, onCoinsChange, onClose }: FruitMachineProp
         clearInterval(spinningTimer.current);
       }
       if (autoPlayTimer.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 卸载清理语义：读取清理时刻的最新 timer 引用（正是需要清除的挂起定时器），复制到局部变量反而会固化过期引用
         clearTimeout(autoPlayTimer.current);
       }
     };

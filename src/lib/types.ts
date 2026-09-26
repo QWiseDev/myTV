@@ -126,7 +126,9 @@ export interface IStorage {
   clearAllData(): Promise<void>;
 
   // 通用缓存相关（新增）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 通用缓存接口由多后端（含禁区内 db.client）实现，调用方直接对结果做对象展开，改 unknown 将波及禁区实现
   getCache(key: string): Promise<any | null>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 载荷类型因后端而异，保持 any 以免改动禁区内实现
   setCache(key: string, data: any, expireSeconds?: number): Promise<void>;
   deleteCache(key: string): Promise<void>;
   clearExpiredCache(prefix?: string): Promise<void>;

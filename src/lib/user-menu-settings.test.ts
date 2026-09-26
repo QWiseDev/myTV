@@ -1,8 +1,8 @@
 import {
+  type UserMenuSettingsSnapshot,
   buildDefaultUserMenuSettings,
   readUserMenuSettings,
   writeUserMenuSettings,
-  type UserMenuSettingsSnapshot,
 } from './user-menu-settings';
 
 function createStorage(initial: Record<string, string> = {}) {

@@ -31,9 +31,8 @@ export async function GET(request: NextRequest) {
     const genre = searchParams.get('genre');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
-    const limit = searchParams.get('limit')
-      ? parseInt(searchParams.get('limit')!)
-      : undefined;
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam) : undefined;
     const offset = parseInt(searchParams.get('offset') || '0');
     const refresh =
       searchParams.get('refresh') === 'true' || searchParams.has('nocache');

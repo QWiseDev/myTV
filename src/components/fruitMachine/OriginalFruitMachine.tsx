@@ -149,7 +149,7 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
         return newButtons;
       });
     }
-  }, [isRunning, isBigOrSmallRunning, rewardScore, ownedScore, betButtons, updateCoins]);
+  }, [isRunning, isBigOrSmallRunning, rewardScore, ownedScore, betButtons, updateCoins, playSound]);
 
   // 长按投注
   const handleBetMouseDown = useCallback((index: number) => {
@@ -201,12 +201,12 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
     let position = 0;
     const spins = 30 + Math.floor(Math.random() * 10);
 
-    runningTimer.current = setInterval(() => {
+    const intervalId = setInterval(() => {
       position++;
       setCurrentLightPosition(position % 24);
 
       if (position >= spins) {
-        clearInterval(runningTimer.current!);
+        clearInterval(intervalId);
         runningTimer.current = null;
         setIsRunning(false);
 
@@ -252,6 +252,8 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
         }
       }
     }, 50); // 50ms间隔，与原版一致
+    runningTimer.current = intervalId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：与 resetGame 相互递归（setTimeout 惰性调用），resetGame 定义在后，加入依赖数组会触发 TDZ 引用错误并改变自动模式闭包快照
   }, [betButtons, rewardScore, activeAuto, stopSound, playSound]);
 
   // 大小游戏
@@ -284,6 +286,7 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
         }, 1500);
       }
     }, 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：collectScore/resetGame 定义在本回调之后（TDZ），加入依赖数组会触发 TDZ 引用错误
   }, [bigOrSmallNumber, rewardScore, activeAuto, playSound]);
 
   // 收分
@@ -304,6 +307,7 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
         setTimeout(() => startGame(), 1000);
       }, 1000);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：resetGame 定义在本回调之后（TDZ），且其闭包快照与自动模式循环行为绑定
   }, [rewardScore, ownedScore, activeAuto, updateCoins, playSound]);
 
   // 重置游戏
@@ -345,7 +349,10 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
   useEffect(() => {
     return () => {
       if (runningTimer.current) clearInterval(runningTimer.current);
-      if (bigOrSmallTimer.current) clearInterval(bigOrSmallTimer.current);
+      if (bigOrSmallTimer.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 卸载清理语义：读取清理时刻的最新 timer 引用（正是需要清除的挂起定时器），复制到局部变量反而会固化过期引用
+        clearInterval(bigOrSmallTimer.current);
+      }
       if (bigOrSmallBtnTimer.current) clearInterval(bigOrSmallBtnTimer.current);
       if (autoTimeout.current) clearTimeout(autoTimeout.current);
       stopSound();

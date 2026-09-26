@@ -3,7 +3,7 @@
 import { ChevronUp } from 'lucide-react';
 import Image from 'next/image';
 
-import { PlayRecord, ReleaseCalendarItem } from '@/lib/types';
+import { PlayRecord, ReleaseCalendarItem, UserPlayStat } from '@/lib/types';
 import { WatchingUpdate } from '@/lib/watching-updates';
 
 import VideoCard from '@/components/VideoCard';
@@ -25,7 +25,7 @@ interface AdminStatsPanelProps {
   loading: boolean;
   error: string | null;
   statsData: PlayStatsResult;
-  userStats: any;
+  userStats: UserPlayStat & { registrationDays: number };
   watchingUpdates: WatchingUpdate | null;
   expandedUsers: Set<string>;
   toggleUserExpanded: (username: string) => void;
@@ -475,7 +475,7 @@ const AdminStatsPanel = ({
                               最近播放记录 (最多显示10条)
                             </h6>
                             <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-                              {userStat.recentRecords.map((record: any) => (
+                              {userStat.recentRecords.map((record) => (
                                 <div
                                   key={record.title + record.save_time}
                                   className='flex items-center space-x-4 p-3 bg-white dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'

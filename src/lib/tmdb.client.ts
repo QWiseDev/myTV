@@ -184,7 +184,7 @@ export async function searchTMDBPerson(
 ): Promise<TMDBPersonSearchResponse> {
   // 检查缓存
   const cacheKey = getCacheKey('person_search', { query: query.trim(), page });
-  const cached = await getCache(cacheKey);
+  const cached = await getCache<TMDBPersonSearchResponse>(cacheKey);
   if (cached) {
     return cached;
   }
@@ -208,7 +208,7 @@ export async function getTMDBPersonMovies(
 ): Promise<TMDBMovieCreditsResponse> {
   // 检查缓存
   const cacheKey = getCacheKey('movie_credits', { personId });
-  const cached = await getCache(cacheKey);
+  const cached = await getCache<TMDBMovieCreditsResponse>(cacheKey);
   if (cached) {
     return cached;
   }
@@ -231,7 +231,7 @@ export async function getTMDBPersonTVShows(
 ): Promise<TMDBTVCreditsResponse> {
   // 检查缓存
   const cacheKey = getCacheKey('tv_credits', { personId });
-  const cached = await getCache(cacheKey);
+  const cached = await getCache<TMDBTVCreditsResponse>(cacheKey);
   if (cached) {
     return cached;
   }
@@ -273,7 +273,7 @@ export async function searchTMDBActorWorks(
       ...filterOptions,
     });
 
-    const cached = await getCache(cacheKey);
+    const cached = await getCache<TMDBResult>(cacheKey);
     if (cached) {
       return cached;
     }

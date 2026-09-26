@@ -152,21 +152,23 @@ export const AlertModal = ({
   );
 };
 
+export interface AlertModalState {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'warning';
+  title: string;
+  message?: string;
+  timer?: number;
+  showConfirm?: boolean;
+}
+
 export const useAlertModal = () => {
-  const [alertModal, setAlertModal] = useState<{
-    isOpen: boolean;
-    type: 'success' | 'error' | 'warning';
-    title: string;
-    message?: string;
-    timer?: number;
-    showConfirm?: boolean;
-  }>({
+  const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
     type: 'success',
     title: '',
   });
 
-  const showAlert = (config: Omit<typeof alertModal, 'isOpen'>) => {
+  const showAlert = (config: Omit<AlertModalState, 'isOpen'>) => {
     setAlertModal({ ...config, isOpen: true });
   };
 
@@ -179,7 +181,7 @@ export const useAlertModal = () => {
 
 export const showError = (
   message: string,
-  showAlert?: (config: any) => void
+  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void
 ) => {
   if (showAlert) {
     showAlert({ type: 'error', title: '错误', message, showConfirm: true });
@@ -190,7 +192,7 @@ export const showError = (
 
 export const showSuccess = (
   message: string,
-  showAlert?: (config: any) => void
+  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void
 ) => {
   if (showAlert) {
     showAlert({ type: 'success', title: '成功', message, timer: 2000 });

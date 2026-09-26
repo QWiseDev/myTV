@@ -39,7 +39,7 @@ interface CacheType {
   key: string;
   name: string;
   description: string;
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
 }
 
@@ -248,7 +248,10 @@ export default function CacheManager() {
       {stats && (
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
           {CACHE_TYPES.map((cacheType) => {
-            const typeStats = stats[cacheType.key as keyof typeof stats] as any;
+            // 各缓存类型统计均含 count/size；仅 douban/tmdb 额外携带 types（渲染处有守卫）
+            const typeStats = stats[
+              cacheType.key as keyof typeof stats
+            ] as { count: number; size: number; types?: Record<string, number> };
             const Icon = cacheType.icon;
 
             return (

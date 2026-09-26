@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 第三方插件手工类型声明，any 仅作类型占位，不影响运行时 */
+
 declare module '@/lib/artplayer-plugin-chromecast' {
   interface ChromecastPluginOptions {
     icon?: string;

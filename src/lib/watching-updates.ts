@@ -21,13 +21,21 @@ let memoryWatchingUpdatesCache: WatchingUpdatesCache | null = null;
 let memoryLastCheckTime = 0;
 
 // 🔧 新增：Sources API缓存，避免重复调用
-let sourcesCache: { data: any; timestamp: number } | null = null;
+// 与 /api/sources 返回结构对齐（仅含 key/name 两个必要字段）
+interface SourceBrief {
+  key: string;
+  name: string;
+}
+let sourcesCache: { data: SourceBrief[]; timestamp: number } | null = null;
 const SOURCES_CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
 
 // 检测存储模式
 const STORAGE_TYPE = (() => {
   if (typeof window === 'undefined') return 'localstorage';
-  const raw = (window as any).RUNTIME_CONFIG?.STORAGE_TYPE || 'localstorage';
+  const runtimeWindow = window as unknown as {
+    RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+  };
+  const raw = runtimeWindow.RUNTIME_CONFIG?.STORAGE_TYPE || 'localstorage';
   return raw;
 })();
 
@@ -196,7 +204,7 @@ export async function checkWatchingUpdates(
       }
     }
 
-    let sources: any[] | null = null;
+    let sources: SourceBrief[] | null = null;
     const sourceKeyMap = new Map<string, string>();
 
     try {
@@ -208,9 +216,10 @@ export async function checkWatchingUpdates(
       } else {
         const sourcesResponse = await fetch('/api/sources');
         if (sourcesResponse.ok) {
-          sources = await sourcesResponse.json();
+          const data = (await sourcesResponse.json()) as SourceBrief[];
+          sources = data;
           sourcesCache = {
-            data: sources,
+            data,
             timestamp: Date.now(),
           };
         }

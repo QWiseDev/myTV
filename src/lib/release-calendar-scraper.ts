@@ -299,26 +299,30 @@ export async function getReleaseCalendar(
     }
 
     if (options.region && options.region !== '全部') {
+      const region = options.region;
       filteredItems = filteredItems.filter((item) =>
-        item.region.includes(options.region!)
+        item.region.includes(region)
       );
     }
 
     if (options.genre && options.genre !== '全部') {
+      const genre = options.genre;
       filteredItems = filteredItems.filter((item) =>
-        item.genre.includes(options.genre!)
+        item.genre.includes(genre)
       );
     }
 
     if (options.dateFrom) {
+      const dateFrom = options.dateFrom;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate >= options.dateFrom!
+        (item) => item.releaseDate >= dateFrom
       );
     }
 
     if (options.dateTo) {
+      const dateTo = options.dateTo;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate <= options.dateTo!
+        (item) => item.releaseDate <= dateTo
       );
     }
 

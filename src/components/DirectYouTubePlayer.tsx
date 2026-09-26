@@ -3,7 +3,7 @@
 import { AlertCircle, CheckCircle, ExternalLink, Play } from 'lucide-react';
 import { useState } from 'react';
 
-import YouTubeVideoCard from './YouTubeVideoCard';
+import YouTubeVideoCard, { type YouTubeVideo } from './YouTubeVideoCard';
 
 // YouTube URL解析工具函数
 const extractVideoId = (url: string): string | null => {
@@ -69,7 +69,7 @@ interface DirectYouTubePlayerProps {
 
 const DirectYouTubePlayer = ({ className = '' }: DirectYouTubePlayerProps) => {
   const [url, setUrl] = useState('');
-  const [videoData, setVideoData] = useState<any>(null);
+  const [videoData, setVideoData] = useState<YouTubeVideo | null>(null);
   const [isValidUrl, setIsValidUrl] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);

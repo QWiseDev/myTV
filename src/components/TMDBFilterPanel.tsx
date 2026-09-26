@@ -124,12 +124,15 @@ export const TMDBFilterPanel: React.FC<TMDBFilterPanelProps> = ({
     (option) => !option.tvOnly || contentType === 'tv'
   );
 
-  const updateFilter = useCallback((key: keyof TMDBFilterState, value: any) => {
-    setLocalFilters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  }, []);
+  const updateFilter = useCallback(
+    <K extends keyof TMDBFilterState>(key: K, value: TMDBFilterState[K]) => {
+      setLocalFilters((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+    },
+    []
+  );
 
   const applyFilters = useCallback(() => {
     onFiltersChange(localFilters);
@@ -402,7 +405,12 @@ export const TMDBFilterPanel: React.FC<TMDBFilterPanelProps> = ({
               <div className='grid grid-cols-2 gap-2'>
                 <select
                   value={localFilters.sortBy || 'rating'}
-                  onChange={(e) => updateFilter('sortBy', e.target.value)}
+                  onChange={(e) =>
+                    updateFilter(
+                      'sortBy',
+                      e.target.value as TMDBFilterState['sortBy']
+                    )
+                  }
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                 >
                   {sortOptions.map((option) => (
@@ -413,7 +421,12 @@ export const TMDBFilterPanel: React.FC<TMDBFilterPanelProps> = ({
                 </select>
                 <select
                   value={localFilters.sortOrder || 'desc'}
-                  onChange={(e) => updateFilter('sortOrder', e.target.value)}
+                  onChange={(e) =>
+                    updateFilter(
+                      'sortOrder',
+                      e.target.value as TMDBFilterState['sortOrder']
+                    )
+                  }
                   className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                 >
                   <option value='desc'>降序</option>

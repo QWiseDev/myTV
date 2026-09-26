@@ -97,6 +97,15 @@ interface PlayTesterDrawerState {
   selectedEpisodeIndex: number;
 }
 
+type SortKey =
+  | 'status'
+  | 'responseTime'
+  | 'resultCount'
+  | 'matchRate'
+  | 'playStatus'
+  | 'name'
+  | 'default';
+
 // 计算匹配率与示例（供顶层 testSource 复用）
 function computeMatchRate(results: SearchResult[], q: string) {
   const lowerQ = (q || '').toLowerCase();
@@ -218,16 +227,18 @@ async function getAllApiSites(): Promise<ApiSite[]> {
 
       const sources: ApiSite[] = [];
       if (data.results) {
-        data.results.forEach((result: any) => {
-          if (result.source && !sources.find((s) => s.key === result.source)) {
-            sources.push({
-              key: result.source,
-              name: result.source_name || result.source,
-              api: '',
-              disabled: false,
-            });
+        data.results.forEach(
+          (result: { source?: string; source_name?: string }) => {
+            if (result.source && !sources.find((s) => s.key === result.source)) {
+              sources.push({
+                key: result.source,
+                name: result.source_name || result.source,
+                api: '',
+                disabled: false,
+              });
+            }
           }
-        });
+        );
       }
       return sources;
     } catch (fallbackError) {
@@ -238,6 +249,25 @@ async function getAllApiSites(): Promise<ApiSite[]> {
 }
 
 // 测试单个源
+// CMS 采集接口返回的原始条目字段（vod_* 为苹果CMS字段，普通字段为兼容回退）
+interface RawSearchItem {
+  vod_id?: string | number;
+  id?: string | number;
+  vod_name?: string;
+  title?: string;
+  vod_pic?: string;
+  poster?: string;
+  vod_year?: string;
+  year?: string;
+  vod_play_url?: string;
+  type_name?: string;
+  type?: string;
+  vod_content?: string;
+  desc?: string;
+  vod_douban_id?: number;
+  douban_id?: number;
+}
+
 async function testSource(
   sourceKey: string,
   query: string
@@ -267,7 +297,7 @@ async function testSource(
 
     // 转换结果格式为 SearchResult
     const results: SearchResult[] = Array.isArray(data.results)
-      ? data.results.map((item: any) => ({
+      ? data.results.map((item: RawSearchItem) => ({
           id: item.vod_id || item.id || '',
           title: item.vod_name || item.title || '未知标题',
           poster: item.vod_pic || item.poster || '',
@@ -291,18 +321,18 @@ async function testSource(
       responseTime,
       disabled: data.disabled,
       resultCount:
-        typeof (data as any).resultCount === 'number'
-          ? (data as any).resultCount
+        typeof data.resultCount === 'number'
+          ? data.resultCount
           : results.length,
       matchRate:
-        typeof (data as any).matchRate === 'number'
-          ? (data as any).matchRate
+        typeof data.matchRate === 'number'
+          ? data.matchRate
           : computeMatchRate(results, query),
-      topMatches: Array.isArray((data as any).topMatches)
-        ? (data as any).topMatches
+      topMatches: Array.isArray(data.topMatches)
+        ? data.topMatches
         : computeTopMatches(results, query),
     };
-  } catch (error: any) {
+  } catch (error) {
     const responseTime = Date.now() - startTime;
 
     return {
@@ -311,7 +341,7 @@ async function testSource(
       status: 'error',
       results: [],
       responseTime,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -377,9 +407,7 @@ export default function SourceTestModule() {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [isDrawerAnimating, setIsDrawerAnimating] = useState(false);
   const [onlyEnabled, setOnlyEnabled] = useState(true);
-  const [sortKey, setSortKey] = useState<
-    'status' | 'responseTime' | 'resultCount' | 'matchRate' | 'playStatus' | 'name' | 'default'
-  >('default');
+  const [sortKey, setSortKey] = useState<SortKey>('default');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [mounted, setMounted] = useState(false);
   const [playTestStatuses, setPlayTestStatuses] = useState<
@@ -474,6 +502,7 @@ export default function SourceTestModule() {
         (prev) =>
           new Map(
             prev.set(source.key, {
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- 不变式：source.key 已在上方 initialResults 中预置，get 必然命中
               ...prev.get(source.key)!,
               status: 'testing',
             })
@@ -849,8 +878,11 @@ export default function SourceTestModule() {
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
           try {
             hls.loadSource(normalizedUrl);
-          } catch (err: any) {
-            handlePlaybackFailure(err?.message || 'HLS 源加载失败');
+          } catch (err) {
+            handlePlaybackFailure(
+              (err instanceof Error ? err.message : undefined) ||
+                'HLS 源加载失败'
+            );
           }
         });
       }
@@ -917,6 +949,7 @@ export default function SourceTestModule() {
       video.removeEventListener('playing', handlePlaying);
       video.removeEventListener('error', handleVideoError);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅挂载时为 video 元素绑定一次事件；handlePlaybackFailure 为每渲染重建的普通函数，经 ref 读取最新值，加入依赖会反复解绑/重绑
   }, []);
 
   const selectedPlayContext = useMemo(() => {
@@ -992,6 +1025,7 @@ export default function SourceTestModule() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：仅在两个抽屉可见性变化时重绑 ESC 监听；handleClosePlayTester 为每渲染重建的普通函数，加入依赖会导致每渲染解绑/重绑
   }, [showResultsModal, playTester.visible]);
 
   // 启用/禁用源
@@ -1027,8 +1061,8 @@ export default function SourceTestModule() {
             })
           )
       );
-    } catch (e: any) {
-      alert(e.message || '操作失败');
+    } catch (e) {
+      alert(e instanceof Error ? e.message || '操作失败' : '操作失败');
     }
   };
 
@@ -1246,12 +1280,16 @@ export default function SourceTestModule() {
           return statusWeight(r);
         case 'responseTime':
           return r?.responseTime ?? Number.POSITIVE_INFINITY;
-        case 'resultCount':
-          return typeof r?.resultCount === 'number'
-            ? r!.resultCount!
+        case 'resultCount': {
+          const resultCount = r?.resultCount;
+          return typeof resultCount === 'number'
+            ? resultCount
             : r?.results?.length || 0;
-        case 'matchRate':
-          return typeof r?.matchRate === 'number' ? r!.matchRate! : -1; // 未测试置为-1，降序时排后
+        }
+        case 'matchRate': {
+          const matchRate = r?.matchRate;
+          return typeof matchRate === 'number' ? matchRate : -1; // 未测试置为-1，降序时排后
+        }
         case 'playStatus':
           return playStatusWeight(src.key);
         case 'name':
@@ -1539,7 +1577,7 @@ export default function SourceTestModule() {
             </label>
             <select
               value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as any)}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
               className='text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-2 sm:px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent'
             >
               <option value='default'>默认顺序</option>

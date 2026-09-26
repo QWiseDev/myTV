@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import { PlayRecord, ReleaseCalendarItem } from '@/lib/types';
+import { PlayRecord, ReleaseCalendarItem, UserPlayStat } from '@/lib/types';
 import {
   type WatchingUpdate,
   checkWatchingUpdates,
@@ -56,7 +56,9 @@ const PlayStatsPage = () => {
       loadTime: Date.now(),
     });
   }, []); // 只在组件挂载时记录一次
-  const [userStats, setUserStats] = useState<any>(null);
+  const [userStats, setUserStats] = useState<
+    (UserPlayStat & { registrationDays: number }) | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
@@ -267,7 +269,7 @@ const PlayStatsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [fetchStats, fetchUpcomingReleases]);
+  }, [fetchStats, fetchUpcomingReleases, safeCheckWatchingUpdates]);
 
   const toggleUserExpanded = useCallback((username: string) => {
     setExpandedUsers((prev) => {
@@ -301,10 +303,9 @@ const PlayStatsPage = () => {
   }, [router]);
 
   const storageType =
-    typeof window !== 'undefined' &&
-    (window as any).RUNTIME_CONFIG?.STORAGE_TYPE
-      ? (window as any).RUNTIME_CONFIG.STORAGE_TYPE
-      : 'localstorage';
+    (typeof window !== 'undefined' &&
+      (window as unknown as { RUNTIME_CONFIG?: { STORAGE_TYPE?: string } })
+        .RUNTIME_CONFIG?.STORAGE_TYPE) || 'localstorage';
 
   useEffect(() => {
     const auth = getAuthInfoFromBrowserCookie();

@@ -263,5 +263,6 @@ export function useAccessLog(
       ...extraData,
       loadTime: Date.now(),
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅在组件挂载时记录一次访问日志，响应 action/extraData 变化会重复上报
   }, []); // 只在组件挂载时记录一次
 }

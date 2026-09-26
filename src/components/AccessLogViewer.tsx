@@ -153,6 +153,7 @@ export default function AccessLogViewer({ className = '' }: AccessLogViewerProps
     if (isAdmin) {
       fetchAccessLogs(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：仅在 isAdmin 变化时拉取；fetchAccessLogs 为普通函数每渲染重建，加入依赖会导致每渲染循环请求
   }, [isAdmin]);
 
   if (!isAdmin) {

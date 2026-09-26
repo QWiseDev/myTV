@@ -1,7 +1,7 @@
 import {
+  type FavoriteRecord,
   buildFavoriteItems,
   buildUserMenuFavoriteRecords,
-  type FavoriteRecord,
 } from './favorite-items';
 import type { Favorite, PlayRecord } from './types';
 

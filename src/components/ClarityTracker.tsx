@@ -80,6 +80,7 @@ export function ClarityTracker({
       setTimeout(initializeClarity, 1000);
     }
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：setClarityUserIdentifier 为每渲染重建的普通函数，加入依赖会导致 Clarity 初始化 effect 每渲染重复执行
   }, [projectId, enable, accountName, displayName, email, sessionType, customTags]);
 
   // 设置 Clarity 用户识别信息的函数

@@ -30,8 +30,8 @@ export default function SlotAdminPage() {
       }
       const data = await response.json();
       setUsers(data.users);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -52,8 +52,8 @@ export default function SlotAdminPage() {
 
       await fetchUsers();
       setEditingUser(null);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
     }
   };
 

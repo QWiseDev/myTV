@@ -16,8 +16,13 @@ export class SoundManager {
   private async initAudioContext() {
     if (typeof window !== 'undefined' && !this.audioContext) {
       try {
-        // 创建音频上下文
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        // 创建音频上下文（旧版 Safari 经 webkitAudioContext 提供，TS lib 未声明；
+        // 两者均不存在时保持原有抛错路径，由 catch 统一告警）
+        const audioContextCtor =
+          window.AudioContext ||
+          ((window as Window & { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext as typeof AudioContext);
+        this.audioContext = new audioContextCtor();
 
         // 预加载音效
         await this.loadSounds();

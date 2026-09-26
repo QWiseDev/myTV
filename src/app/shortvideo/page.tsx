@@ -296,8 +296,8 @@ export default function ShortVideoPage() {
     return () => {
       cancelled = true;
     };
-    // 只依赖 selectedCategory，避免循环依赖
-  }, [selectedCategory]);
+    // fetchVideoUrl 仅依赖 selectedCategory，身份随其同步变化，触发时机不变
+  }, [selectedCategory, fetchVideoUrl]);
 
   // 预加载视频
   useEffect(() => {

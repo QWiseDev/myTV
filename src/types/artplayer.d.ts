@@ -3,6 +3,8 @@
  * 为 Artplayer 和相关插件提供完整的类型支持
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- 第三方库手工类型声明，any 仅作类型占位，精确建模成本过高且不影响运行时 */
+
 declare module 'artplayer' {
   export interface ArtplayerOptions {
     container: HTMLElement | string;

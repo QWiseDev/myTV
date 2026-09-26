@@ -343,8 +343,7 @@ function analyzeContentTypeDistribution(results: SearchResult[]): Record<string,
 
 function getYearRange(results: SearchResult[]): { min: number; max: number } {
   const years = results
-    .filter(r => r.year)
-    .map(r => parseInt(r.year!))
+    .flatMap(r => (r.year ? [parseInt(r.year)] : []))
     .filter(year => !isNaN(year));
 
   if (years.length === 0) return { min: 0, max: 0 };

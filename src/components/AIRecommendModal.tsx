@@ -383,6 +383,7 @@ export default function AIRecommendModal({
                       >
                         <div className='flex items-start gap-3'>
                           {movie.poster && (
+                            /* eslint-disable-next-line @next/next/no-img-element -- 外部推荐海报来自第三方域，尺寸不定，绕过优化器避免运行时代理开销 */
                             <img
                               src={movie.poster}
                               alt={movie.title}
@@ -470,6 +471,7 @@ export default function AIRecommendModal({
                           >
                             <div className='flex items-start gap-3'>
                               <div className='relative'>
+                                {/* eslint-disable-next-line @next/next/no-img-element -- YouTube 外部缩略图，绕过优化器保持直连加载行为 */}
                                 <img
                                   src={video.thumbnail}
                                   alt={video.title}
@@ -547,11 +549,12 @@ export default function AIRecommendModal({
                                   className='relative cursor-pointer'
                                   onClick={() => handleVideoLinkPlay(video)}
                                 >
-                                  <img
-                                    src={video.thumbnail}
-                                    alt={video.title}
-                                    className='w-20 h-15 object-cover rounded'
-                                  />
+                                    {/* eslint-disable-next-line @next/next/no-img-element -- 外部视频缩略图，绕过优化器保持直连加载行为 */}
+                                    <img
+                                      src={video.thumbnail}
+                                      alt={video.title}
+                                      className='w-20 h-15 object-cover rounded'
+                                    />
                                   <div className='absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded'>
                                     <div className='bg-red-600 text-white rounded-full p-2'>
                                       <Play className='w-4 h-4' />

@@ -3,7 +3,7 @@
 import { ChevronUp } from 'lucide-react';
 import Image from 'next/image';
 
-import { PlayRecord, ReleaseCalendarItem } from '@/lib/types';
+import { PlayRecord, ReleaseCalendarItem, UserPlayStat } from '@/lib/types';
 import { WatchingUpdate } from '@/lib/watching-updates';
 
 import VideoCard from '@/components/VideoCard';
@@ -16,7 +16,7 @@ import {
 } from './playStatsShared';
 
 interface PersonalStatsPanelProps {
-  userStats: any;
+  userStats: UserPlayStat & { registrationDays: number };
   loading: boolean;
   error: string | null;
   onRefresh: () => void;

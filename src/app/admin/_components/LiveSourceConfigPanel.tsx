@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type DragEndEvent,
   closestCenter,
   DndContext,
   PointerSensor,
@@ -93,7 +94,7 @@ const LiveSourceConfig = ({
   }, [config]);
 
   // 通用 API 请求
-  const callLiveSourceApi = async (body: Record<string, any>) => {
+  const callLiveSourceApi = async (body: Record<string, unknown>) => {
     try {
       const resp = await fetch('/api/admin/live', {
         method: 'POST',
@@ -215,7 +216,7 @@ const LiveSourceConfig = ({
     setEditingLiveSource(null);
   };
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = liveSources.findIndex((s) => s.key === active.id);
