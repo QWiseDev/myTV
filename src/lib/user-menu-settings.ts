@@ -1,3 +1,5 @@
+import { safeJsonParse } from './safe-storage';
+
 export interface UserMenuRuntimeConfig {
   DOUBAN_PROXY_TYPE?: string;
   DOUBAN_PROXY?: string;
@@ -57,7 +59,14 @@ function readBooleanSetting(
 ): boolean {
   const raw = storage.getItem(key);
 
-  return raw === null ? fallback : JSON.parse(raw);
+  if (raw === null) return fallback;
+
+  const parsed = safeJsonParse<unknown>(raw, undefined);
+  if (typeof parsed === 'boolean') return parsed;
+  // 兼容历史上未走 JSON.stringify 写入的裸字符串
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return fallback;
 }
 
 function readNumberSetting(
@@ -67,7 +76,10 @@ function readNumberSetting(
 ): number {
   const raw = storage.getItem(key);
 
-  return raw === null ? fallback : parseInt(raw);
+  if (raw === null) return fallback;
+
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function readStringSetting(
