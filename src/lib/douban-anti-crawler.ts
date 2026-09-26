@@ -1,29 +1,6 @@
 import * as cheerio from 'cheerio';
-import { createHash } from 'crypto';
 
-/**
- * 计算 SHA-512 哈希值
- */
-function sha512(data: string): string {
-  return createHash('sha512').update(data).digest('hex');
-}
-
-/**
- * 工作量证明算法 - 寻找满足难度要求的 nonce
- * @param data 要哈希的数据
- * @param difficulty 难度（前导零的数量）
- * @returns 满足条件的 nonce
- */
-function proofOfWork(data: string, difficulty = 4): number {
-  const targetSubStr = '0'.repeat(difficulty);
-
-  for (let nonce = 1; ; nonce += 1) {
-    const hash = sha512(data + nonce);
-    if (hash.startsWith(targetSubStr)) {
-      return nonce;
-    }
-  }
-}
+import { solvePowNonce } from './douban-challenge';
 
 /**
  * 解析豆瓣验证页面，提取表单数据
@@ -100,8 +77,8 @@ export async function getDoubanCookie(
         throw new Error('Failed to parse verification page');
       }
 
-      // Step 4: 计算工作量证明
-      const sol = proofOfWork(formData.cha, 4);
+      // Step 4: 计算工作量证明（复用 douban-challenge 的有上限实现，避免死循环）
+      const sol = solvePowNonce(formData.cha, 4);
 
       // Step 5: 提交验证表单
       const formBody = new URLSearchParams({

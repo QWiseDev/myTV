@@ -24,9 +24,12 @@ function extractHiddenValue(html: string, id: string): string | null {
 }
 
 function getSetCookies(response: Response): string[] {
-  const anyHeaders = response.headers as any;
-  if (typeof anyHeaders.getSetCookie === 'function') {
-    return anyHeaders.getSetCookie();
+  // Headers.getSetCookie 在旧版 TS lib 中缺失，经 unknown 收窄探测
+  const headers = response.headers as unknown as {
+    getSetCookie?: () => string[];
+  };
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie();
   }
 
   const single = response.headers.get('set-cookie');
@@ -40,7 +43,11 @@ function toCookieHeader(setCookies: string[]): string {
     .join('; ');
 }
 
-function solvePowNonce(
+/**
+ * PoW 解算内核（difficulty 前导零 + sha512），带迭代上限防止死循环。
+ * douban-anti-crawler 的验证流程复用同一算法。
+ */
+export function solvePowNonce(
   cha: string,
   difficulty = 4,
   maxIterations = 5_000_000
