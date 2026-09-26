@@ -1,20 +1,18 @@
 'use client';
 
-import type Artplayer from 'artplayer';
-import type { HlsConfig } from 'hls.js';
-import {
+import type {
   Dispatch,
   MutableRefObject,
   SetStateAction,
-  useEffect,
-  useRef,
 } from 'react';
+import { useEffect, useRef } from 'react';
 
-import { filterAdsFromM3U8 } from '@/lib/ad-filter';
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
 import { SearchResult } from '@/lib/types';
 
+import { useCustomAdFilterCode } from './useCustomAdFilterCode';
 import type { MemoryPressure } from './useMemoryMonitor';
+import type { SourceChangeOwner } from './useSourceSwitcher';
 import {
   createArtplayerConfig,
   setupArtplayerGlobals,
@@ -23,7 +21,6 @@ import type { ArtplayerRuntimeModules } from '../utils/artplayerLoader';
 import { loadArtplayerModules } from '../utils/artplayerLoader';
 import { getOptimizedDanmakuConfig, saveDanmakuConfigToStorage } from '../utils/danmakuConfig';
 import {
-  type ArtPlayerLike,
   type DanmakuItemLike,
   isDanmakuAbortError,
   recoverStoppedDanmaku,
@@ -31,8 +28,9 @@ import {
   resetDanmakuTimeline,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
+import { createAdFilterHlsLoader } from '../utils/hlsAdFilterLoader';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
-import { stripMpegTsPrefix } from '../utils/mpegTs';
+import { restoreMutedVolumeOnFirstPlay, scheduleAutoPlayWithFallback } from '../utils/playerAutoPlay';
 import { detectPlayerBrowserSupport } from '../utils/playerBrowserSupport';
 import {
   type PlayerMediaSwitchResult,
@@ -41,6 +39,11 @@ import {
   switchPlayerMedia,
 } from '../utils/playerSwitch';
 import {
+  EXTERNAL_DANMU_LOAD_DELAY_MS,
+  MEDIA_LOADING_TIMEOUT_MS,
+} from '../utils/playerTimings';
+import type { PlayArtplayer } from '../utils/playerTypes';
+import {
   addResolutionDisplay,
   applyAllUiEnhancements,
 } from '../utils/playerUiEnhancements';
@@ -48,9 +51,9 @@ import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
 import { installSuperResolution } from '../utils/superResolution';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
 
+export type { PlayArtplayer } from '../utils/playerTypes';
+
 const VIDEO_HAVE_CURRENT_DATA = 2;
-const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
-const CUSTOM_AD_FILTER_VERSION_CACHE_KEY = 'custom_ad_filter_version_cache';
 
 type AnalyticsHandlers = {
   handlePlay: (position?: number, quality?: string) => void;
@@ -70,20 +73,6 @@ type DanmakuPluginSnapshot = {
   isStop?: boolean;
   option?: unknown;
 };
-type HlsLoaderContext = {
-  type?: string;
-};
-type HlsLoaderResponse = {
-  data?: unknown;
-};
-type HlsLoaderCallbacks = {
-  onSuccess?: (
-    response: HlsLoaderResponse,
-    stats: unknown,
-    context: HlsLoaderContext,
-    networkDetails: unknown,
-  ) => void;
-};
 type HlsMediaVideo = HTMLVideoElement & {
   hls?: HlsRuntimeInstance | null;
 };
@@ -93,13 +82,6 @@ type DanmakuConfigChange = {
   opacity?: unknown;
   speed?: unknown;
 };
-export type PlayArtplayer = Artplayer &
-  ArtPlayerLike & {
-    notice: {
-      show: string;
-    };
-    $video?: HTMLVideoElement;
-  };
 
 interface UsePlayerInitializerParams {
   videoUrl: string;
@@ -124,6 +106,7 @@ interface UsePlayerInitializerParams {
     source: string,
     id: string,
     title: string,
+    options?: { initiatedBy?: 'user' | 'auto' },
   ) => Promise<void> | void;
   currentSource: string;
   currentId: string;
@@ -153,6 +136,7 @@ interface UsePlayerInitializerParams {
   switchPromiseRef: MutableRefObject<Promise<PlayerMediaSwitchResult> | null>;
   danmuPluginStateRef: MutableRefObject<DanmakuPluginSnapshot | null>;
   isSourceChangingRef: MutableRefObject<boolean>;
+  sourceChangeOwnerRef: MutableRefObject<SourceChangeOwner | null>;
   isEpisodeChangingRef: MutableRefObject<boolean>;
   isSkipControllerTriggeredRef: MutableRefObject<boolean>;
   videoEndedHandledRef: MutableRefObject<boolean>;
@@ -167,7 +151,7 @@ interface UsePlayerInitializerParams {
 export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
-  const customAdFilterCodeRef = useRef('');
+  const customAdFilterCodeRef = useCustomAdFilterCode();
   const initializationGenerationRef = useRef(0);
   const mediaSessionRef = useRef(0);
   const mediaLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -182,87 +166,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     currentId: mediaId,
     artRef,
   } = params;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadCustomAdFilterCode = async () => {
-      try {
-        const cachedCode = localStorage.getItem(
-          CUSTOM_AD_FILTER_CODE_CACHE_KEY,
-        );
-        const cachedVersion = localStorage.getItem(
-          CUSTOM_AD_FILTER_VERSION_CACHE_KEY,
-        );
-
-        if (cachedCode) {
-          customAdFilterCodeRef.current = cachedCode;
-        }
-
-        const versionResponse = await fetch('/api/ad-filter');
-        if (!versionResponse.ok) {
-          return;
-        }
-
-        const versionPayload = (await versionResponse.json()) as {
-          version?: unknown;
-        };
-        const version =
-          typeof versionPayload.version === 'number'
-            ? versionPayload.version
-            : Number(versionPayload.version) || 0;
-
-        if (cancelled) return;
-
-        if (version <= 0) {
-          localStorage.removeItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY);
-          localStorage.removeItem(CUSTOM_AD_FILTER_VERSION_CACHE_KEY);
-          customAdFilterCodeRef.current = '';
-          return;
-        }
-
-        if (cachedCode && cachedVersion === String(version)) {
-          return;
-        }
-
-        const fullResponse = await fetch('/api/ad-filter?full=true');
-        if (!fullResponse.ok) {
-          return;
-        }
-
-        const fullPayload = (await fullResponse.json()) as {
-          code?: unknown;
-        };
-        const code =
-          typeof fullPayload.code === 'string' ? fullPayload.code : '';
-
-        if (cancelled) return;
-
-        if (code) {
-          localStorage.setItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY, code);
-          localStorage.setItem(
-            CUSTOM_AD_FILTER_VERSION_CACHE_KEY,
-            String(version),
-          );
-          customAdFilterCodeRef.current = code;
-        } else {
-          localStorage.removeItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY);
-          localStorage.removeItem(CUSTOM_AD_FILTER_VERSION_CACHE_KEY);
-          customAdFilterCodeRef.current = '';
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('加载自定义去广告代码失败:', error);
-        }
-      }
-    };
-
-    void loadCustomAdFilterCode();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const generation = ++initializationGenerationRef.current;
@@ -319,6 +222,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       switchPromiseRef,
       danmuPluginStateRef,
       isSourceChangingRef,
+      sourceChangeOwnerRef,
       isEpisodeChangingRef,
       isSkipControllerTriggeredRef,
       videoEndedHandledRef,
@@ -338,6 +242,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     const finishSourceSwitch = (_reason: string) => {
       if (!isSourceChangingRef.current) return;
       isSourceChangingRef.current = false;
+      sourceChangeOwnerRef.current = null;
     };
 
     const handleCurrentSourceFailure = (
@@ -345,6 +250,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       options: { allowAutoSwitch?: boolean } = {},
     ) => {
       const allowAutoSwitch = options.allowAutoSwitch ?? true;
+      const owner = sourceChangeOwnerRef.current;
+      const isUserSwitchInFlight =
+        isSourceChangingRef.current && owner?.by === 'user';
+      const isUserSwitchTarget =
+        !!owner && owner.source === currentSource && owner.id === currentId;
       const { sources, nextSource } = markSourceFailedAndFindNext(
         availableSourcesRef.current,
         {
@@ -355,10 +265,20 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
       availableSourcesRef.current = sources;
       setAvailableSources(sources);
+
+      if (isUserSwitchInFlight && !isUserSwitchTarget) {
+        // 用户手动换源进行中，且报错的是旧播放器：只标记失败并提示，
+        // 不自动跳转也不解除换源锁，避免劫持用户选择的切换目标
+        showPlayerNotice(finalNotice);
+        return;
+      }
+
       finishSourceSwitch('当前源失败');
 
       if (allowAutoSwitch && nextSource) {
-        handleSourceChange(nextSource.source, nextSource.id, nextSource.title);
+        handleSourceChange(nextSource.source, nextSource.id, nextSource.title, {
+          initiatedBy: 'auto',
+        });
         return;
       }
 
@@ -383,7 +303,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         const activeParams = latestParamsRef.current;
         setLoading(false);
         setIsVideoLoading(false);
-        finishSourceSwitch('视频加载超时');
 
         console.error('视频加载超时:', {
           url: activeParams.videoUrl,
@@ -393,9 +312,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         });
 
         handleCurrentSourceFailure(
-          `视频加载超时 (10秒)\n地址: ${activeParams.videoUrl}\n\n没有更多播放源了`,
+          `视频加载超时 (${MEDIA_LOADING_TIMEOUT_MS / 1000}秒)\n地址: ${activeParams.videoUrl}\n\n没有更多播放源了`,
         );
-      }, 10000);
+      }, MEDIA_LOADING_TIMEOUT_MS);
 
       mediaLoadingTimeoutRef.current = timeoutId;
     };
@@ -417,59 +336,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         return;
       }
 
-      class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
-        constructor(config: HlsConfig) {
-          super(config);
-          const load = this.load.bind(this);
-          this.load = function (
-            context: HlsLoaderContext,
-            conf: unknown,
-            callbacks: HlsLoaderCallbacks,
-          ) {
-            if (context.type === 'manifest' || context.type === 'level') {
-              const onSuccess = callbacks.onSuccess;
-              if (typeof onSuccess === 'function') {
-                callbacks.onSuccess = function (
-                  response: HlsLoaderResponse,
-                  stats: unknown,
-                  ctx: HlsLoaderContext,
-                ) {
-                  if (
-                    blockAdEnabledRef.current &&
-                    response.data &&
-                    typeof response.data === 'string'
-                  ) {
-                    response.data = filterAdsFromM3U8(response.data, {
-                      type: currentSource,
-                      customCode: customAdFilterCodeRef.current,
-                      onCustomError: (error) => {
-                        console.error(
-                          '执行自定义去广告代码失败，使用默认规则:',
-                          error,
-                        );
-                      },
-                    });
-                  }
-                  return onSuccess(response, stats, ctx, null);
-                };
-              }
-            } else if (context.type === 'fragment') {
-              const onSuccess = callbacks.onSuccess;
-              if (typeof onSuccess === 'function') {
-                callbacks.onSuccess = function (
-                  response: HlsLoaderResponse,
-                  stats: unknown,
-                  ctx: HlsLoaderContext,
-                ) {
-                  response.data = stripMpegTsPrefix(response.data);
-                  return onSuccess(response, stats, ctx, null);
-                };
-              }
-            }
-            load(context, conf, callbacks);
-          };
-        }
-      }
+      const CustomHlsJsLoader = createAdFilterHlsLoader(Hls, {
+        blockAdEnabledRef,
+        customAdFilterCodeRef,
+        source: currentSource,
+      });
 
       if (
         !detail ||
@@ -748,7 +619,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           setIsVideoLoading(false);
           clearMediaLoadingTimeout();
-          finishSourceSwitch('视频元素错误');
 
           handleCurrentSourceFailure(getVideoErrorMessage(error));
         };
@@ -788,20 +658,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             console.warn('⚠️ 初始化分辨率显示失败:', error);
           }
 
-          if ((isIOS || isSafari) && artPlayer.muted) {
-            const handleFirstPlay = () => {
-              if (!isActivePlayer()) return;
-              setTimeout(() => {
-                if (isActivePlayer() && artPlayer.muted) {
-                  artPlayer.muted = false;
-                  artPlayer.volume = lastVolumeRef.current || 0.7;
-                }
-              }, 500);
-
-              artPlayer.off('video:play', handleFirstPlay);
-            };
-
-            artPlayer.on('video:play', handleFirstPlay);
+          if (isIOS || isSafari) {
+            restoreMutedVolumeOnFirstPlay(artPlayer, {
+              isActivePlayer,
+              lastVolumeRef,
+            });
           }
 
           if (externalDanmuEnabledRef.current) {
@@ -837,7 +698,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 console.error('加载外部弹幕失败:', error);
                 showDanmakuErrorNotice(artPlayer, error);
               }
-            }, 1000);
+            }, EXTERNAL_DANMU_LOAD_DELAY_MS);
           }
 
           artPlayer.on('artplayerPluginDanmuku:show', () => {
@@ -969,97 +830,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             isRestoringFromRecordRef.current = false;
           }
 
-          if ((isIOS || isSafari) && artPlayer.paused) {
-            const tryAutoPlay = async () => {
-              if (!isActivePlayer()) return;
-              try {
-                let playAttempts = 0;
-                const maxAttempts = 3;
-
-                const attemptPlay = async (): Promise<boolean> => {
-                  if (!isActivePlayer()) return false;
-                  playAttempts++;
-
-                  try {
-                    await artPlayer.play();
-                    return true;
-                  } catch (playError: unknown) {
-                    const playErrorName =
-                      playError instanceof Error ? playError.name : '';
-
-                    if (playErrorName === 'NotAllowedError') {
-                      if (playAttempts < maxAttempts) {
-                        artPlayer.volume = 0.1;
-                        await new Promise((resolve) =>
-                          setTimeout(resolve, 200),
-                        );
-                        return attemptPlay();
-                      }
-                      return false;
-                    } else if (playErrorName === 'AbortError') {
-                      if (playAttempts < maxAttempts) {
-                        await new Promise((resolve) =>
-                          setTimeout(resolve, 500),
-                        );
-                        return attemptPlay();
-                      }
-                      return false;
-                    }
-                    return false;
-                  }
-                };
-
-                const success = await attemptPlay();
-                if (!isActivePlayer()) return;
-
-                if (!success) {
-                  if (isActivePlayer()) {
-                    artPlayer.notice.show = '轻触播放按钮开始观看';
-
-                    let hasHandledFirstInteraction = false;
-                    const handleFirstUserInteraction = async () => {
-                      if (!isActivePlayer()) {
-                        artPlayer.off('video:play', handleFirstUserInteraction);
-                        document.removeEventListener(
-                          'click',
-                          handleFirstUserInteraction,
-                        );
-                        return;
-                      }
-                      if (hasHandledFirstInteraction) return;
-                      hasHandledFirstInteraction = true;
-
-                      try {
-                        await artPlayer.play();
-                        setTimeout(() => {
-                          if (isActivePlayer() && !artPlayer.muted) {
-                            artPlayer.volume = lastVolumeRef.current || 0.7;
-                          }
-                        }, 1000);
-                      } catch (error) {
-                        console.warn('用户交互播放失败:', error);
-                      }
-
-                      artPlayer.off('video:play', handleFirstUserInteraction);
-                      document.removeEventListener(
-                        'click',
-                        handleFirstUserInteraction,
-                      );
-                    };
-
-                    artPlayer.on('video:play', handleFirstUserInteraction);
-                    document.addEventListener(
-                      'click',
-                      handleFirstUserInteraction,
-                    );
-                  }
-                }
-              } catch (error) {
-                console.warn('自动播放回退机制执行失败:', error);
-              }
-            };
-
-            setTimeout(tryAutoPlay, 200);
+          if (isIOS || isSafari) {
+            scheduleAutoPlayWithFallback(artPlayer, {
+              isActivePlayer,
+              lastVolumeRef,
+            });
           }
 
           setTimeout(() => {
@@ -1091,7 +866,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           clearMediaLoadingTimeout();
           setIsVideoLoading(false);
-          finishSourceSwitch('播放器错误');
 
           if (artPlayer.currentTime > 0) {
             handleCurrentSourceFailure('播放失败，请切换其他播放源', {
@@ -1200,6 +974,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     currentEpisodeIndex, // 需要集数索引来验证播放条件
     mediaSource,
     mediaId,
+    customAdFilterCodeRef, // 稳定 ref（非裸 useRef，需显式声明以通过 exhaustive-deps）
     // 其他状态通过 ref 访问，避免不必要的重新初始化
   ]);
 }

@@ -8,10 +8,6 @@ import { selectUsableImageUrl } from '@/lib/utils';
 
 import { SpeedTestProgress } from '../types';
 import {
-  checkAllKeywordsMatch,
-  generateSearchVariants,
-} from '../utils/helpers';
-import {
   dedupeSources,
   findSourceByIdentity,
   hydrateSourceDetail,
@@ -19,16 +15,18 @@ import {
   resolveDoubanId,
 } from '../utils/sourceDetails';
 import { preferBestSource } from '../utils/sourcePreference';
+import {
+  fuzzyMatchSources,
+  matchesSourceLoosely,
+  matchesSourceStrictly,
+  searchSourcesByTitle,
+} from '../utils/sourceSearch';
 
 interface DeviceInfo {
   userAgent: string;
   isIOS: boolean;
   isIOS13: boolean;
   isMobile: boolean;
-}
-
-interface SearchApiResponse {
-  results: SearchResult[];
 }
 
 export interface UseSourceInitializationParams {
@@ -158,48 +156,12 @@ export function useSourceInitialization({
         try {
           const query = videoTitle || detailData.title;
           if (query && query.trim()) {
-            const maxVariants = 2;
-            const limitedVariants = generateSearchVariants(query.trim()).slice(
-              0,
-              maxVariants,
-            );
-
-            const allResults: SearchResult[] = [];
-            let bestResults: SearchResult[] = [];
-
-            for (const variant of limitedVariants) {
-              try {
-                const data = await cachedGet<SearchApiResponse>('/api/search', {
-                  q: variant,
-                });
-
-                if (data.results && data.results.length > 0) {
-                  allResults.push(...data.results);
-
-                  const filteredResults = data.results.filter(
-                    (result: SearchResult) => {
-                      const queryTitle = query
-                        .replaceAll(' ', '')
-                        .toLowerCase();
-                      const resultTitle = result.title
-                        .replaceAll(' ', '')
-                        .toLowerCase();
-                      return (
-                        resultTitle.includes(queryTitle) ||
-                        queryTitle.includes(resultTitle)
-                      );
-                    },
-                  );
-
-                  if (filteredResults.length > 0) {
-                    bestResults = filteredResults;
-                    break;
-                  }
-                }
-              } catch (e) {
-                console.warn(`搜索变体 "${variant}" 失败:`, e);
-              }
-            }
+            const { bestResults } = await searchSourcesByTitle({
+              query,
+              matchResult: (result) => matchesSourceLoosely(result.title, query),
+              onVariantError: (variant, error) =>
+                console.warn(`搜索变体 "${variant}" 失败:`, error),
+            });
 
             if (bestResults.length > 0) {
               const combined = [detailData, ...bestResults];
@@ -231,172 +193,30 @@ export function useSourceInitialization({
     ): Promise<SearchResult[]> => {
       const silent = options?.silent === true;
       try {
-        const searchVariants = generateSearchVariants(query.trim());
-        const maxVariants = 2;
-        const limitedVariants = searchVariants.slice(0, maxVariants);
-
-        const allResults: SearchResult[] = [];
-        let bestResults: SearchResult[] = [];
-
-        for (const variant of limitedVariants) {
-
-          const data = await cachedGet<SearchApiResponse>('/api/search', {
-            q: variant,
-          }).catch((err) => {
-            console.warn(`搜索变体 "${variant}" 失败:`, err.message);
-            return { results: [] };
-          });
-
-          if (data.results && data.results.length > 0) {
-            allResults.push(...data.results);
-
-            const filteredResults = data.results.filter(
-              (result: SearchResult) => {
-                const referenceTitle = videoTitle || searchTitle || query;
-                const queryTitle = referenceTitle
-                  .replaceAll(' ', '')
-                  .toLowerCase();
-                const resultTitle = result.title
-                  .replaceAll(' ', '')
-                  .toLowerCase();
-
-                const titleMatch =
-                  resultTitle.includes(queryTitle) ||
-                  queryTitle.includes(resultTitle) ||
-                  resultTitle.replace(/\d+|[：:]/g, '') ===
-                    queryTitle.replace(/\d+|[：:]/g, '') ||
-                  checkAllKeywordsMatch(queryTitle, resultTitle);
-
-                const normalizedYear = videoYearRef.current?.toLowerCase();
-                const yearMatch = normalizedYear
-                  ? result.year.toLowerCase() === normalizedYear
-                  : true;
-                const typeMatch = searchType
-                  ? (searchType === 'tv' && result.episodes.length > 1) ||
-                    (searchType === 'movie' && result.episodes.length === 1)
-                  : true;
-
-                return titleMatch && yearMatch && typeMatch;
-              },
-            );
-
-            if (filteredResults.length > 0) {
-              bestResults = filteredResults;
-              if (filteredResults.length >= 5) {
-                break;
-              }
-            }
-          }
-        }
+        const referenceTitle = videoTitle || searchTitle || query;
+        const { allResults, bestResults } = await searchSourcesByTitle({
+          query,
+          minMatchesToStop: 5,
+          matchResult: (result) =>
+            matchesSourceStrictly(result, {
+              queryTitle: referenceTitle,
+              year: videoYearRef.current,
+              searchType,
+            }),
+          onVariantError: (variant, error) =>
+            console.warn(
+              `搜索变体 "${variant}" 失败:`,
+              (error as Error)?.message,
+            ),
+        });
 
         let finalResults = bestResults;
 
         if (bestResults.length === 0) {
-          const queryTitle = (videoTitleRef.current || '').toLowerCase().trim();
-          const allCandidates = allResults;
-          const englishChars = (queryTitle.match(/[a-z\s]/g) || []).length;
-          const chineseChars = (queryTitle.match(/[\u4e00-\u9fff]/g) || [])
-            .length;
-          const isEnglishQuery = englishChars > chineseChars;
-
-
-          let relevantMatches: SearchResult[] = [];
-
-          if (isEnglishQuery) {
-
-            const queryWords = queryTitle
-              .toLowerCase()
-              .replace(/[^\w\s]/g, ' ')
-              .split(/\s+/)
-              .filter(
-                (word) =>
-                  word.length > 2 &&
-                  ![
-                    'the',
-                    'a',
-                    'an',
-                    'and',
-                    'or',
-                    'of',
-                    'in',
-                    'on',
-                    'at',
-                    'to',
-                    'for',
-                    'with',
-                    'by',
-                  ].includes(word),
-              );
-
-
-            relevantMatches = allCandidates.filter((result) => {
-              const title = result.title.toLowerCase();
-              const titleWords = title
-                .replace(/[^\w\s]/g, ' ')
-                .split(/\s+/)
-                .filter((word) => word.length > 1);
-
-              const matchedWords = queryWords.filter((queryWord) =>
-                titleWords.some(
-                  (titleWord) =>
-                    titleWord.includes(queryWord) ||
-                    queryWord.includes(titleWord) ||
-                    (queryWord.length > 4 &&
-                      titleWord.length > 4 &&
-                      queryWord.substring(0, 4) === titleWord.substring(0, 4)),
-                ),
-              );
-
-              const wordMatchRatio = matchedWords.length / queryWords.length;
-              if (wordMatchRatio >= 0.5) {
-                return true;
-              }
-              return false;
-            });
-          } else {
-            relevantMatches = allCandidates.filter((result) => {
-              const title = result.title.toLowerCase();
-              const normalizedQuery = queryTitle.replace(
-                /[^\w\u4e00-\u9fff]/g,
-                '',
-              );
-              const normalizedTitle = title.replace(/[^\w\u4e00-\u9fff]/g, '');
-
-              if (
-                normalizedTitle.includes(normalizedQuery) ||
-                normalizedQuery.includes(normalizedTitle)
-              ) {
-                return true;
-              }
-
-              const commonChars = Array.from(normalizedQuery).filter((char) =>
-                normalizedTitle.includes(char),
-              ).length;
-              const similarity = commonChars / normalizedQuery.length;
-              if (similarity >= 0.5) {
-                return true;
-              }
-              return false;
-            });
-          }
-
-
-          const maxResults = isEnglishQuery ? 5 : 20;
-          if (
-            relevantMatches.length > 0 &&
-            relevantMatches.length <= maxResults
-          ) {
-            finalResults = Array.from(
-              new Map(
-                relevantMatches.map((item) => [
-                  `${item.source}-${item.id}`,
-                  item,
-                ]),
-              ).values(),
-            );
-          } else {
-            finalResults = [];
-          }
+          finalResults = fuzzyMatchSources(
+            allResults,
+            videoTitleRef.current || '',
+          );
         }
 
         return finalResults;

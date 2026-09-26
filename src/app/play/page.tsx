@@ -44,7 +44,10 @@ import { usePlayerState } from './hooks/usePlayerState';
 import { usePlayProgress } from './hooks/usePlayProgress';
 import { usePlayRecordSync } from './hooks/usePlayRecordSync';
 import { useSourceInitialization } from './hooks/useSourceInitialization';
-import { useSourceSwitcher } from './hooks/useSourceSwitcher';
+import {
+  type SourceChangeOwner,
+  useSourceSwitcher,
+} from './hooks/useSourceSwitcher';
 import type { EpisodeVideoInfo } from './types';
 import { preloadArtplayerModules } from './utils/artplayerLoader';
 import type {
@@ -402,19 +405,6 @@ function PlayPageClient() {
     detailRef.current = detail;
   }, [detail]);
 
-  // 🩹 兜底同步：部分流程下 detail 已带 douban_id，但状态中的 videoDoubanId 仍为 0，
-  // 会导致演员阵容 / 豆瓣短评不触发加载；此处补一次同步避免漏掉。
-  useEffect(() => {
-    const doubanIdFromDetail = detail?.douban_id;
-    if (
-      doubanIdFromDetail &&
-      doubanIdFromDetail > 0 &&
-      (!videoDoubanId || videoDoubanId === 0)
-    ) {
-      actions.setVideoInfo({ doubanId: doubanIdFromDetail });
-    }
-  }, [detail?.douban_id, videoDoubanId, actions]);
-
   useEffect(() => {
     availableSourcesRef.current = availableSources;
   }, [availableSources]);
@@ -537,6 +527,9 @@ function PlayPageClient() {
   const episodeSwitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const danmuPluginStateRef = useRef<DanmakuPluginStateSnapshot | null>(null); // 保存弹幕插件状态
   const isSourceChangingRef = useRef<boolean>(false); // 标记是否正在换源
+  // 记录进行中换源的发起方（用户手动/自动）与目标，供播放器故障处理区分：
+  // 用户手动换源优先于自动换源，且不被旧播放器的故障劫持
+  const sourceChangeOwnerRef = useRef<SourceChangeOwner | null>(null);
   const isEpisodeChangingRef = useRef<boolean>(false); // 标记是否正在切换集数
   const isSkipControllerTriggeredRef = useRef<boolean>(false); // 标记是否通过 SkipController 触发了下一集
   const videoEndedHandledRef = useRef<boolean>(false); // 🔥 标记当前视频的 video:ended 事件是否已经被处理过（防止多个监听器重复触发）
@@ -826,6 +819,7 @@ function PlayPageClient() {
     setAvailableSources,
     setCurrentEpisodeIndex,
     isSourceChangingRef,
+    sourceChangeOwnerRef,
     externalDanmuEnabledRef,
     loadExternalDanmu,
   });
@@ -837,6 +831,7 @@ function PlayPageClient() {
 
       // 重置状态
       isSourceChangingRef.current = false;
+      sourceChangeOwnerRef.current = null;
       switchPromiseRef.current = null;
     };
   }, [clearPendingSwitchTimers]);
@@ -925,6 +920,7 @@ function PlayPageClient() {
     switchPromiseRef,
     danmuPluginStateRef,
     isSourceChangingRef,
+    sourceChangeOwnerRef,
     isEpisodeChangingRef,
     isSkipControllerTriggeredRef,
     videoEndedHandledRef,
