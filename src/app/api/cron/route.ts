@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshEnabledLiveChannels } from '@/lib/live';
 import { savePlayRecordMutation } from '@/lib/play-record-mutations';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 import { parseStorageKey } from '@/lib/storage-key';
 import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
 import {
@@ -367,12 +368,10 @@ async function cleanupInactiveUsers() {
         // 只对时间符合的用户进行数据库检查
         let userExists = true;
         try {
-          userExists = (await Promise.race([
-            db.checkUserExist(user.username),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('checkUserExist超时')), 5000),
-            ),
-          ])) as boolean;
+          userExists = (await withAbortableTimeout(
+            async () => db.checkUserExist(user.username),
+            5000
+          )) as boolean;
         } catch (err) {
           console.error(`  ❌ 检查用户存在状态失败: ${err}, 跳过该用户`);
           continue;
@@ -385,12 +384,10 @@ async function cleanupInactiveUsers() {
         // 获取用户统计信息（5秒超时）
         let userStats;
         try {
-          userStats = (await Promise.race([
-            db.getUserPlayStat(user.username),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('getUserPlayStat超时')), 5000),
-            ),
-          ])) as {
+          userStats = (await withAbortableTimeout(
+            async () => db.getUserPlayStat(user.username),
+            5000
+          )) as {
             lastLoginTime?: number;
             firstLoginTime?: number;
             loginCount?: number;

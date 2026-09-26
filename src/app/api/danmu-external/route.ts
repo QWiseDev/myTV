@@ -8,6 +8,7 @@ import {
   bypassDoubanPowChallenge,
   isDoubanChallengePage,
 } from '@/lib/douban-challenge';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 
 interface PlatformUrl {
   platform: string;
@@ -292,10 +293,6 @@ async function extractPlatformUrls(
 ): Promise<PlatformUrl[]> {
   if (!doubanId) return [];
 
-  // 添加超时控制 - 在try块外定义以便catch块使用
-  const controller = new AbortController();
-  let timeoutId: NodeJS.Timeout | undefined;
-
   try {
     // 请求限流：确保请求间隔 - 防止被封IP
     const now = Date.now();
@@ -310,31 +307,26 @@ async function extractPlatformUrls(
     // 添加随机延时 - 防止被封IP
     await randomDelay(300, 1000);
 
-    // 设置超时控制
-    timeoutId = setTimeout(() => controller.abort(), 10000);
-
     const target = `https://movie.douban.com/subject/${doubanId}/`;
     const userAgent = getRandomUserAgent();
-    const fetchOptions = {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': userAgent,
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        DNT: '1',
-        Connection: 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'max-age=0',
-        // 随机添加Referer - 防止被封IP
-        ...(Math.random() > 0.5 ? { Referer: 'https://www.douban.com/' } : {}),
-      },
+    const headers = {
+      'User-Agent': userAgent,
+      Accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      DNT: '1',
+      Connection: 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'max-age=0',
+      // 随机添加Referer - 防止被封IP
+      ...(Math.random() > 0.5 ? { Referer: 'https://www.douban.com/' } : {}),
     };
 
-    const response = await fetchDoubanWithVerification(target, fetchOptions);
-
-    clearTimeout(timeoutId);
+    const response = await withAbortableTimeout(
+      (signal) => fetchDoubanWithVerification(target, { signal, headers }),
+      10000
+    );
 
     if (!response.ok) {
       return [];
@@ -502,12 +494,10 @@ async function extractPlatformUrls(
 
     return convertedUrls;
   } catch (error) {
-    // 清理超时定时器
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
       console.error('❌ 豆瓣请求超时 (10秒):', doubanId);
     } else {
       console.error('❌ 提取平台链接失败:', error);
@@ -524,24 +514,24 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
   for (let i = 0; i < xmlApiUrls.length; i++) {
     const baseUrl = xmlApiUrls[i];
     const apiName = i === 0 ? '主用XML API' : `备用XML API ${i}`;
-    const controller = new AbortController();
     const timeout = 15000; // 15秒超时
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
       const apiUrl = `${baseUrl}/?url=${encodeURIComponent(videoUrl)}`;
 
-      const response = await fetch(apiUrl, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          Accept: 'application/xml, text/xml, */*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        },
-      });
-
-      clearTimeout(timeoutId);
+      const response = await withAbortableTimeout(
+        (signal) =>
+          fetch(apiUrl, {
+            signal,
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              Accept: 'application/xml, text/xml, */*',
+              'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            },
+          }),
+        timeout
+      );
 
       if (!response.ok) {
         continue; // 尝试下一个API
@@ -709,8 +699,10 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
 
       return finalDanmu; // 成功获取优化后的弹幕
     } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      ) {
         console.error(`❌ ${apiName}请求超时 (${timeout / 1000}秒):`, videoUrl);
       } else {
         console.error(`❌ ${apiName}请求失败:`, error);
@@ -771,8 +763,6 @@ async function fetchKlmJson<T>(
   options: RequestInit = {},
   timeout = 12000,
 ): Promise<T | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
   const headers = new Headers(options.headers);
   if (!headers.has('User-Agent')) {
     headers.set(
@@ -785,26 +775,29 @@ async function fetchKlmJson<T>(
   }
 
   try {
-    const response = await fetch(apiUrl, {
-      ...options,
-      signal: controller.signal,
-      headers,
-    });
+    return await withAbortableTimeout(async (signal) => {
+      const response = await fetch(apiUrl, {
+        ...options,
+        signal,
+        headers,
+      });
 
-    if (!response.ok) {
-      return null;
-    }
+      if (!response.ok) {
+        return null;
+      }
 
-    return (await response.json()) as T;
+      return (await response.json()) as T;
+    }, timeout);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
       console.error(`❌ 自建弹幕API请求超时 (${timeout / 1000}秒):`, apiUrl);
     } else {
       console.error('❌ 自建弹幕API请求失败:', error);
     }
     return null;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -923,30 +916,32 @@ async function fetchDanmuFromKlmEpisode(
 
 // 从自建 danmu_api 获取弹幕数据
 async function fetchDanmuFromKlmAPI(videoUrl: string): Promise<DanmuItem[]> {
-  const controller = new AbortController();
   const timeout = videoUrl.includes('iqiyi.com') ? 30000 : 20000;
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const apiBaseUrl = await getDanmuApiBase();
-    if (!apiBaseUrl) {
+    const response = await withAbortableTimeout(async (signal) => {
+      const apiBaseUrl = await getDanmuApiBase();
+      if (!apiBaseUrl) {
+        return null;
+      }
+
+      const apiUrl = `${apiBaseUrl}/api/v2/comment?url=${encodeURIComponent(
+        videoUrl,
+      )}&format=json`;
+
+      return fetch(apiUrl, {
+        signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          Accept: 'application/json, text/plain, */*',
+        },
+      });
+    }, timeout);
+
+    if (!response) {
       return [];
     }
-
-    const apiUrl = `${apiBaseUrl}/api/v2/comment?url=${encodeURIComponent(
-      videoUrl,
-    )}&format=json`;
-
-    const response = await fetch(apiUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-      },
-    });
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return [];
@@ -967,8 +962,10 @@ async function fetchDanmuFromKlmAPI(videoUrl: string): Promise<DanmuItem[]> {
 
     return danmuList;
   } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
       console.error(`❌ 自建弹幕API请求超时 (${timeout / 1000}秒):`, videoUrl);
     } else {
       console.error('❌ 自建弹幕API请求失败:', error);
@@ -979,8 +976,6 @@ async function fetchDanmuFromKlmAPI(videoUrl: string): Promise<DanmuItem[]> {
 
 // 从danmu.icu获取弹幕数据
 async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
-  const controller = new AbortController();
-
   // 根据平台设置不同的超时时间
   let timeout = 20000; // 默认20秒
   if (videoUrl.includes('iqiyi.com')) {
@@ -991,23 +986,23 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
     timeout = 25000; // 芒果TV25秒
   }
 
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
   try {
     const apiUrl = `https://api.danmu.icu/?url=${encodeURIComponent(videoUrl)}`;
 
-    const response = await fetch(apiUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        Referer: 'https://danmu.icu/',
-      },
-    });
-
-    clearTimeout(timeoutId);
+    const response = await withAbortableTimeout(
+      (signal) =>
+        fetch(apiUrl, {
+          signal,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            Accept: 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            Referer: 'https://danmu.icu/',
+          },
+        }),
+      timeout
+    );
 
     if (!response.ok) {
       return [];
@@ -1071,8 +1066,10 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
 
     return danmuList;
   } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
       console.error(`❌ 弹幕API请求超时 (${timeout / 1000}秒):`, videoUrl);
     } else {
       console.error('❌ 获取弹幕失败:', error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 import { getCandidates, getSpiderJar } from '@/lib/spiderJar';
 
 // Helper function to get base URL with SITE_BASE env support
@@ -14,6 +15,20 @@ function getBaseUrl(request: NextRequest): string {
   const host = request.headers.get('host') || 'localhost:3000';
   const protocol = request.headers.get('x-forwarded-proto') || 'http';
   return `${protocol}://${host}`;
+}
+
+// 获取客户端真实IP - 正确处理x-forwarded-for中的多个IP
+function getClientIP(request: NextRequest): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    // x-forwarded-for可能包含多个IP，第一个通常是客户端真实IP
+    return forwardedFor.split(',')[0].trim();
+  }
+  return (
+    request.headers.get('x-real-ip') ||
+    request.headers.get('cf-connecting-ip') ||
+    'unknown'
+  );
 }
 
 // 生产环境使用Redis/Upstash/Kvrocks的频率限制
@@ -205,21 +220,7 @@ export async function GET(request: NextRequest) {
       securityConfig?.enableIpWhitelist &&
       securityConfig.allowedIPs.length > 0
     ) {
-      // 获取客户端真实IP - 正确处理x-forwarded-for中的多个IP
-      const getClientIP = () => {
-        const forwardedFor = request.headers.get('x-forwarded-for');
-        if (forwardedFor) {
-          // x-forwarded-for可能包含多个IP，第一个通常是客户端真实IP
-          return forwardedFor.split(',')[0].trim();
-        }
-        return (
-          request.headers.get('x-real-ip') ||
-          request.headers.get('cf-connecting-ip') ||
-          'unknown'
-        );
-      };
-
-      const clientIP = getClientIP();
+      const clientIP = getClientIP(request);
 
       const isAllowed = securityConfig.allowedIPs.some((allowedIP) => {
         const trimmedIP = allowedIP.trim();
@@ -259,20 +260,7 @@ export async function GET(request: NextRequest) {
 
     // 访问频率限制（从数据库配置读取）
     if (securityConfig?.enableRateLimit) {
-      // 获取客户端真实IP - 正确处理x-forwarded-for中的多个IP
-      const getClientIP = () => {
-        const forwardedFor = request.headers.get('x-forwarded-for');
-        if (forwardedFor) {
-          return forwardedFor.split(',')[0].trim();
-        }
-        return (
-          request.headers.get('x-real-ip') ||
-          request.headers.get('cf-connecting-ip') ||
-          'unknown'
-        );
-      };
-
-      const clientIP = getClientIP();
+      const clientIP = getClientIP(request);
 
       const rateLimit = securityConfig.rateLimit || 60;
 
@@ -447,17 +435,17 @@ export async function GET(request: NextRequest) {
             try {
               // 尝试获取源站的分类数据
               const categoriesUrl = `${source.api}?ac=list`;
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
-              const response = await fetch(categoriesUrl, {
-                signal: controller.signal,
-                headers: {
-                  'User-Agent': 'TVBox/1.0.0',
-                },
-              });
-
-              clearTimeout(timeoutId);
+              const response = await withAbortableTimeout(
+                (signal) =>
+                  fetch(categoriesUrl, {
+                    signal,
+                    headers: {
+                      'User-Agent': 'TVBox/1.0.0',
+                    },
+                  }),
+                10000 // 10秒超时
+              );
 
               if (response.ok) {
                 const data = await response.json();
@@ -473,7 +461,10 @@ export async function GET(request: NextRequest) {
             } catch (error) {
               // 优化的错误处理：区分不同类型的错误
               if (error instanceof Error) {
-                if (error.name === 'AbortError') {
+                if (
+                  error.name === 'TimeoutError' ||
+                  error.name === 'AbortError'
+                ) {
                   console.warn(
                     `[TVBox] 获取源站 ${source.name} 分类超时(10s)，使用默认分类`
                   );

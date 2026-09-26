@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -82,12 +83,10 @@ export async function GET(request: NextRequest) {
       const searchPromises = apiSites.map(async (site) => {
         try {
           // 添加超时控制
-          const searchPromise = Promise.race([
-            searchFromApi(site, query),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
-            ),
-          ]);
+          const searchPromise = withAbortableTimeout(
+            async () => searchFromApi(site, query),
+            20000
+          );
 
           const results = (await searchPromise) as any[];
 

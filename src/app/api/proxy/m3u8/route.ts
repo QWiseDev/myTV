@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { filterAdsFromM3U8 } from '@/lib/ad-filter';
 import { getConfig } from '@/lib/config';
 import { getBaseUrl, resolveUrl } from '@/lib/live';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 
 export const runtime = 'nodejs';
 
@@ -63,8 +64,6 @@ export async function GET(request: Request) {
 
   let response: Response | null = null;
   let responseUsed = false;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
 
   try {
     const decodedUrl = decodeURIComponent(url);
@@ -85,23 +84,24 @@ export async function GET(request: Request) {
       Connection: 'keep-alive',
     };
 
-    response = await fetch(decodedUrl, {
-      cache: 'no-cache',
-      redirect: 'follow',
-      credentials: 'same-origin',
-      signal: controller.signal,
-      headers: new Headers(headers),
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore - Node.js specific option
-      agent: typeof window === 'undefined' ? agent : undefined,
-    });
-
-    clearTimeout(timeoutId);
+    response = await withAbortableTimeout(
+      (signal) =>
+        fetch(decodedUrl, {
+          cache: 'no-cache',
+          redirect: 'follow',
+          credentials: 'same-origin',
+          signal,
+          headers: new Headers(headers),
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore - Node.js specific option
+          agent: typeof window === 'undefined' ? agent : undefined,
+        }),
+      15000 // 15秒超时
+    );
 
     // 参考 hls.js fetch-loader 的错误处理逻辑
     if (!response.ok) {
       stats.errors++;
-      clearTimeout(timeoutId);
 
       // 直接返回原始的HTTP错误，让hls.js处理
       // 不返回JSON，因为hls.js期望的是M3U8内容或标准HTTP错误
@@ -242,10 +242,9 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     stats.errors++;
-    clearTimeout(timeoutId);
 
     // 处理不同类型的错误
-    if (error.name === 'AbortError') {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       return NextResponse.json({ error: 'Request timeout' }, { status: 408 });
     }
 
@@ -268,8 +267,6 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   } finally {
-    clearTimeout(timeoutId);
-
     // 确保 response 被正确关闭以释放资源
     if (response && !responseUsed) {
       try {
