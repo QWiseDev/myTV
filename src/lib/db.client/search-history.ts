@@ -9,6 +9,7 @@ import {
   STORAGE_TYPE,
   triggerGlobalError,
 } from './core';
+import { readThroughCache } from './read-through-cache';
 
 // ---------------- 搜索历史相关常量 ----------------
 // 搜索历史最大保存条数
@@ -30,47 +31,30 @@ export async function getSearchHistory(): Promise<string[]> {
 
   // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
-    // 优先从缓存获取数据
-    const cachedData = cacheManager.getCachedSearchHistory();
-
-    if (cachedData) {
-      // 返回缓存数据，同时后台异步更新（使用去重机制）
-      cacheManager
-        .getOrCreateRequest('searchhistory-background-sync', () =>
-          fetchFromApi<string[]>(`/api/searchhistory`),
-        )
-        .then((freshData) => {
-          // 只有数据真正不同时才更新缓存
-          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
-            cacheManager.cacheSearchHistory(freshData);
-            // 触发数据更新事件
-            window.dispatchEvent(
-              new CustomEvent('searchHistoryUpdated', {
-                detail: freshData,
-              }),
-            );
-          }
-        })
-        .catch((err) => {
+    try {
+      return await readThroughCache<string[]>({
+        readCache: () => cacheManager.getCachedSearchHistory(),
+        writeCache: (data) => cacheManager.cacheSearchHistory(data),
+        fetchFromServer: () => fetchFromApi<string[]>(`/api/searchhistory`),
+        backgroundSyncKey: 'searchhistory-background-sync',
+        initialFetchKey: 'searchhistory-initial-fetch',
+        dispatchUpdated: (data) =>
+          window.dispatchEvent(
+            new CustomEvent('searchHistoryUpdated', {
+              detail: data,
+            }),
+          ),
+        warnSyncFailure: (err) => {
           console.warn('后台同步搜索历史失败:', err);
           triggerGlobalError('后台同步搜索历史失败');
-        });
-
-      return cachedData;
-    } else {
-      // 缓存为空，使用去重机制从 API 获取并缓存
-      try {
-        const freshData = await cacheManager.getOrCreateRequest(
-          'searchhistory-initial-fetch',
-          () => fetchFromApi<string[]>(`/api/searchhistory`),
-        );
-        cacheManager.cacheSearchHistory(freshData);
-        return freshData;
-      } catch (err) {
-        console.error('获取搜索历史失败:', err);
-        triggerGlobalError('获取搜索历史失败');
-        return [];
-      }
+        },
+        handleFetchFailure: (err) => {
+          console.error('获取搜索历史失败:', err);
+          triggerGlobalError('获取搜索历史失败');
+        },
+      });
+    } catch {
+      return [];
     }
   }
 

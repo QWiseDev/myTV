@@ -10,10 +10,35 @@ import {
   STORAGE_TYPE,
   triggerGlobalError,
 } from './core';
+import { readThroughCache } from './read-through-cache';
 import { generateStorageKey } from '../storage-key';
 
 // ---- 常量 ----
 const FAVORITES_KEY = 'moontv_favorites';
+
+function readFavoritesThroughCache(): Promise<Record<string, Favorite>> {
+  return readThroughCache<Record<string, Favorite>>({
+    readCache: () => cacheManager.getCachedFavorites(),
+    writeCache: (data) => cacheManager.cacheFavorites(data),
+    fetchFromServer: () => fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
+    backgroundSyncKey: 'favorites-background-sync',
+    initialFetchKey: 'favorites-initial-fetch',
+    dispatchUpdated: (data) =>
+      window.dispatchEvent(
+        new CustomEvent('favoritesUpdated', {
+          detail: data,
+        }),
+      ),
+    warnSyncFailure: (err) => {
+      console.warn('后台同步收藏失败:', err);
+      triggerGlobalError('后台同步收藏失败');
+    },
+    handleFetchFailure: (err) => {
+      console.error('获取收藏失败:', err);
+      triggerGlobalError('获取收藏失败');
+    },
+  });
+}
 
 // ---------------- 收藏相关 API ----------------
 
@@ -29,48 +54,7 @@ export async function getAllFavorites(): Promise<Record<string, Favorite>> {
 
   // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
-    // 优先从缓存获取数据
-    const cachedData = cacheManager.getCachedFavorites();
-
-    if (cachedData) {
-      // 返回缓存数据，同时后台异步更新（使用去重机制）
-      cacheManager
-        .getOrCreateRequest('favorites-background-sync', () =>
-          fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-        )
-        .then((freshData) => {
-          // 只有数据真正不同时才更新缓存
-          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
-            cacheManager.cacheFavorites(freshData);
-            // 触发数据更新事件
-            window.dispatchEvent(
-              new CustomEvent('favoritesUpdated', {
-                detail: freshData,
-              }),
-            );
-          }
-        })
-        .catch((err) => {
-          console.warn('后台同步收藏失败:', err);
-          triggerGlobalError('后台同步收藏失败');
-        });
-
-      return cachedData;
-    } else {
-      // 缓存为空，使用去重机制从 API 获取并缓存
-      try {
-        const freshData = await cacheManager.getOrCreateRequest(
-          'favorites-initial-fetch',
-          () => fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-        );
-        cacheManager.cacheFavorites(freshData);
-        return freshData;
-      } catch (err) {
-        console.error('获取收藏失败:', err);
-        triggerGlobalError('获取收藏失败');
-        throw err;
-      }
-    }
+    return readFavoritesThroughCache();
   }
 
   // localStorage 模式
@@ -220,46 +204,32 @@ export async function isFavorited(
 
   // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
-    const cachedFavorites = cacheManager.getCachedFavorites();
-
-    if (cachedFavorites) {
-      // 返回缓存数据，同时后台异步更新（使用去重机制）
-      cacheManager
-        .getOrCreateRequest('favorites-background-sync', () =>
+    try {
+      const favorites = await readThroughCache<Record<string, Favorite>>({
+        readCache: () => cacheManager.getCachedFavorites(),
+        writeCache: (data) => cacheManager.cacheFavorites(data),
+        fetchFromServer: () =>
           fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-        )
-        .then((freshData) => {
-          // 只有数据真正不同时才更新缓存
-          if (JSON.stringify(cachedFavorites) !== JSON.stringify(freshData)) {
-            cacheManager.cacheFavorites(freshData);
-            // 触发数据更新事件
-            window.dispatchEvent(
-              new CustomEvent('favoritesUpdated', {
-                detail: freshData,
-              }),
-            );
-          }
-        })
-        .catch((err) => {
+        backgroundSyncKey: 'favorites-background-sync',
+        initialFetchKey: 'favorites-initial-fetch',
+        dispatchUpdated: (data) =>
+          window.dispatchEvent(
+            new CustomEvent('favoritesUpdated', {
+              detail: data,
+            }),
+          ),
+        warnSyncFailure: (err) => {
           console.warn('后台同步收藏失败:', err);
           triggerGlobalError('后台同步收藏失败');
-        });
-
-      return !!cachedFavorites[key];
-    } else {
-      // 缓存为空，使用去重机制从 API 获取并缓存
-      try {
-        const freshData = await cacheManager.getOrCreateRequest(
-          'favorites-initial-fetch',
-          () => fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-        );
-        cacheManager.cacheFavorites(freshData);
-        return !!freshData[key];
-      } catch (err) {
-        console.error('检查收藏状态失败:', err);
-        triggerGlobalError('检查收藏状态失败');
-        return false;
-      }
+        },
+        handleFetchFailure: (err) => {
+          console.error('检查收藏状态失败:', err);
+          triggerGlobalError('检查收藏状态失败');
+        },
+      });
+      return !!favorites[key];
+    } catch {
+      return false;
     }
   }
 

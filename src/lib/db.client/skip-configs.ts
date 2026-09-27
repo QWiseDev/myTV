@@ -3,6 +3,7 @@
 
 import { cacheManager } from './cache-manager';
 import { fetchFromApi, STORAGE_TYPE, triggerGlobalError } from './core';
+import { readThroughCache } from './read-through-cache';
 import { getAuthInfoFromBrowserCookie } from '../auth';
 import { generateStorageKey } from '../storage-key';
 import type { EpisodeSkipConfig } from '../types';
@@ -164,44 +165,33 @@ export async function getAllSkipConfigs(): Promise<
 
   // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
   if (STORAGE_TYPE !== 'localstorage') {
-    // 优先从缓存获取数据
-    const cachedData = cacheManager.getCachedSkipConfigs();
-
-    if (cachedData) {
-      // 返回缓存数据，同时后台异步更新
-      fetchFromApi<Record<string, EpisodeSkipConfig>>(`/api/skipconfigs`)
-        .then((freshData) => {
-          // 只有数据真正不同时才更新缓存
-          if (JSON.stringify(cachedData) !== JSON.stringify(freshData)) {
-            cacheManager.cacheSkipConfigs(freshData);
-            // 触发数据更新事件
-            window.dispatchEvent(
-              new CustomEvent('skipConfigsUpdated', {
-                detail: freshData,
-              }),
-            );
-          }
-        })
-        .catch((err) => {
+    try {
+      // 注意：与 favorites / search-history 不同，此处的后台同步与初始拉取
+      // 不经过 getOrCreateRequest 去重，保持直接请求的现状
+      return await readThroughCache<Record<string, EpisodeSkipConfig>>({
+        readCache: () => cacheManager.getCachedSkipConfigs(),
+        writeCache: (data) => cacheManager.cacheSkipConfigs(data),
+        fetchFromServer: () =>
+          fetchFromApi<Record<string, EpisodeSkipConfig>>(`/api/skipconfigs`),
+        backgroundSyncKey: null,
+        initialFetchKey: null,
+        dispatchUpdated: (data) =>
+          window.dispatchEvent(
+            new CustomEvent('skipConfigsUpdated', {
+              detail: data,
+            }),
+          ),
+        warnSyncFailure: (err) => {
           console.warn('后台同步跳过片头片尾配置失败:', err);
           triggerGlobalError('后台同步跳过片头片尾配置失败');
-        });
-
-      return cachedData;
-    } else {
-      // 缓存为空，直接从 API 获取并缓存
-      try {
-        const freshData =
-          await fetchFromApi<Record<string, EpisodeSkipConfig>>(
-            `/api/skipconfigs`,
-          );
-        cacheManager.cacheSkipConfigs(freshData);
-        return freshData;
-      } catch (err) {
-        console.error('获取跳过片头片尾配置失败:', err);
-        triggerGlobalError('获取跳过片头片尾配置失败');
-        return {};
-      }
+        },
+        handleFetchFailure: (err) => {
+          console.error('获取跳过片头片尾配置失败:', err);
+          triggerGlobalError('获取跳过片头片尾配置失败');
+        },
+      });
+    } catch {
+      return {};
     }
   }
 
