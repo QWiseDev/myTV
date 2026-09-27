@@ -16,6 +16,7 @@ import { danmakuMediaKey } from '@/lib/danmaku';
 import { generateStorageKey } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
 import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
+import { useSyncedRef } from '@/hooks/useSyncedRef';
 
 import PageLayout from '@/components/PageLayout';
 import PlayDetailsSection from '@/components/play/PlayDetailsSection';
@@ -253,10 +254,7 @@ function PlayPageClient() {
   );
   // 🔑 用 ref 镜像 duration：timeupdate 监听器在播放器初始化时仅挂一次，
   //    直接闭包捕获的 videoDuration 会被钉死在初始值，必须通过 ref 读取最新值
-  const videoDurationRef = useRef(videoDuration);
-  useEffect(() => {
-    videoDurationRef.current = videoDuration;
-  }, [videoDuration]);
+  const videoDurationRef = useSyncedRef(videoDuration);
 
   const {
     movie: movieDetails,
@@ -316,15 +314,9 @@ function PlayPageClient() {
     }
     return true;
   });
-  const blockAdEnabledRef = useRef(blockAdEnabled);
-  useEffect(() => {
-    blockAdEnabledRef.current = blockAdEnabled;
-  }, [blockAdEnabled]);
+  const blockAdEnabledRef = useSyncedRef(blockAdEnabled);
 
-  const externalDanmuEnabledRef = useRef(externalDanmuEnabled);
-  useEffect(() => {
-    externalDanmuEnabledRef.current = externalDanmuEnabled;
-  }, [externalDanmuEnabled]);
+  const externalDanmuEnabledRef = useSyncedRef(externalDanmuEnabled);
 
   // 搜索所需信息
   const searchTitle = routeParams.searchTitle;
@@ -341,7 +333,7 @@ function PlayPageClient() {
 
   // 是否需要优选
   const [needPrefer, setNeedPrefer] = useState(routeParams.needPrefer);
-  const needPreferRef = useRef(needPrefer);
+  const needPreferRef = useSyncedRef(needPrefer);
   useEffect(() => {
     setNeedPrefer(routeParams.needPrefer);
   }, [
@@ -351,13 +343,9 @@ function PlayPageClient() {
     routeParams.source,
     routeParams.title,
   ]);
-  useEffect(() => {
-    needPreferRef.current = needPrefer;
-  }, [needPrefer]);
 
   // 换源相关状态
   const [availableSources, setAvailableSources] = useState<SearchResult[]>([]);
-  const availableSourcesRef = useRef<SearchResult[]>([]);
 
   // 网盘搜索
   const {
@@ -368,46 +356,16 @@ function PlayPageClient() {
     handleNetDiskSearch,
   } = useNetdiskSearch();
 
-  const currentSourceRef = useRef(currentSource);
-  const currentIdRef = useRef(currentId);
-  const videoUrlRef = useRef(videoUrl);
-  const videoTitleRef = useRef(videoTitle);
-  const videoYearRef = useRef(videoYear);
-  const videoDoubanIdRef = useRef(videoDoubanId);
-  const detailRef = useRef<SearchResult | null>(detail);
-  const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
+  const currentSourceRef = useSyncedRef(currentSource);
+  const currentIdRef = useSyncedRef(currentId);
+  const videoUrlRef = useSyncedRef(videoUrl);
+  const videoTitleRef = useSyncedRef(videoTitle);
+  const videoYearRef = useSyncedRef(videoYear);
+  const videoDoubanIdRef = useSyncedRef(videoDoubanId);
+  const detailRef = useSyncedRef(detail);
+  const currentEpisodeIndexRef = useSyncedRef(currentEpisodeIndex);
+  const availableSourcesRef = useSyncedRef(availableSources);
   const videoUrlRequestIdRef = useRef(0);
-
-  // 同步最新值到 refs - 修复无限循环问题，但保持关键状态的同步
-  useEffect(() => {
-    currentSourceRef.current = currentSource;
-    currentIdRef.current = currentId;
-    videoUrlRef.current = videoUrl;
-    videoTitleRef.current = videoTitle;
-    videoYearRef.current = videoYear;
-    videoDoubanIdRef.current = videoDoubanId;
-  }, [
-    currentSource,
-    currentId,
-    videoUrl,
-    videoTitle,
-    videoYear,
-    videoDoubanId,
-  ]); // 只同步基本信息，避免循环
-
-  // 单独同步 currentEpisodeIndex，确保播放进度保存时使用正确的集数
-  useEffect(() => {
-    currentEpisodeIndexRef.current = currentEpisodeIndex;
-  }, [currentEpisodeIndex]); // 必须同步集数变化
-
-  // 单独处理 detail 和 availableSources，使用深比较避免无限循环
-  useEffect(() => {
-    detailRef.current = detail;
-  }, [detail]);
-
-  useEffect(() => {
-    availableSourcesRef.current = availableSources;
-  }, [availableSources]);
 
   useBangumiDetails({
     videoDoubanId,
@@ -582,7 +540,8 @@ function PlayPageClient() {
       const episodeData = detailData.episodes[episodeIndex];
       commitVideoUrl(episodeData || '');
     },
-    [setVideoUrl],
+    // videoUrlRef 为稳定 ref 引用（useSyncedRef 内部为 useRef）
+    [setVideoUrl, videoUrlRef],
   );
 
   const ensureVideoSource = (video: HTMLVideoElement | null, url: string) => {
