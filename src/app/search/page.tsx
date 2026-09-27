@@ -22,10 +22,9 @@ import SearchResultFilter, {
   SearchFilterCategory,
 } from '@/components/SearchResultFilter';
 import SearchSuggestions from '@/components/SearchSuggestions';
-import TMDBFilterPanel from '@/components/TMDBFilterPanel';
-import VideoCard from '@/components/VideoCard';
 import VirtualSearchGrid from '@/components/VirtualSearchGrid';
 
+import { TmdbActorResults } from './_components/TmdbActorResults';
 import {
   YouTubeDirectMode,
   YouTubeModeSwitch,
@@ -773,122 +772,19 @@ function SearchPageClient() {
                 </>
               ) : searchType === 'tmdb-actor' ? (
                 /* TMDB演员搜索结果 */
-                <>
-                  <div className='mb-4'>
-                    <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                      TMDB演员搜索结果
-                      {tmdbActorLoading && (
-                        <span className='ml-2 inline-block align-middle'>
-                          <span className='inline-block h-3 w-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin'></span>
-                        </span>
-                      )}
-                    </h2>
-
-                    {/* 电影/电视剧类型选择器 */}
-                    <div className='mt-3 flex items-center gap-2'>
-                      <span className='text-sm text-gray-600 dark:text-gray-400'>
-                        类型：
-                      </span>
-                      <div className='flex gap-2'>
-                        {[
-                          { key: 'movie', label: '电影' },
-                          { key: 'tv', label: '电视剧' },
-                        ].map((type) => (
-                          <button
-                            key={type.key}
-                            onClick={() => {
-                              setTmdbActorType(type.key as 'movie' | 'tv');
-                              const currentQuery =
-                                searchQuery.trim() || searchParams?.get('q');
-                              if (currentQuery) {
-                                handleTmdbActorSearch(
-                                  currentQuery,
-                                  type.key as 'movie' | 'tv',
-                                  tmdbFilterState,
-                                );
-                              }
-                            }}
-                            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                              tmdbActorType === type.key
-                                ? 'bg-blue-500 text-white border-blue-500'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700'
-                            }`}
-                            disabled={tmdbActorLoading}
-                          >
-                            {type.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* TMDB筛选面板 */}
-                    <div className='mt-4'>
-                      <TMDBFilterPanel
-                        contentType={tmdbActorType}
-                        filters={tmdbFilterState}
-                        onFiltersChange={(newFilterState) => {
-                          setTmdbFilterState(newFilterState);
-                          const currentQuery =
-                            searchQuery.trim() || searchParams?.get('q');
-                          if (currentQuery) {
-                            handleTmdbActorSearch(
-                              currentQuery,
-                              tmdbActorType,
-                              newFilterState,
-                            );
-                          }
-                        }}
-                        isVisible={tmdbFilterVisible}
-                        onToggleVisible={() =>
-                          setTmdbFilterVisible(!tmdbFilterVisible)
-                        }
-                        resultCount={tmdbActorResults?.length || 0}
-                      />
-                    </div>
-                  </div>
-
-                  {tmdbActorError ? (
-                    <div className='text-center py-8'>
-                      <div className='text-red-500 mb-2'>{tmdbActorError}</div>
-                      <button
-                        onClick={() => {
-                          const currentQuery =
-                            searchQuery.trim() || searchParams?.get('q');
-                          if (currentQuery) {
-                            handleTmdbActorSearch(
-                              currentQuery,
-                              tmdbActorType,
-                              tmdbFilterState,
-                            );
-                          }
-                        }}
-                        className='px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors'
-                      >
-                        重试
-                      </button>
-                    </div>
-                  ) : tmdbActorResults && tmdbActorResults.length > 0 ? (
-                    <div className='grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
-                      {tmdbActorResults.map((item, index) => (
-                        <div key={item.id || index} className='w-full'>
-                          <VideoCard
-                            id={item.id}
-                            title={item.title}
-                            poster={item.poster}
-                            year={item.year}
-                            rate={item.rate}
-                            from='douban'
-                            type={tmdbActorType}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : !tmdbActorLoading ? (
-                    <div className='text-center text-gray-500 py-8 dark:text-gray-400'>
-                      未找到相关演员作品
-                    </div>
-                  ) : null}
-                </>
+                <TmdbActorResults
+                  tmdbActorResults={tmdbActorResults}
+                  tmdbActorLoading={tmdbActorLoading}
+                  tmdbActorError={tmdbActorError}
+                  tmdbActorType={tmdbActorType}
+                  tmdbFilterState={tmdbFilterState}
+                  tmdbFilterVisible={tmdbFilterVisible}
+                  currentQuery={currentQuery}
+                  setTmdbActorType={setTmdbActorType}
+                  setTmdbFilterState={setTmdbFilterState}
+                  setTmdbFilterVisible={setTmdbFilterVisible}
+                  handleTmdbActorSearch={handleTmdbActorSearch}
+                />
               ) : searchType === 'youtube' ? (
                 /* YouTube搜索结果 */
                 <YouTubeSearchResults
