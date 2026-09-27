@@ -10,63 +10,22 @@ import {
   XCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
   type ApiSite,
-  type EpisodeEntry,
-  type ParsedSearchResult,
   type SourceTestResult,
   autoTestVideoPlayback,
   getAllApiSites,
-  parseSearchResultsForPlayback,
   testSource,
 } from '@/lib/source-test';
 import { SearchResult } from '@/lib/types';
+import { PlayTestStatus, usePlayTester } from '@/hooks/usePlayTester';
 
+import { PlayTesterDrawer } from '@/components/PlayTesterDrawer';
 import VideoCard from '@/components/VideoCard';
 
-import { formatBandwidth, getHLSStreamInfo, HLSStreamInfo } from '../app/play/utils/hlsStreamInfo';
-
-type HlsInstance = InstanceType<typeof import('hls.js').default>;
-
-interface PlayTestStatus {
-  status: 'idle' | 'testing' | 'success' | 'error';
-  url?: string;
-  checkedAt?: number;
-  message?: string;
-  autoTested?: boolean; // 标记是否为自动测试
-  // HLS 流信息
-  streamInfo?: HLSStreamInfo;
-  resolution?: string;
-  bandwidth?: string;
-  codecSet?: string;
-  frameRate?: string;
-  totalStreams?: number;
-  maxResolution?: string;
-  minResolution?: string;
-  bandwidthRange?: string;
-}
-
-interface PlayerState {
-  status: 'idle' | 'loading' | 'playing' | 'error';
-  url?: string;
-  title?: string;
-  sourceKey?: string;
-  message?: string;
-  details?: string;
-}
-
-interface PlayTesterDrawerState {
-  visible: boolean;
-  sourceKey?: string;
-  sourceName?: string;
-  parsedResults: ParsedSearchResult[];
-  selectedResultIndex: number;
-  selectedLineIndex: number;
-  selectedEpisodeIndex: number;
-}
 
 type SortKey =
   | 'status'
@@ -91,26 +50,24 @@ export default function SourceTestModule() {
   const [sortKey, setSortKey] = useState<SortKey>('default');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [mounted, setMounted] = useState(false);
-  const [playTestStatuses, setPlayTestStatuses] = useState<
-    Map<string, PlayTestStatus>
-  >(new Map());
   const [isAutoTestingVideos, setIsAutoTestingVideos] = useState(false);
   const [autoPlayTest, setAutoPlayTest] = useState(false); // 是否自动进行播放测试
-  const [playTester, setPlayTester] = useState<PlayTesterDrawerState>({
-    visible: false,
-    parsedResults: [],
-    selectedResultIndex: 0,
-    selectedLineIndex: 0,
-    selectedEpisodeIndex: 0,
-  });
-  const [playDrawerAnimating, setPlayDrawerAnimating] = useState(false);
-  const [playerState, setPlayerState] = useState<PlayerState>({
-    status: 'idle',
-  });
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsInstanceRef = useRef<HlsInstance | null>(null);
-  const latestPlaySourceRef = useRef<string | undefined>(undefined);
-  const latestPlayUrlRef = useRef<string | undefined>(undefined);
+
+  // 播放检测：抽屉状态、播放探测与自动检测（拆分至 usePlayTester）
+  const {
+    playTestStatuses,
+    playTester,
+    playDrawerAnimating,
+    playerState,
+    videoRef,
+    latestPlayUrlRef,
+    updatePlayStatus,
+    handleOpenPlayTester,
+    handleClosePlayTester,
+    handleSelectPlayResult,
+    handleSelectPlayLine,
+    handleSelectPlayEpisode,
+  } = usePlayTester({ testResults });
 
   // 客户端挂载标记
   useEffect(() => {
@@ -306,379 +263,6 @@ export default function SourceTestModule() {
     // 等待动画完成后再隐藏
     setTimeout(() => setShowResultsModal(false), 300);
   };
-
-  const updatePlayStatus = (
-    sourceKey: string,
-    patch: Partial<PlayTestStatus> & { status: PlayTestStatus['status'] }
-  ) => {
-    try {
-      setPlayTestStatuses((prev) => {
-        const next = new Map(prev);
-        const current = next.get(sourceKey) || { status: 'idle' as const };
-        const checkedAt =
-          typeof patch.checkedAt === 'number'
-            ? patch.checkedAt
-            : patch.status === 'testing'
-            ? current.checkedAt
-            : Date.now();
-        next.set(sourceKey, {
-          ...current,
-          ...patch,
-          status: patch.status,
-          checkedAt,
-        });
-        return next;
-      });
-    } catch (error) {
-      console.error('更新播放状态失败:', error, { sourceKey, patch });
-    }
-  };
-
-  const cleanupPlayer = () => {
-    if (hlsInstanceRef.current) {
-      hlsInstanceRef.current.destroy();
-      hlsInstanceRef.current = null;
-    }
-    const video = videoRef.current;
-    if (video) {
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-    }
-  };
-
-  const handlePlaybackFailure = (message: string, details?: string) => {
-    const sourceKey = latestPlaySourceRef.current;
-    setPlayerState((prev) => ({
-      ...prev,
-      status: 'error',
-      message,
-      details,
-    }));
-    if (sourceKey) {
-      updatePlayStatus(sourceKey, {
-        status: 'error',
-        url: latestPlayUrlRef.current,
-        message,
-        checkedAt: Date.now(),
-      });
-    }
-  };
-
-  const handleOpenPlayTester = (source: ApiSite) => {
-    const result = testResults.get(source.key);
-    if (!result || !Array.isArray(result.results) || result.results.length === 0) {
-      alert('请先完成搜索测试，并确保该源返回了搜索结果');
-      return;
-    }
-    const parsedResults = parseSearchResultsForPlayback(result.results);
-    if (parsedResults.length === 0) {
-      alert('未能从该源的搜索结果中解析到可播放地址');
-      return;
-    }
-    setPlayTester({
-      visible: true,
-      sourceKey: source.key,
-      sourceName: source.name,
-      parsedResults,
-      selectedResultIndex: 0,
-      selectedLineIndex: 0,
-      selectedEpisodeIndex: 0,
-    });
-    setTimeout(() => setPlayDrawerAnimating(true), 10);
-  };
-
-  const handleClosePlayTester = () => {
-    setPlayDrawerAnimating(false);
-    setTimeout(() => {
-      setPlayTester((prev) => ({
-        ...prev,
-        visible: false,
-      }));
-      latestPlaySourceRef.current = undefined;
-      latestPlayUrlRef.current = undefined;
-      setPlayerState({ status: 'idle' });
-      cleanupPlayer();
-    }, 300);
-  };
-
-  const handleSelectPlayResult = (index: number) => {
-    setPlayTester((prev) => {
-      if (!prev.parsedResults[index]) return prev;
-      return {
-        ...prev,
-        selectedResultIndex: index,
-        selectedLineIndex: 0,
-        selectedEpisodeIndex: 0,
-      };
-    });
-  };
-
-  const handleSelectPlayLine = (index: number) => {
-    setPlayTester((prev) => {
-      const currentResult = prev.parsedResults[prev.selectedResultIndex];
-      if (!currentResult || !currentResult.lines[index]) return prev;
-      return {
-        ...prev,
-        selectedLineIndex: index,
-        selectedEpisodeIndex: 0,
-      };
-    });
-  };
-
-  const handleSelectPlayEpisode = (index: number) => {
-    setPlayTester((prev) => {
-      const currentResult = prev.parsedResults[prev.selectedResultIndex];
-      const line = currentResult?.lines[prev.selectedLineIndex];
-      if (!line || !line.episodes[index]) return prev;
-      return {
-        ...prev,
-        selectedEpisodeIndex: index,
-      };
-    });
-  };
-
-  const startPlayDetection = async (
-    episode: EpisodeEntry,
-    options: {
-      lineLabel: string;
-      videoTitle: string;
-      sourceKey: string;
-      sourceName?: string;
-    }
-  ) => {
-    const normalizedUrl = episode.url.trim();
-    if (!normalizedUrl) {
-      handlePlaybackFailure('播放地址为空');
-      return;
-    }
-
-    latestPlaySourceRef.current = options.sourceKey;
-    latestPlayUrlRef.current = normalizedUrl;
-    cleanupPlayer();
-    setPlayerState({
-      status: 'loading',
-      url: normalizedUrl,
-      title: `${options.videoTitle} · ${options.lineLabel} · ${episode.title}`,
-      sourceKey: options.sourceKey,
-      message: '正在请求媒体资源...',
-    });
-
-    updatePlayStatus(options.sourceKey, {
-      status: 'testing',
-      url: normalizedUrl,
-      message: `${options.lineLabel} / ${episode.title} 检测中`,
-    });
-
-    const video = videoRef.current;
-    if (!video) {
-      handlePlaybackFailure('播放器尚未初始化');
-      return;
-    }
-
-    const isHlsStream = /\.m3u8($|\?)/i.test(normalizedUrl);
-    let handledByHls = false;
-    if (isHlsStream) {
-      let Hls: typeof import('hls.js').default;
-      try {
-        Hls = (await import('hls.js')).default;
-      } catch (error) {
-        handlePlaybackFailure(
-          error instanceof Error ? error.message : 'HLS 播放器加载失败'
-        );
-        return;
-      }
-
-      if (
-        latestPlaySourceRef.current !== options.sourceKey ||
-        latestPlayUrlRef.current !== normalizedUrl
-      ) {
-        return;
-      }
-
-      if (!Hls.isSupported()) {
-        video.src = normalizedUrl;
-        video.load();
-      } else {
-        handledByHls = true;
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-        });
-        hlsInstanceRef.current = hls;
-
-        // 获取 HLS 流信息
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          const streamInfo = getHLSStreamInfo(hls);
-
-          if (streamInfo) {
-
-            // 获取当前流信息
-            const currentStream = streamInfo.levels[streamInfo.currentLevel];
-            const maxBandwidth = streamInfo.maxBandwidth;
-            const minBandwidth = streamInfo.minBandwidth;
-
-            const updateData: Partial<PlayTestStatus> = {
-              streamInfo,
-              totalStreams: streamInfo.totalLevels,
-              maxResolution: streamInfo.maxResolution,
-              minResolution: streamInfo.minResolution,
-              bandwidthRange: maxBandwidth && minBandwidth
-                ? `${formatBandwidth(minBandwidth)} - ${formatBandwidth(maxBandwidth)}`
-                : undefined
-            };
-
-            // 获取当前流信息
-            if (currentStream) {
-              updateData.resolution = currentStream.resolution;
-              updateData.bandwidth = currentStream.bandwidthText;
-              updateData.codecSet = currentStream.codecSet;
-              updateData.frameRate = currentStream.frameRate;
-            }
-
-            updatePlayStatus(options.sourceKey, {
-              status: 'testing',
-              message: `HLS 解析成功 - ${streamInfo.totalLevels}个清晰度`,
-              ...updateData
-            });
-          }
-        });
-
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data?.fatal) {
-            const reason =
-              data?.response?.code === 0
-                ? '跨域被拒或未开放 CORS'
-                : data?.response?.code === 403
-                ? '403 禁止访问，可能需要白名单'
-                : data?.details || '未知 HLS 错误';
-            handlePlaybackFailure(`HLS 错误：${reason}`, data?.response?.url);
-          }
-        });
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          try {
-            hls.loadSource(normalizedUrl);
-          } catch (err) {
-            handlePlaybackFailure(
-              (err instanceof Error ? err.message : undefined) ||
-                'HLS 源加载失败'
-            );
-          }
-        });
-      }
-    }
-
-    if (!handledByHls) {
-      video.src = normalizedUrl;
-      video.load();
-    }
-
-    const playPromise = video.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch((err) => {
-        const msg =
-          err?.message?.includes('NotAllowedError') ||
-          err?.message?.includes('AbortError')
-            ? '浏览器阻止了自动播放，请手动点击播放'
-            : err?.message || '浏览器拒绝播放该流';
-        handlePlaybackFailure(msg);
-      });
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      cleanupPlayer();
-    };
-  }, []);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const handlePlaying = () => {
-      const sourceKey = latestPlaySourceRef.current;
-      if (!sourceKey) return;
-      setPlayerState((prev) => ({
-        ...prev,
-        status: 'playing',
-        message: '播放成功',
-      }));
-      updatePlayStatus(sourceKey, {
-        status: 'success',
-        url: latestPlayUrlRef.current,
-        message: '播放成功',
-      });
-    };
-    const handleVideoError = () => {
-      const mediaError = video.error;
-      const errorCode = mediaError?.code || 0;
-      const messageMap: Record<number, string> = {
-        1: '加载被用户中止',
-        2: '网络错误或跨域限制',
-        3: '解码失败，可能格式不受支持',
-        4: '资源不可用或跨域限制',
-      };
-      handlePlaybackFailure(
-        messageMap[errorCode] || '播放失败，可能被跨域限制',
-        mediaError?.message
-      );
-    };
-    video.addEventListener('playing', handlePlaying);
-    video.addEventListener('error', handleVideoError);
-    return () => {
-      video.removeEventListener('playing', handlePlaying);
-      video.removeEventListener('error', handleVideoError);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅挂载时为 video 元素绑定一次事件；handlePlaybackFailure 为每渲染重建的普通函数，经 ref 读取最新值，加入依赖会反复解绑/重绑
-  }, []);
-
-  const selectedPlayContext = useMemo(() => {
-    if (!playTester.visible) return null;
-    const currentResult = playTester.parsedResults[playTester.selectedResultIndex];
-    if (!currentResult) return null;
-    const line = currentResult.lines[playTester.selectedLineIndex];
-    if (!line) return null;
-    const episode = line.episodes[playTester.selectedEpisodeIndex];
-    if (!episode) return null;
-    return {
-      episode,
-      lineLabel: line.label,
-      videoTitle: currentResult.info.title,
-    };
-  }, [
-    playTester.visible,
-    playTester.parsedResults,
-    playTester.selectedResultIndex,
-    playTester.selectedLineIndex,
-    playTester.selectedEpisodeIndex,
-  ]);
-
-  useEffect(() => {
-    if (
-      !playTester.visible ||
-      !playTester.sourceKey ||
-      !selectedPlayContext ||
-      !selectedPlayContext.episode
-    ) {
-      return;
-    }
-    startPlayDetection(selectedPlayContext.episode, {
-      lineLabel: selectedPlayContext.lineLabel,
-      videoTitle: selectedPlayContext.videoTitle,
-      sourceKey: playTester.sourceKey,
-      sourceName: playTester.sourceName,
-    });
-    // 依赖仅关心选中的播放上下文，避免因函数引用变化导致重复触发
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    playTester.visible,
-    playTester.sourceKey,
-    playTester.sourceName,
-    selectedPlayContext?.episode?.url,
-    selectedPlayContext?.lineLabel,
-    selectedPlayContext?.videoTitle,
-  ]);
 
   // 防止滚动穿透
   useEffect(() => {
@@ -1566,188 +1150,18 @@ export default function SourceTestModule() {
         )}
 
       {/* 播放检测抽屉 */}
-      {mounted &&
-        playTester.visible &&
-        createPortal(
-          <>
-            <div
-              className={`fixed inset-0 bg-black z-[1180] transition-opacity duration-300 ${
-                playDrawerAnimating ? 'bg-opacity-50' : 'bg-opacity-0'
-              }`}
-              onClick={handleClosePlayTester}
-            />
-            <div
-              className={`fixed inset-y-0 right-0 z-[1190] w-full md:w-5/6 lg:w-3/4 xl:w-2/3 bg-white dark:bg-gray-900 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
-                playDrawerAnimating ? 'translate-x-0' : 'translate-x-full'
-              }`}
-            >
-              <div className='flex items-center justify-between p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800 shadow-sm'>
-                <div className='flex-1 min-w-0'>
-                  <div className='flex items-center gap-2'>
-                    <h3 className='text-lg sm:text-xl font-semibold text-gray-900 dark:text-white'>
-                      播放检测
-                    </h3>
-                    {playTester.sourceName && (
-                      <span className='px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded'>
-                        {playTester.sourceName}
-                      </span>
-                    )}
-                  </div>
-                  {playerState.message && (
-                    <p
-                      className={`text-xs sm:text-sm mt-1 ${
-                        playerState.status === 'error'
-                          ? 'text-red-500'
-                          : 'text-gray-500'
-                      }`}
-                    >
-                      {playerState.message}
-                      {playerState.details && `（${playerState.details}）`}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleClosePlayTester}
-                  className='p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
-                  title='关闭 (ESC)'
-                >
-                  <XMarkIcon className='w-6 h-6' />
-                </button>
-              </div>
-
-              <div className='flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-gray-50 dark:bg-gray-950/60'>
-                {/* 结果列表与线路选择 */}
-                <div className='grid grid-cols-1 lg:grid-cols-3 gap-4'>
-                  <div className='bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm overflow-hidden'>
-                    <div className='px-3 py-2 border-b border-gray-200 dark:border-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200'>
-                      搜索结果 ({playTester.parsedResults.length})
-                    </div>
-                    <div className='max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800'>
-                      {playTester.parsedResults.map((item, idx) => (
-                        <button
-                          key={`${item.info.id}-${idx}`}
-                          onClick={() => handleSelectPlayResult(idx)}
-                          className={`w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                            playTester.selectedResultIndex === idx
-                              ? 'bg-blue-50 dark:bg-blue-900/30'
-                              : ''
-                          }`}
-                        >
-                          <div className='flex items-center justify-between gap-2'>
-                            <div className='truncate text-sm text-gray-900 dark:text-white'>
-                              {item.info.title}
-                            </div>
-                            <span className='text-xs text-gray-500'>
-                              {item.lines.length} 条线路
-                            </span>
-                          </div>
-                          <div className='text-xs text-gray-500 truncate'>
-                            ID: {item.info.id}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className='bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm p-3 space-y-3'>
-                    <div className='flex items-center justify-between text-sm text-gray-700 dark:text-gray-200'>
-                      <span>线路 / 剧集</span>
-                      {playerState.url && (
-                        <span className='text-xs text-gray-500 truncate max-w-[12rem]'>
-                          {playerState.url}
-                        </span>
-                      )}
-                    </div>
-                    <div className='flex flex-wrap gap-2'>
-                      {playTester.parsedResults[
-                        playTester.selectedResultIndex
-                      ]?.lines.map((line, idx) => (
-                        <button
-                          key={line.lineIndex}
-                          onClick={() => handleSelectPlayLine(idx)}
-                          className={`px-3 py-1 rounded-full border text-xs ${
-                            playTester.selectedLineIndex === idx
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
-                          }`}
-                        >
-                          {line.label}（{line.episodes.length}）
-                        </button>
-                      ))}
-                    </div>
-                    <div className='flex flex-wrap gap-2 max-h-32 overflow-y-auto'>
-                      {playTester.parsedResults[
-                        playTester.selectedResultIndex
-                      ]?.lines[playTester.selectedLineIndex]?.episodes.map(
-                        (ep, idx) => (
-                          <button
-                            key={`${ep.title}-${idx}`}
-                            onClick={() => handleSelectPlayEpisode(idx)}
-                            className={`px-3 py-1 rounded-lg text-xs border ${
-                              playTester.selectedEpisodeIndex === idx
-                                ? 'bg-green-600 text-white border-green-600'
-                                : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
-                            }`}
-                            title={ep.url}
-                          >
-                            {ep.title || `第${idx + 1}集`}
-                          </button>
-                        )
-                      )}
-                    </div>
-                    <div className='text-xs text-gray-500 dark:text-gray-400'>
-                      提示：若提示跨域或 403，可在源配置中添加代理或白名单。
-                    </div>
-                  </div>
-
-                  <div className='bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm p-3 flex flex-col gap-3'>
-                    <div className='flex items-center justify-between text-sm text-gray-700 dark:text-gray-200'>
-                      <span>播放器</span>
-                      <span
-                        className={`text-xs ${
-                          playerState.status === 'error'
-                            ? 'text-red-500'
-                            : playerState.status === 'playing'
-                            ? 'text-green-600'
-                            : 'text-gray-500'
-                        }`}
-                      >
-                        {playerState.status === 'loading'
-                          ? '检测中...'
-                          : playerState.status === 'playing'
-                          ? '播放成功'
-                          : playerState.status === 'error'
-                          ? '播放异常'
-                          : '待检测'}
-                      </span>
-                    </div>
-                    <div className='aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center'>
-                      <video
-                        ref={videoRef}
-                        className='w-full h-full'
-                        controls
-                        playsInline
-                        muted
-                        crossOrigin='anonymous'
-                      />
-                    </div>
-                    {playerState.title && (
-                      <div className='text-xs text-gray-600 dark:text-gray-300'>
-                        {playerState.title}
-                      </div>
-                    )}
-                    {latestPlayUrlRef.current && (
-                      <div className='text-xs text-gray-500 break-all'>
-                        {latestPlayUrlRef.current}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>,
-          document.body
-        )}
+      <PlayTesterDrawer
+        mounted={mounted}
+        playTester={playTester}
+        playDrawerAnimating={playDrawerAnimating}
+        playerState={playerState}
+        videoRef={videoRef}
+        latestPlayUrlRef={latestPlayUrlRef}
+        handleClosePlayTester={handleClosePlayTester}
+        handleSelectPlayResult={handleSelectPlayResult}
+        handleSelectPlayLine={handleSelectPlayLine}
+        handleSelectPlayEpisode={handleSelectPlayEpisode}
+      />
 
       {/* 空状态 */}
       {sources.length === 0 && (
