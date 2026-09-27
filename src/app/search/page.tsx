@@ -523,6 +523,42 @@ function SearchPageClient() {
     }
   };
 
+  // 搜索类型切换：统一清空各路搜索状态（含此前各按钮遗漏的
+  // youtubeWarning / netdiskTotal），再按目标类型触发对应搜索
+  const handleSearchTypeSwitch = (
+    type: 'video' | 'netdisk' | 'youtube' | 'tmdb-actor',
+  ) => {
+    // 📊 分析埋点：搜索类型切换
+    analytics.handleFilterChange('search_type', type);
+    setSearchType(type);
+
+    setNetdiskResults(null);
+    setNetdiskError(null);
+    setNetdiskTotal(0);
+    setYoutubeResults(null);
+    setYoutubeError(null);
+    setYoutubeWarning(null);
+    // 注意：不重置 YouTube 排序和内容类型，保持用户选择
+    setTmdbActorResults(null);
+    setTmdbActorError(null);
+
+    const currentQuery = searchQuery.trim() || searchParams?.get('q');
+    if (!currentQuery || !showResults) return;
+
+    if (type === 'netdisk') {
+      handleNetDiskSearch(currentQuery);
+    } else if (type === 'youtube') {
+      // 强制脱离当前事件批次重新搜索
+      setTimeout(() => handleYouTubeSearch(currentQuery), 0);
+    } else if (type === 'tmdb-actor') {
+      handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
+    } else {
+      // 影视搜索由 searchParams 变化的 effect 处理
+      setIsLoading(true);
+      router.push(`/search?q=${encodeURIComponent(currentQuery)}`);
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
@@ -594,29 +630,7 @@ function SearchPageClient() {
               <div className='inline-flex items-center bg-gradient-to-r from-gray-50 via-white to-gray-50 dark:from-gray-800 dark:via-gray-750 dark:to-gray-800 rounded-xl p-1.5 space-x-2 shadow-lg border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm'>
                 <button
                   type='button'
-                  onClick={() => {
-                    // 📊 分析埋点：搜索类型切换
-                    analytics.handleFilterChange('search_type', 'video');
-
-                    setSearchType('video');
-                    // 切换到影视搜索时，清除网盘、YouTube和TMDB演员搜索状态
-                    setNetdiskResults(null);
-                    setNetdiskError(null);
-                    setNetdiskTotal(0);
-                    setYoutubeResults(null);
-                    setYoutubeError(null);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
-                    // 如果有搜索词且当前显示结果，触发影视搜索
-                    const currentQuery =
-                      searchQuery.trim() || searchParams?.get('q');
-                    if (currentQuery && showResults) {
-                      setIsLoading(true);
-                      router.push(
-                        `/search?q=${encodeURIComponent(currentQuery)}`,
-                      );
-                    }
-                  }}
+                  onClick={() => handleSearchTypeSwitch('video')}
                   className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 relative overflow-hidden ${
                     searchType === 'video'
                       ? 'bg-gradient-to-br from-green-400 via-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30 scale-105'
@@ -627,25 +641,7 @@ function SearchPageClient() {
                 </button>
                 <button
                   type='button'
-                  onClick={() => {
-                    // 📊 分析埋点：搜索类型切换
-                    analytics.handleFilterChange('search_type', 'netdisk');
-
-                    setSearchType('netdisk');
-                    // 清除之前的网盘搜索状态，确保重新开始
-                    setNetdiskError(null);
-                    setNetdiskResults(null);
-                    setYoutubeResults(null);
-                    setYoutubeError(null);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
-                    // 如果当前有搜索词，立即触发网盘搜索
-                    const currentQuery =
-                      searchQuery.trim() || searchParams?.get('q');
-                    if (currentQuery && showResults) {
-                      handleNetDiskSearch(currentQuery);
-                    }
-                  }}
+                  onClick={() => handleSearchTypeSwitch('netdisk')}
                   className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 relative overflow-hidden ${
                     searchType === 'netdisk'
                       ? 'bg-gradient-to-br from-blue-400 via-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-105'
@@ -656,29 +652,7 @@ function SearchPageClient() {
                 </button>
                 <button
                   type='button'
-                  onClick={() => {
-                    // 📊 分析埋点：搜索类型切换
-                    analytics.handleFilterChange('search_type', 'youtube');
-
-                    setSearchType('youtube');
-                    // 清除之前的YouTube搜索状态，确保重新开始
-                    setYoutubeError(null);
-                    setYoutubeWarning(null);
-                    setYoutubeResults(null);
-                    // 注意：不重置排序和内容类型，保持用户选择
-                    setNetdiskResults(null);
-                    setNetdiskError(null);
-                    setNetdiskTotal(0);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
-                    // 如果当前有搜索词，立即触发YouTube搜索
-                    const currentQuery =
-                      searchQuery.trim() || searchParams?.get('q');
-                    if (currentQuery && showResults) {
-                      // 如果已经在YouTube标签，或者是新切换，都强制重新搜索
-                      setTimeout(() => handleYouTubeSearch(currentQuery), 0);
-                    }
-                  }}
+                  onClick={() => handleSearchTypeSwitch('youtube')}
                   className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 relative overflow-hidden ${
                     searchType === 'youtube'
                       ? 'bg-gradient-to-br from-red-400 via-red-500 to-rose-600 text-white shadow-lg shadow-red-500/30 scale-105'
@@ -689,30 +663,7 @@ function SearchPageClient() {
                 </button>
                 <button
                   type='button'
-                  onClick={() => {
-                    // 📊 分析埋点：搜索类型切换
-                    analytics.handleFilterChange('search_type', 'tmdb-actor');
-
-                    setSearchType('tmdb-actor');
-                    // 清除之前的搜索状态
-                    setTmdbActorError(null);
-                    setTmdbActorResults(null);
-                    setNetdiskResults(null);
-                    setNetdiskError(null);
-                    setNetdiskTotal(0);
-                    setYoutubeResults(null);
-                    setYoutubeError(null);
-                    // 如果当前有搜索词，立即触发TMDB演员搜索
-                    const currentQuery =
-                      searchQuery.trim() || searchParams?.get('q');
-                    if (currentQuery && showResults) {
-                      handleTmdbActorSearch(
-                        currentQuery,
-                        tmdbActorType,
-                        tmdbFilterState,
-                      );
-                    }
-                  }}
+                  onClick={() => handleSearchTypeSwitch('tmdb-actor')}
                   className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 relative overflow-hidden ${
                     searchType === 'tmdb-actor'
                       ? 'bg-gradient-to-br from-purple-400 via-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/30 scale-105'

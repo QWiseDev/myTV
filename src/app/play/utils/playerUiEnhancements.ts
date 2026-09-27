@@ -221,7 +221,6 @@ export function fixDanmakuProgressConflict(): Cleanup {
           }
         });
 
-        // console.log('🔄 弹幕菜单hover状态已重置'); // 减少控制台噪音
       } catch (error) {
         console.warn('弹幕状态重置失败:', error);
       }
@@ -235,7 +234,6 @@ export function fixDanmakuProgressConflict(): Cleanup {
       controls.forEach((control) => {
         control.style.pointerEvents = 'auto';
       });
-      // console.log('🚀 弹幕菜单hover状态已立即恢复'); // 减少控制台噪音
     };
 
     // 立即执行一次恢复

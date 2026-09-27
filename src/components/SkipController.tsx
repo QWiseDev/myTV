@@ -376,7 +376,6 @@ export default function SkipController({
         episodeSwitchCooldownRef.current > 0 &&
         timeSinceSwitch < cooldownTime
       ) {
-        // console.log(`⏳ [SkipController] 冷却中，已过${timeSinceSwitch}ms，还需${cooldownTime - timeSinceSwitch}ms`);
         return;
       }
 
