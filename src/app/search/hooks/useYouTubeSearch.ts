@@ -3,6 +3,17 @@
 
 import { useState } from 'react';
 
+export type YouTubeContentType =
+  | 'all'
+  | 'music'
+  | 'movie'
+  | 'educational'
+  | 'gaming'
+  | 'sports'
+  | 'news';
+
+export type YouTubeSortOrder = 'relevance' | 'date' | 'rating' | 'viewCount' | 'title';
+
 /**
  * YouTube 搜索：状态与请求逻辑拆分自搜索页原实现，URL 参数拼装、
  * 警告透传与错误文案原样保留。
@@ -12,17 +23,15 @@ export function useYouTubeSearch() {
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
   const [youtubeWarning, setYoutubeWarning] = useState<string | null>(null);
-  const [youtubeContentType, setYoutubeContentType] = useState<
-    'all' | 'music' | 'movie' | 'educational' | 'gaming' | 'sports' | 'news'
-  >('all');
-  const [youtubeSortOrder, setYoutubeSortOrder] = useState<
-    'relevance' | 'date' | 'rating' | 'viewCount' | 'title'
-  >('relevance');
+  const [youtubeContentType, setYoutubeContentType] =
+    useState<YouTubeContentType>('all');
+  const [youtubeSortOrder, setYoutubeSortOrder] =
+    useState<YouTubeSortOrder>('relevance');
 
   const handleYouTubeSearch = async (
     query: string,
-    contentType = youtubeContentType,
-    sortOrder = youtubeSortOrder,
+    contentType: YouTubeContentType = youtubeContentType,
+    sortOrder: YouTubeSortOrder = youtubeSortOrder,
   ) => {
     if (!query.trim()) return;
 
