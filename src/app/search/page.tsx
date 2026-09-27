@@ -1,9 +1,9 @@
-/* eslint-disable react-hooks/exhaustive-deps, @typescript-eslint/no-explicit-any,@typescript-eslint/no-non-null-assertion,no-empty */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { ChevronUp, Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import {
@@ -13,24 +13,24 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { safeJsonParse } from '@/lib/safe-storage';
-import { SearchResult } from '@/lib/types';
 import { useSearchPageAnalytics } from '@/hooks/useSearchPageAnalytics';
 
 import NetDiskSearchResults from '@/components/NetDiskSearchResults';
 import PageLayout from '@/components/PageLayout';
-import SearchResultFilter, {
-  SearchFilterCategory,
-} from '@/components/SearchResultFilter';
 import SearchSuggestions from '@/components/SearchSuggestions';
-import VirtualSearchGrid from '@/components/VirtualSearchGrid';
 
 import { TmdbActorResults } from './_components/TmdbActorResults';
+import { VideoResultsSection } from './_components/VideoResultsSection';
 import {
   YouTubeDirectMode,
   YouTubeModeSwitch,
   YouTubeSearchResults,
 } from './_components/YouTubeSearchResults';
 import { useNetdiskSearch } from './hooks/useNetdiskSearch';
+import {
+  SearchFilterValues,
+  useSearchFilters,
+} from './hooks/useSearchFilters';
 import { useTmdbActorSearch } from './hooks/useTmdbActorSearch';
 import { useVideoSearch } from './hooks/useVideoSearch';
 import { useYouTubeSearch } from './hooks/useYouTubeSearch';
@@ -63,23 +63,13 @@ function SearchPageClient() {
   const [tmdbFilterVisible, setTmdbFilterVisible] = useState(false);
 
   // 过滤器：非聚合与聚合
-  const [filterAll, setFilterAll] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
+  const [filterAll, setFilterAll] = useState<SearchFilterValues>({
     source: 'all',
     title: 'all',
     year: 'all',
     yearOrder: 'none',
   });
-  const [filterAgg, setFilterAgg] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
+  const [filterAgg, setFilterAgg] = useState<SearchFilterValues>({
     source: 'all',
     title: 'all',
     year: 'all',
@@ -159,229 +149,14 @@ function SearchPageClient() {
     handleTmdbActorSearch,
   } = useTmdbActorSearch();
 
-  const computeGroupStats = (group: SearchResult[]) => {
-    const episodes = (() => {
-      const countMap = new Map<number, number>();
-      group.forEach((g) => {
-        const len = g.episodes?.length || 0;
-        if (len > 0) countMap.set(len, (countMap.get(len) || 0) + 1);
-      });
-      let max = 0;
-      let res = 0;
-      countMap.forEach((v, k) => {
-        if (v > max) {
-          max = v;
-          res = k;
-        }
-      });
-      return res;
-    })();
-    const source_names = Array.from(
-      new Set(group.map((g) => g.source_name).filter(Boolean)),
-    ) as string[];
-
-    const douban_id = (() => {
-      const countMap = new Map<number, number>();
-      group.forEach((g) => {
-        if (g.douban_id && g.douban_id > 0) {
-          countMap.set(g.douban_id, (countMap.get(g.douban_id) || 0) + 1);
-        }
-      });
-      let max = 0;
-      let res: number | undefined;
-      countMap.forEach((v, k) => {
-        if (v > max) {
-          max = v;
-          res = k;
-        }
-      });
-      return res;
-    })();
-
-    return { episodes, source_names, douban_id };
-  };
-
-  // 简化的年份排序：unknown/空值始终在最后
-  const compareYear = (
-    aYear: string,
-    bYear: string,
-    order: 'none' | 'asc' | 'desc',
-  ) => {
-    // 如果是无排序状态，返回0（保持原顺序）
-    if (order === 'none') return 0;
-
-    // 处理空值和unknown
-    const aIsEmpty = !aYear || aYear === 'unknown';
-    const bIsEmpty = !bYear || bYear === 'unknown';
-
-    if (aIsEmpty && bIsEmpty) return 0;
-    if (aIsEmpty) return 1; // a 在后
-    if (bIsEmpty) return -1; // b 在后
-
-    // 都是有效年份，按数字比较
-    const aNum = parseInt(aYear, 10);
-    const bNum = parseInt(bYear, 10);
-
-    return order === 'asc' ? aNum - bNum : bNum - aNum;
-  };
-
-  // 聚合后的结果（按标题和年份分组）
-  const aggregatedResults = useMemo(() => {
-    const map = new Map<string, SearchResult[]>();
-    const keyOrder: string[] = []; // 记录键出现的顺序
-
-    searchResults.forEach((item) => {
-      // 使用 title + year + type 作为键，year 必然存在，但依然兜底 'unknown'
-      const key = `${item.title.replaceAll(' ', '')}-${
-        item.year || 'unknown'
-      }-${item.episodes.length === 1 ? 'movie' : 'tv'}`;
-      const arr = map.get(key) || [];
-
-      // 如果是新的键，记录其顺序
-      if (arr.length === 0) {
-        keyOrder.push(key);
-      }
-
-      arr.push(item);
-      map.set(key, arr);
+  // 过滤/排序与聚合分组（拆分至 useSearchFilters）
+  const { filterOptions, filteredAllResults, filteredAggResults } =
+    useSearchFilters({
+      searchResults,
+      searchQuery,
+      filterAll,
+      filterAgg,
     });
-
-    // 按出现顺序返回聚合结果
-    return keyOrder.map(
-      (key) => [key, map.get(key)!] as [string, SearchResult[]],
-    );
-  }, [searchResults]);
-
-  // 构建筛选选项
-  const filterOptions = useMemo(() => {
-    const sourcesSet = new Map<string, string>();
-    const titlesSet = new Set<string>();
-    const yearsSet = new Set<string>();
-
-    searchResults.forEach((item) => {
-      if (item.source && item.source_name) {
-        sourcesSet.set(item.source, item.source_name);
-      }
-      if (item.title) titlesSet.add(item.title);
-      if (item.year) yearsSet.add(item.year);
-    });
-
-    const sourceOptions: { label: string; value: string }[] = [
-      { label: '全部来源', value: 'all' },
-      ...Array.from(sourcesSet.entries())
-        .sort((a, b) => a[1].localeCompare(b[1]))
-        .map(([value, label]) => ({ label, value })),
-    ];
-
-    const titleOptions: { label: string; value: string }[] = [
-      { label: '全部标题', value: 'all' },
-      ...Array.from(titlesSet.values())
-        .sort((a, b) => a.localeCompare(b))
-        .map((t) => ({ label: t, value: t })),
-    ];
-
-    // 年份: 将 unknown 放末尾
-    const years = Array.from(yearsSet.values());
-    const knownYears = years
-      .filter((y) => y !== 'unknown')
-      .sort((a, b) => parseInt(b) - parseInt(a));
-    const hasUnknown = years.includes('unknown');
-    const yearOptions: { label: string; value: string }[] = [
-      { label: '全部年份', value: 'all' },
-      ...knownYears.map((y) => ({ label: y, value: y })),
-      ...(hasUnknown ? [{ label: '未知', value: 'unknown' }] : []),
-    ];
-
-    const categoriesAll: SearchFilterCategory[] = [
-      { key: 'source', label: '来源', options: sourceOptions },
-      { key: 'title', label: '标题', options: titleOptions },
-      { key: 'year', label: '年份', options: yearOptions },
-    ];
-
-    const categoriesAgg: SearchFilterCategory[] = [
-      { key: 'source', label: '来源', options: sourceOptions },
-      { key: 'title', label: '标题', options: titleOptions },
-      { key: 'year', label: '年份', options: yearOptions },
-    ];
-
-    return { categoriesAll, categoriesAgg };
-  }, [searchResults]);
-
-  // 非聚合：应用筛选与排序
-  const filteredAllResults = useMemo(() => {
-    const { source, title, year, yearOrder } = filterAll;
-    const filtered = searchResults.filter((item) => {
-      if (source !== 'all' && item.source !== source) return false;
-      if (title !== 'all' && item.title !== title) return false;
-      if (year !== 'all' && item.year !== year) return false;
-      return true;
-    });
-
-    // 如果是无排序状态，直接返回过滤后的原始顺序
-    if (yearOrder === 'none') {
-      return filtered;
-    }
-
-    // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
-    return filtered.sort((a, b) => {
-      // 首先按年份排序
-      const yearComp = compareYear(a.year, b.year, yearOrder);
-      if (yearComp !== 0) return yearComp;
-
-      // 年份相同时，精确匹配在前
-      const aExactMatch = a.title === searchQuery.trim();
-      const bExactMatch = b.title === searchQuery.trim();
-      if (aExactMatch && !bExactMatch) return -1;
-      if (!aExactMatch && bExactMatch) return 1;
-
-      // 最后按标题排序，正序时字母序，倒序时反字母序
-      return yearOrder === 'asc'
-        ? a.title.localeCompare(b.title)
-        : b.title.localeCompare(a.title);
-    });
-  }, [searchResults, filterAll, searchQuery]);
-
-  // 聚合：应用筛选与排序
-  const filteredAggResults = useMemo(() => {
-    const { source, title, year, yearOrder } = filterAgg as any;
-    const filtered = aggregatedResults.filter(([_, group]) => {
-      const gTitle = group[0]?.title ?? '';
-      const gYear = group[0]?.year ?? 'unknown';
-      const hasSource =
-        source === 'all' ? true : group.some((item) => item.source === source);
-      if (!hasSource) return false;
-      if (title !== 'all' && gTitle !== title) return false;
-      if (year !== 'all' && gYear !== year) return false;
-      return true;
-    });
-
-    // 如果是无排序状态，保持按关键字+年份+类型出现的原始顺序
-    if (yearOrder === 'none') {
-      return filtered;
-    }
-
-    // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
-    return filtered.sort((a, b) => {
-      // 首先按年份排序
-      const aYear = a[1][0].year;
-      const bYear = b[1][0].year;
-      const yearComp = compareYear(aYear, bYear, yearOrder);
-      if (yearComp !== 0) return yearComp;
-
-      // 年份相同时，精确匹配在前
-      const aExactMatch = a[1][0].title === searchQuery.trim();
-      const bExactMatch = b[1][0].title === searchQuery.trim();
-      if (aExactMatch && !bExactMatch) return -1;
-      if (!aExactMatch && bExactMatch) return 1;
-
-      // 最后按标题排序，正序时字母序，倒序时反字母序
-      const aTitle = a[1][0].title;
-      const bTitle = b[1][0].title;
-      return yearOrder === 'asc'
-        ? aTitle.localeCompare(bTitle)
-        : bTitle.localeCompare(aTitle);
-    });
-  }, [aggregatedResults, filterAgg, searchQuery]);
 
   useEffect(() => {
     // 📊 记录搜索页面访问
@@ -806,79 +581,22 @@ function SearchPageClient() {
                 />
               ) : (
                 /* 原有的影视搜索结果 */
-                <>
-                  {/* 标题 */}
-                  <div className='mb-4'>
-                    <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                      搜索结果
-                      {totalSources > 0 && useFluidSearch && (
-                        <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
-                          {completedSources}/{totalSources}
-                        </span>
-                      )}
-                      {isLoading && useFluidSearch && (
-                        <span className='ml-2 inline-block align-middle'>
-                          <span className='inline-block h-3 w-3 border-2 border-gray-300 border-t-green-500 rounded-full animate-spin'></span>
-                        </span>
-                      )}
-                    </h2>
-                  </div>
-                  {/* 筛选器 + 开关控件 */}
-                  <div className='mb-8 space-y-4'>
-                    {/* 筛选器 */}
-                    <div className='flex-1 min-w-0'>
-                      {viewMode === 'agg' ? (
-                        <SearchResultFilter
-                          categories={filterOptions.categoriesAgg}
-                          values={filterAgg}
-                          onChange={(v) => setFilterAgg(v as any)}
-                        />
-                      ) : (
-                        <SearchResultFilter
-                          categories={filterOptions.categoriesAll}
-                          values={filterAll}
-                          onChange={(v) => setFilterAll(v as any)}
-                        />
-                      )}
-                    </div>
-
-                    {/* 开关控件行 */}
-                    <div className='flex items-center justify-end gap-6'>
-                      {/* 聚合开关 */}
-                      <label className='flex items-center gap-3 cursor-pointer select-none shrink-0 group'>
-                        <span className='text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors'>
-                          🔄 聚合
-                        </span>
-                        <div className='relative'>
-                          <input
-                            type='checkbox'
-                            className='sr-only peer'
-                            checked={viewMode === 'agg'}
-                            onChange={() =>
-                              setViewMode(viewMode === 'agg' ? 'all' : 'agg')
-                            }
-                          />
-                          <div className='w-11 h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full peer-checked:from-emerald-400 peer-checked:to-green-500 transition-all duration-300 dark:from-gray-600 dark:to-gray-700 dark:peer-checked:from-emerald-500 dark:peer-checked:to-green-600 shadow-inner'></div>
-                          <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-5 shadow-lg peer-checked:shadow-emerald-300 dark:peer-checked:shadow-emerald-500/50 peer-checked:scale-105'></div>
-                          {/* 开关内图标 */}
-                          <div className='absolute top-1.5 left-1.5 w-3 h-3 flex items-center justify-center pointer-events-none transition-all duration-300 peer-checked:translate-x-5'>
-                            <span className='text-[10px] peer-checked:text-white text-gray-500'>
-                              {viewMode === 'agg' ? '🔗' : '○'}
-                            </span>
-                          </div>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                  <VirtualSearchGrid
-                    filteredResults={filteredAllResults}
-                    filteredAggResults={filteredAggResults}
-                    viewMode={viewMode}
-                    searchQuery={searchQuery}
-                    isLoading={isLoading}
-                    computeGroupStats={computeGroupStats}
-                  />
-                </>
+                <VideoResultsSection
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  filterAll={filterAll}
+                  setFilterAll={setFilterAll}
+                  filterAgg={filterAgg}
+                  setFilterAgg={setFilterAgg}
+                  filterOptions={filterOptions}
+                  filteredAllResults={filteredAllResults}
+                  filteredAggResults={filteredAggResults}
+                  searchQuery={searchQuery}
+                  isLoading={isLoading}
+                  totalSources={totalSources}
+                  completedSources={completedSources}
+                  useFluidSearch={useFluidSearch}
+                />
               )}
             </section>
           ) : (
