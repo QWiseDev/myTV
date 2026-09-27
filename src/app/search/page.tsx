@@ -3,18 +3,10 @@
 
 import { ChevronUp, Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import React, {
-  startTransition,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import {
-  addSearchHistory,
   clearSearchHistory,
   deleteSearchHistory,
   getSearchHistory,
@@ -31,10 +23,15 @@ import SearchResultFilter, {
   SearchFilterCategory,
 } from '@/components/SearchResultFilter';
 import SearchSuggestions from '@/components/SearchSuggestions';
-import TMDBFilterPanel, { TMDBFilterState } from '@/components/TMDBFilterPanel';
+import TMDBFilterPanel from '@/components/TMDBFilterPanel';
 import VideoCard from '@/components/VideoCard';
 import VirtualSearchGrid from '@/components/VirtualSearchGrid';
 import YouTubeVideoCard from '@/components/YouTubeVideoCard';
+
+import { useNetdiskSearch } from './hooks/useNetdiskSearch';
+import { useTmdbActorSearch } from './hooks/useTmdbActorSearch';
+import { useVideoSearch } from './hooks/useVideoSearch';
+import { useYouTubeSearch } from './hooks/useYouTubeSearch';
 
 function SearchPageClient() {
   // 📊 搜索页面分析埋点
@@ -50,69 +47,116 @@ function SearchPageClient() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentQueryRef = useRef<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const [totalSources, setTotalSources] = useState(0);
-  const [completedSources, setCompletedSources] = useState(0);
-  const pendingResultsRef = useRef<SearchResult[]>([]);
-  const flushTimerRef = useRef<number | null>(null);
-  const [useFluidSearch, setUseFluidSearch] = useState(true);
 
   // 网盘搜索相关状态
   const [searchType, setSearchType] = useState<
     'video' | 'netdisk' | 'youtube' | 'tmdb-actor'
   >('video');
-  const [netdiskResults, setNetdiskResults] = useState<{
-    [key: string]: any[];
-  } | null>(null);
-  const [netdiskLoading, setNetdiskLoading] = useState(false);
-  const [netdiskError, setNetdiskError] = useState<string | null>(null);
-  const [netdiskTotal, setNetdiskTotal] = useState(0);
 
-  // YouTube搜索相关状态
-  const [youtubeResults, setYoutubeResults] = useState<any[] | null>(null);
-  const [youtubeLoading, setYoutubeLoading] = useState(false);
-  const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  const [youtubeWarning, setYoutubeWarning] = useState<string | null>(null);
-  const [youtubeContentType, setYoutubeContentType] = useState<
-    'all' | 'music' | 'movie' | 'educational' | 'gaming' | 'sports' | 'news'
-  >('all');
-  const [youtubeSortOrder, setYoutubeSortOrder] = useState<
-    'relevance' | 'date' | 'rating' | 'viewCount' | 'title'
-  >('relevance');
-  const [youtubeMode, setYoutubeMode] = useState<'search' | 'direct'>('search'); // 新增：YouTube模式
-
-  // TMDB演员搜索相关状态
-  const [tmdbActorResults, setTmdbActorResults] = useState<any[] | null>(null);
-  const [tmdbActorLoading, setTmdbActorLoading] = useState(false);
-  const [tmdbActorError, setTmdbActorError] = useState<string | null>(null);
-  const [tmdbActorType, setTmdbActorType] = useState<'movie' | 'tv'>('movie');
-
-  // TMDB筛选状态
-  const [tmdbFilterState, setTmdbFilterState] = useState<TMDBFilterState>({
-    startYear: undefined,
-    endYear: undefined,
-    minRating: undefined,
-    maxRating: undefined,
-    minPopularity: undefined,
-    maxPopularity: undefined,
-    minVoteCount: undefined,
-    minEpisodeCount: undefined,
-    genreIds: [],
-    languages: [],
-    onlyRated: false,
-    sortBy: 'popularity',
-    sortOrder: 'desc',
-    limit: undefined, // 移除默认限制，显示所有结果
-  });
+  // YouTube模式
+  const [youtubeMode, setYoutubeMode] = useState<'search' | 'direct'>('search');
 
   // TMDB筛选面板显示状态
   const [tmdbFilterVisible, setTmdbFilterVisible] = useState(false);
+
+  // 过滤器：非聚合与聚合
+  const [filterAll, setFilterAll] = useState<{
+    source: string;
+    title: string;
+    year: string;
+    yearOrder: 'none' | 'asc' | 'desc';
+  }>({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none',
+  });
+  const [filterAgg, setFilterAgg] = useState<{
+    source: string;
+    title: string;
+    year: string;
+    yearOrder: 'none' | 'asc' | 'desc';
+  }>({
+    source: 'all',
+    title: 'all',
+    year: 'all',
+    yearOrder: 'none',
+  });
+
+  // 获取默认聚合设置：只读取用户本地设置，默认为 true
+  const getDefaultAggregate = () => {
+    if (typeof window !== 'undefined') {
+      const userSetting = localStorage.getItem('defaultAggregateSearch');
+      if (userSetting !== null) {
+        return safeJsonParse<boolean>(userSetting, true);
+      }
+    }
+    return true; // 默认启用聚合
+  };
+
+  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
+    return getDefaultAggregate() ? 'agg' : 'all';
+  });
+
+  // 影视/聚合搜索：状态、流式连接与结果缓冲（拆分至 useVideoSearch）
+  const {
+    searchResults,
+    isLoading,
+    showResults,
+    showSuggestions,
+    totalSources,
+    completedSources,
+    useFluidSearch,
+    setShowResults,
+    setIsLoading,
+    setShowSuggestions,
+  } = useVideoSearch({
+    viewMode,
+    filterAgg,
+    filterAll,
+    onQueryChange: setSearchQuery,
+    analytics,
+  });
+
+  // 网盘 / YouTube / TMDB演员三路搜索（各拆分至独立 hook）
+  const {
+    netdiskResults,
+    setNetdiskResults,
+    netdiskLoading,
+    netdiskError,
+    setNetdiskError,
+    netdiskTotal,
+    setNetdiskTotal,
+    handleNetDiskSearch,
+  } = useNetdiskSearch();
+  const {
+    youtubeResults,
+    setYoutubeResults,
+    youtubeLoading,
+    youtubeError,
+    setYoutubeError,
+    youtubeWarning,
+    setYoutubeWarning,
+    youtubeContentType,
+    setYoutubeContentType,
+    youtubeSortOrder,
+    setYoutubeSortOrder,
+    handleYouTubeSearch,
+  } = useYouTubeSearch();
+  const {
+    tmdbActorResults,
+    setTmdbActorResults,
+    tmdbActorLoading,
+    tmdbActorError,
+    setTmdbActorError,
+    tmdbActorType,
+    setTmdbActorType,
+    tmdbFilterState,
+    setTmdbFilterState,
+    handleTmdbActorSearch,
+  } = useTmdbActorSearch();
+
   const computeGroupStats = (group: SearchResult[]) => {
     const episodes = (() => {
       const countMap = new Map<number, number>();
@@ -154,64 +198,9 @@ function SearchPageClient() {
 
     return { episodes, source_names, douban_id };
   };
-  // 过滤器：非聚合与聚合
-  const [filterAll, setFilterAll] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none',
-  });
-  const [filterAgg, setFilterAgg] = useState<{
-    source: string;
-    title: string;
-    year: string;
-    yearOrder: 'none' | 'asc' | 'desc';
-  }>({
-    source: 'all',
-    title: 'all',
-    year: 'all',
-    yearOrder: 'none',
-  });
-
-  // 获取默认聚合设置：只读取用户本地设置，默认为 true
-  const getDefaultAggregate = () => {
-    if (typeof window !== 'undefined') {
-      const userSetting = localStorage.getItem('defaultAggregateSearch');
-      if (userSetting !== null) {
-        return safeJsonParse<boolean>(userSetting, true);
-      }
-    }
-    return true; // 默认启用聚合
-  };
-
-  const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
-    return getDefaultAggregate() ? 'agg' : 'all';
-  });
 
   // 在“无排序”场景用于每个源批次的预排序：完全匹配标题优先，其次年份倒序，未知年份最后
-  const sortBatchForNoOrder = (items: SearchResult[]) => {
-    const q = currentQueryRef.current.trim();
-    return items.slice().sort((a, b) => {
-      const aExact = (a.title || '').trim() === q;
-      const bExact = (b.title || '').trim() === q;
-      if (aExact && !bExact) return -1;
-      if (!aExact && bExact) return 1;
-
-      const aNum = Number.parseInt(a.year as any, 10);
-      const bNum = Number.parseInt(b.year as any, 10);
-      const aValid = !Number.isNaN(aNum);
-      const bValid = !Number.isNaN(bNum);
-      if (aValid && !bValid) return -1;
-      if (!aValid && bValid) return 1;
-      if (aValid && bValid) return bNum - aNum; // 年份倒序
-      return 0;
-    });
-  };
+  // （已随流式搜索逻辑移入 useVideoSearch）
 
   // 简化的年份排序：unknown/空值始终在最后
   const compareYear = (
@@ -420,18 +409,6 @@ function SearchPageClient() {
       }
     }
 
-    // 读取流式搜索设置
-    if (typeof window !== 'undefined') {
-      const savedFluidSearch = localStorage.getItem('fluidSearch');
-      const defaultFluidSearch =
-        (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
-      if (savedFluidSearch !== null) {
-        setUseFluidSearch(safeJsonParse<boolean>(savedFluidSearch, true));
-      } else if (defaultFluidSearch !== undefined) {
-        setUseFluidSearch(defaultFluidSearch);
-      }
-    }
-
     // 监听搜索历史更新事件
     const unsubscribe = subscribeToDataUpdates(
       'searchHistoryUpdated',
@@ -528,219 +505,7 @@ function SearchPageClient() {
     tmdbActorError,
   ]);
 
-  useEffect(() => {
-    // 当搜索参数变化时更新搜索状态
-    const query = searchParams.get('q') || '';
-    currentQueryRef.current = query.trim();
 
-    if (query) {
-      setSearchQuery(query);
-      // 新搜索：关闭旧连接并清空结果
-      if (eventSourceRef.current) {
-        try {
-          eventSourceRef.current.close();
-        } catch {}
-        eventSourceRef.current = null;
-      }
-      setSearchResults([]);
-      setTotalSources(0);
-      setCompletedSources(0);
-      // 清理缓冲
-      pendingResultsRef.current = [];
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      setIsLoading(true);
-      setShowResults(true);
-
-      const trimmed = query.trim();
-
-      // 每次搜索时重新读取设置，确保使用最新的配置
-      let currentFluidSearch = useFluidSearch;
-      if (typeof window !== 'undefined') {
-        const savedFluidSearch = localStorage.getItem('fluidSearch');
-        if (savedFluidSearch !== null) {
-          currentFluidSearch = safeJsonParse<boolean>(
-            savedFluidSearch,
-            useFluidSearch
-          );
-        } else {
-          const defaultFluidSearch =
-            (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
-          currentFluidSearch = defaultFluidSearch;
-        }
-      }
-
-      // 如果读取的配置与当前状态不同，更新状态
-      if (currentFluidSearch !== useFluidSearch) {
-        setUseFluidSearch(currentFluidSearch);
-      }
-
-      if (currentFluidSearch) {
-        // 流式搜索：打开新的流式连接
-        const es = new EventSource(
-          `/api/search/ws?q=${encodeURIComponent(trimmed)}`,
-        );
-        eventSourceRef.current = es;
-
-        es.onmessage = (event) => {
-          if (!event.data) return;
-          try {
-            const payload = JSON.parse(event.data);
-            if (currentQueryRef.current !== trimmed) return;
-            switch (payload.type) {
-              case 'start':
-                setTotalSources(payload.totalSources || 0);
-                setCompletedSources(0);
-                break;
-              case 'source_result': {
-                setCompletedSources((prev) => prev + 1);
-                if (
-                  Array.isArray(payload.results) &&
-                  payload.results.length > 0
-                ) {
-                  // 缓冲新增结果，节流刷入，避免频繁重渲染导致闪烁
-                  const activeYearOrder =
-                    viewMode === 'agg'
-                      ? filterAgg.yearOrder
-                      : filterAll.yearOrder;
-                  const incoming: SearchResult[] =
-                    activeYearOrder === 'none'
-                      ? sortBatchForNoOrder(payload.results as SearchResult[])
-                      : (payload.results as SearchResult[]);
-                  pendingResultsRef.current.push(...incoming);
-                  if (!flushTimerRef.current) {
-                    flushTimerRef.current = window.setTimeout(() => {
-                      const toAppend = pendingResultsRef.current;
-                      pendingResultsRef.current = [];
-                      startTransition(() => {
-                        setSearchResults((prev) => prev.concat(toAppend));
-                      });
-                      flushTimerRef.current = null;
-                    }, 80);
-                  }
-                }
-                break;
-              }
-              case 'source_error':
-                setCompletedSources((prev) => prev + 1);
-                break;
-              case 'complete':
-                setCompletedSources(payload.completedSources || totalSources);
-                // 完成前确保将缓冲写入
-                if (pendingResultsRef.current.length > 0) {
-                  const toAppend = pendingResultsRef.current;
-                  pendingResultsRef.current = [];
-                  if (flushTimerRef.current) {
-                    clearTimeout(flushTimerRef.current);
-                    flushTimerRef.current = null;
-                  }
-                  startTransition(() => {
-                    const newResults = [...searchResults, ...toAppend];
-                    setSearchResults((prev) => prev.concat(toAppend));
-
-                    // 📊 分析埋点：流式搜索完成
-                    if (query) {
-                      analytics.handleSearch(query, newResults, 0, {
-                        category: 'video',
-                        searchType: 'general',
-                        searchFrom: 'search_form',
-                      });
-                    }
-                  });
-                }
-                setIsLoading(false);
-                try {
-                  es.close();
-                } catch {}
-                if (eventSourceRef.current === es) {
-                  eventSourceRef.current = null;
-                }
-                break;
-            }
-          } catch {}
-        };
-
-        es.onerror = () => {
-          setIsLoading(false);
-          // 错误时也清空缓冲
-          if (pendingResultsRef.current.length > 0) {
-            const toAppend = pendingResultsRef.current;
-            pendingResultsRef.current = [];
-            if (flushTimerRef.current) {
-              clearTimeout(flushTimerRef.current);
-              flushTimerRef.current = null;
-            }
-            startTransition(() => {
-              setSearchResults((prev) => prev.concat(toAppend));
-            });
-          }
-          try {
-            es.close();
-          } catch {}
-          if (eventSourceRef.current === es) {
-            eventSourceRef.current = null;
-          }
-        };
-      } else {
-        // 传统搜索：使用普通接口
-        fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
-          .then((response) => response.json())
-          .then((data) => {
-            if (currentQueryRef.current !== trimmed) return;
-
-            if (data.results && Array.isArray(data.results)) {
-              const activeYearOrder =
-                viewMode === 'agg' ? filterAgg.yearOrder : filterAll.yearOrder;
-              const results: SearchResult[] =
-                activeYearOrder === 'none'
-                  ? sortBatchForNoOrder(data.results as SearchResult[])
-                  : (data.results as SearchResult[]);
-
-              setSearchResults(results);
-              setTotalSources(1);
-              setCompletedSources(1);
-
-              // 📊 分析埋点：搜索完成
-              analytics.handleSearch(query, results, 0, {
-                category: 'video',
-                searchType: 'general',
-                searchFrom: 'search_form',
-              });
-            }
-            setIsLoading(false);
-          })
-          .catch(() => {
-            setIsLoading(false);
-          });
-      }
-      setShowSuggestions(false);
-
-      // 保存到搜索历史 (事件监听会自动更新界面)
-      addSearchHistory(query);
-    } else {
-      setShowResults(false);
-      setShowSuggestions(false);
-    }
-  }, [searchParams]);
-
-  // 组件卸载时，关闭可能存在的连接
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        try {
-          eventSourceRef.current.close();
-        } catch {}
-        eventSourceRef.current = null;
-      }
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      pendingResultsRef.current = [];
-    };
-  }, []);
 
   // 输入框内容变化时触发，显示搜索建议
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -758,158 +523,6 @@ function SearchPageClient() {
   const handleInputFocus = () => {
     if (searchQuery.trim()) {
       setShowSuggestions(true);
-    }
-  };
-
-  // YouTube搜索函数
-  const handleYouTubeSearch = async (
-    query: string,
-    contentType = youtubeContentType,
-    sortOrder = youtubeSortOrder,
-  ) => {
-    if (!query.trim()) return;
-
-    setYoutubeLoading(true);
-    setYoutubeError(null);
-    setYoutubeWarning(null);
-    setYoutubeResults(null);
-
-    try {
-      // 构建搜索URL，包含内容类型和排序参数
-      let searchUrl = `/api/youtube/search?q=${encodeURIComponent(
-        query.trim(),
-      )}`;
-      if (contentType && contentType !== 'all') {
-        searchUrl += `&contentType=${contentType}`;
-      }
-      if (sortOrder && sortOrder !== 'relevance') {
-        searchUrl += `&order=${sortOrder}`;
-      }
-      const response = await fetch(searchUrl);
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setYoutubeResults(data.videos || []);
-        // 如果有警告信息，设置警告状态
-        if (data.warning) {
-          setYoutubeWarning(data.warning);
-        }
-      } else {
-        setYoutubeError(data.error || 'YouTube搜索失败');
-      }
-    } catch (error: any) {
-      console.error('YouTube搜索请求失败:', error);
-      // 尝试提取具体的错误消息
-      let errorMessage = 'YouTube搜索请求失败，请稍后重试';
-      if (error.message) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-      setYoutubeError(errorMessage);
-    } finally {
-      setYoutubeLoading(false);
-    }
-  };
-
-  // 网盘搜索函数
-  const handleNetDiskSearch = async (query: string) => {
-    if (!query.trim()) return;
-
-    setNetdiskLoading(true);
-    setNetdiskError(null);
-    setNetdiskResults(null);
-    setNetdiskTotal(0);
-
-    try {
-      const response = await fetch(
-        `/api/netdisk/search?q=${encodeURIComponent(query.trim())}`,
-      );
-      const data = await response.json();
-
-      // 检查响应状态和success字段
-      if (response.ok && data.success) {
-        setNetdiskResults(data.data.merged_by_type || {});
-        setNetdiskTotal(data.data.total || 0);
-      } else {
-        // 处理错误情况（包括功能关闭、配置错误等）
-        setNetdiskError(data.error || '网盘搜索失败');
-      }
-    } catch (error: any) {
-      console.error('网盘搜索请求失败:', error);
-      setNetdiskError('网盘搜索请求失败，请稍后重试');
-    } finally {
-      setNetdiskLoading(false);
-    }
-  };
-
-  // TMDB演员搜索函数
-  const handleTmdbActorSearch = async (
-    query: string,
-    type = tmdbActorType,
-    filterState = tmdbFilterState,
-  ) => {
-    if (!query.trim()) return;
-
-    setTmdbActorLoading(true);
-    setTmdbActorError(null);
-    setTmdbActorResults(null);
-
-    try {
-      // 构建筛选参数
-      const params = new URLSearchParams({
-        actor: query.trim(),
-        type: type,
-      });
-
-      // 只有设置了limit且大于0时才添加limit参数
-      if (filterState.limit && filterState.limit > 0) {
-        params.append('limit', filterState.limit.toString());
-      }
-
-      // 添加筛选参数
-      if (filterState.startYear)
-        params.append('startYear', filterState.startYear.toString());
-      if (filterState.endYear)
-        params.append('endYear', filterState.endYear.toString());
-      if (filterState.minRating)
-        params.append('minRating', filterState.minRating.toString());
-      if (filterState.maxRating)
-        params.append('maxRating', filterState.maxRating.toString());
-      if (filterState.minPopularity)
-        params.append('minPopularity', filterState.minPopularity.toString());
-      if (filterState.maxPopularity)
-        params.append('maxPopularity', filterState.maxPopularity.toString());
-      if (filterState.minVoteCount)
-        params.append('minVoteCount', filterState.minVoteCount.toString());
-      if (filterState.minEpisodeCount)
-        params.append(
-          'minEpisodeCount',
-          filterState.minEpisodeCount.toString(),
-        );
-      if (filterState.genreIds && filterState.genreIds.length > 0)
-        params.append('genreIds', filterState.genreIds.join(','));
-      if (filterState.languages && filterState.languages.length > 0)
-        params.append('languages', filterState.languages.join(','));
-      if (filterState.onlyRated) params.append('onlyRated', 'true');
-      if (filterState.sortBy) params.append('sortBy', filterState.sortBy);
-      if (filterState.sortOrder)
-        params.append('sortOrder', filterState.sortOrder);
-
-      // 调用TMDB API端点
-      const response = await fetch(`/api/tmdb/actor?${params.toString()}`);
-      const data = await response.json();
-
-      if (response.ok && data.code === 200) {
-        setTmdbActorResults(data.list || []);
-      } else {
-        setTmdbActorError(data.error || data.message || '搜索演员失败');
-      }
-    } catch (error: any) {
-      console.error('TMDB演员搜索请求失败:', error);
-      setTmdbActorError('搜索演员失败，请稍后重试');
-    } finally {
-      setTmdbActorLoading(false);
     }
   };
 
