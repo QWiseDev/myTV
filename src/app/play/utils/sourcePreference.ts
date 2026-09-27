@@ -60,18 +60,13 @@ export async function preferBestSource(
   options: PreferenceOptions,
 ): Promise<SearchResult> {
   const { deviceInfo, setSpeedTestProgress } = options;
-  const { userAgent, isIOS13, isMobile } = deviceInfo;
+  const { isIOS13, isMobile } = deviceInfo;
 
   // 处理空数组或单个源的情况
   if (sources.length === 0) {
     throw new Error('没有可用的播放源');
   }
   if (sources.length === 1) return sources[0];
-
-  // 使用全局统一的设备检测结果
-  const _isIPad =
-    /iPad/i.test(userAgent) ||
-    (userAgent.includes('Macintosh') && navigator.maxTouchPoints >= 1);
 
   // 如果是iPad或iOS13+（包括新iPad在桌面模式下），使用轻量级测速策略
   if (isIOS13) {

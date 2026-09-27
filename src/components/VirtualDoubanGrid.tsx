@@ -74,16 +74,7 @@ export const VirtualDoubanGrid: React.FC<VirtualDoubanGridProps> = ({
     setIsVirtualLoadingMore(false);
   }, [doubanData, type, primarySelection]);
 
-  // 强制重新计算容器尺寸的useEffect
-  useEffect(() => {
-    const checkContainer = () => {
-      const element = containerRef.current;
-      const _actualWidth = element?.offsetWidth || 0;
 
-    };
-
-    checkContainer();
-  }, [containerWidth]);
 
   // 检查是否还有更多项目可以加载（虚拟层面）
   const hasNextVirtualPage = displayItemCount < totalItemCount;

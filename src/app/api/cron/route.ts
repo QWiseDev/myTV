@@ -100,7 +100,7 @@ async function cronJob() {
 
 async function refreshAllLiveChannels() {
   const config = await getConfig();
-  const _result = await refreshEnabledLiveChannels(config);
+  await refreshEnabledLiveChannels(config);
   await db.saveAdminConfig(config);
 }
 
@@ -230,7 +230,6 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
       // 播放记录
       try {
         const playRecords = await db.getAllPlayRecords(user);
-        const _totalRecords = Object.keys(playRecords).length;
 
         for (const [key, record] of Object.entries(playRecords)) {
           try {
@@ -277,7 +276,6 @@ async function refreshRecordsFavoritesAndWatchingUpdates() {
         favorites = Object.fromEntries(
           Object.entries(favorites).filter(([_, fav]) => fav.origin !== 'live'),
         );
-        const _totalFavorites = Object.keys(favorites).length;
 
         for (const [key, fav] of Object.entries(favorites)) {
           try {
@@ -412,10 +410,6 @@ async function cleanupInactiveUsers() {
         const shouldDelete = isOldEnough && (hasNeverLoggedIn || loginTooOld);
 
         if (shouldDelete) {
-          const _deleteReason = hasNeverLoggedIn
-            ? '从未登入'
-            : `最后登入时间过久: ${new Date(lastLoginTime).toISOString()}`;
-
           // 从数据库删除用户数据
           await db.deleteUser(user.username);
 

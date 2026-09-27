@@ -309,13 +309,5 @@ export async function GET(request: Request) {
     );
   } finally {
     clearTimeout(timeoutId);
-
-    // 定期打印统计信息
-    if (
-      logoStats.requests % 200 === 0 &&
-      process.env.NODE_ENV === 'development'
-    ) {
-      const _hitRate = (logoStats.cacheHits / logoStats.requests) * 100;
-    }
   }
 }

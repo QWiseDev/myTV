@@ -227,8 +227,6 @@ class SmartCache {
     reliability.stability = this.calculateStability(reliability);
 
     this.reliability.set(cacheKey, reliability);
-
-    const _ttl = this.getCacheTTL(reliability);
   }
 
   /**

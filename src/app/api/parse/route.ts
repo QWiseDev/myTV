@@ -134,7 +134,7 @@ async function updateParsersHealth() {
     return { name: parser.name, status: parser.status, isHealthy };
   });
 
-  const _results = await Promise.allSettled(healthChecks);
+  await Promise.allSettled(healthChecks);
 }
 
 export async function GET(request: NextRequest) {

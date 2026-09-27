@@ -97,9 +97,8 @@ const CATEGORIES: Category[] = [
   },
 ];
 
-// 播放器池配置 - 简化配置，减少复杂度
-const _PLAYER_POOL_SIZE = 1; // 简化为单个播放器
-const PRELOAD_COUNT = 3; // 预加载视频数量
+// 预加载视频数量
+const PRELOAD_COUNT = 3;
 
 
 export default function ShortVideoPage() {

@@ -199,9 +199,6 @@ function SearchPageClient() {
     return { episodes, source_names, douban_id };
   };
 
-  // 在“无排序”场景用于每个源批次的预排序：完全匹配标题优先，其次年份倒序，未知年份最后
-  // （已随流式搜索逻辑移入 useVideoSearch）
-
   // 简化的年份排序：unknown/空值始终在最后
   const compareYear = (
     aYear: string,
@@ -663,7 +660,6 @@ function SearchPageClient() {
                     // 📊 分析埋点：搜索类型切换
                     analytics.handleFilterChange('search_type', 'youtube');
 
-                    const _wasAlreadyYoutube = searchType === 'youtube';
                     setSearchType('youtube');
                     // 清除之前的YouTube搜索状态，确保重新开始
                     setYoutubeError(null);

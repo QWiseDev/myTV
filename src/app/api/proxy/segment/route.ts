@@ -136,10 +136,6 @@ export async function GET(request: Request) {
       }
     });
 
-    const _contentLength = parseInt(
-      response?.headers.get('content-length') || '0',
-      10
-    );
     let bytesTransferred = 0;
 
     // 优化的流式传输，带背压控制

@@ -326,31 +326,5 @@ export function m3u8Loader(
     }
   });
 
-  // 添加性能监控和缓冲管理事件
-  hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
-    if (
-      data.frag.stats &&
-      data.frag.stats.loading &&
-      data.frag.stats.loaded
-    ) {
-      const loadTime =
-        data.frag.stats.loading.end - data.frag.stats.loading.start;
-      if (loadTime > 0 && data.frag.stats.loaded > 0) {
-        const throughputBps = (data.frag.stats.loaded * 8 * 1000) / loadTime; // bits per second
-        const _throughputMbps = throughputBps / 1000000;
-      }
-    }
-  });
-
-  // 监听缓冲区卡顿和自动恢复
-  hls.on(Hls.Events.ERROR, (event, data) => {
-    if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-      console.warn('Buffer stalled, attempting recovery...');
-      // 不做任何操作，让 HLS.js 自动处理
-    } else if (data.details === Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE) {
-      console.warn('Buffer hole detected, HLS.js will handle seeking...');
-      // 不做任何操作，让 HLS.js 自动跳过空洞
-    }
-  });
 
 }

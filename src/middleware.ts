@@ -6,8 +6,6 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const _requestId = Math.random().toString(36).substring(7);
-
 
   // 跳过不需要认证的路径
   if (shouldSkipAuth(pathname)) {

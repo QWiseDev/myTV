@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, no-console */
+/* eslint-disable no-console */
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -124,7 +124,8 @@ export async function GET(request: NextRequest) {
 
     // 合并所有成功的弹幕数据
     let allDanmu: DanmuItem[] = [];
-    const platformInfo: any[] = [];
+    const platformInfo: Array<{ platform: string; url: string; count: number }> =
+      [];
 
     results.forEach((result) => {
       if (result.status === 'fulfilled' && result.value.danmu.length > 0) {

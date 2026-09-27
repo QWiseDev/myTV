@@ -229,39 +229,6 @@ function DoubanPageClient() {
     return () => clearTimeout(timer);
   }, [type, customCategories]);
 
-  // 参数快照比较函数
-  const _isSnapshotEqual = useCallback(
-    (
-      snapshot1: {
-        type: string;
-        primarySelection: string;
-        secondarySelection: string;
-        multiLevelSelection: Record<string, string>;
-        selectedWeekday: string;
-        currentPage: number;
-      },
-      snapshot2: {
-        type: string;
-        primarySelection: string;
-        secondarySelection: string;
-        multiLevelSelection: Record<string, string>;
-        selectedWeekday: string;
-        currentPage: number;
-      },
-    ) => {
-      return (
-        snapshot1.type === snapshot2.type &&
-        snapshot1.primarySelection === snapshot2.primarySelection &&
-        snapshot1.secondarySelection === snapshot2.secondarySelection &&
-        snapshot1.selectedWeekday === snapshot2.selectedWeekday &&
-        snapshot1.currentPage === snapshot2.currentPage &&
-        JSON.stringify(snapshot1.multiLevelSelection) ===
-          JSON.stringify(snapshot2.multiLevelSelection)
-      );
-    },
-    [],
-  );
-
   // 生成API请求参数的辅助函数
   const getRequestParams = useCallback(
     (pageStart: number) => {

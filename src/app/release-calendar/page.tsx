@@ -783,11 +783,6 @@ export default function ReleaseCalendarPage() {
                             currentMonth,
                             1
                           );
-                          const _lastDay = new Date(
-                            currentYear,
-                            currentMonth + 1,
-                            0
-                          );
                           const startDate = new Date(firstDay);
                           startDate.setDate(
                             startDate.getDate() - firstDay.getDay()

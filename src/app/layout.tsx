@@ -35,8 +35,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // 🔥 构建时避免数据库调用，只使用环境变量默认值
-  const _storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-
   const siteName = process.env.NEXT_PUBLIC_SITE_NAME || '卡拉米影视';
   const announcement =
     process.env.ANNOUNCEMENT ||

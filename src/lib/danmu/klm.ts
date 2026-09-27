@@ -227,64 +227,21 @@ async function fetchDanmuFromKlmEpisode(
   return { danmu, resolvedEpisode };
 }
 
-// 从自建 danmu_api 获取弹幕数据
+// 从自建 danmu_api 获取弹幕数据（复用 fetchKlmJson：超时/非 2xx/解析失败均归一为空结果）
 async function fetchDanmuFromKlmAPI(videoUrl: string): Promise<DanmuItem[]> {
   const timeout = videoUrl.includes('iqiyi.com') ? 30000 : 20000;
-
-  try {
-    const response = await withAbortableTimeout(async (signal) => {
-      const apiBaseUrl = await getDanmuApiBase();
-      if (!apiBaseUrl) {
-        return null;
-      }
-
-      const apiUrl = `${apiBaseUrl}/api/v2/comment?url=${encodeURIComponent(
-        videoUrl,
-      )}&format=json`;
-
-      return fetch(apiUrl, {
-        signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          Accept: 'application/json, text/plain, */*',
-        },
-      });
-    }, timeout);
-
-    if (!response) {
-      return [];
-    }
-
-    if (!response.ok) {
-      return [];
-    }
-
-    const data = (await response.json()) as KlmDanmuResponse;
-    const _comments = Array.isArray(data.comments) ? data.comments : [];
-
-    const danmuList = normalizeKlmDanmuResponse(data);
-
-    const maxAllowedDanmu = 20000;
-    if (danmuList.length > maxAllowedDanmu) {
-      console.warn(
-        `⚠️ 自建弹幕数量过多 (${danmuList.length})，截断至 ${maxAllowedDanmu} 条`,
-      );
-      return danmuList.slice(0, maxAllowedDanmu);
-    }
-
-    return danmuList;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.name === 'TimeoutError' || error.name === 'AbortError')
-    ) {
-      console.error(`❌ 自建弹幕API请求超时 (${timeout / 1000}秒):`, videoUrl);
-    } else {
-      console.error('❌ 自建弹幕API请求失败:', error);
-    }
+  const apiBaseUrl = await getDanmuApiBase();
+  if (!apiBaseUrl) {
     return [];
   }
+
+  const apiUrl = `${apiBaseUrl}/api/v2/comment?url=${encodeURIComponent(
+    videoUrl,
+  )}&format=json`;
+
+  return normalizeKlmDanmuResponse(
+    await fetchKlmJson<KlmDanmuResponse>(apiUrl, {}, timeout),
+  );
 }
 
 export {

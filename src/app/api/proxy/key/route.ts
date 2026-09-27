@@ -240,13 +240,5 @@ export async function GET(request: Request) {
     );
   } finally {
     clearTimeout(timeoutId);
-
-    // 定期打印统计信息
-    if (
-      keyStats.requests % 100 === 0 &&
-      process.env.NODE_ENV === 'development'
-    ) {
-      const _hitRate = (keyStats.cacheHits / keyStats.requests) * 100;
-    }
   }
 }

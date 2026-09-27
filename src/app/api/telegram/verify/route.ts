@@ -207,9 +207,6 @@ export async function GET(request: Request) {
 
         await db.registerUser(username, initialPassword);
 
-        // 验证用户是否真的被创建
-        const _verifyExists = await db.checkUserExist(username);
-
         // 清除配置缓存，强制下次getConfig()时重新从数据库读取最新用户列表
         clearConfigCache();
 

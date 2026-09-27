@@ -314,18 +314,9 @@ async function autoTestVideoPlayback(
       };
     }
 
-    // 简单测试视频地址格式
-    const testUrl = firstEpisode.url;
-    if (!/^https?:\/\//i.test(testUrl)) {
-      return {
-        success: false,
-        message: '播放地址格式无效',
-      };
-    }
-
     return {
       success: true,
-      url: testUrl,
+      url: firstEpisode.url,
       message: `可播放: ${firstResult.info.title} - ${firstLine.label} - ${firstEpisode.title}`,
     };
   } catch (error) {

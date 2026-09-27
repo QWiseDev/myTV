@@ -48,7 +48,6 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
       const danmakuRegex = /<d p="([^"]*)"[^>]*>([^<]*)<\/d>/g;
       const danmuList: DanmuItem[] = [];
       let match;
-      const _count = 0;
 
       // 🚀 激进性能优化策略 - 基于ArtPlayer源码深度分析
       // 核心问题: 大量弹幕导致内存占用和计算密集
@@ -137,8 +136,6 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
           if (batchCount >= BATCH_SIZE) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             batchCount = 0;
-
-            // 进度反馈，避免用户以为卡死
           }
         } catch (error) {
           console.error(`❌ 解析第${totalProcessed}条XML弹幕失败:`, error);
@@ -191,16 +188,6 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
           .slice(0, maxAllowedDanmu);
       }
 
-
-      // 🎯 优化统计信息，减少不必要的计算
-      if (finalDanmu.length > 0) {
-        const firstTime = finalDanmu[0].time;
-        const lastTime = finalDanmu[finalDanmu.length - 1].time;
-        const _duration = lastTime - firstTime;
-
-
-        // 只在弹幕较少时显示详细统计
-      }
 
       return finalDanmu; // 成功获取优化后的弹幕
     } catch (error) {
@@ -298,17 +285,6 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
         return valid;
       })
       .sort((a, b) => a.time - b.time); // 按时间排序
-
-    // 显示时间分布统计
-    const _timeStats = danmuList.reduce(
-      (acc, item) => {
-        const timeRange = Math.floor(item.time / 60); // 按分钟分组
-        acc[timeRange] = (acc[timeRange] || 0) + 1;
-        return acc;
-      },
-      {} as Record<number, number>,
-    );
-
 
     return danmuList;
   } catch (error) {
