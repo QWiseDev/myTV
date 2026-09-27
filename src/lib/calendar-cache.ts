@@ -24,7 +24,6 @@ export class CalendarCacheManager {
 
     try {
       const timestamp = Date.now().toString();
-      const _sizeKB = Math.round(JSON.stringify(data).length / 1024);
       const expireSeconds = Math.floor(CACHE_DURATION / 1000);
 
       await db.setCache(CALENDAR_DATA_KEY, data, expireSeconds);

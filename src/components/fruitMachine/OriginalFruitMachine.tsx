@@ -19,18 +19,6 @@ const FRUIT_ICONS = {
   8: '🍇', // 葡萄
 };
 
-// 投注按钮图标映射
-const _BUTTON_ICONS = {
-  1: '🍎', // 苹果
-  2: '🍊', // 橙子
-  3: '🍋', // 柠檬
-  4: '🍉', // 西瓜
-  5: '🔔', // 铃铛
-  6: '⭐', // 星星
-  7: '💎', // 钻石
-  8: '7️⃣', // 七七
-};
-
 interface OriginalFruitMachineProps {
   coins: number;
   onCoinsChange: (newCoins: number) => void;
@@ -337,14 +325,6 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
     }
   }, [activeAuto, isRunning, isBigOrSmallRunning, startGame]);
 
-  // 大小按钮和收分闪动
-  const _setBigOrSmallBtnTimer = useCallback(() => {
-    setIsBigOrSmallBtnSwitch(true);
-    bigOrSmallBtnTimer.current = setInterval(() => {
-      setIsBigOrSmallBtnSwitch(prev => !prev);
-    }, 100);
-  }, []);
-
   // 清理定时器
   useEffect(() => {
     return () => {
@@ -353,7 +333,10 @@ export default function OriginalFruitMachine({ coins, onCoinsChange, onClose: _o
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 卸载清理语义：读取清理时刻的最新 timer 引用（正是需要清除的挂起定时器），复制到局部变量反而会固化过期引用
         clearInterval(bigOrSmallTimer.current);
       }
-      if (bigOrSmallBtnTimer.current) clearInterval(bigOrSmallBtnTimer.current);
+      if (bigOrSmallBtnTimer.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 卸载清理语义：读取清理时刻的最新 timer 引用（正是需要清除的挂起定时器），复制到局部变量反而会固化过期引用
+        clearInterval(bigOrSmallBtnTimer.current);
+      }
       if (autoTimeout.current) clearTimeout(autoTimeout.current);
       stopSound();
     };

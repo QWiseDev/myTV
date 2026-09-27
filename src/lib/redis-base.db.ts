@@ -639,11 +639,6 @@ export abstract class BaseRedisStorage implements IStorage {
 
       if (!val) return null;
 
-      // 调试：显示剩余 TTL
-      if (process.env.NODE_ENV === 'development') {
-        const _ttl = await this.withRetry(() => this.client.ttl(cacheKey));
-      }
-
       // 智能处理返回值：兼容不同Redis客户端的行为
       if (typeof val === 'string') {
         // 检查是否是HTML错误页面

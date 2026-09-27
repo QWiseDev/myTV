@@ -69,15 +69,7 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
     setIsLoadingMore(false);
   }, [currentData, viewMode]);
 
-  // 强制重新计算容器尺寸的useEffect
-  useEffect(() => {
-    const checkContainer = () => {
-      const element = containerRef.current;
-      const _actualWidth = element?.offsetWidth || 0;
-    };
 
-    checkContainer();
-  }, [containerWidth]);
 
   // 检查是否还有更多项目可以加载
   const hasNextPage = displayItemCount < totalItemCount;

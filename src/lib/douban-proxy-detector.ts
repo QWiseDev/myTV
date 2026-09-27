@@ -111,7 +111,7 @@ async function probeEndpoint(
   const startTime = performance.now();
 
   try {
-    const _response = await fetch(url, {
+    await fetch(url, {
       method: 'HEAD',
       mode: 'no-cors', // 允许跨域探测
       signal: controller.signal,
