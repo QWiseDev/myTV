@@ -6,6 +6,13 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getCacheTime, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import {
+  isSearchTimeoutError,
+  isSiteSearchBenched,
+  markSiteSearchSuccess,
+  markSiteSearchTimeout,
+  SEARCH_SITE_TIMEOUT_MS,
+} from '@/lib/site-health';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -41,17 +48,29 @@ export async function GET(request: NextRequest) {
   const config = await getConfig();
   const apiSites = await getAvailableApiSites(authInfo.username);
 
-  // 添加超时控制和错误处理，避免慢接口拖累整体响应
-  // 移除数字变体后，统一使用智能搜索变体
-  const searchPromises = apiSites.map((site) =>
-    withAbortableTimeout(
+  // 添加超时控制和错误处理，避免慢接口拖累整体响应；近期连续超时的站点
+  // 直接跳过（站点级隔离），防止挂死站点把整体完成时间钉在超时上限
+  const searchPromises = apiSites.map((site) => {
+    if (isSiteSearchBenched(site.key)) {
+      return Promise.resolve([]);
+    }
+
+    return withAbortableTimeout(
       async () => searchFromApi(site, query),
-      20000
-    ).catch((err) => {
-      console.warn(`搜索失败 ${site.name}:`, err.message);
-      return []; // 返回空数组而不是抛出错误
-    })
-  );
+      SEARCH_SITE_TIMEOUT_MS
+    )
+      .then((results) => {
+        markSiteSearchSuccess(site.key);
+        return results;
+      })
+      .catch((err) => {
+        if (isSearchTimeoutError(err)) {
+          markSiteSearchTimeout(site.key);
+        }
+        console.warn(`搜索失败 ${site.name}:`, err.message);
+        return []; // 返回空数组而不是抛出错误
+      });
+  });
 
   try {
     const results = await Promise.allSettled(searchPromises);

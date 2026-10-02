@@ -6,6 +6,13 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import {
+  isSearchTimeoutError,
+  isSiteSearchBenched,
+  markSiteSearchSuccess,
+  markSiteSearchTimeout,
+  SEARCH_SITE_TIMEOUT_MS,
+} from '@/lib/site-health';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -81,65 +88,90 @@ export async function GET(request: NextRequest) {
 
       // 为每个源创建搜索 Promise
       const searchPromises = apiSites.map(async (site) => {
-        try {
-          // 添加超时控制
-          const searchPromise = withAbortableTimeout(
-            async () => searchFromApi(site, query),
-            20000
-          );
-
-          const results = (await searchPromise) as any[];
-
-          // 过滤黄色内容
-          let filteredResults = results;
-          if (!config.SiteConfig.DisableYellowFilter) {
-            filteredResults = results.filter((result) => {
-              const typeName = result.type_name || '';
-              return !yellowWords.some((word: string) =>
-                typeName.includes(word)
-              );
-            });
-          }
-
-          // 发送该源的搜索结果
+        if (isSiteSearchBenched(site.key)) {
+          // 近期连续超时的站点直接跳过，仍推送空结果推进进度
           completedSources++;
 
           if (!streamClosed) {
-            const sourceEvent = `data: ${JSON.stringify({
+            const skippedEvent = `data: ${JSON.stringify({
               type: 'source_result',
               source: site.key,
               sourceName: site.name,
-              results: filteredResults,
+              results: [],
               timestamp: Date.now(),
             })}\n\n`;
 
-            if (!safeEnqueue(encoder.encode(sourceEvent))) {
+            if (!safeEnqueue(encoder.encode(skippedEvent))) {
               streamClosed = true;
               return; // 连接已关闭，停止处理
             }
           }
+        } else {
+          try {
+            // 添加超时控制
+            const searchPromise = withAbortableTimeout(
+              async () => searchFromApi(site, query),
+              SEARCH_SITE_TIMEOUT_MS
+            );
 
-          if (filteredResults.length > 0) {
-            allResults.push(...filteredResults);
-          }
-        } catch (error) {
-          console.warn(`搜索失败 ${site.name}:`, error);
+            const results = (await searchPromise) as any[];
+            markSiteSearchSuccess(site.key);
 
-          // 发送源错误事件
-          completedSources++;
+            // 过滤黄色内容
+            let filteredResults = results;
+            if (!config.SiteConfig.DisableYellowFilter) {
+              filteredResults = results.filter((result) => {
+                const typeName = result.type_name || '';
+                return !yellowWords.some((word: string) =>
+                  typeName.includes(word)
+                );
+              });
+            }
 
-          if (!streamClosed) {
-            const errorEvent = `data: ${JSON.stringify({
-              type: 'source_error',
-              source: site.key,
-              sourceName: site.name,
-              error: error instanceof Error ? error.message : '搜索失败',
-              timestamp: Date.now(),
-            })}\n\n`;
+            // 发送该源的搜索结果
+            completedSources++;
 
-            if (!safeEnqueue(encoder.encode(errorEvent))) {
-              streamClosed = true;
-              return; // 连接已关闭，停止处理
+            if (!streamClosed) {
+              const sourceEvent = `data: ${JSON.stringify({
+                type: 'source_result',
+                source: site.key,
+                sourceName: site.name,
+                results: filteredResults,
+                timestamp: Date.now(),
+              })}\n\n`;
+
+              if (!safeEnqueue(encoder.encode(sourceEvent))) {
+                streamClosed = true;
+                return; // 连接已关闭，停止处理
+              }
+            }
+
+            if (filteredResults.length > 0) {
+              allResults.push(...filteredResults);
+            }
+          } catch (error) {
+            console.warn(`搜索失败 ${site.name}:`, error);
+
+            if (isSearchTimeoutError(error)) {
+              markSiteSearchTimeout(site.key);
+            }
+
+            // 发送源错误事件
+            completedSources++;
+
+            if (!streamClosed) {
+              const errorEvent = `data: ${JSON.stringify({
+                type: 'source_error',
+                source: site.key,
+                sourceName: site.name,
+                error: error instanceof Error ? error.message : '搜索失败',
+                timestamp: Date.now(),
+              })}\n\n`;
+
+              if (!safeEnqueue(encoder.encode(errorEvent))) {
+                streamClosed = true;
+                return; // 连接已关闭，停止处理
+              }
             }
           }
         }
