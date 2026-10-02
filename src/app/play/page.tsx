@@ -15,6 +15,7 @@ import { logAccess } from '@/lib/access-log';
 import { danmakuMediaKey } from '@/lib/danmaku';
 import { generateStorageKey } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
+import { isUsableImageUrl, selectUsableImageUrl } from '@/lib/utils';
 import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
@@ -331,6 +332,14 @@ function PlayPageClient() {
     );
   }, [playRecords, routeParams.id, routeParams.source]);
 
+  // 播放记录封面兜底：记录就绪而详情接口未返回时，先把记录里的封面用起来
+  useEffect(() => {
+    const recordCover = selectUsableImageUrl(routePlayRecord?.cover);
+    if (recordCover && !isUsableImageUrl(videoCover)) {
+      setVideoCover(recordCover);
+    }
+  }, [routePlayRecord?.cover, videoCover, setVideoCover]);
+
   // 是否需要优选
   const [needPrefer, setNeedPrefer] = useState(routeParams.needPrefer);
   const needPreferRef = useSyncedRef(needPrefer);
@@ -577,7 +586,10 @@ function PlayPageClient() {
     videoTitle: routeParams.title,
     searchTitle,
     fallbackTitle: routePlayRecord?.title,
-    fallbackCover: routeParams.poster,
+    fallbackCover: selectUsableImageUrl(
+      routeParams.poster,
+      routePlayRecord?.cover,
+    ),
     fallbackDoubanId: routePlayRecord?.douban_id,
     searchType,
     needPreferRef,
