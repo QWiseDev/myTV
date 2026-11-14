@@ -861,20 +861,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 descending ? currentEnd - i : currentStart + i,
               );
             })()}
-            itemHeight={40}
-            gap={12}
-            minItemWidth={72}
+            itemHeight={72}
+            gap={10}
+            columns={5}
             renderItem={(episodeNumber) => {
               const isActive = episodeNumber === value;
               return (
                 <button
                   key={episodeNumber}
                   onClick={() => handleEpisodeClick(episodeNumber - 1)}
-                  className={`group relative h-10 min-w-10 px-3 py-2 flex items-center justify-center text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap font-mono border overflow-hidden
+                  className={`group h-[72px] w-full flex items-center justify-center text-xl font-bold rounded-xl transition-colors duration-200 border-2
                     ${
                       isActive
-                        ? 'border-green-400 text-green-400 bg-green-400/10'
-                        : 'border-transparent bg-gray-200/70 text-gray-700 hover:bg-gray-300/70 dark:bg-[#2a2a2a] dark:text-gray-200 dark:hover:bg-[#3a3a3a]'
+                        ? 'border-green-400 text-green-400 bg-transparent'
+                        : 'border-transparent bg-[#2a2a2a] text-gray-100 hover:bg-[#333]'
                     }`.trim()}
                 >
                   <span className='relative z-10'>

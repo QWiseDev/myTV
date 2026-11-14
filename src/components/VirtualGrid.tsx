@@ -4,20 +4,23 @@ interface VirtualGridProps<T> {
   items: T[];
   itemHeight: number;
   gap: number;
-  /** 单个 item 的最小宽度（px），列数按容器宽度自动计算 */
-  minItemWidth: number;
+  /** 固定列数（如爱奇艺的 5 列）；不传则按 minItemWidth 随容器宽度自适应 */
+  columns?: number;
+  /** 单个 item 的最小宽度（px），仅在未指定 columns 时用于自适应 */
+  minItemWidth?: number;
   renderItem: (item: T, index: number) => React.ReactNode;
   overscan?: number;
 }
 
 /**
- * 虚拟滚动网格：按容器宽度自适应列数，只渲染可视区内的行。
+ * 虚拟滚动网格：只渲染可视区内的行。
  * 高度由父容器（flex-1 min-h-0）决定，不依赖固定数值。
  */
 export function VirtualGrid<T>({
   items,
   itemHeight,
   gap,
+  columns: columnsProp,
   minItemWidth,
   renderItem,
   overscan = 3,
@@ -40,10 +43,9 @@ export function VirtualGrid<T>({
 
   // 容器宽度未测量到时（jsdom/首帧）用合理兜底值，真实浏览器由 ResizeObserver 校正
   const effectiveWidth = containerWidth || 400;
-  const columns = Math.max(
-    1,
-    Math.floor((effectiveWidth + gap) / (minItemWidth + gap)),
-  );
+  const columns =
+    columnsProp ??
+    Math.max(1, Math.floor((effectiveWidth + gap) / ((minItemWidth ?? 64) + gap)));
 
   const rowHeight = itemHeight + gap;
   const totalRows = Math.ceil(items.length / columns);
