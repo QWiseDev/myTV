@@ -39,6 +39,7 @@ interface LiveDataSource {
   url: string;
   ua?: string;
   epg?: string;
+  direct?: boolean;
   channelNumber?: number;
   disabled?: boolean;
   from: 'config' | 'custom';
@@ -65,6 +66,7 @@ const LiveSourceConfig = ({
     url: '',
     ua: '',
     epg: '',
+    direct: false,
     disabled: false,
     from: 'custom',
   });
@@ -178,6 +180,7 @@ const LiveSourceConfig = ({
         url: newLiveSource.url,
         ua: newLiveSource.ua,
         epg: newLiveSource.epg,
+        direct: newLiveSource.direct,
       });
       setNewLiveSource({
         name: '',
@@ -185,6 +188,7 @@ const LiveSourceConfig = ({
         url: '',
         epg: '',
         ua: '',
+        direct: false,
         disabled: false,
         from: 'custom',
       });
@@ -205,6 +209,7 @@ const LiveSourceConfig = ({
         url: editingLiveSource.url,
         ua: editingLiveSource.ua,
         epg: editingLiveSource.epg,
+        direct: editingLiveSource.direct,
       });
       setEditingLiveSource(null);
     }).catch(() => {
@@ -292,15 +297,22 @@ const LiveSourceConfig = ({
             : '-'}
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
-          <span
-            className={`px-2 py-1 text-xs rounded-full ${
-              !liveSource.disabled
-                ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-                : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-            }`}
-          >
-            {!liveSource.disabled ? '启用中' : '已禁用'}
-          </span>
+          <div className='flex items-center space-x-1'>
+            <span
+              className={`px-2 py-1 text-xs rounded-full ${
+                !liveSource.disabled
+                  ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
+                  : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+              }`}
+            >
+              {!liveSource.disabled ? '启用中' : '已禁用'}
+            </span>
+            {liveSource.direct && (
+              <span className='px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'>
+                直连
+              </span>
+            )}
+          </div>
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
           <button
@@ -444,6 +456,20 @@ const LiveSourceConfig = ({
               }
               className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
             />
+            <label className='flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300'>
+              <input
+                type='checkbox'
+                checked={newLiveSource.direct || false}
+                onChange={(e) =>
+                  setNewLiveSource((prev) => ({
+                    ...prev,
+                    direct: e.target.checked,
+                  }))
+                }
+                className='h-4 w-4 rounded border-gray-300 text-blue-600'
+              />
+              <span>浏览器直连（分片不经服务器，源需支持 CORS）</span>
+            </label>
           </div>
           <div className='flex justify-end'>
             <button
@@ -554,6 +580,21 @@ const LiveSourceConfig = ({
                 }
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
               />
+            </div>
+            <div className='flex items-end pb-2'>
+              <label className='flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300'>
+                <input
+                  type='checkbox'
+                  checked={editingLiveSource.direct || false}
+                  onChange={(e) =>
+                    setEditingLiveSource((prev) =>
+                      prev ? { ...prev, direct: e.target.checked } : null
+                    )
+                  }
+                  className='h-4 w-4 rounded border-gray-300 text-blue-600'
+                />
+                <span>浏览器直连（分片不经服务器，源需支持 CORS）</span>
+              </label>
             </div>
           </div>
           <div className='flex justify-end space-x-2'>

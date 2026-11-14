@@ -72,6 +72,7 @@ export interface AdminConfig {
     url: string; // m3u 地址
     ua?: string;
     epg?: string; // 节目单
+    direct?: boolean; // 浏览器直连：分片不经服务器代理（源需支持 CORS）
     from: 'config' | 'custom';
     channelNumber?: number;
     disabled?: boolean;

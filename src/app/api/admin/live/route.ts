@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, key, name, url, ua, epg } = body;
+    const { action, key, name, url, ua, epg, direct } = body;
 
     if (!config) {
       return NextResponse.json({ error: '配置不存在' }, { status: 404 });
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
           url: url as string,
           ua: ua || '',
           epg: epg || '',
+          direct: direct === true,
           from: 'custom' as 'custom' | 'config',
           channelNumber: 0,
           disabled: false,
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
         editSource.url = url as string;
         editSource.ua = ua || '';
         editSource.epg = epg || '';
+        editSource.direct = direct === true;
 
         // 刷新频道数
         try {

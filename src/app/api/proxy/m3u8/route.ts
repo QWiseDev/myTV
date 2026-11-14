@@ -12,25 +12,6 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-// 连接池管理
-import * as http from 'http';
-import * as https from 'https';
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  maxFreeSockets: 10,
-  timeout: 60000,
-  keepAliveMsecs: 30000,
-});
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  maxFreeSockets: 10,
-  timeout: 60000,
-  keepAliveMsecs: 30000,
-});
 
 // 性能统计
 const stats = {
@@ -61,16 +42,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Source not found' }, { status: 404 });
   }
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
+  // 直连判定：源配置 direct，或用户端 hls.js loader 已带 allowCORS 参数
+  const allowDirect = allowCORS || liveSource.direct === true;
 
   let response: Response | null = null;
   let responseUsed = false;
 
   try {
     const decodedUrl = decodeURIComponent(url);
-
-    // 选择合适的 agent
-    const isHttps = decodedUrl.startsWith('https:');
-    const agent = isHttps ? httpsAgent : httpAgent;
 
     // 参考 hls.js fetch-loader，构建标准headers
     const headers: Record<string, string> = {
@@ -81,7 +60,6 @@ export async function GET(request: Request) {
       'Accept-Language': 'en-US,en;q=0.9',
       'Cache-Control': 'no-cache',
       Pragma: 'no-cache',
-      Connection: 'keep-alive',
     };
 
     response = await withAbortableTimeout(
@@ -92,9 +70,6 @@ export async function GET(request: Request) {
           credentials: 'same-origin',
           signal,
           headers: new Headers(headers),
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore - Node.js specific option
-          agent: typeof window === 'undefined' ? agent : undefined,
         }),
       15000 // 15秒超时
     );
@@ -159,7 +134,7 @@ export async function GET(request: Request) {
         filteredContent,
         baseUrl,
         request,
-        allowCORS,
+        allowDirect,
         source,
       );
 
@@ -286,7 +261,7 @@ function rewriteM3U8Content(
   content: string,
   baseUrl: string,
   req: Request,
-  allowCORS: boolean,
+  allowDirect: boolean,
   source: string | null,
 ) {
   // 从 referer 头提取协议信息
@@ -314,10 +289,11 @@ function rewriteM3U8Content(
     // 处理 TS 片段 URL 和其他媒体文件
     if (line && !line.startsWith('#')) {
       const resolvedUrl = resolveUrl(baseUrl, line);
-      const proxyUrl = allowCORS
+      // 直连模式：分片 URL 解析为绝对地址后透传，浏览器直接向源站拉取
+      const targetUrl = allowDirect
         ? resolvedUrl
         : createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
-      rewrittenLines.push(proxyUrl);
+      rewrittenLines.push(targetUrl);
       continue;
     }
 
