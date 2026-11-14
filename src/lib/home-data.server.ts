@@ -66,7 +66,10 @@ async function getCriticalMovies(): Promise<DoubanItem[]> {
     });
     const data = await fetchDoubanData<DoubanRecentHotResponse>(target, signal);
     return mapDoubanRecentHotItems(data);
-  }, DATA_FETCH_TIMEOUTS.CRITICAL).catch(() => EMPTY_HOME_DATA.hotMovies);
+  }, DATA_FETCH_TIMEOUTS.CRITICAL).catch((error) => {
+    console.error('首页关键数据（热门电影）预取失败:', error);
+    return EMPTY_HOME_DATA.hotMovies;
+  });
   inflightCriticalMoviesPromise = request;
 
   try {
