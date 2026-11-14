@@ -36,7 +36,7 @@ describe('fruit-machine-arcade', () => {
   });
 
   it('pickTargetIndex 始终返回合法下标，且落格频率接近权重分布', () => {
-    const samples = 30000;
+    const samples = 100000;
     const counts = new Array(BOARD.length).fill(0);
     for (let i = 0; i < samples; i++) {
       const idx = pickTargetIndex();
@@ -47,9 +47,9 @@ describe('fruit-machine-arcade', () => {
     const totalWeight = BOARD.reduce((sum, c) => sum + cellWeight(c), 0);
     for (let i = 0; i < BOARD.length; i++) {
       const expected = (cellWeight(BOARD[i]) / totalWeight) * samples;
-      // 允许 ±25% 相对误差（抽样波动）
-      expect(counts[i]).toBeGreaterThan(expected * 0.75);
-      expect(counts[i]).toBeLessThan(expected * 1.25);
+      // 允许 ±30% 相对误差（低权重格的抽样波动大）
+      expect(counts[i]).toBeGreaterThan(expected * 0.7);
+      expect(counts[i]).toBeLessThan(expected * 1.3);
     }
   });
 

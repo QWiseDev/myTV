@@ -862,9 +862,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
               );
             })()}
             itemHeight={40}
-            containerHeight={300}
             gap={12}
-            columns={6}
+            minItemWidth={72}
             renderItem={(episodeNumber) => {
               const isActive = episodeNumber === value;
               return (
