@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 
 import type { AdminConfig } from './admin.types';
 import { filterAliveChannels } from './live-health';
+import { buildFetchViaProxyUrl, getSegmentProxyConfig } from './live-proxy';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
@@ -75,14 +76,21 @@ export async function refreshLiveChannels(liveInfo: {
   const data = await response.text();
   const result = parseM3U(liveInfo.key, data);
 
-  // 健康检查：并发探测频道地址，自动剔除死链
+  // 健康检查：并发探测频道地址，自动剔除死链。
+  // 配置了独立分片代理时经其 /fetch 通道探测，使探活路径与真实播放路径一致
+  // （主站探活通过但分片代理与源不通的频道，同样会被剔除）。
+  const segProxy = getSegmentProxyConfig();
+  const healthOpts = segProxy
+    ? { probeUrl: (url: string) => buildFetchViaProxyUrl(segProxy, url, ua) }
+    : undefined;
   const { alive: aliveChannels, deadRemoved } = await filterAliveChannels(
     result.channels,
     ua,
+    healthOpts,
   );
   if (deadRemoved > 0) {
     console.log(
-      `[LIVE] ${liveInfo.name || liveInfo.key} 频道健康检查: 共 ${result.channels.length} 个，剔除失效 ${deadRemoved} 个，保留 ${aliveChannels.length} 个`,
+      `[LIVE] ${liveInfo.name || liveInfo.key} 频道健康检查: 共 ${result.channels.length} 个，剔除失效 ${deadRemoved} 个，保留 ${aliveChannels.length} 个${segProxy ? '（经分片代理探测）' : ''}`,
     );
   }
   result.channels = aliveChannels;

@@ -21,9 +21,18 @@ function readConfig() {
   };
 }
 
+export interface HealthCheckOptions {
+  /**
+   * 探测地址转换器：传入时以转换后的地址探测（如经 124 分片代理的 /fetch 通道），
+   * 使探测路径与真实播放路径（播放器 → 分片代理 → 源）一致。
+   */
+  probeUrl?: (url: string) => string;
+}
+
 export async function filterAliveChannels<T extends { url: string }>(
   channels: T[],
   ua: string,
+  opts?: HealthCheckOptions,
 ): Promise<{ alive: T[]; deadRemoved: number }> {
   const config = readConfig();
   if (!config.enabled) {
@@ -47,12 +56,12 @@ export async function filterAliveChannels<T extends { url: string }>(
     while (cursor < probeTargets.length) {
       const url = probeTargets[cursor++];
       try {
-        const resp = await fetch(url, {
+        const resp = await fetch(opts?.probeUrl ? opts.probeUrl(url) : url, {
           headers: { 'User-Agent': ua, Accept: '*/*' },
           signal: AbortSignal.timeout(config.timeoutMs),
           redirect: 'follow',
         });
-        // 200-299（含 206 Range）视为存活；探测后立即取消 body 避免整段下载
+        // 200-299（含 206 Range）视为存活；4xx/5xx（含代理回传的上游错误码）→ 死链
         if (resp.ok || resp.status === 206) {
           aliveUrls.add(url);
         }
