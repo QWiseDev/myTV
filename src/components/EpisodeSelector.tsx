@@ -870,14 +870,14 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 <button
                   key={episodeNumber}
                   onClick={() => handleEpisodeClick(episodeNumber - 1)}
-                  className={`group h-[72px] w-full flex items-center justify-center text-xl font-bold rounded-xl transition-colors duration-200 border-2
+                  className={`group h-[72px] w-full flex items-center justify-center px-2 text-xl font-bold rounded-xl transition-colors duration-200 border-2 overflow-hidden
                     ${
                       isActive
-                        ? 'border-green-400 text-green-400 bg-transparent'
-                        : 'border-transparent bg-[#2a2a2a] text-gray-100 hover:bg-[#333]'
+                        ? 'border-green-400 text-green-600 bg-transparent dark:text-green-400'
+                        : 'border-transparent bg-gray-200/70 text-gray-700 hover:bg-gray-300/70 dark:bg-[#2a2a2a] dark:text-gray-100 dark:hover:bg-[#333]'
                     }`.trim()}
                 >
-                  <span className='relative z-10'>
+                  <span className='relative z-10 max-w-full truncate'>
                     {(() => {
                       const title = episodes_titles?.[episodeNumber - 1];
                       if (!title) {
