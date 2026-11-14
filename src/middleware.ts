@@ -124,6 +124,8 @@ function shouldSkipAuth(pathname: string): boolean {
     '/favicon.ico',
     '/robots.txt',
     '/manifest.json',
+    '/sw.js', // Service Worker：放行以便浏览器能完成 SW 更新检查
+    '/workbox-', // SW 运行时 importScripts 依赖
     '/icons/',
     '/logo.svg',
     '/screenshot.png',

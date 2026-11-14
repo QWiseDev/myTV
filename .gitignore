@@ -47,6 +47,9 @@ src/lib/runtime.ts
 public/manifest.json
 public/sw.js
 public/workbox-*.js
+# sw.js 与 workbox 运行时需随镜像发布（直播流不可被 SW 缓存，见 sw.js 补丁注释）
+!public/sw.js
+!public/workbox-*.js
 
 # development documentation (internal docs, not for production)
 *_OPTIMIZATION.md
