@@ -888,86 +888,82 @@ function LivePageClient() {
 
   return (
     <PageLayout activePath='/live'>
-      <div className='flex flex-col gap-3 py-4 px-5 lg:px-[3rem] 2xl:px-20'>
-        {/* 第一行：页面标题 */}
-        <div className='py-1'>
-          <h1 className='text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 max-w-[80%]'>
-            <Radio className='w-5 h-5 text-blue-500 flex-shrink-0' />
-            <div className='min-w-0 flex-1'>
-              <div className='truncate'>
-                {currentSource?.name}
-                {currentSource && currentChannel && (
-                  <span className='text-gray-500 dark:text-gray-400'>
-                    {` > ${currentChannel.name}`}
-                  </span>
-                )}
-                {currentSource && !currentChannel && (
-                  <span className='text-gray-500 dark:text-gray-400'>
-                    {` > ${currentSource.name}`}
-                  </span>
-                )}
-              </div>
-            </div>
-          </h1>
-        </div>
-
-        {/* 第二行：播放器和频道列表 */}
-        <div className='space-y-2'>
-          {/* 折叠控制 - 仅在 lg 及以上屏幕显示 */}
-          <div className='hidden lg:flex justify-end'>
-            <button
-              onClick={() => setIsChannelListCollapsed(!isChannelListCollapsed)}
-              className='group relative flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/80 hover:bg-white dark:bg-gray-800/80 dark:hover:bg-gray-800 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm hover:shadow-md transition-all duration-200'
-              title={isChannelListCollapsed ? '显示频道列表' : '隐藏频道列表'}
-            >
-              <svg
-                className={`w-3.5 h-3.5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${
-                  isChannelListCollapsed ? 'rotate-180' : 'rotate-0'
-                }`}
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth='2'
-                  d='M9 5l7 7-7 7'
-                />
-              </svg>
-              <span className='text-xs font-medium text-gray-600 dark:text-gray-300'>
-                {isChannelListCollapsed ? '显示' : '隐藏'}
-              </span>
-
-              {/* 精致的状态指示点 */}
-              <div
-                className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full transition-all duration-200 ${
-                  isChannelListCollapsed
-                    ? 'bg-orange-400 animate-pulse'
-                    : 'bg-green-400'
-                }`}
-              ></div>
-            </button>
-          </div>
-
+      <div className='flex flex-col gap-2 px-5 pb-4 lg:px-[3rem] 2xl:px-20'>
+        {/* 播放器区：顶着菜单栏，高度铺满视口剩余部分（参考爱奇艺剧场模式） */}
+        <div
+          className={`grid gap-2 md:h-[calc(100vh-4.25rem)] transition-all duration-300 ease-in-out ${
+            isChannelListCollapsed
+              ? 'grid-cols-1'
+              : 'grid-cols-1 md:grid-cols-4'
+          }`}
+        >
+          {/* 播放器列 */}
           <div
-            className={`grid gap-4 lg:h-[500px] xl:h-[650px] 2xl:h-[750px] transition-all duration-300 ease-in-out ${
-              isChannelListCollapsed
-                ? 'grid-cols-1'
-                : 'grid-cols-1 md:grid-cols-4'
+            className={`relative h-full transition-all duration-300 ease-in-out ${
+              isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'
             }`}
           >
-            {/* 播放器 */}
-            <div
-              className={`h-full transition-all duration-300 ease-in-out ${
-                isChannelListCollapsed ? 'col-span-1' : 'md:col-span-3'
-              }`}
-            >
-              <div className='relative w-full h-[300px] lg:h-full'>
-                <div
-                  ref={artRef}
-                  className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
-                ></div>
+            <div className='relative w-full aspect-video md:aspect-auto md:h-full'>
+              <div
+                ref={artRef}
+                className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30'
+              ></div>
+
+              {/* 频道标题悬浮层（爱奇艺式：覆盖在播放器顶部） */}
+              <div className='absolute top-0 left-0 right-0 z-[500] flex items-center justify-between bg-gradient-to-b from-black/70 via-black/30 to-transparent p-2 lg:p-3 pointer-events-none rounded-t-xl'>
+                <div className='min-w-0 flex-1 flex items-center gap-1.5 text-xs lg:text-sm font-semibold text-white/95 drop-shadow'>
+                  <Radio className='w-4 h-4 text-blue-400 flex-shrink-0' />
+                  <span className='truncate'>
+                    {currentSource?.name}
+                    {currentSource && currentChannel && (
+                      <span className='text-white/70'>
+                        {` > ${currentChannel.name}`}
+                      </span>
+                    )}
+                    {currentSource && !currentChannel && (
+                      <span className='text-white/70'>
+                        {` > ${currentSource.name}`}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {/* 折叠控制 - 仅在 lg 及以上屏幕显示 */}
+                <button
+                  onClick={() =>
+                    setIsChannelListCollapsed(!isChannelListCollapsed)
+                  }
+                  className='hidden lg:flex pointer-events-auto items-center space-x-1.5 px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all duration-200'
+                  title={
+                    isChannelListCollapsed ? '显示频道列表' : '隐藏频道列表'
+                  }
+                >
+                  <svg
+                    className={`w-3.5 h-3.5 text-white/80 transition-transform duration-200 ${
+                      isChannelListCollapsed ? 'rotate-180' : 'rotate-0'
+                    }`}
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth='2'
+                      d='M9 5l7 7-7 7'
+                    />
+                  </svg>
+                  <span className='text-xs font-medium text-white/85'>
+                    {isChannelListCollapsed ? '显示' : '隐藏'}
+                  </span>
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isChannelListCollapsed
+                        ? 'bg-orange-400 animate-pulse'
+                        : 'bg-green-400'
+                    }`}
+                  ></div>
+                </button>
+              </div>
 
                 {/* 不支持的直播类型提示 */}
                 {unsupportedType && (
@@ -1053,7 +1049,6 @@ function LivePageClient() {
               onSourceChange={handleSourceChange}
             />
           </div>
-        </div>
 
         {/* 当前频道信息 */}
         {currentChannel && (

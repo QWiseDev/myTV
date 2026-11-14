@@ -67,7 +67,7 @@ export function ChannelSidebar({
 }: ChannelSidebarProps) {
   return (
     <div
-      className={`h-[300px] lg:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${
+      className={`h-[300px] md:h-full md:overflow-hidden transition-all duration-300 ease-in-out ${
         isChannelListCollapsed
           ? 'md:col-span-1 lg:hidden lg:opacity-0 lg:scale-95'
           : 'md:col-span-1 lg:opacity-100 lg:scale-100'
