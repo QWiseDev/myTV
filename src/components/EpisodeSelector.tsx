@@ -145,20 +145,18 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     return currentPage;
   }, [currentPage, descending, pageCount]);
 
-  // 🔥 修复：当当前集数变化时，自动切换到对应的页面
-  // 🔥 修复：只有在选集tab激活时才进行自动切换，避免干扰用户手动切换tab
+  // 当前播放集数变化时，自动跳到其所在分页（不依赖 currentPage，
+  // 否则手动切换分页会被此 effect 立即弹回播放集所在页）
   useEffect(() => {
-    // 只有在选集tab激活时才进行自动切换
+    // 只有在选集tab激活时才进行自动切换，避免干扰用户手动切换tab
     if (activeTab !== 'episodes') return;
 
     const newPage = Math.floor((value - 1) / episodesPerPage);
     // 确保新计算的页码在有效范围内
     const validPage = Math.max(0, Math.min(newPage, pageCount - 1));
 
-    if (validPage !== currentPage) {
-      setCurrentPage(validPage);
-    }
-  }, [activeTab, currentPage, episodesPerPage, pageCount, value]);
+    setCurrentPage(validPage);
+  }, [activeTab, episodesPerPage, pageCount, value]);
 
   // 自动探测单个源：与"检查当前集"同一套判定口径（跳过/失败带原因）
   const runAutoProbe = useCallback(
@@ -756,58 +754,40 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   );
 
   return (
-    <div className='md:ml-2 px-4 py-0 h-full rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
-      {/* 主要的 Tab 切换 - 美化版本 */}
-      <div className='flex mb-1 -mx-4 sm:-mx-6 flex-shrink-0 relative'>
+    <div className='px-4 py-2 h-full flex flex-col overflow-hidden'>
+      {/* 主要的 Tab 切换 - 爱奇艺式文字下划线 */}
+      <div className='flex mb-3 flex-shrink-0 border-b border-gray-200/60 dark:border-white/10'>
         {totalEpisodes > 1 && (
           <div
             onClick={handleEpisodeTabClick}
-            className={`group flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center cursor-pointer transition-all duration-300 font-semibold relative overflow-hidden
+            className={`flex-1 pb-2.5 text-center cursor-pointer text-base font-semibold relative transition-colors duration-200
               ${
                 activeTab === 'episodes'
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-gray-700 hover:text-green-600 dark:text-gray-300 dark:hover:text-green-400'
+                  ? 'text-gray-900 dark:text-white'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               }
             `.trim()}
           >
-            {/* 激活态背景光晕 */}
+            选集
             {activeTab === 'episodes' && (
-              <div className='absolute inset-0 bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 -z-10'></div>
+              <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-green-400'></div>
             )}
-            {/* 非激活态背景 */}
-            {activeTab !== 'episodes' && (
-              <div className='absolute inset-0 bg-gray-100/50 dark:bg-gray-800/50 group-hover:bg-gray-100 dark:group-hover:bg-gray-800/70 transition-colors duration-300 -z-10'></div>
-            )}
-            {/* 悬浮光效 */}
-            <div className='absolute inset-0 bg-gradient-to-r from-transparent via-green-100/0 to-transparent dark:via-green-500/0 group-hover:via-green-100/50 dark:group-hover:via-green-500/10 transition-all duration-300 -z-10'></div>
-            <span className='relative z-10 font-bold text-sm sm:font-bold'>
-              选集
-            </span>
           </div>
         )}
         <div
           onClick={handleSourceTabClick}
-          className={`group flex-1 py-2 sm:py-3 px-4 sm:px-6 text-center cursor-pointer transition-all duration-300 font-semibold relative overflow-hidden
+          className={`flex-1 pb-2.5 text-center cursor-pointer text-base font-semibold relative transition-colors duration-200
             ${
               activeTab === 'sources'
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400'
+                ? 'text-gray-900 dark:text-white'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             }
           `.trim()}
         >
-          {/* 激活态背景光晕 */}
+          换源
           {activeTab === 'sources' && (
-            <div className='absolute inset-0 bg-gradient-to-r from-blue-50 via-cyan-50 to-sky-50 dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-sky-900/20 -z-10'></div>
+            <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-green-400'></div>
           )}
-          {/* 非激活态背景 */}
-          {activeTab !== 'sources' && (
-            <div className='absolute inset-0 bg-gray-100/50 dark:bg-gray-800/50 group-hover:bg-gray-100 dark:group-hover:bg-gray-800/70 transition-colors duration-300 -z-10'></div>
-          )}
-          {/* 悬浮光效 */}
-          <div className='absolute inset-0 bg-gradient-to-r from-transparent via-blue-100/0 to-transparent dark:via-blue-500/0 group-hover:via-blue-100/50 dark:group-hover:via-blue-500/10 transition-all duration-300 -z-10'></div>
-          <span className='relative z-10 font-bold text-sm sm:font-bold'>
-            换源
-          </span>
         </div>
       </div>
 
@@ -891,19 +871,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 <button
                   key={episodeNumber}
                   onClick={() => handleEpisodeClick(episodeNumber - 1)}
-                  className={`group h-10 min-w-10 px-3 py-2 flex items-center justify-center text-sm font-semibold rounded-lg transition-all duration-300 whitespace-nowrap font-mono relative overflow-hidden
+                  className={`group relative h-10 min-w-10 px-3 py-2 flex items-center justify-center text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap font-mono border overflow-hidden
                     ${
                       isActive
-                        ? 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white shadow-lg shadow-green-500/30 dark:from-green-600 dark:via-emerald-600 dark:to-teal-600 dark:shadow-green-500/20'
-                        : 'bg-gradient-to-r from-gray-200 to-gray-100 text-gray-700 hover:from-gray-300 hover:to-gray-200 hover:scale-105 hover:shadow-md dark:from-white/10 dark:to-white/5 dark:text-gray-300 dark:hover:from-white/20 dark:hover:to-white/15'
+                        ? 'border-green-400 text-green-400 bg-green-400/10'
+                        : 'border-transparent bg-gray-200/70 text-gray-700 hover:bg-gray-300/70 dark:bg-[#2a2a2a] dark:text-gray-200 dark:hover:bg-[#3a3a3a]'
                     }`.trim()}
                 >
-                  {isActive && (
-                    <div className='absolute inset-0 bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 opacity-30 blur'></div>
-                  )}
-                  {!isActive && (
-                    <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/20 dark:group-hover:via-white/10 transition-all duration-300'></div>
-                  )}
                   <span className='relative z-10'>
                     {(() => {
                       const title = episodes_titles?.[episodeNumber - 1];

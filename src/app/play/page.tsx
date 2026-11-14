@@ -959,9 +959,9 @@ function PlayPageClient() {
   }
 
   return (
-    <PageLayout activePath='/play' fullWidth>
+    <PageLayout activePath='/play' fullWidth theater>
       {/* 剧场模式：md 及以上锁视口不滚动，播放器+右侧信息框一屏放下 */}
-      <div className='px-0 xl:px-6 md:h-[calc(100vh-4.25rem)] md:overflow-hidden'>
+      <div className='px-0 xl:px-6 md:h-full'>
         {/* 剧场模式：全宽铺满，与爱奇艺一致 */}
         <div className='mx-auto flex max-w-full flex-col gap-3 pt-2 pb-4 md:h-full'>
           <PlayerAndEpisodeSection

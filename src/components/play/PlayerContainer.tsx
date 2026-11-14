@@ -98,10 +98,10 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
     }, [isHovered, isCoarsePointer, artPlayerRef]);
 
     return (
-      <div className='transition-all duration-300 ease-in-out rounded-xl border border-white/0 dark:border-white/30'>
+      <div className='transition-all duration-300 ease-in-out rounded-xl border border-white/0 dark:border-white/30 h-full'>
         {/* 高度参考爱奇艺剧场模式：小屏 16:9，lg 起铺满导航栏以下的视口 */}
         <div
-          className='relative w-full h-[350px] md:aspect-video md:h-auto lg:aspect-auto lg:h-[calc(100vh-4.5rem)]'
+          className='relative w-full h-[350px] md:aspect-video md:h-auto lg:aspect-auto lg:h-full'
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >

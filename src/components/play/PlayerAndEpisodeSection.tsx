@@ -51,24 +51,15 @@ interface PlayerAndEpisodeSectionProps {
   playerProps: PlayerContainerBaseProps;
   episodePanelProps: EpisodePanelConfig;
   playerRef: RefObject<HTMLDivElement>;
-  /** 右侧「详情」标签页：视频信息 + 收藏 + 网盘（原播放器下方区块） */
+  /** 「详情」覆盖面板内容：视频信息 + 收藏 + 网盘（原播放器下方区块） */
   infoProps: ComponentProps<typeof VideoDetailsPanelComponent>;
-  /** 右侧「详情」标签页：弹幕管理（原播放器下方区块） */
+  /** 「详情」覆盖面板内容：弹幕管理 */
   danmakuProps: Omit<ComponentProps<typeof DanmakuPanel>, 'key'>;
 }
 
-type RightTab = 'episodes' | 'info';
-
-const TAB_STYLES = (active: boolean) =>
-  `flex-1 py-3 px-4 text-center text-sm font-medium cursor-pointer transition-all duration-200 border-b-2 ${
-    active
-      ? 'text-green-400 border-green-400 bg-green-400/5'
-      : 'text-gray-400 border-transparent hover:text-gray-200'
-  }`;
-
 /**
- * 负责渲染播放器区域与右侧面板（选集/详情双标签），爱奇艺式锁视口布局：
- * 播放器铺满上方，右侧信息框一栏到底，页面本身不滚动。
+ * 负责渲染播放器区域与右侧信息面板（爱奇艺式锁视口布局）：
+ * 面板顶部常显片名与信息行，「详情 >」展开详情覆盖面板，页面本身不滚动。
  */
 export default function PlayerAndEpisodeSection({
   playerProps,
@@ -78,12 +69,12 @@ export default function PlayerAndEpisodeSection({
   danmakuProps,
 }: PlayerAndEpisodeSectionProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<RightTab>('episodes');
+  const [showInfoOverlay, setShowInfoOverlay] = useState(false);
 
   return (
-    <div className='space-y-4'>
+    <div className='space-y-4 h-full flex flex-col'>
       <div
-        className={`grid gap-4 md:h-full transition-all duration-300 ease-in-out ${
+        className={`grid gap-4 flex-1 min-h-0 transition-all duration-300 ease-in-out ${
           isCollapsed ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-4'
         }`}
       >
@@ -97,41 +88,76 @@ export default function PlayerAndEpisodeSection({
         </div>
 
         {!isCollapsed && (
-          <div className='md:col-span-1 flex flex-col h-full min-h-0 rounded-xl border border-white/0 dark:border-white/30 overflow-hidden'>
-            {/* Tab 切换：选集 / 详情 */}
-            <div className='flex flex-shrink-0 border-b border-gray-200 dark:border-gray-700'>
-              <button
-                className={TAB_STYLES(activeTab === 'episodes')}
-                onClick={() => setActiveTab('episodes')}
-              >
-                选集
-              </button>
-              <button
-                className={TAB_STYLES(activeTab === 'info')}
-                onClick={() => setActiveTab('info')}
-              >
-                详情
-              </button>
-            </div>
+          <div className='md:col-span-1 flex flex-col h-full min-h-0 overflow-hidden relative bg-gray-50 dark:bg-[#1c1b19]'>
+            {/* 常态：片名 + 信息行 + 选集 */}
+            <div className='flex-1 min-h-0 flex flex-col'>
+              {/* 片名 + 详情入口 */}
+              <div className='px-4 pt-4 pb-1 flex-shrink-0'>
+                <div className='flex items-center justify-between gap-2'>
+                  <h2 className='text-xl font-bold text-gray-900 dark:text-gray-100 truncate'>
+                    {infoProps.videoTitle}
+                  </h2>
+                  <button
+                    onClick={() => setShowInfoOverlay(true)}
+                    className='flex-shrink-0 text-xs text-gray-400 hover:text-white transition-colors whitespace-nowrap'
+                  >
+                    详情 &gt;
+                  </button>
+                </div>
+                <div className='mt-1 text-xs text-gray-500 dark:text-gray-400 truncate'>
+                  {infoProps.videoYear}
+                  {infoProps.detail?.class ? ` | ${infoProps.detail.class}` : ''}
+                </div>
+              </div>
 
-            {/* Tab 内容区：选集用内部滚动，详情整页滚动 */}
-            <div className='flex-1 min-h-0 overflow-hidden'>
-              {activeTab === 'episodes' ? (
+              {/* 选集（选集/换源，内部滚动） */}
+              <div className='flex-1 min-h-0 flex flex-col'>
                 <EpisodePanel
                   {...episodePanelProps}
                   isCollapsed={isCollapsed}
                 />
-              ) : (
-                <div className='h-full overflow-y-auto pb-4'>
-                  <VideoDetailsPanelDynamic {...infoProps} />
-                  <div className='px-2'>
-                    <DanmakuPanel
-                      key={`${danmakuProps.title}-${danmakuProps.episodeIndex}`}
-                      {...danmakuProps}
+              </div>
+            </div>
+
+            {/* 详情覆盖面板（点击「详情 >」展开，× 关闭） */}
+            <div
+              className={`absolute inset-0 z-30 bg-gray-900 dark:bg-[#191817] transition-transform duration-300 ease-out ${
+                showInfoOverlay ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <div className='flex items-center justify-between px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/60 flex-shrink-0'>
+                <h3 className='text-base font-semibold text-gray-900 dark:text-gray-100'>
+                  详情
+                </h3>
+                <button
+                  onClick={() => setShowInfoOverlay(false)}
+                  className='w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors'
+                  aria-label='关闭详情'
+                >
+                  <svg
+                    className='w-5 h-5'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M6 18L18 6M6 6l12 12'
                     />
-                  </div>
+                  </svg>
+                </button>
+              </div>
+              <div className='absolute inset-0 top-[52px] overflow-y-auto p-3'>
+                <VideoDetailsPanelDynamic {...infoProps} />
+                <div className='px-1 mt-2'>
+                  <DanmakuPanel
+                    key={`${danmakuProps.title}-${danmakuProps.episodeIndex}`}
+                    {...danmakuProps}
+                  />
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}

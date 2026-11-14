@@ -8,6 +8,8 @@ interface PageLayoutProps {
   activePath?: string;
   disableMobilePadding?: boolean;
   fullWidth?: boolean;
+  /** 剧场模式（播放页/直播页）：内容顶满导航栏，md 及以上锁视口高度不可滚动 */
+  theater?: boolean;
 }
 
 const PageLayout = ({
@@ -15,6 +17,7 @@ const PageLayout = ({
   activePath = '/',
   disableMobilePadding = false,
   fullWidth = false,
+  theater = false,
 }: PageLayoutProps) => {
   return (
     <div className='w-full min-h-screen'>
@@ -42,16 +45,21 @@ const PageLayout = ({
       <main
         className={`flex-1 transition-all duration-300 ${
           disableMobilePadding ? 'mb-0' : 'mb-14 md:mb-0'
-        }`}
+        } ${theater ? 'md:h-screen md:overflow-hidden' : ''}`}
         style={{
           paddingTop: 'calc(4rem + env(safe-area-inset-top))',
-          paddingBottom: disableMobilePadding ? 0 : 'calc(3.5rem + env(safe-area-inset-bottom))',
+          paddingBottom:
+            disableMobilePadding || theater
+              ? 0
+              : 'calc(3.5rem + env(safe-area-inset-bottom))',
         }}
       >
         <div
           className={`transition-all duration-300 ${
-            disableMobilePadding ? 'py-0' : 'pt-2 pb-4 lg:pt-3 lg:pb-6'
-          } ${fullWidth ? 'w-full px-0' : 'container mx-auto px-4 lg:px-6'}`}
+            disableMobilePadding || theater
+              ? 'py-0 h-full'
+              : 'pt-2 pb-4 lg:pt-3 lg:pb-6'
+          } ${fullWidth || theater ? 'w-full px-0' : 'container mx-auto px-4 lg:px-6'}`}
         >
           {children}
         </div>

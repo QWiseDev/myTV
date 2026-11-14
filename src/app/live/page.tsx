@@ -763,7 +763,7 @@ function LivePageClient() {
 
   if (loading) {
     return (
-      <PageLayout activePath='/live'>
+      <PageLayout activePath='/live' theater>
         <div className='flex items-center justify-center min-h-screen bg-transparent'>
           <div className='text-center max-w-md mx-auto px-6'>
             {/* 动画直播图标 */}
@@ -844,7 +844,7 @@ function LivePageClient() {
 
   if (error) {
     return (
-      <PageLayout activePath='/live'>
+      <PageLayout activePath='/live' theater>
         <div className='flex items-center justify-center min-h-screen bg-transparent'>
           <div className='text-center max-w-md mx-auto px-6'>
             {/* 错误图标 */}
@@ -887,11 +887,11 @@ function LivePageClient() {
   }
 
   return (
-    <PageLayout activePath='/live'>
-      <div className='flex flex-col gap-2 px-5 pb-4 lg:px-[3rem] 2xl:px-20'>
+    <PageLayout activePath='/live' theater>
+      <div className='flex flex-col gap-2 px-5 pb-4 lg:px-[3rem] 2xl:px-20 md:h-full'>
         {/* 播放器区：顶着菜单栏，高度铺满视口剩余部分（参考爱奇艺剧场模式） */}
         <div
-          className={`grid gap-2 md:h-[calc(100vh-4.25rem)] transition-all duration-300 ease-in-out ${
+          className={`grid gap-2 md:h-full transition-all duration-300 ease-in-out ${
             isChannelListCollapsed
               ? 'grid-cols-1'
               : 'grid-cols-1 md:grid-cols-4'
