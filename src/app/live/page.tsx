@@ -608,6 +608,10 @@ function LivePageClient() {
         artPlayerRef.current = new Artplayer({
           container: artRef.current,
           url: targetUrl,
+          // 代理 URL 检测不到 .m3u8 扩展名（Artplayer 取 ? 前路径的扩展名），
+          // 必须显式指定 type 才会走 customType.m3u8 分支启动 hls.js；
+          // 运行时支持该字段但官方 d.ts 漏声明，故用 spread 绕过类型检查
+          ...({ type: 'm3u8' } as Record<string, string>),
           poster: currentChannel.logo,
           volume: 0.7,
           muted: false,
