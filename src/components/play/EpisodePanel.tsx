@@ -50,7 +50,7 @@ export default function EpisodePanel({
   return (
     <div className='md:col-span-1 flex flex-col h-full'>
       {!isCollapsed && (
-        <div className='h-full max-h-[350px] md:max-h-[450px] lg:max-h-[520px] xl:max-h-[600px] 2xl:max-h-[700px] overflow-hidden transition-all duration-300 ease-in-out'>
+        <div className='h-full max-h-[350px] md:max-h-[450px] lg:max-h-none overflow-hidden transition-all duration-300 ease-in-out'>
           <Suspense fallback={<div>加载中...</div>}>
             <EpisodeSelector
               totalEpisodes={totalEpisodes}

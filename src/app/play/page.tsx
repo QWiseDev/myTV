@@ -963,7 +963,8 @@ function PlayPageClient() {
   return (
     <PageLayout activePath='/play' fullWidth>
       <div className='px-0 xl:px-6'>
-        <div className='mx-auto flex max-w-full flex-col gap-3 pt-2 pb-4 xl:max-w-7xl'>
+        {/* 剧场模式：全宽铺满，与爱奇艺一致 */}
+        <div className='mx-auto flex max-w-full flex-col gap-3 pt-2 pb-4'>
           <PlayerAndEpisodeSection
             playerRef={artRef}
             playerProps={{
