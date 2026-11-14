@@ -50,7 +50,8 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
   ) => {
     return (
       <div className='transition-all duration-300 ease-in-out rounded-xl border border-white/0 dark:border-white/30'>
-        <div className='relative w-full h-[350px] md:h-[450px] lg:h-[520px] xl:h-[600px] 2xl:h-[700px]'>
+        {/* 高度参考爱奇艺剧场模式：小屏 16:9，lg 起铺满导航栏以下的视口 */}
+        <div className='relative w-full h-[350px] md:aspect-video md:h-auto lg:aspect-auto lg:h-[calc(100vh-4.5rem)]'>
           {/* 播放器 */}
           <div
             ref={ref}
