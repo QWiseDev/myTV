@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic';
 import type { MutableRefObject } from 'react';
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 
 import type { ArtPlayerLike } from '@/app/play/utils/danmakuRuntime';
 
@@ -48,19 +48,92 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
     },
     ref,
   ) => {
+    // 触屏设备没有悬停，控件常显；鼠标设备按爱奇艺交互：悬停播放器才显示
+    const [isCoarsePointer] = useState(
+      () =>
+        typeof window !== 'undefined' &&
+        !!window.matchMedia?.('(pointer: coarse)')?.matches,
+    );
+    const [isHovered, setIsHovered] = useState(false);
+    const showOverlay = isCoarsePointer || isHovered;
+
+    // 底部进度条跟随悬停：播放中移开鼠标即隐藏，暂停/悬停时显示
+    useEffect(() => {
+      if (isCoarsePointer) return;
+      let attempts = 0;
+      let timer: ReturnType<typeof setInterval> | null = null;
+      const attach = () => {
+        const art = artPlayerRef.current as
+          | (ArtPlayerLike & {
+              controls?: { show: boolean };
+              playing?: boolean;
+              on?: (event: string, cb: () => void) => void;
+              off?: (event: string, cb: () => void) => void;
+            })
+          | null;
+        const controls = art?.controls;
+        if (!art || !controls) return false;
+        const apply = () => {
+          controls.show = isHovered || !art.playing;
+        };
+        apply();
+        const onPlay = () => {
+          if (!isHovered) controls.show = false;
+        };
+        const onPause = () => {
+          controls.show = true;
+        };
+        art.on?.('video:play', onPlay);
+        art.on?.('video:pause', onPause);
+        return true;
+      };
+      timer = setInterval(() => {
+        if (attach() || ++attempts > 20) {
+          if (timer) clearInterval(timer);
+        }
+      }, 300);
+      return () => {
+        if (timer) clearInterval(timer);
+      };
+    }, [isHovered, isCoarsePointer, artPlayerRef]);
+
     return (
       <div className='transition-all duration-300 ease-in-out rounded-xl border border-white/0 dark:border-white/30'>
         {/* 高度参考爱奇艺剧场模式：小屏 16:9，lg 起铺满导航栏以下的视口 */}
-        <div className='relative w-full h-[350px] md:aspect-video md:h-auto lg:aspect-auto lg:h-[calc(100vh-4.5rem)]'>
+        <div
+          className='relative w-full h-[350px] md:aspect-video md:h-auto lg:aspect-auto lg:h-[calc(100vh-4.5rem)]'
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
           {/* 播放器 */}
           <div
             ref={ref}
             className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg'
           ></div>
 
-          {/* 控制按钮组 - 播放器内右上角 */}
+          {/* 顶部信息栏：悬停时显示 剧集名称 + 集数（爱奇艺式） */}
+          {detailTitle && (
+            <div
+              className={`absolute top-0 left-0 right-0 z-10 flex items-center bg-gradient-to-b from-black/70 via-black/35 to-transparent px-3 py-2.5 transition-opacity duration-300 pointer-events-none rounded-t-xl ${
+                showOverlay ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              <span className='text-sm lg:text-base font-semibold text-white/95 truncate drop-shadow'>
+                {detailTitle}
+              </span>
+              <span className='ml-3 text-xs lg:text-sm text-white/70 whitespace-nowrap'>
+                第{episodeIndex + 1}集
+              </span>
+            </div>
+          )}
+
+          {/* 控制按钮组 - 播放器内右上角（悬停播放器时显示） */}
           {currentSource && currentId && (
-            <div className='absolute top-3 right-3 z-10 flex flex-col gap-1.5'>
+            <div
+              className={`absolute top-3 right-3 z-10 flex flex-col gap-1.5 transition-opacity duration-300 ${
+                showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
               {/* 选集和换源面板控制按钮 */}
               {onToggleEpisodePanel && (
                 <button
