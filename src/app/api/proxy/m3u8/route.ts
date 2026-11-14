@@ -5,6 +5,12 @@ import { NextResponse } from 'next/server';
 import { filterAdsFromM3U8 } from '@/lib/ad-filter';
 import { getConfig } from '@/lib/config';
 import { getBaseUrl, resolveUrl } from '@/lib/live';
+import {
+  buildExternalSegmentUrl,
+  buildFetchViaProxyUrl,
+  getSegmentProxyConfig,
+  SegmentProxyConfig,
+} from '@/lib/live-proxy';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 
 export const runtime = 'nodejs';
@@ -44,6 +50,8 @@ export async function GET(request: Request) {
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
   // 直连判定：源配置 direct，或用户端 hls.js loader 已带 allowCORS 参数
   const allowDirect = allowCORS || liveSource.direct === true;
+  // 独立分片代理（配置 SEGMENT_PROXY_BASE 后分片与播放列表均经其转发）
+  const segProxy = getSegmentProxyConfig();
 
   let response: Response | null = null;
   let responseUsed = false;
@@ -62,16 +70,21 @@ export async function GET(request: Request) {
       Pragma: 'no-cache',
     };
 
+    // 配置了独立分片代理时，播放列表也经其代取（主站与源不通时仍可取到）
+    const fetchUrl = segProxy
+      ? buildFetchViaProxyUrl(segProxy, decodedUrl, ua)
+      : decodedUrl;
+
     response = await withAbortableTimeout(
       (signal) =>
-        fetch(decodedUrl, {
+        fetch(fetchUrl, {
           cache: 'no-cache',
           redirect: 'follow',
           credentials: 'same-origin',
           signal,
           headers: new Headers(headers),
         }),
-      15000 // 15秒超时
+      15000, // 15秒超时
     );
 
     // 参考 hls.js fetch-loader 的错误处理逻辑
@@ -107,7 +120,9 @@ export async function GET(request: Request) {
 
     if (isM3U8) {
       // 获取最终的响应URL（处理重定向后的URL）
-      const finalUrl = response.url;
+      // 经独立代理代取时，最终地址由 X-Final-Url 头带回（response.url 是代理地址）
+      const finalUrl =
+        (segProxy && response.headers.get('X-Final-Url')) || response.url;
       const m3u8Content = await response.text();
       responseUsed = true;
 
@@ -136,6 +151,8 @@ export async function GET(request: Request) {
         request,
         allowDirect,
         source,
+        ua,
+        segProxy,
       );
 
       const headers = new Headers();
@@ -263,6 +280,8 @@ function rewriteM3U8Content(
   req: Request,
   allowDirect: boolean,
   source: string | null,
+  ua: string,
+  segProxy: SegmentProxyConfig | null,
 ) {
   // 从 referer 头提取协议信息
   const referer = req.headers.get('referer');
@@ -289,10 +308,15 @@ function rewriteM3U8Content(
     // 处理 TS 片段 URL 和其他媒体文件
     if (line && !line.startsWith('#')) {
       const resolvedUrl = resolveUrl(baseUrl, line);
-      // 直连模式：分片 URL 解析为绝对地址后透传，浏览器直接向源站拉取
-      const targetUrl = allowDirect
-        ? resolvedUrl
-        : createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
+      // 直连模式透传；配置独立代理时指向该服务；否则走内置分片代理
+      let targetUrl: string;
+      if (allowDirect) {
+        targetUrl = resolvedUrl;
+      } else if (segProxy) {
+        targetUrl = buildExternalSegmentUrl(segProxy, resolvedUrl, ua);
+      } else {
+        targetUrl = createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
+      }
       rewrittenLines.push(targetUrl);
       continue;
     }

@@ -1,0 +1,24 @@
+[Unit]
+Description=myTV standalone segment proxy for live streams
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/segment-proxy
+ExecStart=/usr/bin/node /opt/segment-proxy/segment-proxy.mjs
+Environment=PORT=8100
+# 与主站 myTV 的 SEGMENT_PROXY_TOKEN 保持一致；留空则不校验
+Environment=PROXY_TOKEN=__REPLACE_TOKEN__
+Restart=always
+RestartSec=3
+# 以 nobody 运行，仅监听本机回环
+User=nobody
+Group=nobody
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
