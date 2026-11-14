@@ -1,0 +1,724 @@
+/* ============ 街机水果机 · 机台视觉（作用域: .afm-root） ============ */
+
+.afm-root {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 18px;
+  user-select: none;
+  -webkit-user-select: none;
+  color: #fff;
+}
+
+/* ---------- 机台外壳 ---------- */
+.afm-cabinet {
+  width: min(96vw, 700px);
+  border-radius: 26px;
+  padding: 14px 14px 16px;
+  background: linear-gradient(
+    180deg,
+    #ff4d38 0%,
+    #d92621 26%,
+    #a3122e 60%,
+    #5c0a3c 100%
+  );
+  box-shadow:
+    0 0 0 6px #2b0a1e,
+    0 0 0 10px #ffd23f33,
+    0 24px 60px #000c,
+    0 6px 18px #000a;
+  position: relative;
+}
+.afm-cabinet.afm-frenzy {
+  animation: afm-frenzy 0.22s steps(2) infinite;
+}
+@keyframes afm-frenzy {
+  0% {
+    box-shadow:
+      0 0 0 6px #2b0a1e,
+      0 0 60px 18px #ffd23f88,
+      0 24px 60px #000c;
+  }
+  100% {
+    box-shadow:
+      0 0 0 6px #2b0a1e,
+      0 0 90px 30px #ff4d38aa,
+      0 24px 60px #000c;
+  }
+}
+
+/* ---------- 顶部灯箱 ---------- */
+.afm-marquee {
+  text-align: center;
+  padding: 10px 8px 12px;
+  border-radius: 16px 16px 6px 6px;
+  background: linear-gradient(180deg, #2b0a3e, #451061);
+  border: 2px solid #ffd23f55;
+  margin-bottom: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.afm-marquee::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    #ffd23f22 0 2px,
+    transparent 2px 46px
+  );
+  pointer-events: none;
+}
+.afm-marquee-title {
+  font-size: clamp(26px, 6vw, 40px);
+  letter-spacing: 8px;
+  font-weight: 900;
+}
+.afm-neon {
+  color: #fff;
+  text-shadow:
+    0 0 6px #ff4d38,
+    0 0 18px #ff4d38,
+    0 0 42px #ff2d95,
+    0 2px 0 #7a0f2a;
+  animation: afm-neon-flicker 3.4s infinite;
+}
+@keyframes afm-neon-flicker {
+  0%,
+  91%,
+  95%,
+  97%,
+  100% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.55;
+  }
+  96% {
+    opacity: 0.7;
+  }
+}
+.afm-marquee-sub {
+  margin-top: 4px;
+  color: #ffd23fbb;
+  font-size: 11px;
+  letter-spacing: 6px;
+  font-weight: 700;
+}
+
+/* ---------- 盘面 ---------- */
+.afm-board-wrap {
+  position: relative;
+  width: min(88vmin, 620px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 42%,
+    #35155d 0%,
+    #1d0b38 58%,
+    #12062a 100%
+  );
+  border: 10px solid #2b0a1e;
+  outline: 3px solid #ffd23f66;
+  box-shadow:
+    inset 0 0 60px #000a,
+    0 4px 16px #0008;
+}
+
+/* 跑马灯泡 */
+.afm-bulb {
+  position: absolute;
+  width: 3.2%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #472058;
+  box-shadow: inset 0 0 3px #0008;
+  transition:
+    background 0.12s,
+    box-shadow 0.12s;
+}
+.afm-bulb.afm-on {
+  background: radial-gradient(circle at 35% 30%, #fffbe8, #ffd23f 55%, #ff9d00);
+  box-shadow:
+    0 0 6px 1px #ffd23f,
+    0 0 16px 4px #ffd23f77;
+}
+.afm-bulb.afm-red.afm-on {
+  background: radial-gradient(circle at 35% 30%, #fff, #ff6b5e 55%, #e6392f);
+  box-shadow:
+    0 0 6px 1px #ff6b5e,
+    0 0 16px 4px #e6392f77;
+}
+.afm-bulb.afm-win-blink {
+  animation: afm-bulb-blink 0.3s steps(2) 8;
+}
+@keyframes afm-bulb-blink {
+  0% {
+    background: #472058;
+    box-shadow: inset 0 0 3px #0008;
+  }
+  100% {
+    background: radial-gradient(
+      circle at 35% 30%,
+      #fffbe8,
+      #ffd23f 55%,
+      #ff9d00
+    );
+    box-shadow:
+      0 0 8px 2px #ffd23f,
+      0 0 20px 6px #ffd23f99;
+  }
+}
+
+/* 押格 */
+.afm-cell {
+  position: absolute;
+  width: 11.5%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 12px;
+  background: linear-gradient(160deg, #fff8ec 0%, #ffe9c4 100%);
+  border: 2px solid #7a1030;
+  box-shadow:
+    0 3px 0 #7a1030,
+    inset 0 -3px 0 #e8c79a55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  z-index: 3;
+  transition:
+    transform 0.1s,
+    filter 0.12s;
+  padding: 0;
+}
+.afm-cell:hover {
+  filter: brightness(1.06);
+}
+.afm-cell:active {
+  transform: translate(-50%, -50%) scale(0.93);
+}
+.afm-cell .afm-ico {
+  font-size: clamp(14px, 3.6vmin, 26px);
+  line-height: 1.15;
+}
+.afm-cell .afm-odds {
+  font-size: clamp(8px, 1.7vmin, 12px);
+  font-weight: 900;
+  color: #7a1030;
+  background: #ffd23f;
+  border-radius: 7px;
+  padding: 0 5px;
+  line-height: 1.45;
+}
+.afm-cell.afm-big {
+  border-color: #b8860b;
+  box-shadow:
+    0 3px 0 #b8860b,
+    0 0 10px #ffd23f66,
+    inset 0 -3px 0 #e8c79a55;
+  background: linear-gradient(160deg, #fff4d6 0%, #ffdf9e 100%);
+}
+.afm-cell.afm-big .afm-odds {
+  background: linear-gradient(180deg, #ffe97a, #ff9d00);
+}
+.afm-cell.afm-text .afm-ico {
+  font-weight: 900;
+  font-style: italic;
+  color: #e6392f;
+  letter-spacing: -1px;
+  text-shadow: 0 1px 0 #fff;
+}
+.afm-cell.afm-bar .afm-ico {
+  color: #144d14;
+}
+.afm-cell.afm-win-flash {
+  animation: afm-cell-flash 0.28s steps(2) 8;
+  z-index: 5;
+}
+@keyframes afm-cell-flash {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.9);
+    box-shadow: 0 0 26px 10px #ffd23fcc;
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+}
+.afm-cell.afm-dim {
+  filter: brightness(0.45) saturate(0.6);
+}
+
+/* ---------- 中央圆盘 ---------- */
+.afm-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #4a1a6e 0%, #2a0f47 70%);
+  border: 4px solid #ffd23f;
+  box-shadow:
+    0 0 24px #ffd23f44,
+    inset 0 0 30px #000a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  z-index: 4;
+  text-align: center;
+  padding: 5%;
+  pointer-events: none;
+}
+.afm-hub-disc {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  z-index: -1;
+  background: conic-gradient(
+    #ff4d38 0 10deg,
+    transparent 10deg 45deg,
+    #ffd23f 45deg 55deg,
+    transparent 55deg 90deg,
+    #ff4d38 90deg 100deg,
+    transparent 100deg 135deg,
+    #ffd23f 135deg 145deg,
+    transparent 145deg 180deg,
+    #ff4d38 180deg 190deg,
+    transparent 190deg 225deg,
+    #ffd23f 225deg 235deg,
+    transparent 235deg 270deg,
+    #ff4d38 270deg 280deg,
+    transparent 280deg 315deg,
+    #ffd23f 315deg 325deg,
+    transparent 325deg 360deg
+  );
+  opacity: 0.5;
+  animation: afm-disc-spin 6s linear infinite;
+}
+@keyframes afm-disc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.afm-hub-symbol {
+  font-size: clamp(28px, 7.5vmin, 54px);
+  line-height: 1.05;
+  filter: drop-shadow(0 3px 6px #000a);
+}
+.afm-hub-symbol.afm-text {
+  font-weight: 900;
+  font-style: italic;
+  color: #ffd23f;
+  text-shadow:
+    0 0 18px #ff4d38,
+    0 2px 0 #7a0f2a;
+  letter-spacing: -2px;
+}
+.afm-hub-symbol.afm-pop {
+  animation: afm-hub-pop 0.5s cubic-bezier(0.2, 2.2, 0.4, 1);
+}
+@keyframes afm-hub-pop {
+  0% {
+    transform: scale(0.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.afm-hub-text {
+  color: #ffe9b8;
+  font-weight: 800;
+  font-size: clamp(13px, 2.8vmin, 19px);
+  letter-spacing: 1px;
+}
+.afm-hub-text .afm-plus {
+  color: #ffd23f;
+}
+.afm-hub-sub {
+  color: #c9a6ffaa;
+  font-size: clamp(10px, 2vmin, 13px);
+}
+
+/* ---------- 操作台 ---------- */
+.afm-deck {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.afm-lcd {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.afm-lcd-item {
+  background: #0b1a12;
+  border: 2px solid #123522;
+  border-radius: 10px;
+  padding: 6px 18px;
+  min-width: 118px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow:
+    inset 0 0 12px #000c,
+    0 2px 0 #123522;
+}
+.afm-lcd-label {
+  color: #2f8f57;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.afm-lcd-val {
+  color: #52ff9a;
+  font-size: 20px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 8px #52ff9a66;
+}
+.afm-lcd-val.afm-win {
+  color: #ffd23f;
+  text-shadow: 0 0 8px #ffd23f66;
+}
+
+.afm-bet-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.afm-bet-btn {
+  position: relative;
+  width: 74px;
+  height: 64px;
+  border-radius: 12px;
+  border: 2.5px solid #7a1030;
+  background: linear-gradient(180deg, #fff8ec, #ffe2b0);
+  box-shadow: 0 4px 0 #7a1030;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.06s,
+    box-shadow 0.06s;
+  padding: 0;
+}
+.afm-bet-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #7a1030;
+}
+.afm-bet-btn .afm-b-ico {
+  font-size: 24px;
+  line-height: 1.1;
+}
+.afm-bet-btn.afm-text .afm-b-ico {
+  font-weight: 900;
+  font-style: italic;
+  color: #e6392f;
+  font-size: 20px;
+}
+.afm-bet-btn.afm-bar .afm-b-ico {
+  color: #144d14;
+}
+.afm-bet-btn .afm-b-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #7a1030;
+}
+.afm-bet-btn .afm-b-badge {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #ffe97a, #ff9d00);
+  border: 2px solid #7a1030;
+  color: #7a1030;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 18px;
+  display: none;
+}
+.afm-bet-btn .afm-b-badge.afm-show {
+  display: block;
+  animation: afm-badge-pop 0.18s cubic-bezier(0.2, 2, 0.4, 1);
+}
+@keyframes afm-badge-pop {
+  0% {
+    transform: scale(0.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.afm-bet-btn.afm-locked {
+  filter: grayscale(0.7) brightness(0.8);
+  pointer-events: none;
+}
+
+.afm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.afm-btn {
+  border: 2.5px solid #7a1030;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    transform 0.06s,
+    box-shadow 0.06s,
+    filter 0.15s;
+}
+.afm-btn:active {
+  transform: translateY(3px);
+}
+.afm-btn.afm-ghost {
+  background: linear-gradient(180deg, #ffe2b0, #ffc98a);
+  box-shadow: 0 4px 0 #7a1030;
+  color: #7a1030;
+}
+.afm-btn.afm-ghost:active {
+  box-shadow: 0 1px 0 #7a1030;
+}
+.afm-btn.afm-start {
+  background: linear-gradient(180deg, #ffd23f, #ff9d00);
+  box-shadow:
+    0 5px 0 #8a4a00,
+    0 0 22px #ffd23f66;
+  color: #7a1030;
+  font-size: 20px;
+  padding: 10px 34px;
+  animation: afm-start-breath 1.6s ease-in-out infinite;
+}
+.afm-btn.afm-start:active {
+  box-shadow: 0 1px 0 #8a4a00;
+}
+.afm-btn.afm-start.afm-locked {
+  animation: none;
+  filter: grayscale(0.6) brightness(0.75);
+}
+@keyframes afm-start-breath {
+  0%,
+  100% {
+    box-shadow:
+      0 5px 0 #8a4a00,
+      0 0 14px #ffd23f44;
+  }
+  50% {
+    box-shadow:
+      0 5px 0 #8a4a00,
+      0 0 30px #ffd23faa;
+  }
+}
+.afm-btn.afm-big {
+  background: linear-gradient(180deg, #ff7a5e, #e6392f);
+  color: #fff;
+  box-shadow: 0 4px 0 #6d0f14;
+}
+.afm-btn.afm-small {
+  background: linear-gradient(180deg, #6ec6ff, #1e6fd9);
+  color: #fff;
+  box-shadow: 0 4px 0 #0c2f66;
+}
+.afm-hidden {
+  display: none !important;
+}
+
+.afm-hint {
+  text-align: center;
+  color: #ffd23f77;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* ---------- 猜大小 ---------- */
+.afm-double-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #0a0714cc;
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.afm-double-panel {
+  width: min(92vw, 380px);
+  background: linear-gradient(180deg, #451061, #2b0a3e);
+  border: 3px solid #ffd23f;
+  border-radius: 20px;
+  padding: 22px 20px 20px;
+  text-align: center;
+  box-shadow:
+    0 0 40px #ffd23f44,
+    0 20px 50px #000c;
+  animation: afm-panel-in 0.3s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes afm-panel-in {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.afm-double-title {
+  color: #fff;
+  letter-spacing: 4px;
+  font-size: 22px;
+  text-shadow: 0 0 14px #ff4d38;
+}
+.afm-dice-wrap {
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.afm-dice {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 10px #000a);
+}
+.afm-dice.afm-shaking {
+  animation: afm-dice-shake 0.14s infinite;
+}
+@keyframes afm-dice-shake {
+  0% {
+    transform: rotate(-16deg) translateY(-3px);
+  }
+  50% {
+    transform: rotate(14deg) translateY(3px);
+  }
+  100% {
+    transform: rotate(-16deg) translateY(-3px);
+  }
+}
+.afm-dice.afm-reveal {
+  animation: afm-dice-big 0.5s cubic-bezier(0.2, 2, 0.4, 1);
+}
+@keyframes afm-dice-big {
+  0% {
+    transform: scale(2.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.afm-double-info {
+  color: #ffe9b8;
+  margin: 8px 0 14px;
+  font-size: 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.afm-double-info b {
+  color: #ffd23f;
+  font-size: 18px;
+}
+.afm-double-info .afm-res {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+.afm-double-info .afm-res.afm-res-big {
+  color: #ff7a5e;
+}
+.afm-double-info .afm-res.afm-res-small {
+  color: #6ec6ff;
+}
+.afm-double-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.afm-double-actions .afm-btn {
+  min-width: 92px;
+  font-size: 18px;
+  padding: 10px 18px;
+}
+
+/* ---------- 金币雨 ---------- */
+.afm-coin-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  overflow: hidden;
+}
+.afm-coin {
+  position: absolute;
+  top: -40px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd23f 55%, #c07f00);
+  border: 2px solid #b8860b;
+  box-shadow: 0 0 8px #ffd23f88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: #8a5a00;
+  animation: afm-coin-fall linear forwards;
+}
+@keyframes afm-coin-fall {
+  0% {
+    transform: translateY(-6vh) rotate(0deg) scale(0.7);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(108vh) rotate(var(--afm-spin, 540deg)) scale(1);
+    opacity: 0.9;
+  }
+}
+
+@media (max-width: 560px) {
+  .afm-bet-btn {
+    width: 60px;
+    height: 56px;
+  }
+  .afm-bet-btn .afm-b-ico {
+    font-size: 20px;
+  }
+  .afm-lcd-item {
+    min-width: 92px;
+    padding: 5px 12px;
+  }
+  .afm-lcd-val {
+    font-size: 17px;
+  }
+}

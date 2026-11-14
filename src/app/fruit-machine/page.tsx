@@ -5,7 +5,7 @@ import { ArrowLeft, Coins, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback,useState } from 'react';
 
-import OriginalFruitMachine from '../../components/fruitMachine/OriginalFruitMachine';
+import ArcadeFruitMachine from '../../components/fruitMachine/ArcadeFruitMachine';
 
 export default function FruitMachinePage() {
   const router = useRouter();
@@ -69,7 +69,7 @@ export default function FruitMachinePage() {
 
       {/* 主要内容区域 */}
       <div className="flex items-center justify-center min-h-[calc(100vh-80px)] p-4">
-        <OriginalFruitMachine
+        <ArcadeFruitMachine
           coins={coins}
           onCoinsChange={handleCoinsChange}
           onClose={handleClose}
