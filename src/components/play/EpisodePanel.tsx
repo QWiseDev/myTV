@@ -48,9 +48,9 @@ export default function EpisodePanel({
   precomputedVideoInfo,
 }: EpisodePanelProps) {
   return (
-    <div className='md:col-span-1 flex flex-col h-full'>
+    <div className='flex flex-col h-full min-h-0'>
       {!isCollapsed && (
-        <div className='h-full max-h-[350px] md:max-h-[450px] lg:max-h-none overflow-hidden transition-all duration-300 ease-in-out'>
+        <div className='flex-1 min-h-0 overflow-hidden transition-all duration-300 ease-in-out'>
           <Suspense fallback={<div>加载中...</div>}>
             <EpisodeSelector
               totalEpisodes={totalEpisodes}

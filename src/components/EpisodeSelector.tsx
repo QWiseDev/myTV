@@ -756,7 +756,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   );
 
   return (
-    <div className='md:ml-2 px-4 py-0 h-full max-h-[350px] md:max-h-[450px] lg:max-h-[520px] xl:max-h-[600px] 2xl:max-h-[700px] rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
+    <div className='md:ml-2 px-4 py-0 h-full rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
       {/* 主要的 Tab 切换 - 美化版本 */}
       <div className='flex mb-1 -mx-4 sm:-mx-6 flex-shrink-0 relative'>
         {totalEpisodes > 1 && (

@@ -20,7 +20,6 @@ import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
 import PageLayout from '@/components/PageLayout';
-import PlayDetailsSection from '@/components/play/PlayDetailsSection';
 import PlayerAndEpisodeSection from '@/components/play/PlayerAndEpisodeSection';
 
 import {
@@ -72,7 +71,6 @@ const LoadingScreen = dynamic(() => import('@/components/play/LoadingScreen'), {
 const ErrorScreen = dynamic(() => import('@/components/play/ErrorScreen'), {
   ssr: false,
 });
-const DanmakuPanel = dynamic(() => import('@/components/play/DanmakuPanel'), { ssr: false });
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
 
@@ -962,9 +960,10 @@ function PlayPageClient() {
 
   return (
     <PageLayout activePath='/play' fullWidth>
-      <div className='px-0 xl:px-6'>
+      {/* 剧场模式：md 及以上锁视口不滚动，播放器+右侧信息框一屏放下 */}
+      <div className='px-0 xl:px-6 md:h-[calc(100vh-4.25rem)] md:overflow-hidden'>
         {/* 剧场模式：全宽铺满，与爱奇艺一致 */}
-        <div className='mx-auto flex max-w-full flex-col gap-3 pt-2 pb-4'>
+        <div className='mx-auto flex max-w-full flex-col gap-3 pt-2 pb-4 md:h-full'>
           <PlayerAndEpisodeSection
             playerRef={artRef}
             playerProps={{
@@ -995,34 +994,30 @@ function PlayPageClient() {
               sourceSearchError,
               precomputedVideoInfo,
             }}
-          />
-
-          <DanmakuPanel
-            key={JSON.stringify([videoTitle, videoYear, videoDoubanId, danmuEpisodeNum])}
-            mediaKey={danmakuMediaKey(videoTitle, videoYear, videoDoubanId)}
-            title={videoTitle}
-            episodeIndex={danmuEpisodeNum - 1}
-            enabled={externalDanmuEnabled}
-            onToggle={handleDanmuOperationOptimized}
-          />
-
-          <PlayDetailsSection
-            detail={detail}
-            videoTitle={videoTitle}
-            videoYear={videoYear}
-            bangumiDetails={bangumiDetails}
-            movieDetails={movieDetails}
-            loadingBangumiDetails={loadingBangumiDetails}
-            loadingMovieDetails={loadingMovieDetails}
-            favorited={favorited}
-            onToggleFavorite={handleFavoriteWithAnalytics}
-            netdiskResults={netdiskResults}
-            netdiskLoading={netdiskLoading}
-            netdiskError={netdiskError}
-            netdiskTotal={netdiskTotal}
-            onNetDiskSearch={handleNetDiskSearch}
-            videoCover={videoCover}
-            videoDoubanId={videoDoubanId || 0}
+            infoProps={{
+              detail,
+              videoTitle,
+              videoYear,
+              bangumiDetails,
+              movieDetails,
+              loadingBangumiDetails,
+              loadingMovieDetails,
+              favorited,
+              onToggleFavorite: handleFavoriteWithAnalytics,
+              netdiskResults,
+              netdiskLoading,
+              netdiskError,
+              netdiskTotal,
+              onNetDiskSearch: handleNetDiskSearch,
+              videoDoubanId: videoDoubanId || 0,
+            }}
+            danmakuProps={{
+              mediaKey: danmakuMediaKey(videoTitle, videoYear, videoDoubanId),
+              title: videoTitle,
+              episodeIndex: danmuEpisodeNum - 1,
+              enabled: externalDanmuEnabled,
+              onToggle: handleDanmuOperationOptimized,
+            }}
           />
         </div>
       </div>
