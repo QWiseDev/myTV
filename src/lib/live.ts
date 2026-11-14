@@ -4,7 +4,9 @@ import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
 import type { AdminConfig } from './admin.types';
-import { filterAliveChannels } from './live-health';
+import { filterAliveChannels, runChannelSpeedTest } from './live-health';
+
+export { getBaseUrl, resolveUrl } from './url-resolve';
 import { buildFetchViaProxyUrl, resolveSegmentProxy } from './live-proxy';
 
 const defaultUA = 'AptvPlayer/1.4.10';
@@ -18,6 +20,8 @@ export interface LiveChannels {
     logo: string;
     group: string;
     url: string;
+    /** 最近一次测速的下载速度 KB/s（0 = 死链） */
+    speed?: number;
   }[];
   epgUrl: string;
   epgs: {
@@ -33,6 +37,75 @@ const cachedLiveChannels: { [key: string]: LiveChannels } = {};
 
 export function deleteCachedLiveChannels(key: string) {
   delete cachedLiveChannels[key];
+}
+
+/**
+ * 对指定直播源的全部频道测速（经分片代理通道，与播放路径一致），
+ * 自动剔除死链与低于阈值的慢源，并回写缓存与配置中的频道数。
+ */
+export async function runSpeedTest(
+  sourceKey: string,
+): Promise<{
+  key: string;
+  name: string;
+  total: number;
+  kept: number;
+  deadRemoved: number;
+  slowRemoved: number;
+  avgKBps: number;
+} | null> {
+  const cached = await getCachedLiveChannels(sourceKey);
+  if (!cached) {
+    return null;
+  }
+  const config = await getConfig();
+  const liveInfo = config.LiveConfig?.find((live) => live.key === sourceKey);
+  if (!liveInfo) {
+    return null;
+  }
+  const ua = liveInfo.ua || defaultUA;
+  const segProxy = resolveSegmentProxy(config);
+  const { results, kept, slowRemoved, deadRemoved } = await runChannelSpeedTest(
+    cached.channels.map((c) => ({ name: c.name, url: c.url })),
+    {
+      ua,
+      probeUrl: segProxy
+        ? (url: string) => buildFetchViaProxyUrl(segProxy, url, ua)
+        : undefined,
+    },
+  );
+
+  // 按测速结果重建缓存频道（附带速度字段），死链与慢源剔除
+  const speedByUrl = new Map(results.map((r) => [r.url, r.speedKBps]));
+  const keptUrls = new Set(kept.map((r) => r.url));
+  cached.channels = cached.channels
+    .filter((c) => keptUrls.has(c.url))
+    .map((c) => ({ ...c, speed: speedByUrl.get(c.url) }));
+  cached.channelNumber = cached.channels.length;
+  cachedLiveChannels[sourceKey] = cached;
+
+  const keptSpeeds = kept.map((r) => r.speedKBps).filter((s) => s > 0);
+  const avgKBps = keptSpeeds.length
+    ? Math.round(keptSpeeds.reduce((a, b) => a + b, 0) / keptSpeeds.length)
+    : 0;
+
+  // 回写频道数
+  liveInfo.channelNumber = cached.channelNumber;
+  await db.saveAdminConfig(config);
+
+  console.log(
+    `[LIVE] ${liveInfo.name || sourceKey} 测速完成: 共 ${results.length}，剔除死链 ${deadRemoved}、慢源 ${slowRemoved}（阈值 ${parseInt(process.env.LIVE_SPEED_MIN_KBPS || '150', 10)}KB/s），保留 ${kept.length}，均速 ${avgKBps}KB/s`,
+  );
+
+  return {
+    key: sourceKey,
+    name: liveInfo.name || sourceKey,
+    total: results.length,
+    kept: kept.length,
+    deadRemoved,
+    slowRemoved,
+    avgKBps,
+  };
 }
 
 export async function getCachedLiveChannels(
@@ -464,84 +537,3 @@ function parseM3U(
   return { tvgUrl, channels };
 }
 
-// utils/urlResolver.js
-export function resolveUrl(baseUrl: string, relativePath: string) {
-  try {
-    // 如果已经是完整的 URL，直接返回
-    if (
-      relativePath.startsWith('http://') ||
-      relativePath.startsWith('https://')
-    ) {
-      return relativePath;
-    }
-
-    // 如果是协议相对路径 (//example.com/path)
-    if (relativePath.startsWith('//')) {
-      const baseUrlObj = new URL(baseUrl);
-      return `${baseUrlObj.protocol}${relativePath}`;
-    }
-
-    // 使用 URL 构造函数处理相对路径
-    const baseUrlObj = new URL(baseUrl);
-    const resolvedUrl = new URL(relativePath, baseUrlObj);
-    return resolvedUrl.href;
-  } catch (error) {
-    // 降级处理
-    return fallbackUrlResolve(baseUrl, relativePath);
-  }
-}
-
-function fallbackUrlResolve(baseUrl: string, relativePath: string) {
-  // 移除 baseUrl 末尾的文件名，保留目录路径
-  let base = baseUrl;
-  if (!base.endsWith('/')) {
-    base = base.substring(0, base.lastIndexOf('/') + 1);
-  }
-
-  // 处理不同类型的相对路径
-  if (relativePath.startsWith('/')) {
-    // 绝对路径 (/path/to/file)
-    const urlObj = new URL(base);
-    return `${urlObj.protocol}//${urlObj.host}${relativePath}`;
-  } else if (relativePath.startsWith('../')) {
-    // 上级目录相对路径 (../path/to/file)
-    const segments = base.split('/').filter((s) => s);
-    const relativeSegments = relativePath.split('/').filter((s) => s);
-
-    for (const segment of relativeSegments) {
-      if (segment === '..') {
-        segments.pop();
-      } else if (segment !== '.') {
-        segments.push(segment);
-      }
-    }
-
-    const urlObj = new URL(base);
-    return `${urlObj.protocol}//${urlObj.host}/${segments.join('/')}`;
-  } else {
-    // 当前目录相对路径 (file.ts 或 ./file.ts)
-    const cleanRelative = relativePath.startsWith('./')
-      ? relativePath.slice(2)
-      : relativePath;
-    return base + cleanRelative;
-  }
-}
-
-// 获取 M3U8 的基础 URL
-export function getBaseUrl(m3u8Url: string) {
-  try {
-    const url = new URL(m3u8Url);
-    // 如果 URL 以 .m3u8 结尾，移除文件名
-    if (url.pathname.endsWith('.m3u8')) {
-      url.pathname = url.pathname.substring(
-        0,
-        url.pathname.lastIndexOf('/') + 1,
-      );
-    } else if (!url.pathname.endsWith('/')) {
-      url.pathname += '/';
-    }
-    return url.protocol + '//' + url.host + url.pathname;
-  } catch (error) {
-    return m3u8Url.endsWith('/') ? m3u8Url : m3u8Url + '/';
-  }
-}

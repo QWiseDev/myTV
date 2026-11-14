@@ -168,6 +168,38 @@ const LiveSourceConfig = ({
     });
   };
 
+  // 频道测速：剔除死链与慢源，弹窗展示报告
+  const handleSpeedTest = (key: string, name: string) => {
+    withLoading(`speedtest_${key}`, async () => {
+      const resp = await fetch('/api/admin/live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'speedtest', key }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || `测速失败: ${resp.status}`);
+      }
+      const data = await resp.json();
+      const s = data.summary as {
+        total: number;
+        kept: number;
+        deadRemoved: number;
+        slowRemoved: number;
+        avgKBps: number;
+      };
+      showAlert({
+        type: 'success',
+        title: `${name} 测速完成`,
+        message: `共 ${s.total} 个频道：保留 ${s.kept} 个（均速 ${s.avgKBps} KB/s），剔除死链 ${s.deadRemoved} 个、慢源 ${s.slowRemoved} 个`,
+        timer: 8000,
+      });
+      await refreshConfig();
+    }).catch(() => {
+      console.error('测速失败', 'speedtest', key);
+    });
+  };
+
   // 刷新直播源
   const handleRefreshLiveSources = async () => {
     if (isRefreshing) return;
@@ -347,6 +379,18 @@ const LiveSourceConfig = ({
           </div>
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
+          <button
+            onClick={() => handleSpeedTest(liveSource.key, liveSource.name)}
+            disabled={isLoading(`speedtest_${liveSource.key}`)}
+            className={`${buttonStyles.roundedSecondary} ${
+              isLoading(`speedtest_${liveSource.key}`)
+                ? 'opacity-50 cursor-not-allowed'
+                : ''
+            }`}
+            title='测试全部频道速度并剔除死链与慢源'
+          >
+            {isLoading(`speedtest_${liveSource.key}`) ? '测速中' : '测速'}
+          </button>
           <button
             onClick={() => handleToggleEnable(liveSource.key)}
             disabled={isLoading(`toggleLiveSource_${liveSource.key}`)}

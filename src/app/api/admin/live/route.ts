@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
-import { deleteCachedLiveChannels, refreshLiveChannels } from '@/lib/live';
+import { deleteCachedLiveChannels, refreshLiveChannels, runSpeedTest } from '@/lib/live';
 import { resolveSegmentProxy } from '@/lib/live-proxy';
 
 export const runtime = 'nodejs';
@@ -244,6 +244,21 @@ export async function POST(request: NextRequest) {
           config.LiveProxyConfig = { baseUrl: '', token: '' };
         }
         break;
+
+      case 'speedtest': {
+        // 全量测速：剔除死链与慢源，返回测速报告
+        const summary = await runSpeedTest(key as string);
+        if (!summary) {
+          return NextResponse.json(
+            { error: '直播源不存在或无频道' },
+            { status: 404 },
+          );
+        }
+        return NextResponse.json(
+          { success: true, summary },
+          { headers: { 'Cache-Control': 'no-store' } },
+        );
+      }
 
       default:
         return NextResponse.json({ error: '未知操作' }, { status: 400 });
