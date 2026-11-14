@@ -8,7 +8,7 @@ import { getBaseUrl, resolveUrl } from '@/lib/live';
 import {
   buildExternalSegmentUrl,
   buildFetchViaProxyUrl,
-  getSegmentProxyConfig,
+  resolveSegmentProxy,
   SegmentProxyConfig,
 } from '@/lib/live-proxy';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
@@ -33,7 +33,6 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const url = searchParams.get('url');
-  const allowCORS = searchParams.get('allowCORS') === 'true';
   const source = searchParams.get('moontv-source');
 
   if (!url) {
@@ -48,10 +47,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Source not found' }, { status: 404 });
   }
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
-  // 直连判定：源配置 direct，或用户端 hls.js loader 已带 allowCORS 参数
-  const allowDirect = allowCORS || liveSource.direct === true;
-  // 独立分片代理（配置 SEGMENT_PROXY_BASE 后分片与播放列表均经其转发）
-  const segProxy = getSegmentProxyConfig();
+  // 直连判定：仅按源配置 direct（管理后台按源开启）
+  const allowDirect = liveSource.direct === true;
+  // 独立分片代理（管理后台配置优先，回落环境变量）：分片与播放列表均经其转发
+  const segProxy = resolveSegmentProxy(config);
 
   let response: Response | null = null;
   let responseUsed = false;

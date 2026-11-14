@@ -56,27 +56,6 @@ function createCustomHlsJsLoader(
         } catch (error) {
           // ignore
         }
-        // 拦截manifest和level请求
-        if (
-          (context as any).type === 'manifest' ||
-          (context as any).type === 'level'
-        ) {
-          // 判断是否浏览器直连
-          const isLiveDirectConnectStr =
-            localStorage.getItem('liveDirectConnect');
-          const isLiveDirectConnect = isLiveDirectConnectStr === 'true';
-          if (isLiveDirectConnect) {
-            // 浏览器直连，使用 URL 对象处理参数
-            try {
-              const url = new URL(context.url);
-              url.searchParams.set('allowCORS', 'true');
-              context.url = url.toString();
-            } catch (error) {
-              // 如果 URL 解析失败，回退到字符串拼接
-              context.url = context.url + '&allowCORS=true';
-            }
-          }
-        }
         // 执行原始load方法
         load(context, config, callbacks);
       };

@@ -40,7 +40,6 @@ export function useUserMenuSettingsController() {
   const [doubanProxyUrl, setDoubanProxyUrl] = useState('');
   const [enableOptimization, setEnableOptimization] = useState(false);
   const [fluidSearch, setFluidSearch] = useState(true);
-  const [liveDirectConnect, setLiveDirectConnect] = useState(false);
   const [doubanDataSource, setDoubanDataSource] = useState('direct');
   const [doubanImageProxyType, setDoubanImageProxyType] = useState('direct');
   const [doubanImageProxyUrl, setDoubanImageProxyUrl] = useState('');
@@ -61,7 +60,6 @@ export function useUserMenuSettingsController() {
     setDoubanImageProxyUrl(settings.doubanImageProxyUrl);
     setEnableOptimization(settings.enableOptimization);
     setFluidSearch(settings.fluidSearch);
-    setLiveDirectConnect(settings.liveDirectConnect);
     setContinueWatchingMinProgress(settings.continueWatchingMinProgress);
     setContinueWatchingMaxProgress(settings.continueWatchingMaxProgress);
     setEnableContinueWatchingFilter(settings.enableContinueWatchingFilter);
@@ -95,11 +93,6 @@ export function useUserMenuSettingsController() {
   const handleFluidSearchToggle = (value: boolean) => {
     setFluidSearch(value);
     persistUserMenuSetting('fluidSearch', JSON.stringify(value));
-  };
-
-  const handleLiveDirectConnectToggle = (value: boolean) => {
-    setLiveDirectConnect(value);
-    persistUserMenuSetting('liveDirectConnect', JSON.stringify(value));
   };
 
   const handleContinueWatchingMinProgressChange = (value: number) => {
@@ -185,7 +178,6 @@ export function useUserMenuSettingsController() {
     enableContinueWatchingFilter,
     enableOptimization,
     fluidSearch,
-    liveDirectConnect,
   };
 
   return {
@@ -200,7 +192,6 @@ export function useUserMenuSettingsController() {
     handleEnableAutoSkipToggle,
     handleEnableContinueWatchingFilterToggle,
     handleFluidSearchToggle,
-    handleLiveDirectConnectToggle,
     handleOptimizationToggle,
     handleResetSettings,
     settings,

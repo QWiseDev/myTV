@@ -77,6 +77,11 @@ export interface AdminConfig {
     channelNumber?: number;
     disabled?: boolean;
   }[];
+  /** 独立分片代理配置（优先于环境变量 SEGMENT_PROXY_BASE/TOKEN） */
+  LiveProxyConfig?: {
+    baseUrl?: string;
+    token?: string;
+  };
   NetDiskConfig?: {
     enabled: boolean; // 是否启用网盘搜索
     pansouUrl: string; // PanSou服务地址

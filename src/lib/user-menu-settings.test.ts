@@ -75,7 +75,6 @@ describe('readUserMenuSettings', () => {
       enableContinueWatchingFilter: 'true',
       enableOptimization: 'true',
       fluidSearch: 'true',
-      liveDirectConnect: 'true',
     });
 
     expect(
@@ -96,7 +95,6 @@ describe('readUserMenuSettings', () => {
       enableContinueWatchingFilter: true,
       enableOptimization: true,
       fluidSearch: true,
-      liveDirectConnect: true,
     });
   });
 });
@@ -117,7 +115,6 @@ describe('writeUserMenuSettings', () => {
       enableContinueWatchingFilter: true,
       enableOptimization: true,
       fluidSearch: false,
-      liveDirectConnect: true,
     };
 
     writeUserMenuSettings(storage, settings);
@@ -135,7 +132,6 @@ describe('writeUserMenuSettings', () => {
       enableContinueWatchingFilter: 'true',
       enableOptimization: 'true',
       fluidSearch: 'false',
-      liveDirectConnect: 'true',
     });
   });
 });

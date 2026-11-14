@@ -6,13 +6,43 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { deleteCachedLiveChannels, refreshLiveChannels } from '@/lib/live';
+import { resolveSegmentProxy } from '@/lib/live-proxy';
 
 export const runtime = 'nodejs';
-
 
 // 强制动态渲染，避免在构建时预生成
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+/** 返回当前生效的分片代理配置（后台配置优先，环境变量回退），供面板预填 */
+export async function GET(request: NextRequest) {
+  try {
+    const authInfo = getAuthInfoFromCookie(request);
+    const username = authInfo?.username;
+    const config = await getConfig();
+    if (username !== process.env.USERNAME) {
+      const user = config.UserConfig?.Users?.find((u) => u.username === username);
+      if (!user || user.role !== 'admin' || user.banned) {
+        return NextResponse.json({ error: '权限不足' }, { status: 401 });
+      }
+    }
+    const proxy = resolveSegmentProxy(config);
+    return NextResponse.json(
+      {
+        baseUrl: proxy?.baseUrl ?? '',
+        token: proxy?.token ?? '',
+        fromDb: Boolean(config.LiveProxyConfig?.baseUrl),
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '操作失败' },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 权限检查
@@ -28,7 +58,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, key, name, url, ua, epg, direct } = body;
+    const {
+      action,
+      key,
+      name,
+      url,
+      ua,
+      epg,
+      direct,
+      proxyBaseUrl,
+      proxyToken,
+    } = body;
 
     if (!config) {
       return NextResponse.json({ error: '配置不存在' }, { status: 404 });
@@ -45,7 +85,7 @@ export async function POST(request: NextRequest) {
         if (config.LiveConfig.some((l) => l.key === key)) {
           return NextResponse.json(
             { error: '直播源 key 已存在' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -84,7 +124,7 @@ export async function POST(request: NextRequest) {
         if (liveSource.from === 'config') {
           return NextResponse.json(
             { error: '不能删除配置文件中的直播源' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -122,7 +162,7 @@ export async function POST(request: NextRequest) {
         if (editSource.from === 'config') {
           return NextResponse.json(
             { error: '不能编辑配置文件中的直播源' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -149,7 +189,7 @@ export async function POST(request: NextRequest) {
         if (!Array.isArray(order)) {
           return NextResponse.json(
             { error: '排序数据格式错误' },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -172,6 +212,39 @@ export async function POST(request: NextRequest) {
         config.LiveConfig = sortedLiveConfig;
         break;
 
+      case 'setproxy':
+        // 配置独立分片代理（清空 baseUrl 表示停用，回落环境变量/内置代理）
+        if (
+          typeof proxyBaseUrl !== 'string' ||
+          typeof proxyToken !== 'string'
+        ) {
+          return NextResponse.json({ error: '参数不完整' }, { status: 400 });
+        }
+        const trimmedBase = proxyBaseUrl.trim();
+        if (trimmedBase) {
+          try {
+            const parsed = new URL(trimmedBase);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+              return NextResponse.json(
+                { error: '代理地址仅支持 http/https' },
+                { status: 400 },
+              );
+            }
+          } catch {
+            return NextResponse.json(
+              { error: '代理地址格式无效' },
+              { status: 400 },
+            );
+          }
+          config.LiveProxyConfig = {
+            baseUrl: trimmedBase.replace(/\/+$/, ''),
+            token: proxyToken.trim(),
+          };
+        } else {
+          config.LiveProxyConfig = { baseUrl: '', token: '' };
+        }
+        break;
+
       default:
         return NextResponse.json({ error: '未知操作' }, { status: 400 });
     }
@@ -188,12 +261,12 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store', // 不缓存结果
         },
-      }
+      },
     );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '操作失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -16,7 +16,6 @@ export interface UserMenuSettingsSnapshot {
   doubanImageProxyUrl: string;
   enableOptimization: boolean;
   fluidSearch: boolean;
-  liveDirectConnect: boolean;
   continueWatchingMinProgress: number;
   continueWatchingMaxProgress: number;
   enableContinueWatchingFilter: boolean;
@@ -48,7 +47,6 @@ export function buildDefaultUserMenuSettings(
     enableContinueWatchingFilter: false,
     enableOptimization: false,
     fluidSearch: runtimeConfig.FLUID_SEARCH !== false,
-    liveDirectConnect: false,
   };
 }
 
@@ -159,11 +157,6 @@ export function readUserMenuSettings(
       'fluidSearch',
       defaults.fluidSearch,
     ),
-    liveDirectConnect: readBooleanSetting(
-      storage,
-      'liveDirectConnect',
-      defaults.liveDirectConnect,
-    ),
   };
 }
 
@@ -180,10 +173,6 @@ export function writeUserMenuSettings(
     JSON.stringify(settings.enableOptimization),
   );
   storage.setItem('fluidSearch', JSON.stringify(settings.fluidSearch));
-  storage.setItem(
-    'liveDirectConnect',
-    JSON.stringify(settings.liveDirectConnect),
-  );
   storage.setItem('doubanProxyUrl', settings.doubanProxyUrl);
   storage.setItem('doubanDataSource', settings.doubanDataSource);
   storage.setItem('doubanImageProxyType', settings.doubanImageProxyType);

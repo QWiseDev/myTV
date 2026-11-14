@@ -2,9 +2,47 @@ import {
   buildExternalSegmentUrl,
   buildFetchViaProxyUrl,
   getSegmentProxyConfig,
+  resolveSegmentProxy,
 } from './live-proxy';
 
 describe('live-proxy', () => {
+  describe('resolveSegmentProxy', () => {
+    it('管理后台配置优先于环境变量', () => {
+      const resolved = resolveSegmentProxy(
+        {
+          LiveProxyConfig: {
+            baseUrl: 'https://admin.example/seg',
+            token: 'admintoken',
+          },
+        },
+        {
+          SEGMENT_PROXY_BASE: 'https://env.example/seg',
+          SEGMENT_PROXY_TOKEN: 'envtoken',
+        },
+      );
+      expect(resolved).toEqual({
+        baseUrl: 'https://admin.example/seg',
+        token: 'admintoken',
+      });
+    });
+
+    it('后台未配置时回落环境变量，均为空则返回 null', () => {
+      expect(
+        resolveSegmentProxy(
+          { LiveProxyConfig: { baseUrl: '', token: '' } },
+          { SEGMENT_PROXY_BASE: 'https://env.example/seg' },
+        ),
+      ).toEqual({ baseUrl: 'https://env.example/seg', token: '' });
+      expect(resolveSegmentProxy(null, {})).toBeNull();
+    });
+
+    it('后台配置非法地址时返回 null（走内置代理）', () => {
+      expect(
+        resolveSegmentProxy({ LiveProxyConfig: { baseUrl: 'not-a-url' } }, {}),
+      ).toBeNull();
+    });
+  });
+
   describe('getSegmentProxyConfig', () => {
     it('未配置时返回 null（走内置代理）', () => {
       expect(getSegmentProxyConfig({})).toBeNull();

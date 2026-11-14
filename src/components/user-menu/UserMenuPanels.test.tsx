@@ -40,7 +40,6 @@ const DEFAULT_SETTINGS: UserMenuSettingsSnapshot = {
   enableContinueWatchingFilter: false,
   enableOptimization: false,
   fluidSearch: true,
-  liveDirectConnect: false,
 };
 
 function createWatchingUpdatesState(): UserMenuWatchingUpdatesState {
@@ -183,7 +182,6 @@ describe('UserMenu presentation panels', () => {
         onDoubanImageProxyUrlChange={jest.fn()}
         onDoubanProxyUrlChange={jest.fn()}
         onFluidSearchChange={jest.fn()}
-        onLiveDirectConnectChange={jest.fn()}
         onOptimizationChange={jest.fn()}
         onReset={onReset}
         settings={{

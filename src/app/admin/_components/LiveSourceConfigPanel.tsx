@@ -83,7 +83,7 @@ const LiveSourceConfig = ({
         delay: 150, // 长按 150ms 后触发，避免与滚动冲突
         tolerance: 5,
       },
-    })
+    }),
   );
 
   // 初始化
@@ -93,7 +93,39 @@ const LiveSourceConfig = ({
       // 进入时重置 orderChanged
       setOrderChanged(false);
     }
+    // 同步分片代理配置
+    setProxyBase(config?.LiveProxyConfig?.baseUrl || '');
+    setProxyToken(config?.LiveProxyConfig?.token || '');
   }, [config]);
+
+  // 分片代理配置（独立服务地址不入源码，存 db）
+  const [proxyBase, setProxyBase] = useState('');
+  const [proxyToken, setProxyToken] = useState('');
+
+  // 拉取当前生效的分片代理（后台配置优先，环境变量回退）用于预填展示
+  useEffect(() => {
+    fetch('/api/admin/live')
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((data) => {
+        if (data && typeof data.baseUrl === 'string') {
+          setProxyBase((prev) => prev || data.baseUrl);
+          setProxyToken((prev) => prev || data.token);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const handleSaveProxy = () => {
+    withLoading('setLiveProxy', () =>
+      callLiveSourceApi({
+        action: 'setproxy',
+        proxyBaseUrl: proxyBase,
+        proxyToken: proxyToken,
+      }),
+    ).catch(() => {
+      console.error('操作失败', 'setproxy', proxyBase);
+    });
+  };
 
   // 通用 API 请求
   const callLiveSourceApi = async (body: Record<string, unknown>) => {
@@ -122,7 +154,7 @@ const LiveSourceConfig = ({
     if (!target) return;
     const action = target.disabled ? 'enable' : 'disable';
     withLoading(`toggleLiveSource_${key}`, () =>
-      callLiveSourceApi({ action, key })
+      callLiveSourceApi({ action, key }),
     ).catch(() => {
       console.error('操作失败', action, key);
     });
@@ -130,7 +162,7 @@ const LiveSourceConfig = ({
 
   const handleDelete = (key: string) => {
     withLoading(`deleteLiveSource_${key}`, () =>
-      callLiveSourceApi({ action: 'delete', key })
+      callLiveSourceApi({ action: 'delete', key }),
     ).catch(() => {
       console.error('操作失败', 'delete', key);
     });
@@ -233,7 +265,7 @@ const LiveSourceConfig = ({
   const handleSaveOrder = () => {
     const order = liveSources.map((s) => s.key);
     withLoading('saveLiveSourceOrder', () =>
-      callLiveSourceApi({ action: 'sort', order })
+      callLiveSourceApi({ action: 'sort', order }),
     )
       .then(() => {
         setOrderChanged(false);
@@ -408,6 +440,45 @@ const LiveSourceConfig = ({
         </div>
       </div>
 
+      {/* 分片代理配置（独立服务，不入源码仓库） */}
+      <div className='p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3'>
+        <div className='flex items-center justify-between'>
+          <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+            分片代理（离直播源更近的服务器，可选）
+          </h4>
+          <button
+            onClick={handleSaveProxy}
+            disabled={isLoading('setLiveProxy')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg ${
+              isLoading('setLiveProxy')
+                ? buttonStyles.disabled
+                : buttonStyles.primary
+            }`}
+          >
+            {isLoading('setLiveProxy') ? '保存中...' : '保存代理配置'}
+          </button>
+        </div>
+        <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+          <input
+            type='text'
+            placeholder='代理地址（如 https://x.x.x.x:8443/seg，留空走内置代理）'
+            value={proxyBase}
+            onChange={(e) => setProxyBase(e.target.value)}
+            className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm'
+          />
+          <input
+            type='text'
+            placeholder='代理 Token（与服务端 PROXY_TOKEN 一致）'
+            value={proxyToken}
+            onChange={(e) => setProxyToken(e.target.value)}
+            className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm'
+          />
+        </div>
+        <p className='text-xs text-gray-500 dark:text-gray-400'>
+          配置后分片与播放列表均经该服务代理，健康检查也按此路径探活；留空则由服务器环境变量决定。
+        </p>
+      </div>
+
       {showAddForm && (
         <div className='p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4'>
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
@@ -519,7 +590,7 @@ const LiveSourceConfig = ({
                 value={editingLiveSource.name}
                 onChange={(e) =>
                   setEditingLiveSource((prev) =>
-                    prev ? { ...prev, name: e.target.value } : null
+                    prev ? { ...prev, name: e.target.value } : null,
                   )
                 }
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -545,7 +616,7 @@ const LiveSourceConfig = ({
                 value={editingLiveSource.url}
                 onChange={(e) =>
                   setEditingLiveSource((prev) =>
-                    prev ? { ...prev, url: e.target.value } : null
+                    prev ? { ...prev, url: e.target.value } : null,
                   )
                 }
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -560,7 +631,7 @@ const LiveSourceConfig = ({
                 value={editingLiveSource.epg}
                 onChange={(e) =>
                   setEditingLiveSource((prev) =>
-                    prev ? { ...prev, epg: e.target.value } : null
+                    prev ? { ...prev, epg: e.target.value } : null,
                   )
                 }
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -575,7 +646,7 @@ const LiveSourceConfig = ({
                 value={editingLiveSource.ua}
                 onChange={(e) =>
                   setEditingLiveSource((prev) =>
-                    prev ? { ...prev, ua: e.target.value } : null
+                    prev ? { ...prev, ua: e.target.value } : null,
                   )
                 }
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -588,7 +659,7 @@ const LiveSourceConfig = ({
                   checked={editingLiveSource.direct || false}
                   onChange={(e) =>
                     setEditingLiveSource((prev) =>
-                      prev ? { ...prev, direct: e.target.checked } : null
+                      prev ? { ...prev, direct: e.target.checked } : null,
                     )
                   }
                   className='h-4 w-4 rounded border-gray-300 text-blue-600'

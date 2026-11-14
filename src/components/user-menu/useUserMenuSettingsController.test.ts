@@ -35,7 +35,6 @@ function readStoredSettings() {
     ),
     enableOptimization: localStorage.getItem('enableOptimization'),
     fluidSearch: localStorage.getItem('fluidSearch'),
-    liveDirectConnect: localStorage.getItem('liveDirectConnect'),
   };
 }
 
@@ -76,7 +75,6 @@ describe('useUserMenuSettingsController', () => {
       enableContinueWatchingFilter: false,
       enableOptimization: false,
       fluidSearch: false,
-      liveDirectConnect: false,
     });
   });
 
@@ -105,7 +103,6 @@ describe('useUserMenuSettingsController', () => {
       result.current.handleDoubanProxyUrlChange('https://proxy.example');
       result.current.handleOptimizationToggle(true);
       result.current.handleFluidSearchToggle(false);
-      result.current.handleLiveDirectConnectToggle(true);
       result.current.handleContinueWatchingMinProgressChange(10);
       result.current.handleContinueWatchingMaxProgressChange(90);
       result.current.handleEnableContinueWatchingFilterToggle(true);
@@ -129,7 +126,6 @@ describe('useUserMenuSettingsController', () => {
       enableContinueWatchingFilter: true,
       enableOptimization: true,
       fluidSearch: false,
-      liveDirectConnect: true,
     });
     expect(readStoredSettings()).toEqual({
       continueWatchingMaxProgress: '90',
@@ -144,7 +140,6 @@ describe('useUserMenuSettingsController', () => {
       enableContinueWatchingFilter: 'true',
       enableOptimization: 'true',
       fluidSearch: 'false',
-      liveDirectConnect: 'true',
     });
     expect(localStorageChanged).toHaveBeenCalledTimes(2);
     expect(doubanImageProxyChanged).toHaveBeenCalledTimes(2);
@@ -161,7 +156,6 @@ describe('useUserMenuSettingsController', () => {
       ['doubanProxyUrl', 'https://proxy.example'],
       ['enableOptimization', 'true'],
       ['fluidSearch', 'false'],
-      ['liveDirectConnect', 'true'],
       ['continueWatchingMinProgress', '10'],
       ['continueWatchingMaxProgress', '90'],
       ['enableContinueWatchingFilter', 'true'],
@@ -212,7 +206,6 @@ describe('useUserMenuSettingsController', () => {
       enableContinueWatchingFilter: false,
       enableOptimization: false,
       fluidSearch: false,
-      liveDirectConnect: false,
     });
     expect(readStoredSettings()).toEqual({
       continueWatchingMaxProgress: '100',
@@ -227,7 +220,6 @@ describe('useUserMenuSettingsController', () => {
       enableContinueWatchingFilter: 'false',
       enableOptimization: 'false',
       fluidSearch: 'false',
-      liveDirectConnect: 'false',
     });
     expect(localStorageChanged).not.toHaveBeenCalled();
     expect(doubanImageProxyChanged).toHaveBeenCalledTimes(1);

@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 
 import type { AdminConfig } from './admin.types';
 import { filterAliveChannels } from './live-health';
-import { buildFetchViaProxyUrl, getSegmentProxyConfig } from './live-proxy';
+import { buildFetchViaProxyUrl, resolveSegmentProxy } from './live-proxy';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
@@ -79,7 +79,7 @@ export async function refreshLiveChannels(liveInfo: {
   // 健康检查：并发探测频道地址，自动剔除死链。
   // 配置了独立分片代理时经其 /fetch 通道探测，使探活路径与真实播放路径一致
   // （主站探活通过但分片代理与源不通的频道，同样会被剔除）。
-  const segProxy = getSegmentProxyConfig();
+  const segProxy = resolveSegmentProxy(await getConfig());
   const healthOpts = segProxy
     ? { probeUrl: (url: string) => buildFetchViaProxyUrl(segProxy, url, ua) }
     : undefined;

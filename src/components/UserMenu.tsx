@@ -147,7 +147,6 @@ export const UserMenu: React.FC = () => {
     handleEnableAutoSkipToggle,
     handleEnableContinueWatchingFilterToggle,
     handleFluidSearchToggle,
-    handleLiveDirectConnectToggle,
     handleOptimizationToggle,
     handleResetSettings,
     settings: settingsSnapshot,
@@ -452,7 +451,6 @@ export const UserMenu: React.FC = () => {
             onDoubanImageProxyUrlChange={handleDoubanImageProxyUrlChange}
             onDoubanProxyUrlChange={handleDoubanProxyUrlChange}
             onFluidSearchChange={handleFluidSearchToggle}
-            onLiveDirectConnectChange={handleLiveDirectConnectToggle}
             onOptimizationChange={handleOptimizationToggle}
             onReset={handleResetSettings}
             settings={settingsSnapshot}
