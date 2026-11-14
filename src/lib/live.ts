@@ -4,6 +4,7 @@ import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
 import type { AdminConfig } from './admin.types';
+import { filterAliveChannels } from './live-health';
 
 const defaultUA = 'AptvPlayer/1.4.10';
 
@@ -73,6 +74,19 @@ export async function refreshLiveChannels(liveInfo: {
   });
   const data = await response.text();
   const result = parseM3U(liveInfo.key, data);
+
+  // 健康检查：并发探测频道地址，自动剔除死链
+  const { alive: aliveChannels, deadRemoved } = await filterAliveChannels(
+    result.channels,
+    ua,
+  );
+  if (deadRemoved > 0) {
+    console.log(
+      `[LIVE] ${liveInfo.name || liveInfo.key} 频道健康检查: 共 ${result.channels.length} 个，剔除失效 ${deadRemoved} 个，保留 ${aliveChannels.length} 个`,
+    );
+  }
+  result.channels = aliveChannels;
+
   const epgUrl = liveInfo.epg || result.tvgUrl;
 
   // 提取有效的 tvg-id
