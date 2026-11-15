@@ -9,7 +9,7 @@ export interface TelegramTokenData {
 // 存储 token 到数据库
 export async function setTelegramToken(
   token: string,
-  data: TelegramTokenData
+  data: TelegramTokenData,
 ): Promise<void> {
   const key = `telegram_token:${token}`;
   const now = Date.now();
@@ -19,7 +19,7 @@ export async function setTelegramToken(
   // 验证 TTL 是否有效
   if (ttl <= 0) {
     const error = new Error(
-      `Invalid TTL: ${ttl} seconds (expiresAt: ${data.expiresAt}, now: ${now})`
+      `Invalid TTL: ${ttl} seconds (expiresAt: ${data.expiresAt}, now: ${now})`,
     );
     console.error('[TelegramToken] TTL validation failed:', error.message);
     throw error;
@@ -34,7 +34,7 @@ export async function setTelegramToken(
       ttl,
       'to',
       finalTtl,
-      'seconds for compatibility'
+      'seconds for compatibility',
     );
   }
 
@@ -49,7 +49,7 @@ export async function setTelegramToken(
 
 // 从数据库获取 token（用于 webhook，仅读取不删除）
 export async function getTelegramToken(
-  token: string
+  token: string,
 ): Promise<TelegramTokenData | null> {
   const key = `telegram_token:${token}`;
 
@@ -75,7 +75,7 @@ export async function getTelegramToken(
 
 // 验证并消费 token（用于 verify，验证后立即删除）
 export async function verifyAndConsumeTelegramToken(
-  token: string
+  token: string,
 ): Promise<TelegramTokenData | null> {
   const key = `telegram_token:${token}`;
 

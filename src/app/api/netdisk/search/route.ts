@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   if (!netDiskConfig?.pansouUrl) {
     return NextResponse.json(
       { error: 'PanSou服务地址未配置' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
         cacheTimestamp: new Date().toISOString(),
       });
     }
-
   } catch (cacheError) {
     console.warn('网盘搜索缓存读取失败:', cacheError);
     // 缓存失败不影响主流程，继续执行
@@ -65,7 +64,7 @@ export async function GET(request: NextRequest) {
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
-      (netDiskConfig.timeout || 30) * 1000
+      (netDiskConfig.timeout || 30) * 1000,
     );
 
     const pansouResponse = await fetch(
@@ -88,14 +87,14 @@ export async function GET(request: NextRequest) {
             'uc',
           ],
         }),
-      }
+      },
     );
 
     clearTimeout(timeout);
 
     if (!pansouResponse.ok) {
       throw new Error(
-        `PanSou服务响应错误: ${pansouResponse.status} ${pansouResponse.statusText}`
+        `PanSou服务响应错误: ${pansouResponse.status} ${pansouResponse.statusText}`,
       );
     }
 
@@ -137,7 +136,7 @@ export async function GET(request: NextRequest) {
         error: errorMessage,
         suggestion: '请检查PanSou服务是否正常运行或联系管理员',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

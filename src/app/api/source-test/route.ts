@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (!role) {
     return NextResponse.json(
       { error: '你没有权限访问源检测功能' },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   if (!query || !sourceKey) {
     return NextResponse.json(
       { error: '缺少必要参数: q (查询关键词) 和 source (源标识)' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -32,18 +32,18 @@ export async function GET(request: NextRequest) {
 
     // 查找指定的源（包括禁用的源）
     const targetSource = config.SourceConfig.find(
-      (s: any) => s.key === sourceKey
+      (s: any) => s.key === sourceKey,
     );
     if (!targetSource) {
       return NextResponse.json(
         { error: `未找到源: ${sourceKey}` },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // 构建搜索URL（使用 videolist 更符合多数源的搜索接口）
     const searchUrl = `${targetSource.api}?ac=videolist&wd=${encodeURIComponent(
-      query
+      query,
     )}`;
 
     // 直接请求源接口，不使用缓存
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
             sourceError: `${response.status} ${response.statusText}`,
             sourceUrl: searchUrl,
           },
-          { status: response.status }
+          { status: response.status },
         );
       }
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
             sourceError: '返回数据不是有效的JSON对象',
             sourceUrl: searchUrl,
           },
-          { status: 502 }
+          { status: 502 },
         );
       }
 
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
             sourceError: data.msg || `错误代码: ${data.code}`,
             sourceUrl: searchUrl,
           },
-          { status: 502 }
+          { status: 502 },
         );
       }
 
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         ? results.filter((item: any) =>
             String(item.vod_name || item.title || '')
               .toLowerCase()
-              .includes(lowerQ)
+              .includes(lowerQ),
           )
         : [];
       const matchRate = resultCount > 0 ? matched.length / resultCount : 0;
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
             sourceError: '连接超时',
             sourceUrl: searchUrl,
           },
-          { status: 408 }
+          { status: 408 },
         );
       }
 
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
           sourceError: fetchError.message,
           sourceUrl: searchUrl,
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
   } catch (error: any) {
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
         error: `服务器内部错误: ${error.message}`,
         sourceError: error.message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

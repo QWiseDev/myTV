@@ -87,7 +87,8 @@ export function UserGroupModal({
 }: UserGroupModalProps) {
   const handleSelectAll = () => {
     const allApis =
-      sourceConfig?.filter((source) => !source.disabled).map((s) => s.key) || [];
+      sourceConfig?.filter((source) => !source.disabled).map((s) => s.key) ||
+      [];
     onSetEnabledApis([
       ...allApis,
       ...SPECIAL_FEATURES.map((feature) => feature.key),
@@ -166,7 +167,9 @@ export function UserGroupModal({
                     className={feature.checkboxClasses}
                   />
                   <div className='flex-1'>
-                    <div className={`text-sm font-medium ${feature.titleClasses}`}>
+                    <div
+                      className={`text-sm font-medium ${feature.titleClasses}`}
+                    >
                       {feature.icon} {feature.name}
                     </div>
                     <div className={`text-xs ${feature.descClasses}`}>
@@ -186,7 +189,10 @@ export function UserGroupModal({
             >
               全不选（无限制）
             </button>
-            <button onClick={handleSelectAll} className={buttonStyles.quickAction}>
+            <button
+              onClick={handleSelectAll}
+              className={buttonStyles.quickAction}
+            >
               全选
             </button>
           </div>

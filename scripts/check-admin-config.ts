@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -38,15 +38,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false
-  }
+    persistSession: false,
+  },
 });
 
 async function checkAdminConfig() {
   try {
-    const { data, error } = await supabase
-      .from('admin_config')
-      .select('*');
+    const { data, error } = await supabase.from('admin_config').select('*');
 
     if (error) {
       console.error('查询 admin_config 失败:', error);
@@ -58,15 +56,21 @@ async function checkAdminConfig() {
 
     if (data && data.length > 0) {
       const config = data[0];
-      const parsedValue = typeof config.config === 'string'
-        ? JSON.parse(config.config)
-        : config.config;
+      const parsedValue =
+        typeof config.config === 'string'
+          ? JSON.parse(config.config)
+          : config.config;
 
-      console.log('\nSourceConfig 数量:', parsedValue.SourceConfig?.length || 0);
+      console.log(
+        '\nSourceConfig 数量:',
+        parsedValue.SourceConfig?.length || 0,
+      );
       if (parsedValue.SourceConfig && parsedValue.SourceConfig.length > 0) {
         console.log('源列表:');
         parsedValue.SourceConfig.forEach((site: any, index: number) => {
-          console.log(`  [${index}] ${site.key} - ${site.name} (${site.api ? '有API' : '无API'})`);
+          console.log(
+            `  [${index}] ${site.key} - ${site.name} (${site.api ? '有API' : '无API'})`,
+          );
         });
       } else {
         console.log('源列表为空');

@@ -57,10 +57,9 @@ async function getCache<T = unknown>(key: string): Promise<T | null> {
 async function setCache(
   key: string,
   data: unknown,
-  expireSeconds: number
+  expireSeconds: number,
 ): Promise<void> {
   try {
-
     // 主要存储：统一存储
     await ClientCache.set(key, data, expireSeconds);
 
@@ -109,7 +108,6 @@ async function cleanExpiredCache(): Promise<void> {
         }
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key));
-
     }
   } catch (e) {
     console.warn('清理TMDB过期缓存失败:', e);
@@ -127,7 +125,7 @@ export function getTMDBCacheStats(): {
   }
 
   const keys = Object.keys(localStorage).filter((key) =>
-    key.startsWith('tmdb-')
+    key.startsWith('tmdb-'),
   );
   const byType: Record<string, number> = {};
   let totalSize = 0;
@@ -154,7 +152,7 @@ export function clearTMDBCache(): void {
   if (typeof localStorage === 'undefined') return;
 
   const keys = Object.keys(localStorage).filter((key) =>
-    key.startsWith('tmdb-')
+    key.startsWith('tmdb-'),
   );
   keys.forEach((key) => localStorage.removeItem(key));
 }
@@ -166,7 +164,6 @@ async function initTMDBCache(): Promise<void> {
 
   // 每10分钟清理一次过期缓存
   setInterval(() => cleanExpiredCache(), 10 * 60 * 1000);
-
 }
 
 // 在模块加载时初始化缓存系统

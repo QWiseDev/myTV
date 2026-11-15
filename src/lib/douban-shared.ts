@@ -48,15 +48,21 @@ export const DOUBAN_RECENT_HOT_HOSTS = {
 
 /** 构造豆瓣 recent_hot 分类接口的完整 URL */
 export function buildDoubanCategoryUrl(
-  { kind, category, type, pageStart = 0, pageLimit = 20 }: DoubanCategoryUrlParams,
-  host: string = DOUBAN_RECENT_HOT_HOSTS.default
+  {
+    kind,
+    category,
+    type,
+    pageStart = 0,
+    pageLimit = 20,
+  }: DoubanCategoryUrlParams,
+  host: string = DOUBAN_RECENT_HOT_HOSTS.default,
 ): string {
   return `${host}/rexxar/api/v2/subject/recent_hot/${kind}?start=${pageStart}&limit=${pageLimit}&category=${category}&type=${type}`;
 }
 
 /** 将豆瓣 recent_hot 原始数据统一映射为 DoubanItem 列表 */
 export function mapDoubanRecentHotItems(
-  response: DoubanRecentHotResponse | null | undefined
+  response: DoubanRecentHotResponse | null | undefined,
 ): DoubanItem[] {
   return (response?.items ?? []).map((item) => ({
     id: item.id,

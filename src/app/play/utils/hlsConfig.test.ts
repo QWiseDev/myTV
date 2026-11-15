@@ -155,7 +155,7 @@ describe('hlsConfig error guards', () => {
     expect(consoleWarn).toHaveBeenCalledWith(
       'HLS Error:',
       'hlsError',
-      expect.objectContaining({ fatal: false })
+      expect.objectContaining({ fatal: false }),
     );
   });
 

@@ -29,12 +29,16 @@ async function checkSchema() {
   `);
 
   console.log('  列:');
-  columns.forEach(col => {
-    console.log(`    - ${col.column_name}: ${col.data_type} (${col.is_nullable})`);
+  columns.forEach((col) => {
+    console.log(
+      `    - ${col.column_name}: ${col.data_type} (${col.is_nullable})`,
+    );
   });
 
   console.log('\n2. 查看数据数量...');
-  const { rows: countResult } = await pgPool.query('SELECT COUNT(*) as count FROM play_records');
+  const { rows: countResult } = await pgPool.query(
+    'SELECT COUNT(*) as count FROM play_records',
+  );
   console.log(`  共 ${countResult[0].count} 条记录`);
 
   await pgPool.end();

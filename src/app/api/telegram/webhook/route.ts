@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         await sendTelegramMessage(
           telegramConfig.botToken,
           chatId,
-          '❌ 登录链接已过期或无效，请返回网站重新操作。'
+          '❌ 登录链接已过期或无效，请返回网站重新操作。',
         );
         return NextResponse.json({ ok: true });
       }
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 // 自动设置 webhook 到当前域名
 async function autoSetWebhook(
   request: Request,
-  botToken: string
+  botToken: string,
 ): Promise<void> {
   try {
     // 获取当前访问的域名
@@ -76,13 +76,12 @@ async function autoSetWebhook(
 
     // 检查当前 Telegram webhook 配置
     const infoResponse = await fetch(
-      `https://api.telegram.org/bot${botToken}/getWebhookInfo`
+      `https://api.telegram.org/bot${botToken}/getWebhookInfo`,
     );
     const info = await infoResponse.json();
 
     // 如果 webhook URL 不匹配，自动更新
     if (info.ok && info.result.url !== currentWebhookUrl) {
-
       await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,7 +90,6 @@ async function autoSetWebhook(
           allowed_updates: ['message'],
         }),
       });
-
     }
   } catch (error) {
     console.error('[Webhook] Auto-set webhook error:', error);
@@ -103,7 +101,7 @@ async function autoSetWebhook(
 async function sendTelegramMessage(
   botToken: string,
   chatId: number,
-  text: string
+  text: string,
 ): Promise<void> {
   try {
     const response = await fetch(
@@ -116,7 +114,7 @@ async function sendTelegramMessage(
           text: text,
           parse_mode: 'Markdown',
         }),
-      }
+      },
     );
 
     if (!response.ok) {

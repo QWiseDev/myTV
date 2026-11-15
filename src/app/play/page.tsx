@@ -500,8 +500,9 @@ function PlayPageClient() {
   const videoEndedHandledRef = useRef<boolean>(false); // 🔥 标记当前视频的 video:ended 事件是否已经被处理过（防止多个监听器重复触发）
 
   // 连续切换源的异步任务管理
-  const switchPromiseRef =
-    useRef<Promise<PlayerMediaSwitchResult> | null>(null);
+  const switchPromiseRef = useRef<Promise<PlayerMediaSwitchResult> | null>(
+    null,
+  );
 
   const artPlayerRef = useRef<PlayArtplayer | null>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
@@ -835,13 +836,10 @@ function PlayPageClient() {
     isSkipControllerTriggeredRef,
   });
 
-  const handleDanmuEpisodeChange = useCallback(
-    (offset: number) => {
-      setDanmuEpisodeOffset((prev) => prev + offset);
-      danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
-    },
-    [],
-  );
+  const handleDanmuEpisodeChange = useCallback((offset: number) => {
+    setDanmuEpisodeOffset((prev) => prev + offset);
+    danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
+  }, []);
 
   usePlayerInitializer({
     videoUrl,

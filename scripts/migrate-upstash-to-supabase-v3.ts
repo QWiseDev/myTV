@@ -22,7 +22,10 @@ const upstashRedis = new Redis({
 
 const pgPool = new Pool({ connectionString: PG_CONNECTION_STRING });
 
-async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await operation();
@@ -45,7 +48,7 @@ async function disableRLS() {
     'user_statistics',
     'access_logs',
     'admin_config',
-    'cache_store'
+    'cache_store',
   ];
 
   for (const table of tables) {
@@ -64,7 +67,7 @@ async function enableRLS() {
     'user_statistics',
     'access_logs',
     'admin_config',
-    'cache_store'
+    'cache_store',
   ];
 
   for (const table of tables) {
@@ -87,7 +90,9 @@ async function migrateUsers() {
   console.log(`  找到 ${usernames.length} 个用户`);
 
   for (const username of usernames) {
-    const password = await withRetry(() => upstashRedis.get(`u:${username}:pwd`));
+    const password = await withRetry(() =>
+      upstashRedis.get(`u:${username}:pwd`),
+    );
 
     try {
       await pgPool.query(
@@ -95,7 +100,7 @@ async function migrateUsers() {
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (username) DO UPDATE SET
            password_hash = EXCLUDED.password_hash`,
-        [username, 'user', false, password]
+        [username, 'user', false, password],
       );
 
       console.log(`    ✓ 用户 ${username}`);
@@ -112,17 +117,24 @@ async function migrateUsers() {
 type UpstashPlayRecord = Record<string, any>;
 
 async function getPlayRecordEntriesFromUpstash(
-  username: string
+  username: string,
 ): Promise<Array<{ key: string; record: UpstashPlayRecord }>> {
   const hashRecords = await withRetry(() =>
-    upstashRedis.hgetall<Record<string, UpstashPlayRecord>>(`u:${username}:prh`)
+    upstashRedis.hgetall<Record<string, UpstashPlayRecord>>(
+      `u:${username}:prh`,
+    ),
   );
 
   if (hashRecords && Object.keys(hashRecords).length > 0) {
-    return Object.entries(hashRecords).map(([key, record]) => ({ key, record }));
+    return Object.entries(hashRecords).map(([key, record]) => ({
+      key,
+      record,
+    }));
   }
 
-  const legacyKeys = await withRetry(() => upstashRedis.keys(`u:${username}:pr:*`));
+  const legacyKeys = await withRetry(() =>
+    upstashRedis.keys(`u:${username}:pr:*`),
+  );
   if (legacyKeys.length === 0) {
     return [];
   }
@@ -195,7 +207,7 @@ async function migratePlayRecords(usernames: string[]) {
             new Date(record.save_time || Date.now()).toISOString(),
             record.search_title || '',
             record.remarks || '',
-          ]
+          ],
         );
         totalRecords++;
       } catch (err: any) {
@@ -212,17 +224,24 @@ async function migratePlayRecords(usernames: string[]) {
 type UpstashSkipConfig = Record<string, any>;
 
 async function getSkipConfigEntriesFromUpstash(
-  username: string
+  username: string,
 ): Promise<Array<{ key: string; config: UpstashSkipConfig }>> {
   const hashConfigs = await withRetry(() =>
-    upstashRedis.hgetall<Record<string, UpstashSkipConfig>>(`u:${username}:skiph`)
+    upstashRedis.hgetall<Record<string, UpstashSkipConfig>>(
+      `u:${username}:skiph`,
+    ),
   );
 
   if (hashConfigs && Object.keys(hashConfigs).length > 0) {
-    return Object.entries(hashConfigs).map(([key, config]) => ({ key, config }));
+    return Object.entries(hashConfigs).map(([key, config]) => ({
+      key,
+      config,
+    }));
   }
 
-  const legacyKeys = await withRetry(() => upstashRedis.keys(`u:${username}:skip:*`));
+  const legacyKeys = await withRetry(() =>
+    upstashRedis.keys(`u:${username}:skip:*`),
+  );
   if (legacyKeys.length === 0) {
     return [];
   }
@@ -285,7 +304,7 @@ async function migrateSkipConfigs(usernames: string[]) {
             config.updated_time
               ? new Date(config.updated_time).toISOString()
               : new Date().toISOString(),
-          ]
+          ],
         );
         totalConfigs++;
       } catch (err: any) {
@@ -305,7 +324,9 @@ async function migrateSearchHistory(usernames: string[]) {
   let totalHistory = 0;
 
   for (const username of usernames) {
-    const keywords = await withRetry(() => upstashRedis.lrange(`u:${username}:sh`, 0, -1));
+    const keywords = await withRetry(() =>
+      upstashRedis.lrange(`u:${username}:sh`, 0, -1),
+    );
 
     if (keywords.length === 0) continue;
 
@@ -315,7 +336,7 @@ async function migrateSearchHistory(usernames: string[]) {
           `INSERT INTO search_history (username, keyword)
            VALUES ($1, $2)
            ON CONFLICT (username, keyword) DO NOTHING`,
-          [username, keyword]
+          [username, keyword],
         );
         totalHistory++;
       } catch (err: any) {
@@ -335,7 +356,9 @@ async function migrateUserStatistics(usernames: string[]) {
   let totalStats = 0;
 
   for (const username of usernames) {
-    const stats = await withRetry(() => upstashRedis.get(`user_login_stats:${username}`)) as any;
+    const stats = (await withRetry(() =>
+      upstashRedis.get(`user_login_stats:${username}`),
+    )) as any;
 
     if (!stats) continue;
 
@@ -351,10 +374,16 @@ async function migrateUserStatistics(usernames: string[]) {
         [
           username,
           stats.loginCount || 0,
-          stats.firstLoginTime ? new Date(stats.firstLoginTime).toISOString() : null,
-          stats.lastLoginTime ? new Date(stats.lastLoginTime).toISOString() : null,
-          stats.lastLoginDate ? new Date(stats.lastLoginDate).toISOString() : null,
-        ]
+          stats.firstLoginTime
+            ? new Date(stats.firstLoginTime).toISOString()
+            : null,
+          stats.lastLoginTime
+            ? new Date(stats.lastLoginTime).toISOString()
+            : null,
+          stats.lastLoginDate
+            ? new Date(stats.lastLoginDate).toISOString()
+            : null,
+        ],
       );
       totalStats++;
       console.log(`  ✓ 用户 ${username}`);
@@ -371,14 +400,14 @@ async function migrateAccessLogs() {
 
   const keys = await withRetry(() => upstashRedis.keys('al:*'));
 
-  const accessLogKeys = keys.filter(k => k.match(/^al:\d+_/));
+  const accessLogKeys = keys.filter((k) => k.match(/^al:\d+_/));
 
   console.log(`  找到 ${accessLogKeys.length} 条访问日志`);
 
   let totalLogs = 0;
 
   for (const key of accessLogKeys) {
-    const log = await withRetry(() => upstashRedis.get(key)) as any;
+    const log = (await withRetry(() => upstashRedis.get(key))) as any;
 
     if (!log) continue;
 
@@ -393,8 +422,10 @@ async function migrateAccessLogs() {
           log.ipAddress,
           log.userAgent,
           log.referrer || '',
-          log.timestamp ? new Date(log.timestamp).toISOString() : new Date().toISOString(),
-        ]
+          log.timestamp
+            ? new Date(log.timestamp).toISOString()
+            : new Date().toISOString(),
+        ],
       );
       totalLogs++;
     } catch (err: any) {
@@ -423,7 +454,7 @@ async function migrateAdminConfig() {
        VALUES ($1)
        ON CONFLICT (id) DO UPDATE SET
          config = EXCLUDED.config`,
-      [JSON.stringify(configData)]
+      [JSON.stringify(configData)],
     );
     console.log('  ✓ 管理员配置迁移成功');
   } catch (err: any) {
@@ -451,7 +482,7 @@ async function migrateCache() {
          VALUES ($1, $2)
          ON CONFLICT (key) DO UPDATE SET
            value = EXCLUDED.value`,
-        [cacheKey, JSON.stringify(value)]
+        [cacheKey, JSON.stringify(value)],
       );
       migrated++;
     } catch (err: any) {

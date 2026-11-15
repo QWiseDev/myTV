@@ -100,6 +100,7 @@ export default function PlayPage() {
 ### 1. PlayerContainer.tsx (~40 行)
 
 封装播放器相关 UI：
+
 - VideoPlayer
 - CoverImage
 - FavoriteButton
@@ -108,6 +109,7 @@ export default function PlayPage() {
 ### 2. EpisodePanel.tsx (~60 行)
 
 封装集数选择器：
+
 - 折叠/展开控制
 - EpisodeSelector
 - 响应式布局

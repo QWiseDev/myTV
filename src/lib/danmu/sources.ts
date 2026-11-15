@@ -35,7 +35,7 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
               'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
             },
           }),
-        timeout
+        timeout,
       );
 
       if (!response.ok) {
@@ -152,7 +152,6 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
         danmuList.push(...segment);
       }
 
-
       if (danmuList.length === 0) {
         continue; // 尝试下一个API
       }
@@ -186,7 +185,6 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
           })
           .slice(0, maxAllowedDanmu);
       }
-
 
       return finalDanmu; // 成功获取优化后的弹幕
     } catch (error) {
@@ -233,7 +231,7 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
             Referer: 'https://danmu.icu/',
           },
         }),
-      timeout
+      timeout,
     );
 
     if (!response.ok) {
@@ -299,4 +297,4 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
   }
 }
 
-export { fetchDanmuFromAPI,fetchDanmuFromXMLAPI };
+export { fetchDanmuFromAPI, fetchDanmuFromXMLAPI };

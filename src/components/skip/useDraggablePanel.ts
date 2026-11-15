@@ -13,7 +13,7 @@ interface Position {
  */
 export function useDraggablePanel(
   storageKey: string,
-  getDefaultPosition: () => Position
+  getDefaultPosition: () => Position,
 ) {
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState<Position>(() => {
@@ -46,7 +46,7 @@ export function useDraggablePanel(
         };
       }
     },
-    [position]
+    [position],
   );
 
   // 触摸开始
@@ -61,7 +61,7 @@ export function useDraggablePanel(
         };
       }
     },
-    [position]
+    [position],
   );
 
   const handleMouseMove = useCallback(
@@ -79,7 +79,7 @@ export function useDraggablePanel(
         y: Math.max(0, Math.min(newY, maxY)),
       });
     },
-    [isDragging]
+    [isDragging],
   );
 
   // 触摸移动
@@ -99,7 +99,7 @@ export function useDraggablePanel(
         y: Math.max(0, Math.min(newY, maxY)),
       });
     },
-    [isDragging]
+    [isDragging],
   );
 
   const handleMouseUp = useCallback(() => {

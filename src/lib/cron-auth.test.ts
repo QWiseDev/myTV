@@ -50,13 +50,11 @@ describe('verifyCronAuth', () => {
       (host) => {
         const result = verifyCronAuth(buildRequest({ host }));
         expect(result.ok).toBe(true);
-      }
+      },
     );
 
     it('拒绝外部 Host 调用', () => {
-      const result = verifyCronAuth(
-        buildRequest({ host: 'mytv.example.com' })
-      );
+      const result = verifyCronAuth(buildRequest({ host: 'mytv.example.com' }));
       expect(result.ok).toBe(false);
       expect(result.status).toBe(403);
     });
@@ -80,7 +78,7 @@ describe('verifyCronAuth', () => {
         buildRequest({
           host: 'mytv.example.com',
           authorization: `Bearer ${SECRET}`,
-        })
+        }),
       );
       expect(result.ok).toBe(true);
     });
@@ -90,7 +88,7 @@ describe('verifyCronAuth', () => {
         buildRequest({
           host: 'mytv.example.com',
           cronSecretHeader: SECRET,
-        })
+        }),
       );
       expect(result.ok).toBe(true);
     });
@@ -100,7 +98,7 @@ describe('verifyCronAuth', () => {
         buildRequest({
           url: `http://mytv.example.com/api/cron?secret=${SECRET}`,
           host: 'mytv.example.com',
-        })
+        }),
       );
       expect(result.ok).toBe(true);
     });
@@ -110,16 +108,14 @@ describe('verifyCronAuth', () => {
         buildRequest({
           host: 'mytv.example.com',
           authorization: 'Bearer wrong-secret',
-        })
+        }),
       );
       expect(result.ok).toBe(false);
       expect(result.status).toBe(401);
     });
 
     it('未携带任何凭据返回 401', () => {
-      const result = verifyCronAuth(
-        buildRequest({ host: 'mytv.example.com' })
-      );
+      const result = verifyCronAuth(buildRequest({ host: 'mytv.example.com' }));
       expect(result.ok).toBe(false);
       expect(result.status).toBe(401);
     });

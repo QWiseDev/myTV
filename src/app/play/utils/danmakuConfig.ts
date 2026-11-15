@@ -62,25 +62,40 @@ export function getDevicePerformance(isMobile: boolean): DevicePerformance {
  */
 export function loadDanmakuConfigFromStorage(): Partial<DanmakuPluginConfig> {
   const read = (key: string, fallback: unknown): unknown => {
-    try { return JSON.parse(localStorage.getItem(`danmaku_${key}`) || JSON.stringify(fallback)); }
-    catch { return fallback; }
+    try {
+      return JSON.parse(
+        localStorage.getItem(`danmaku_${key}`) || JSON.stringify(fallback),
+      );
+    } catch {
+      return fallback;
+    }
   };
   const number = (key: string, fallback: number, min: number, max: number) => {
     const value = Number(read(key, fallback));
-    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+    return Number.isFinite(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback;
   };
   const modes = read('modes', [0, 1, 2]);
   const margin = read('margin', [10, '75%']);
-  const validMargin = Array.isArray(margin) && margin.length === 2 && margin.every(
-    (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0) ||
-      (typeof value === 'string' && /^\d{1,2}%$|^100%$/.test(value)),
-  );
+  const validMargin =
+    Array.isArray(margin) &&
+    margin.length === 2 &&
+    margin.every(
+      (value) =>
+        (typeof value === 'number' && Number.isFinite(value) && value >= 0) ||
+        (typeof value === 'string' && /^\d{1,2}%$|^100%$/.test(value)),
+    );
   return {
     speed: number('speed', 5, 1, 10),
     opacity: number('opacity', 0.5, 0, 1),
     fontSize: number('fontSize', 20, 12, 60),
-    modes: Array.isArray(modes) ? modes.filter((mode): mode is 0 | 1 | 2 => [0, 1, 2].includes(mode)) : [0, 1, 2],
-    margin: validMargin ? margin as DanmakuPluginConfig['margin'] : [10, '75%'],
+    modes: Array.isArray(modes)
+      ? modes.filter((mode): mode is 0 | 1 | 2 => [0, 1, 2].includes(mode))
+      : [0, 1, 2],
+    margin: validMargin
+      ? (margin as DanmakuPluginConfig['margin'])
+      : [10, '75%'],
     visible: read('visible', true) !== false,
     antiOverlap: read('antiOverlap', true) !== false,
     synchronousPlayback: read('synchronousPlayback', true) !== false,
@@ -89,10 +104,21 @@ export function loadDanmakuConfigFromStorage(): Partial<DanmakuPluginConfig> {
 
 export function saveDanmakuConfigToStorage(option: Record<string, unknown>) {
   try {
-    for (const key of ['speed', 'opacity', 'fontSize', 'modes', 'margin', 'antiOverlap', 'synchronousPlayback']) {
-      if (option[key] !== undefined) localStorage.setItem(`danmaku_${key}`, JSON.stringify(option[key]));
+    for (const key of [
+      'speed',
+      'opacity',
+      'fontSize',
+      'modes',
+      'margin',
+      'antiOverlap',
+      'synchronousPlayback',
+    ]) {
+      if (option[key] !== undefined)
+        localStorage.setItem(`danmaku_${key}`, JSON.stringify(option[key]));
     }
-  } catch { /* 存储不可用时仍允许本次播放调整。 */ }
+  } catch {
+    /* 存储不可用时仍允许本次播放调整。 */
+  }
 }
 
 /**
@@ -103,7 +129,6 @@ export function getOptimizedDanmakuConfig(
 ): Partial<DanmakuPluginConfig> {
   const devicePerformance = getDevicePerformance(isMobile);
   const storageConfig = loadDanmakuConfigFromStorage();
-
 
   // ✅ 优化：根据性能等级调整弹幕密度
   const maxDanmakuCount =

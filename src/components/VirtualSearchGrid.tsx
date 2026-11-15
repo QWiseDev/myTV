@@ -69,8 +69,6 @@ export const VirtualSearchGrid: React.FC<VirtualSearchGridProps> = ({
     setIsLoadingMore(false);
   }, [currentData, viewMode]);
 
-
-
   // 检查是否还有更多项目可以加载
   const hasNextPage = displayItemCount < totalItemCount;
 

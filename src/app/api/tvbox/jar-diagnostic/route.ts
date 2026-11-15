@@ -45,7 +45,7 @@ interface DiagnosticReport {
 // 测试单个 JAR 源
 async function testJarSource(
   url: string,
-  name: string
+  name: string,
 ): Promise<JarTestResult> {
   const startTime = Date.now();
   const result: JarTestResult = {
@@ -211,10 +211,9 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < testSources.length; i += concurrency) {
     const batch = testSources.slice(i, i + concurrency);
     const batchResults = await Promise.all(
-      batch.map((source) => testJarSource(source.url, source.name))
+      batch.map((source) => testJarSource(source.url, source.name)),
     );
     results.push(...batchResults);
-
   }
 
   // 分析结果
@@ -228,7 +227,7 @@ export async function GET(request: NextRequest) {
     averageResponseTime:
       results.reduce((sum, r) => sum + r.responseTime, 0) / results.length,
     fastestSource: successResults.sort(
-      (a, b) => a.responseTime - b.responseTime
+      (a, b) => a.responseTime - b.responseTime,
     )[0]?.url,
     recommendedSource: successResults[0]?.url,
   };
@@ -256,10 +255,10 @@ export async function GET(request: NextRequest) {
   // 分析失败原因
   const timeouts = failedResults.filter((r) => r.status === 'timeout').length;
   const httpErrors = failedResults.filter(
-    (r) => r.httpStatus && (r.httpStatus === 403 || r.httpStatus === 404)
+    (r) => r.httpStatus && (r.httpStatus === 403 || r.httpStatus === 404),
   ).length;
   const invalidJars = failedResults.filter(
-    (r) => r.status === 'invalid'
+    (r) => r.status === 'invalid',
   ).length;
 
   if (timeouts > 0) {
@@ -267,7 +266,7 @@ export async function GET(request: NextRequest) {
   }
   if (httpErrors > 0) {
     recommendations.push(
-      `🚫 检测到 ${httpErrors} 个 HTTP 错误（403/404），源文件可能已失效`
+      `🚫 检测到 ${httpErrors} 个 HTTP 错误（403/404），源文件可能已失效`,
     );
   }
   if (invalidJars > 0) {

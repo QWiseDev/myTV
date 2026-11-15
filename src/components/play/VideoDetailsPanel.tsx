@@ -15,9 +15,12 @@ import CommentSection from './CommentSection';
 import FavoriteButton from './FavoriteButton';
 import RecommendationsSection from './RecommendationsSection';
 
-const NetDiskSearchResults = dynamic(() => import('@/components/NetDiskSearchResults'), {
-  ssr: false,
-});
+const NetDiskSearchResults = dynamic(
+  () => import('@/components/NetDiskSearchResults'),
+  {
+    ssr: false,
+  },
+);
 
 interface VideoDetailsPanelProps {
   videoTitle: string;
@@ -120,10 +123,9 @@ export default function VideoDetailsPanel({
   const overview =
     bangumiDetails?.summary || movieDetails?.intro || detail?.desc || '';
 
-  const genreText =
-    movieDetails?.genres?.length
-      ? movieDetails.genres.slice(0, 3).join(' ')
-      : detail?.type_name || detail?.class || '';
+  const genreText = movieDetails?.genres?.length
+    ? movieDetails.genres.slice(0, 3).join(' ')
+    : detail?.type_name || detail?.class || '';
 
   return (
     <div className='pb-6 @container'>
@@ -163,7 +165,10 @@ export default function VideoDetailsPanel({
                 <RatingDisplay score={movieDetails.rate} color='yellow' />
               ) : null}
               {bangumiRating > 0 && bangumiDetails?.rating?.score ? (
-                <RatingDisplay score={bangumiDetails.rating.score} color='pink' />
+                <RatingDisplay
+                  score={bangumiDetails.rating.score}
+                  color='pink'
+                />
               ) : null}
             </div>
           )}
@@ -240,7 +245,9 @@ export default function VideoDetailsPanel({
           value={movieDetails?.cast?.length ? movieDetails.cast : undefined}
           clampLines={2}
         />
-        {bangumiDetails?.date && <MetaRow label='播出' value={bangumiDetails.date} />}
+        {bangumiDetails?.date && (
+          <MetaRow label='播出' value={bangumiDetails.date} />
+        )}
       </div>
 
       {/* 剧情简介 */}
@@ -256,21 +263,19 @@ export default function VideoDetailsPanel({
       {/* 标签行：国家/语言/集数/时长/共话 */}
       {(() => {
         const tags: React.ReactNode[] = [];
-        movieDetails?.countries?.slice(0, 2).forEach((c, i) =>
-          tags.push(<Tag key={`c${i}`}>{c}</Tag>),
-        );
-        movieDetails?.languages?.slice(0, 2).forEach((l, i) =>
-          tags.push(<Tag key={`l${i}`}>{l}</Tag>),
-        );
+        movieDetails?.countries
+          ?.slice(0, 2)
+          .forEach((c, i) => tags.push(<Tag key={`c${i}`}>{c}</Tag>));
+        movieDetails?.languages
+          ?.slice(0, 2)
+          .forEach((l, i) => tags.push(<Tag key={`l${i}`}>{l}</Tag>));
         if (movieDetails?.episodes)
           tags.push(<Tag key='ep'>共{movieDetails.episodes}集</Tag>);
-        bangumiDetails?.tags?.slice(0, 4).forEach((t, i) =>
-          tags.push(<Tag key={`t${i}`}>{t.name}</Tag>),
-        );
+        bangumiDetails?.tags
+          ?.slice(0, 4)
+          .forEach((t, i) => tags.push(<Tag key={`t${i}`}>{t.name}</Tag>));
         if (bangumiDetails?.total_episodes)
-          tags.push(
-            <Tag key='tep'>共{bangumiDetails.total_episodes}话</Tag>,
-          );
+          tags.push(<Tag key='tep'>共{bangumiDetails.total_episodes}话</Tag>);
         return tags.length > 0 ? (
           <div className='mt-4 flex flex-wrap gap-2'>{tags}</div>
         ) : null;
@@ -308,11 +313,13 @@ export default function VideoDetailsPanel({
               点击上方「网盘资源」按钮开始搜索
             </p>
           )}
-          {videoTitle && !netdiskLoading && (netdiskResults || netdiskError) && (
-            <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
-              搜索关键词：{videoTitle}
-            </p>
-          )}
+          {videoTitle &&
+            !netdiskLoading &&
+            (netdiskResults || netdiskError) && (
+              <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
+                搜索关键词：{videoTitle}
+              </p>
+            )}
 
           <NetDiskSearchResults
             results={netdiskResults}

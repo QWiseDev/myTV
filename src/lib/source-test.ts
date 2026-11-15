@@ -52,7 +52,7 @@ function computeMatchRate(results: SearchResult[], q: string) {
   const lowerQ = (q || '').toLowerCase();
   if (!results || results.length === 0) return 0;
   const hit = results.filter((r) =>
-    (r.title || '').toLowerCase().includes(lowerQ)
+    (r.title || '').toLowerCase().includes(lowerQ),
   ).length;
   return hit / results.length;
 }
@@ -60,7 +60,7 @@ function computeMatchRate(results: SearchResult[], q: string) {
 function computeTopMatches(results: SearchResult[], q: string) {
   const lowerQ = (q || '').toLowerCase();
   const hit = results.filter((r) =>
-    (r.title || '').toLowerCase().includes(lowerQ)
+    (r.title || '').toLowerCase().includes(lowerQ),
   );
   return hit.slice(0, 3).map((r) => r.title || '');
 }
@@ -139,7 +139,7 @@ function parsePlayableLines(result: SearchResult): ParsedEpisodeLine[] {
 }
 
 function parseSearchResultsForPlayback(
-  results: SearchResult[]
+  results: SearchResult[],
 ): ParsedSearchResult[] {
   if (!Array.isArray(results)) return [];
   return results
@@ -170,7 +170,10 @@ async function getAllApiSites(): Promise<ApiSite[]> {
       if (data.results) {
         data.results.forEach(
           (result: { source?: string; source_name?: string }) => {
-            if (result.source && !sources.find((s) => s.key === result.source)) {
+            if (
+              result.source &&
+              !sources.find((s) => s.key === result.source)
+            ) {
               sources.push({
                 key: result.source,
                 name: result.source_name || result.source,
@@ -178,7 +181,7 @@ async function getAllApiSites(): Promise<ApiSite[]> {
                 disabled: false,
               });
             }
-          }
+          },
         );
       }
       return sources;
@@ -210,13 +213,13 @@ interface RawSearchItem {
 
 async function testSource(
   sourceKey: string,
-  query: string
+  query: string,
 ): Promise<SourceTestResult> {
   const startTime = Date.now();
 
   try {
     const response = await fetch(
-      `/api/source-test?q=${encodeURIComponent(query)}&source=${sourceKey}`
+      `/api/source-test?q=${encodeURIComponent(query)}&source=${sourceKey}`,
     );
     const responseTime = Date.now() - startTime;
 
@@ -290,7 +293,7 @@ async function testSource(
 async function autoTestVideoPlayback(
   sourceKey: string,
   sourceName: string,
-  results: SearchResult[]
+  results: SearchResult[],
 ): Promise<{ success: boolean; url?: string; message?: string }> {
   try {
     // 解析搜索结果中的播放地址

@@ -107,7 +107,6 @@ export const usePlayRecordSync = ({
       const targetIndex = record.index - 1;
       const targetTime = record.play_time;
 
-
       if (
         targetIndex >= 0 &&
         targetIndex < totalEpisodes &&
@@ -162,7 +161,6 @@ export const usePlayRecordSync = ({
             }
 
             try {
-
               // 🔥 直接设置 video 元素的 currentTime，更可靠
               const videoElement = player.video || player.$video;
               if (videoElement) {

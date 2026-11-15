@@ -5,7 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
-import { deleteCachedLiveChannels, refreshLiveChannels, runSpeedTest } from '@/lib/live';
+import {
+  deleteCachedLiveChannels,
+  refreshLiveChannels,
+  runSpeedTest,
+} from '@/lib/live';
 import { resolveSegmentProxy } from '@/lib/live-proxy';
 
 export const runtime = 'nodejs';
@@ -18,7 +22,9 @@ export async function GET(request: NextRequest) {
     const username = authInfo?.username;
     const config = await getConfig();
     if (username !== process.env.USERNAME) {
-      const user = config.UserConfig?.Users?.find((u) => u.username === username);
+      const user = config.UserConfig?.Users?.find(
+        (u) => u.username === username,
+      );
       if (!user || user.role !== 'admin' || user.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
       }

@@ -41,7 +41,7 @@ const ERROR_TIMEOUT = 10000;
 // 自定义 hls.js loader：为所有请求附加直播源参数，并按需追加浏览器直连参数
 function createCustomHlsJsLoader(
   Hls: HlsConstructor,
-  getSourceKey: () => string
+  getSourceKey: () => string,
 ) {
   return class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
     constructor(config: any) {
@@ -77,7 +77,7 @@ export function m3u8Loader(
   url: string,
   Hls: HlsConstructor,
   hlsRuntime: HlsConfigRuntime,
-  { getSourceKey, errorCounters, callbacks }: M3u8LoaderOptions
+  { getSourceKey, errorCounters, callbacks }: M3u8LoaderOptions,
 ) {
   const { onUnsupportedType, onVideoLoadingChange } = callbacks;
 
@@ -112,14 +112,14 @@ export function m3u8Loader(
       devicePerformance === 'low'
         ? 20
         : devicePerformance === 'medium'
-        ? 30
-        : 30, // 源码默认 30
+          ? 30
+          : 30, // 源码默认 30
     maxBufferSize:
       devicePerformance === 'low'
         ? 30 * 1000 * 1000
         : devicePerformance === 'medium'
-        ? 60 * 1000 * 1000
-        : 60 * 1000 * 1000, // 源码默认 60MB
+          ? 60 * 1000 * 1000
+          : 60 * 1000 * 1000, // 源码默认 60MB
     maxBufferHole: 0.1, // 源码默认值，允许小的缓冲区空洞
 
     // Gap Controller 配置 - 缓冲区空洞处理 (源码中的默认值)
@@ -131,8 +131,8 @@ export function m3u8Loader(
       devicePerformance === 'low'
         ? 500000
         : devicePerformance === 'medium'
-        ? 500000
-        : 500000, // 源码默认 500k
+          ? 500000
+          : 500000, // 源码默认 500k
     abrBandWidthFactor: 0.95, // 源码默认
     abrBandWidthUpFactor: 0.7, // 源码默认
     abrMaxWithRealBitrate: false, // 源码默认
@@ -197,7 +197,7 @@ export function m3u8Loader(
       errorCounters.lastErrorTime = currentTime;
 
       console.warn(
-        `KeyLoadError count: ${errorCounters.keyLoadErrorCount}/${MAX_KEY_ERRORS}`
+        `KeyLoadError count: ${errorCounters.keyLoadErrorCount}/${MAX_KEY_ERRORS}`,
       );
 
       // 如果短时间内keyLoadError次数过多，认为这个频道不可用
@@ -257,7 +257,6 @@ export function m3u8Loader(
     if (data.fatal) {
       switch (data.type) {
         case Hls.ErrorTypes.NETWORK_ERROR:
-
           // 根据具体的网络错误类型进行处理
           if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
             setTimeout(() => {
@@ -282,7 +281,7 @@ export function m3u8Loader(
           } catch (e) {
             console.error(
               'Failed to recover from media error, trying audio codec swap:',
-              e
+              e,
             );
             try {
               // 使用音频编解码器交换作为备选方案
@@ -304,6 +303,4 @@ export function m3u8Loader(
       }
     }
   });
-
-
 }

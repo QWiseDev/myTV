@@ -3,7 +3,7 @@
  * 提供统一的错误处理和重试机制
  */
 
-import { useCallback,useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { PlayError, PlayErrorCode, reportError } from '../utils/errors';
 
@@ -22,7 +22,7 @@ export interface UseErrorHandlerReturn {
   retry: <T>(
     fn: () => Promise<T>,
     maxRetries?: number,
-    delay?: number
+    delay?: number,
   ) => Promise<T>;
 }
 
@@ -46,13 +46,13 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
       playError = new PlayError(
         PlayErrorCode.UNKNOWN_ERROR,
         error.message,
-        error
+        error,
       );
     } else {
       playError = new PlayError(
         PlayErrorCode.UNKNOWN_ERROR,
         String(error),
-        error
+        error,
       );
     }
 
@@ -67,7 +67,7 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
     if (process.env.NODE_ENV === 'development') {
       console.error(
         `[${playError.code}] ${playError.message}`,
-        playError.details
+        playError.details,
       );
     }
 
@@ -97,10 +97,10 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
    * @param delay 重试延迟（默认1000ms，每次重试会递增）
    */
   const retry = useCallback(
-    async <T,>(
+    async <T>(
       fn: () => Promise<T>,
       maxRetries = 3,
-      delay = 1000
+      delay = 1000,
     ): Promise<T> => {
       let lastError: unknown;
 
@@ -121,7 +121,7 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
       // 所有重试都失败，抛出最后的错误
       throw lastError;
     },
-    []
+    [],
   );
 
   return {

@@ -27,7 +27,7 @@ const nextConfig = {
 
   // 🔥 全局强制动态渲染，避免构建时数据库访问问题
   generateBuildId: async () => {
-    return 'build'
+    return 'build';
   },
 
   // 禁用静态优化，强制所有页面动态渲染
@@ -41,7 +41,7 @@ const nextConfig = {
         source: '/api/:path*',
         destination: '/api/:path*',
       },
-    ]
+    ];
   },
 
   // 🔥 生产环境移除 console.* 但保留 console.error 和 console.warn
@@ -74,7 +74,8 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable, stale-while-revalidate=86400', // 1年缓存 + 24小时过期宽限期
+            value:
+              'public, max-age=31536000, immutable, stale-while-revalidate=86400', // 1年缓存 + 24小时过期宽限期
           },
           {
             key: 'Expires',
@@ -131,7 +132,7 @@ const nextConfig = {
   webpack(config) {
     // Grab the existing rule that handles SVG imports
     const fileLoaderRule = config.module.rules.find((rule) =>
-      rule.test?.test?.('.svg')
+      rule.test?.test?.('.svg'),
     );
 
     config.module.rules.push(
@@ -151,7 +152,7 @@ const nextConfig = {
           dimensions: false,
           titleProp: true,
         },
-      }
+      },
     );
 
     // Modify the file loader rule to ignore *.svg, since we have it handled now.

@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
             // 添加超时控制
             const searchPromise = withAbortableTimeout(
               async () => searchFromApi(site, query),
-              SEARCH_SITE_TIMEOUT_MS
+              SEARCH_SITE_TIMEOUT_MS,
             );
 
             const results = (await searchPromise) as any[];
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
               filteredResults = results.filter((result) => {
                 const typeName = result.type_name || '';
                 return !yellowWords.some((word: string) =>
-                  typeName.includes(word)
+                  typeName.includes(word),
                 );
               });
             }

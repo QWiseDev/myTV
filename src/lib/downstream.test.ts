@@ -64,7 +64,7 @@ describe('getDetailFromApi', () => {
               '第01集$https://example.com/ep1/index.m3u8#第02集$https://example.com/ep2/index.m3u8',
           },
         ],
-      })
+      }),
     );
 
     const result = await getDetailFromApi(apiSite, '131288');
@@ -76,7 +76,7 @@ describe('getDetailFromApi', () => {
     expect(result.episodes_titles).toEqual(['第01集', '第02集']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://caiji.maotaizy.cc/api.php/provide/vod?ac=videolist&ids=131288'
+      'https://caiji.maotaizy.cc/api.php/provide/vod?ac=videolist&ids=131288',
     );
   });
 
@@ -88,8 +88,8 @@ describe('getDetailFromApi', () => {
       .mockReturnValueOnce(mockJsonResponse({}, false, 500))
       .mockReturnValueOnce(
         mockTextResponse(
-          '<h1>低智商犯罪</h1><a href="$https://example.com/ep1/index.m3u8">第01集</a>'
-        )
+          '<h1>低智商犯罪</h1><a href="$https://example.com/ep1/index.m3u8">第01集</a>',
+        ),
       );
 
     const result = await getDetailFromApi(apiSite, '131288');
@@ -97,7 +97,7 @@ describe('getDetailFromApi', () => {
     expect(result.episodes).toEqual(['https://example.com/ep1/index.m3u8']);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][0]).toBe(
-      'https://mtzy.me/index.php/vod/detail/id/131288.html'
+      'https://mtzy.me/index.php/vod/detail/id/131288.html',
     );
   });
 });

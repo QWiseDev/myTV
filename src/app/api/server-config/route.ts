@@ -9,7 +9,6 @@ export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(_request: NextRequest) {
-
   const config = await getConfig();
 
   const result: Record<string, unknown> = {

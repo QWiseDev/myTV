@@ -12,7 +12,12 @@ export type YouTubeContentType =
   | 'sports'
   | 'news';
 
-export type YouTubeSortOrder = 'relevance' | 'date' | 'rating' | 'viewCount' | 'title';
+export type YouTubeSortOrder =
+  | 'relevance'
+  | 'date'
+  | 'rating'
+  | 'viewCount'
+  | 'title';
 
 /**
  * YouTube 搜索：状态与请求逻辑拆分自搜索页原实现，URL 参数拼装、

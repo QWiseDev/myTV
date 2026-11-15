@@ -29,7 +29,7 @@ function parseMovieHTML(html: string): ReleaseCalendarItem[] {
       // 提取标题 - 从dd-d1 div中
       const titleMatch =
         /<div class="dd-d1"><a[^>]*title="[^"]*">([^<]+)<\/a><\/div>/.exec(
-          block
+          block,
         );
 
       // 提取导演
@@ -43,7 +43,7 @@ function parseMovieHTML(html: string): ReleaseCalendarItem[] {
 
       // 提取上映时间
       const dateMatch = /<div>上映时间：(\d{4}\/\d{2}\/\d{2})<\/div>/.exec(
-        block
+        block,
       );
 
       // 提取主演 - 需要处理多个链接
@@ -119,7 +119,7 @@ function parseTVHTML(html: string): ReleaseCalendarItem[] {
       // 提取标题 - 从dd-d1 div中
       const titleMatch =
         /<div class="dd-d1"><a[^>]*title="[^"]*">([^<]+)<\/a><\/div>/.exec(
-          block
+          block,
         );
 
       // 提取导演
@@ -133,7 +133,7 @@ function parseTVHTML(html: string): ReleaseCalendarItem[] {
 
       // 提取上映时间
       const dateMatch = /<div>上映时间：(\d{4}\/\d{2}\/\d{2})<\/div>/.exec(
-        block
+        block,
       );
 
       // 提取主演 - 需要处理多个链接
@@ -249,7 +249,6 @@ export async function scrapeTVReleases(): Promise<ReleaseCalendarItem[]> {
  */
 export async function scrapeAllReleases(): Promise<ReleaseCalendarItem[]> {
   try {
-
     // 避免并发请求导致的失败，改为顺序执行
     const movies = await scrapeMovieReleases();
 
@@ -279,7 +278,7 @@ export async function getReleaseCalendar(
     dateTo?: string;
     limit?: number;
     offset?: number;
-  } = {}
+  } = {},
 ): Promise<{
   items: ReleaseCalendarItem[];
   total: number;
@@ -294,35 +293,35 @@ export async function getReleaseCalendar(
 
     if (options.type) {
       filteredItems = filteredItems.filter(
-        (item) => item.type === options.type
+        (item) => item.type === options.type,
       );
     }
 
     if (options.region && options.region !== '全部') {
       const region = options.region;
       filteredItems = filteredItems.filter((item) =>
-        item.region.includes(region)
+        item.region.includes(region),
       );
     }
 
     if (options.genre && options.genre !== '全部') {
       const genre = options.genre;
       filteredItems = filteredItems.filter((item) =>
-        item.genre.includes(genre)
+        item.genre.includes(genre),
       );
     }
 
     if (options.dateFrom) {
       const dateFrom = options.dateFrom;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate >= dateFrom
+        (item) => item.releaseDate >= dateFrom,
       );
     }
 
     if (options.dateTo) {
       const dateTo = options.dateTo;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate <= dateTo
+        (item) => item.releaseDate <= dateTo,
       );
     }
 

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const hasPermission = await hasSpecialFeaturePermission(
       username,
       'ai-recommend',
-      adminConfig
+      adminConfig,
     );
     if (!hasPermission) {
       return NextResponse.json(
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
             Pragma: 'no-cache',
             'Surrogate-Control': 'no-store',
           },
-        }
+        },
       );
     }
     const aiConfig = adminConfig.AIRecommendConfig;
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
             Pragma: 'no-cache',
             'Surrogate-Control': 'no-store',
           },
-        }
+        },
       );
     }
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         {
           error: 'AI推荐功能配置不完整，请联系管理员',
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         {
           error: 'Invalid messages format',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = `你是LunaTV的智能推荐助手，支持：${capabilities.join(
-      '、'
+      '、',
     )}。当前日期：${currentDate}
 
 ## 功能状态：
@@ -310,7 +310,7 @@ ${
           Authorization: `Bearer ${aiConfig.apiKey}`,
         },
         body: JSON.stringify(requestBody),
-      }
+      },
     );
 
     if (!openaiResponse.ok) {
@@ -347,7 +347,7 @@ ${
           details: errorDetails,
           status: openaiResponse.status,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -365,10 +365,10 @@ ${
           error: 'AI服务响应格式异常，请稍后重试',
           details: `响应结构异常: ${JSON.stringify(aiResult).substring(
             0,
-            200
+            200,
           )}...`,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -459,7 +459,7 @@ ${
             isReasoningModel: useMaxCompletionTokens,
           },
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -475,7 +475,7 @@ ${
         const searchKeywords = extractYouTubeSearchKeywords(aiContent);
         const youtubeVideos = await searchYouTubeVideos(
           searchKeywords,
-          youtubeConfig
+          youtubeConfig,
         );
 
         // 构建YouTube推荐响应
@@ -596,7 +596,7 @@ ${
         error: errorMessage,
         details: errorDetails,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -624,14 +624,14 @@ export async function GET(request: NextRequest) {
       {
         error: '获取历史记录失败',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // 视频链接解析处理函数
 async function handleVideoLinkParsing(
-  videoLinks: Array<{ videoId: string; originalUrl: string }>
+  videoLinks: Array<{ videoId: string; originalUrl: string }>,
 ) {
   const parsedVideos = [];
 
@@ -639,7 +639,7 @@ async function handleVideoLinkParsing(
     try {
       // 使用YouTube oEmbed API获取视频信息（公开，无需API Key）
       const response = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${link.videoId}&format=json`
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${link.videoId}&format=json`,
       );
 
       if (response.ok) {
@@ -696,7 +696,7 @@ function extractYouTubeSearchKeywords(content: string): string[] {
 // YouTube视频搜索函数（仅支持真实API）
 async function searchYouTubeVideos(
   keywords: string[],
-  youtubeConfig: { apiKey?: string }
+  youtubeConfig: { apiKey?: string },
 ) {
   const videos = [];
 

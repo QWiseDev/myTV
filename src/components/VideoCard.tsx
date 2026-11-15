@@ -368,680 +368,665 @@ function useVideoCardImageState(poster: string) {
 
 type ActionSheetPhase = 'closed' | 'open' | 'closing';
 
-const VideoCard = memo(function VideoCard(
-    {
-      id,
-      title = '',
-      query = '',
-      poster = '',
-      episodes,
-      source,
-      source_name,
-      source_names,
-      progress = 0,
-      year,
-      from,
-      currentEpisode,
-      douban_id,
-      onDelete,
-      rate,
-      type = '',
-      isBangumi = false,
-      isAggregate = false,
-      origin = 'vod',
-      remarks,
-      priority = false,
-      sizes,
-    }: VideoCardProps,
-  ) {
-    const [actionSheetPhase, setActionSheetPhase] =
-      useState<ActionSheetPhase>('closed');
-    const showMobileActions = actionSheetPhase === 'open';
+const VideoCard = memo(function VideoCard({
+  id,
+  title = '',
+  query = '',
+  poster = '',
+  episodes,
+  source,
+  source_name,
+  source_names,
+  progress = 0,
+  year,
+  from,
+  currentEpisode,
+  douban_id,
+  onDelete,
+  rate,
+  type = '',
+  isBangumi = false,
+  isAggregate = false,
+  origin = 'vod',
+  remarks,
+  priority = false,
+  sizes,
+}: VideoCardProps) {
+  const [actionSheetPhase, setActionSheetPhase] =
+    useState<ActionSheetPhase>('closed');
+  const showMobileActions = actionSheetPhase === 'open';
 
-    const actualTitle = title;
-    const actualPoster = poster;
-    const actualSource = source;
-    const actualId = id;
-    const actualDoubanId = douban_id;
-    const actualEpisodes = episodes;
-    const actualYear = year;
-    const actualQuery = query || '';
-    const cardIdentity = JSON.stringify([
-      from,
-      actualSource ?? null,
-      actualId ?? null,
-    ]);
-    const latestCardIdentityRef = useRef(cardIdentity);
-    const favoriteMutationsRef = useRef(new Map<string, Promise<void>>());
-    const deleteMutationsRef = useRef(new Map<string, Promise<void>>());
-    latestCardIdentityRef.current = cardIdentity;
-    const subjectUrl = buildVideoCardSubjectUrl(actualDoubanId, isBangumi);
-    const actualSearchType = getVideoCardSearchType({
-      isAggregate,
-      episodes: actualEpisodes,
-      type,
-    });
-    const entryPoster = getVideoCardEntryPoster(from, actualPoster);
-    const {
-      isLoading,
-      imageLoaded,
-      imageSrc,
-      useUnoptimizedImage,
-      handleImageLoad,
-      handleImageError,
-    } = useVideoCardImageState(actualPoster);
+  const actualTitle = title;
+  const actualPoster = poster;
+  const actualSource = source;
+  const actualId = id;
+  const actualDoubanId = douban_id;
+  const actualEpisodes = episodes;
+  const actualYear = year;
+  const actualQuery = query || '';
+  const cardIdentity = JSON.stringify([
+    from,
+    actualSource ?? null,
+    actualId ?? null,
+  ]);
+  const latestCardIdentityRef = useRef(cardIdentity);
+  const favoriteMutationsRef = useRef(new Map<string, Promise<void>>());
+  const deleteMutationsRef = useRef(new Map<string, Promise<void>>());
+  latestCardIdentityRef.current = cardIdentity;
+  const subjectUrl = buildVideoCardSubjectUrl(actualDoubanId, isBangumi);
+  const actualSearchType = getVideoCardSearchType({
+    isAggregate,
+    episodes: actualEpisodes,
+    type,
+  });
+  const entryPoster = getVideoCardEntryPoster(from, actualPoster);
+  const {
+    isLoading,
+    imageLoaded,
+    imageSrc,
+    useUnoptimizedImage,
+    handleImageLoad,
+    handleImageError,
+  } = useVideoCardImageState(actualPoster);
 
-    const [favorited, setFavorited] = useVideoCardFavoriteStatus({
-      from,
-      source: actualSource,
-      id: actualId,
-    });
-    const {
-      searchFavorited,
-      setSearchFavorited,
-      checkSearchFavoriteStatus,
-    } = useVideoCardSearchFavoriteStatus({
+  const [favorited, setFavorited] = useVideoCardFavoriteStatus({
+    from,
+    source: actualSource,
+    id: actualId,
+  });
+  const { searchFavorited, setSearchFavorited, checkSearchFavoriteStatus } =
+    useVideoCardSearchFavoriteStatus({
       from,
       isAggregate,
       source: actualSource,
       id: actualId,
     });
 
-    const setCurrentFavoriteState = useCallback(
-      (nextFavorited: boolean) => {
-        if (from === 'search') {
-          setSearchFavorited(nextFavorited);
+  const setCurrentFavoriteState = useCallback(
+    (nextFavorited: boolean) => {
+      if (from === 'search') {
+        setSearchFavorited(nextFavorited);
+      } else {
+        setFavorited(nextFavorited);
+      }
+    },
+    [from],
+  );
+
+  const toggleFavorite = useCallback((): Promise<void> => {
+    const favoriteToggleParams = {
+      from,
+      source: actualSource,
+      id: actualId,
+    };
+
+    if (!canToggleVideoCardFavorite(favoriteToggleParams)) {
+      return Promise.resolve();
+    }
+    const pendingMutation = favoriteMutationsRef.current.get(cardIdentity);
+    if (pendingMutation) return pendingMutation;
+
+    const { source: favoriteSource, id: favoriteId } = favoriteToggleParams;
+    const mutationIdentity = cardIdentity;
+
+    const mutation = (async () => {
+      try {
+        // 确定当前收藏状态
+        const currentFavorited =
+          from === 'search' ? searchFavorited : favorited;
+
+        if (currentFavorited) {
+          // 如果已收藏，删除收藏
+          await deleteFavorite(favoriteSource, favoriteId);
+          if (latestCardIdentityRef.current === mutationIdentity) {
+            setCurrentFavoriteState(false);
+          }
         } else {
-          setFavorited(nextFavorited);
+          // 如果未收藏，添加收藏
+          await saveFavorite(favoriteSource, favoriteId, {
+            title: actualTitle,
+            source_name: source_name || '',
+            year: actualYear || '',
+            cover: actualPoster,
+            total_episodes: actualEpisodes ?? 1,
+            save_time: Date.now(),
+          });
+          if (latestCardIdentityRef.current === mutationIdentity) {
+            setCurrentFavoriteState(true);
+          }
         }
-      },
-      [from],
-    );
+      } catch {
+        // 持久层已触发全局错误提示；业务命令边界在此消费 rejection。
+      }
+    })();
 
-    const toggleFavorite = useCallback(
-      (): Promise<void> => {
-        const favoriteToggleParams = {
-          from,
-          source: actualSource,
-          id: actualId,
-        };
+    favoriteMutationsRef.current.set(mutationIdentity, mutation);
+    return mutation.finally(() => {
+      if (favoriteMutationsRef.current.get(mutationIdentity) === mutation) {
+        favoriteMutationsRef.current.delete(mutationIdentity);
+      }
+    });
+  }, [
+    from,
+    actualSource,
+    actualId,
+    actualTitle,
+    source_name,
+    actualYear,
+    actualPoster,
+    actualEpisodes,
+    favorited,
+    searchFavorited,
+    setCurrentFavoriteState,
+    cardIdentity,
+  ]);
 
-        if (!canToggleVideoCardFavorite(favoriteToggleParams)) {
-          return Promise.resolve();
-        }
-        const pendingMutation = favoriteMutationsRef.current.get(cardIdentity);
-        if (pendingMutation) return pendingMutation;
+  const handleToggleFavorite = useCallback(
+    (event: React.MouseEvent): Promise<void> => {
+      event.preventDefault();
+      event.stopPropagation();
+      return toggleFavorite();
+    },
+    [toggleFavorite],
+  );
 
-        const { source: favoriteSource, id: favoriteId } = favoriteToggleParams;
-        const mutationIdentity = cardIdentity;
+  const deleteRecord = useCallback((): Promise<void> => {
+    if (from !== 'playrecord' || !actualSource || !actualId) {
+      return Promise.resolve();
+    }
+    const pendingMutation = deleteMutationsRef.current.get(cardIdentity);
+    if (pendingMutation) return pendingMutation;
 
-        const mutation = (async () => {
-          try {
-            // 确定当前收藏状态
-            const currentFavorited =
-              from === 'search' ? searchFavorited : favorited;
+    const mutationIdentity = cardIdentity;
 
-            if (currentFavorited) {
-              // 如果已收藏，删除收藏
-              await deleteFavorite(favoriteSource, favoriteId);
-              if (latestCardIdentityRef.current === mutationIdentity) {
-                setCurrentFavoriteState(false);
-              }
-            } else {
-              // 如果未收藏，添加收藏
-              await saveFavorite(favoriteSource, favoriteId, {
-                title: actualTitle,
-                source_name: source_name || '',
-                year: actualYear || '',
-                cover: actualPoster,
-                total_episodes: actualEpisodes ?? 1,
-                save_time: Date.now(),
-              });
-              if (latestCardIdentityRef.current === mutationIdentity) {
-                setCurrentFavoriteState(true);
-              }
-            }
-          } catch {
-            // 持久层已触发全局错误提示；业务命令边界在此消费 rejection。
-          }
-        })();
-
-        favoriteMutationsRef.current.set(mutationIdentity, mutation);
-        return mutation.finally(() => {
-          if (
-            favoriteMutationsRef.current.get(mutationIdentity) === mutation
-          ) {
-            favoriteMutationsRef.current.delete(mutationIdentity);
-          }
-        });
-      },
-      [
-        from,
-        actualSource,
-        actualId,
-        actualTitle,
-        source_name,
-        actualYear,
-        actualPoster,
-        actualEpisodes,
-        favorited,
-        searchFavorited,
-        setCurrentFavoriteState,
-        cardIdentity,
-      ],
-    );
-
-    const handleToggleFavorite = useCallback(
-      (event: React.MouseEvent): Promise<void> => {
-        event.preventDefault();
-        event.stopPropagation();
-        return toggleFavorite();
-      },
-      [toggleFavorite],
-    );
-
-    const deleteRecord = useCallback(
-      (): Promise<void> => {
-        if (from !== 'playrecord' || !actualSource || !actualId) {
-          return Promise.resolve();
-        }
-        const pendingMutation = deleteMutationsRef.current.get(cardIdentity);
-        if (pendingMutation) return pendingMutation;
-
-        const mutationIdentity = cardIdentity;
-
-        const mutation = (async () => {
-          try {
-            if (onDelete) {
-              await onDelete();
-              return;
-            }
-
-            await deletePlayRecord(actualSource, actualId);
-          } catch {
-            // db.client 或上层 onDelete 已负责提示/回滚，避免 React 丢弃的 Promise 继续抛错。
-          }
-        })();
-
-        deleteMutationsRef.current.set(mutationIdentity, mutation);
-        return mutation.finally(() => {
-          if (deleteMutationsRef.current.get(mutationIdentity) === mutation) {
-            deleteMutationsRef.current.delete(mutationIdentity);
-          }
-        });
-      },
-      [from, actualSource, actualId, onDelete, cardIdentity],
-    );
-
-    const handleDeleteRecord = useCallback(
-      (event: React.MouseEvent): Promise<void> => {
-        event.preventDefault();
-        event.stopPropagation();
-        return deleteRecord();
-      },
-      [deleteRecord],
-    );
-
-    const playUrl = useMemo(
-      () =>
-        buildPlayUrl({
-          origin,
-          from,
-          source: actualSource,
-          id: actualId,
-          title: actualTitle,
-          year: actualYear,
-          doubanId: actualDoubanId,
-          searchType: actualSearchType,
-          isAggregate,
-          query: actualQuery,
-          poster: entryPoster,
-        }),
-      [
-        origin,
-        from,
-        isAggregate,
-        actualSource,
-        actualId,
-        actualTitle,
-        actualYear,
-        actualSearchType,
-        actualQuery,
-        actualDoubanId,
-        entryPoster,
-      ],
-    );
-
-    const handleClick = useCallback(() => {
-      navigateVideoCardPlayUrl(playUrl);
-    }, [playUrl]);
-
-    const handlePrimaryLinkClick = useCallback(
-      (event: React.MouseEvent<HTMLAnchorElement>) => {
-        event.stopPropagation();
-        if (
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        ) {
+    const mutation = (async () => {
+      try {
+        if (onDelete) {
+          await onDelete();
           return;
         }
 
-        event.preventDefault();
-        handleClick();
-      },
-      [handleClick],
-    );
-
-    // 新标签页播放处理函数
-    const handlePlayInNewTab = useCallback(() => {
-      if (playUrl) window.open(playUrl, '_blank');
-    }, [playUrl]);
-
-    const openMobileActions = useCallback(() => {
-      setActionSheetPhase('open');
-
-      // 异步检查收藏状态，不阻塞菜单显示
-      void checkSearchFavoriteStatus();
-    }, [checkSearchFavoriteStatus]);
-
-    // 长按操作
-    const handleLongPress = useCallback(() => {
-      if (!showMobileActions) {
-        // 防止重复触发
-        // 立即显示菜单，避免等待数据加载导致动画卡顿
-        openMobileActions();
+        await deletePlayRecord(actualSource, actualId);
+      } catch {
+        // db.client 或上层 onDelete 已负责提示/回滚，避免 React 丢弃的 Promise 继续抛错。
       }
-    }, [showMobileActions, openMobileActions]);
+    })();
 
-    const handleContextMenu = useCallback(
-      (e: React.MouseEvent) => {
-        // 阻止默认右键菜单
-        e.preventDefault();
-        e.stopPropagation();
-
-        // 右键弹出操作菜单
-        openMobileActions();
-
-        return false;
-      },
-      [openMobileActions],
-    );
-
-    const closeMobileActions = useCallback(() => {
-      setActionSheetPhase((currentPhase) =>
-        currentPhase === 'open' ? 'closing' : currentPhase,
-      );
-    }, []);
-
-    const handleMobileActionsExited = useCallback(() => {
-      setActionSheetPhase((currentPhase) =>
-        currentPhase === 'closing' ? 'closed' : currentPhase,
-      );
-    }, []);
-
-    // 长按手势hook
-    const longPressProps = useLongPress({
-      onLongPress: handleLongPress,
-      onClick: handleClick, // 保持点击播放功能
-      longPressDelay: 500,
+    deleteMutationsRef.current.set(mutationIdentity, mutation);
+    return mutation.finally(() => {
+      if (deleteMutationsRef.current.get(mutationIdentity) === mutation) {
+        deleteMutationsRef.current.delete(mutationIdentity);
+      }
     });
+  }, [from, actualSource, actualId, onDelete, cardIdentity]);
 
-    const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
-    // 爱奇艺式副标题类型标签
-    const typeLabel =
-      type === 'movie'
-        ? '电影'
-        : type === 'tv'
-          ? '剧集'
-          : type === 'show'
-            ? '综艺'
-            : '';
-    const subtitleParts = [
-      ...(actualYear && !config.showYear ? [actualYear] : []),
-      ...(typeLabel ? [typeLabel] : []),
-    ];
-    const isLiveCard = origin === 'live';
-    const actionSheetSources = useMemo(
-      () =>
-        isAggregate && source_names
-          ? Array.from(new Set(source_names))
-          : undefined,
-      [isAggregate, source_names],
-    );
+  const handleDeleteRecord = useCallback(
+    (event: React.MouseEvent): Promise<void> => {
+      event.preventDefault();
+      event.stopPropagation();
+      return deleteRecord();
+    },
+    [deleteRecord],
+  );
 
-    // 移动端操作菜单配置
-    const mobileActions = useMobileActions({
-      config,
-      from,
+  const playUrl = useMemo(
+    () =>
+      buildPlayUrl({
+        origin,
+        from,
+        source: actualSource,
+        id: actualId,
+        title: actualTitle,
+        year: actualYear,
+        doubanId: actualDoubanId,
+        searchType: actualSearchType,
+        isAggregate,
+        query: actualQuery,
+        poster: entryPoster,
+      }),
+    [
       origin,
-      source: actualSource,
-      id: actualId,
-      doubanId: actualDoubanId,
-      isBangumi,
-      favorited,
-      searchFavorited,
-      onPlay: handleClick,
-      onPlayNewTab: handlePlayInNewTab,
-      onToggleFavorite: toggleFavorite,
-      onDeleteRecord: deleteRecord,
-    });
+      from,
+      isAggregate,
+      actualSource,
+      actualId,
+      actualTitle,
+      actualYear,
+      actualSearchType,
+      actualQuery,
+      actualDoubanId,
+      entryPoster,
+    ],
+  );
 
-    return (
-      <>
+  const handleClick = useCallback(() => {
+    navigateVideoCardPlayUrl(playUrl);
+  }, [playUrl]);
+
+  const handlePrimaryLinkClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.stopPropagation();
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      handleClick();
+    },
+    [handleClick],
+  );
+
+  // 新标签页播放处理函数
+  const handlePlayInNewTab = useCallback(() => {
+    if (playUrl) window.open(playUrl, '_blank');
+  }, [playUrl]);
+
+  const openMobileActions = useCallback(() => {
+    setActionSheetPhase('open');
+
+    // 异步检查收藏状态，不阻塞菜单显示
+    void checkSearchFavoriteStatus();
+  }, [checkSearchFavoriteStatus]);
+
+  // 长按操作
+  const handleLongPress = useCallback(() => {
+    if (!showMobileActions) {
+      // 防止重复触发
+      // 立即显示菜单，避免等待数据加载导致动画卡顿
+      openMobileActions();
+    }
+  }, [showMobileActions, openMobileActions]);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      // 阻止默认右键菜单
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 右键弹出操作菜单
+      openMobileActions();
+
+      return false;
+    },
+    [openMobileActions],
+  );
+
+  const closeMobileActions = useCallback(() => {
+    setActionSheetPhase((currentPhase) =>
+      currentPhase === 'open' ? 'closing' : currentPhase,
+    );
+  }, []);
+
+  const handleMobileActionsExited = useCallback(() => {
+    setActionSheetPhase((currentPhase) =>
+      currentPhase === 'closing' ? 'closed' : currentPhase,
+    );
+  }, []);
+
+  // 长按手势hook
+  const longPressProps = useLongPress({
+    onLongPress: handleLongPress,
+    onClick: handleClick, // 保持点击播放功能
+    longPressDelay: 500,
+  });
+
+  const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
+  // 爱奇艺式副标题类型标签
+  const typeLabel =
+    type === 'movie'
+      ? '电影'
+      : type === 'tv'
+        ? '剧集'
+        : type === 'show'
+          ? '综艺'
+          : '';
+  const subtitleParts = [
+    ...(actualYear && !config.showYear ? [actualYear] : []),
+    ...(typeLabel ? [typeLabel] : []),
+  ];
+  const isLiveCard = origin === 'live';
+  const actionSheetSources = useMemo(
+    () =>
+      isAggregate && source_names
+        ? Array.from(new Set(source_names))
+        : undefined,
+    [isAggregate, source_names],
+  );
+
+  // 移动端操作菜单配置
+  const mobileActions = useMobileActions({
+    config,
+    from,
+    origin,
+    source: actualSource,
+    id: actualId,
+    doubanId: actualDoubanId,
+    isBangumi,
+    favorited,
+    searchFavorited,
+    onPlay: handleClick,
+    onPlayNewTab: handlePlayInNewTab,
+    onToggleFavorite: toggleFavorite,
+    onDeleteRecord: deleteRecord,
+  });
+
+  return (
+    <>
+      <div
+        className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-[500]'
+        onClick={handleClick}
+        style={cardContainerStyle}
+        onContextMenu={handleContextMenu}
+        onDragStart={preventDragStart}
+      >
+        {playUrl && (
+          <a
+            href={playUrl}
+            aria-label={`播放 ${actualTitle}`}
+            className='absolute inset-0 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00be06] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#141414]'
+            onClick={handlePrimaryLinkClick}
+            onDragStart={preventDragStart}
+            {...longPressProps}
+          />
+        )}
+
+        {/* 海报容器 */}
         <div
-          className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-[500]'
-          onClick={handleClick}
-          style={cardContainerStyle}
-          onContextMenu={handleContextMenu}
-          onDragStart={preventDragStart}
+          className={`relative aspect-[2/3] overflow-hidden rounded-lg ${
+            isLiveCard ? 'ring-1 ring-[#d9d9d9] dark:ring-[#464646]' : ''
+          } border border-[#e8e8e8] bg-[#f2f2f2] shadow-sm transition-all duration-300 group-hover:border-[#c4ecc8] group-hover:shadow-[0_18px_45px_rgba(48,48,46,0.16)] dark:border-[#3a3a3a] dark:bg-[#2a2a2a] dark:group-hover:border-[#1f4a26] dark:group-hover:shadow-[0_18px_45px_rgba(0,0,0,0.34)]`}
+          style={noSelectStyle}
+          onContextMenu={preventContextMenu}
         >
-          {playUrl && (
-            <a
-              href={playUrl}
-              aria-label={`播放 ${actualTitle}`}
-              className='absolute inset-0 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00be06] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#141414]'
-              onClick={handlePrimaryLinkClick}
-              onDragStart={preventDragStart}
-              {...longPressProps}
-            />
-          )}
-
-          {/* 海报容器 */}
+          {/* 渐变光泽动画层 */}
           <div
-            className={`relative aspect-[2/3] overflow-hidden rounded-lg ${
-              isLiveCard
-                ? 'ring-1 ring-[#d9d9d9] dark:ring-[#464646]'
-                : ''
-            } border border-[#e8e8e8] bg-[#f2f2f2] shadow-sm transition-all duration-300 group-hover:border-[#c4ecc8] group-hover:shadow-[0_18px_45px_rgba(48,48,46,0.16)] dark:border-[#3a3a3a] dark:bg-[#2a2a2a] dark:group-hover:border-[#1f4a26] dark:group-hover:shadow-[0_18px_45px_rgba(0,0,0,0.34)]`}
+            className='absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500 motion-reduce:transition-none pointer-events-none z-10 motion-safe:animate-[card-shimmer_2.5s_ease-in-out_infinite] motion-safe:[animation-play-state:paused] motion-safe:group-hover:[animation-play-state:running] motion-safe:group-focus-within:[animation-play-state:running]'
+            style={{
+              background:
+                'linear-gradient(110deg, transparent 30%, rgba(250,249,245,0.12) 45%, rgba(250,249,245,0.34) 50%, rgba(250,249,245,0.12) 55%, transparent 70%)',
+              backgroundSize: '200% 100%',
+            }}
+          />
+
+          {/* 骨架屏 */}
+          {!isLoading && <ImagePlaceholder aspectRatio='aspect-[2/3]' />}
+          {/* 图片 */}
+          <Image
+            src={imageSrc}
+            alt={actualTitle}
+            fill
+            className={`${
+              isLiveCard ? 'object-contain' : 'object-cover'
+            } transition-all duration-700 ease-out ${
+              imageLoaded
+                ? 'opacity-100 blur-0 scale-100'
+                : 'opacity-0 blur-md scale-105'
+            }`}
+            referrerPolicy='no-referrer'
+            loading={priority ? undefined : 'lazy'}
+            priority={priority}
+            unoptimized={useUnoptimizedImage}
+            sizes={
+              sizes ||
+              '(max-width: 640px) 120px, (max-width: 768px) 176px, (max-width: 1024px) 200px, 220px'
+            }
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            style={noPointerStyle}
+            onContextMenu={preventContextMenu}
+            onDragStart={preventDragStart}
+          />
+
+          {/* 悬浮遮罩 - 玻璃态效果 */}
+          <div
+            className='absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-all duration-300 ease-in-out opacity-0 group-hover:opacity-100 backdrop-blur-[2px]'
             style={noSelectStyle}
             onContextMenu={preventContextMenu}
-          >
-            {/* 渐变光泽动画层 */}
-            <div
-              className='absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500 motion-reduce:transition-none pointer-events-none z-10 motion-safe:animate-[card-shimmer_2.5s_ease-in-out_infinite] motion-safe:[animation-play-state:paused] motion-safe:group-hover:[animation-play-state:running] motion-safe:group-focus-within:[animation-play-state:running]'
-              style={{
-                background:
-                  'linear-gradient(110deg, transparent 30%, rgba(250,249,245,0.12) 45%, rgba(250,249,245,0.34) 50%, rgba(250,249,245,0.12) 55%, transparent 70%)',
-                backgroundSize: '200% 100%',
-              }}
-            />
+          />
 
-            {/* 骨架屏 */}
-            {!isLoading && <ImagePlaceholder aspectRatio='aspect-[2/3]' />}
-            {/* 图片 */}
-            <Image
-              src={imageSrc}
-              alt={actualTitle}
-              fill
-              className={`${
-                isLiveCard ? 'object-contain' : 'object-cover'
-              } transition-all duration-700 ease-out ${
-                imageLoaded
-                  ? 'opacity-100 blur-0 scale-100'
-                  : 'opacity-0 blur-md scale-105'
-              }`}
-              referrerPolicy='no-referrer'
-              loading={priority ? undefined : 'lazy'}
-              priority={priority}
-              unoptimized={useUnoptimizedImage}
-              sizes={sizes || '(max-width: 640px) 120px, (max-width: 768px) 176px, (max-width: 1024px) 200px, 220px'}
-              onLoad={handleImageLoad}
-              onError={handleImageError}
-              style={noPointerStyle}
-              onContextMenu={preventContextMenu}
-              onDragStart={preventDragStart}
-            />
-
-            {/* 悬浮遮罩 - 玻璃态效果 */}
+          {/* 播放按钮 */}
+          {config.showPlayButton && (
             <div
-              className='absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-all duration-300 ease-in-out opacity-0 group-hover:opacity-100 backdrop-blur-[2px]'
+              className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'
               style={noSelectStyle}
               onContextMenu={preventContextMenu}
-            />
-
-            {/* 播放按钮 */}
-            {config.showPlayButton && (
-              <div
-                className='absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 ease-in-out delay-75 group-hover:opacity-100 group-hover:scale-100'
+            >
+              <PlayCircleIcon
+                size={50}
+                strokeWidth={0.8}
+                className='text-white fill-transparent transition-all duration-300 ease-out hover:fill-[#00be06] hover:scale-[1.1]'
                 style={noSelectStyle}
                 onContextMenu={preventContextMenu}
-              >
-                <PlayCircleIcon
-                  size={50}
-                  strokeWidth={0.8}
-                  className='text-white fill-transparent transition-all duration-300 ease-out hover:fill-[#00be06] hover:scale-[1.1]'
-                  style={noSelectStyle}
-                  onContextMenu={preventContextMenu}
-                />
-              </div>
-            )}
-
-            {/* 操作按钮 */}
-            {(config.showHeart || config.showCheckCircle) && (
-              <div
-                className='pointer-events-none absolute bottom-3 right-3 z-[30] flex gap-2 opacity-0 translate-y-2 transition-all duration-300 ease-in-out sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0'
-                style={noSelectStyle}
-                onContextMenu={preventContextMenu}
-              >
-                {config.showCheckCircle && (
-                  <button
-                    type='button'
-                    data-button='true'
-                    aria-label={`删除 ${actualTitle} 的播放记录`}
-                    onClick={handleDeleteRecord}
-                    className='inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-300 ease-out hover:text-[#00be06] hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
-                    style={noSelectStyle}
-                    onContextMenu={preventContextMenu}
-                  >
-                    <Trash2 aria-hidden='true' size={20} />
-                  </button>
-                )}
-                {config.showHeart && from !== 'search' && (
-                  <button
-                    type='button'
-                    data-button='true'
-                    aria-label={`${favorited ? '取消收藏' : '收藏'} ${actualTitle}`}
-                    aria-pressed={favorited}
-                    onClick={handleToggleFavorite}
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-                      favorited
-                        ? 'text-red-600'
-                        : 'text-white hover:text-red-400'
-                    }`}
-                    style={noSelectStyle}
-                    onContextMenu={preventContextMenu}
-                  >
-                    <Heart
-                      aria-hidden='true'
-                      size={20}
-                      className={favorited ? 'fill-current' : 'fill-transparent'}
-                    />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* 徽章组件 */}
-            <EpisodeBadge
-              episodes={actualEpisodes || 0}
-              currentEpisode={currentEpisode}
-            />
-
-            {config.showYear && (
-              <YearBadge
-                year={actualYear || ''}
-                hasEpisodeBadge={!!(actualEpisodes && actualEpisodes > 1)}
               />
-            )}
+            </div>
+          )}
 
-            <CompletedBadge remarks={remarks} />
-
-            {config.showRating && rate && <RatingBadge rate={rate} />}
-
-            {/* 豆瓣链接 */}
-            {config.showDoubanLink && subjectUrl && (
-              <a
-                href={subjectUrl}
-                aria-label={isBangumi ? '打开 Bangumi 详情' : '打开豆瓣详情'}
-                target='_blank'
-                rel='noopener noreferrer'
-                onClick={(e) => e.stopPropagation()}
-                className='pointer-events-none absolute top-2 left-2 z-[30] opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-x-0 focus:pointer-events-auto focus:opacity-100 focus:translate-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full'
-                style={noSelectStyle}
-                onContextMenu={preventContextMenu}
-              >
-                <div
-                  className='bg-[#00be06] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#00a304] hover:scale-[1.1] transition-all duration-300 ease-out'
+          {/* 操作按钮 */}
+          {(config.showHeart || config.showCheckCircle) && (
+            <div
+              className='pointer-events-none absolute bottom-3 right-3 z-[30] flex gap-2 opacity-0 translate-y-2 transition-all duration-300 ease-in-out sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0'
+              style={noSelectStyle}
+              onContextMenu={preventContextMenu}
+            >
+              {config.showCheckCircle && (
+                <button
+                  type='button'
+                  data-button='true'
+                  aria-label={`删除 ${actualTitle} 的播放记录`}
+                  onClick={handleDeleteRecord}
+                  className='inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-300 ease-out hover:text-[#00be06] hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
                   style={noSelectStyle}
                   onContextMenu={preventContextMenu}
                 >
-                  <Link size={16} style={noPointerStyle} />
-                </div>
-              </a>
-            )}
-
-            {/* 聚合播放源指示器 */}
-            {playUrl &&
-              isAggregate &&
-              source_names &&
-              source_names.length > 0 && (
-                <AggregateSourceIndicator
-                  href={playUrl}
-                  sourceNames={source_names}
-                  title={actualTitle}
-                />
+                  <Trash2 aria-hidden='true' size={20} />
+                </button>
               )}
-          </div>
+              {config.showHeart && from !== 'search' && (
+                <button
+                  type='button'
+                  data-button='true'
+                  aria-label={`${favorited ? '取消收藏' : '收藏'} ${actualTitle}`}
+                  aria-pressed={favorited}
+                  onClick={handleToggleFavorite}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                    favorited ? 'text-red-600' : 'text-white hover:text-red-400'
+                  }`}
+                  style={noSelectStyle}
+                  onContextMenu={preventContextMenu}
+                >
+                  <Heart
+                    aria-hidden='true'
+                    size={20}
+                    className={favorited ? 'fill-current' : 'fill-transparent'}
+                  />
+                </button>
+              )}
+            </div>
+          )}
 
-          {/* 进度条 */}
-          {config.showProgress && progress !== undefined && (
-            <div
-              className='mt-1 h-1 w-full bg-[#e8e8e8] rounded-full overflow-hidden dark:bg-[#3a3a3a]'
+          {/* 徽章组件 */}
+          <EpisodeBadge
+            episodes={actualEpisodes || 0}
+            currentEpisode={currentEpisode}
+          />
+
+          {config.showYear && (
+            <YearBadge
+              year={actualYear || ''}
+              hasEpisodeBadge={!!(actualEpisodes && actualEpisodes > 1)}
+            />
+          )}
+
+          <CompletedBadge remarks={remarks} />
+
+          {config.showRating && rate && <RatingBadge rate={rate} />}
+
+          {/* 豆瓣链接 */}
+          {config.showDoubanLink && subjectUrl && (
+            <a
+              href={subjectUrl}
+              aria-label={isBangumi ? '打开 Bangumi 详情' : '打开豆瓣详情'}
+              target='_blank'
+              rel='noopener noreferrer'
+              onClick={(e) => e.stopPropagation()}
+              className='pointer-events-none absolute top-2 left-2 z-[30] opacity-0 -translate-x-2 transition-all duration-300 ease-in-out delay-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-hover:translate-x-0 focus:pointer-events-auto focus:opacity-100 focus:translate-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full'
               style={noSelectStyle}
               onContextMenu={preventContextMenu}
             >
               <div
-                className='h-full bg-[#00be06] transition-all duration-500 ease-out dark:bg-[#1acd50]'
-                style={{ ...noSelectStyle, width: `${progress}%` }}
+                className='bg-[#00be06] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#00a304] hover:scale-[1.1] transition-all duration-300 ease-out'
+                style={noSelectStyle}
                 onContextMenu={preventContextMenu}
-              />
-            </div>
+              >
+                <Link size={16} style={noPointerStyle} />
+              </div>
+            </a>
           )}
 
-          {/* 标题与来源 — 爱奇艺式左对齐 */}
+          {/* 聚合播放源指示器 */}
+          {playUrl &&
+            isAggregate &&
+            source_names &&
+            source_names.length > 0 && (
+              <AggregateSourceIndicator
+                href={playUrl}
+                sourceNames={source_names}
+                title={actualTitle}
+              />
+            )}
+        </div>
+
+        {/* 进度条 */}
+        {config.showProgress && progress !== undefined && (
           <div
-            className='mt-1.5 text-left'
+            className='mt-1 h-1 w-full bg-[#e8e8e8] rounded-full overflow-hidden dark:bg-[#3a3a3a]'
             style={noSelectStyle}
             onContextMenu={preventContextMenu}
           >
-            <div className='relative px-1' style={noSelectStyle}>
-              {/* 背景高亮效果 */}
-              <div className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/45 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/45 transition-all duration-300 rounded-md'></div>
+            <div
+              className='h-full bg-[#00be06] transition-all duration-500 ease-out dark:bg-[#1acd50]'
+              style={{ ...noSelectStyle, width: `${progress}%` }}
+              onContextMenu={preventContextMenu}
+            />
+          </div>
+        )}
 
-              <span
-                className='block text-sm font-semibold line-clamp-2 text-[#111111] dark:text-[#f5f5f5] transition-all duration-300 ease-in-out group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] peer relative z-10'
-                style={{
-                  ...noSelectStyle,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  lineHeight: '1.4',
-                }}
-                onContextMenu={preventContextMenu}
-              >
+        {/* 标题与来源 — 爱奇艺式左对齐 */}
+        <div
+          className='mt-1.5 text-left'
+          style={noSelectStyle}
+          onContextMenu={preventContextMenu}
+        >
+          <div className='relative px-1' style={noSelectStyle}>
+            {/* 背景高亮效果 */}
+            <div className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/45 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/45 transition-all duration-300 rounded-md'></div>
+
+            <span
+              className='block text-sm font-semibold line-clamp-2 text-[#111111] dark:text-[#f5f5f5] transition-all duration-300 ease-in-out group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] peer relative z-10'
+              style={{
+                ...noSelectStyle,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                lineHeight: '1.4',
+              }}
+              onContextMenu={preventContextMenu}
+            >
+              {actualTitle}
+            </span>
+            {/* 增强的 tooltip */}
+            <div
+              className='absolute bottom-full left-0 mb-2 px-3 py-2 bg-gradient-to-br from-gray-800 to-gray-900 text-white text-xs rounded-lg shadow-xl border border-white/10 opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 ease-out delay-100 pointer-events-none z-50 backdrop-blur-sm'
+              style={{
+                ...noSelectStyle,
+                minWidth: '200px',
+                maxWidth: 'min(90vw, 400px)',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                left: '50%',
+                transform: 'translateX(-50%)',
+              }}
+              onContextMenu={preventContextMenu}
+            >
+              <span className='font-medium leading-relaxed block text-center'>
                 {actualTitle}
               </span>
-              {/* 增强的 tooltip */}
               <div
-                className='absolute bottom-full left-0 mb-2 px-3 py-2 bg-gradient-to-br from-gray-800 to-gray-900 text-white text-xs rounded-lg shadow-xl border border-white/10 opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 ease-out delay-100 pointer-events-none z-50 backdrop-blur-sm'
-                style={{
-                  ...noSelectStyle,
-                  minWidth: '200px',
-                  maxWidth: 'min(90vw, 400px)',
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                }}
-                onContextMenu={preventContextMenu}
-              >
-                <span className='font-medium leading-relaxed block text-center'>
-                  {actualTitle}
-                </span>
-                <div
-                  className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-gray-800'
-                  style={noSelectStyle}
-                />
-              </div>
+                className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-gray-800'
+                style={noSelectStyle}
+              />
             </div>
-            {/* 副标题：年份 · 类型 */}
-            {subtitleParts.length > 0 && (
-              <div
-                className='mt-1 px-1 text-xs text-[#5f5f5f] dark:text-[#a8a8a8] line-clamp-1'
-                style={noSelectStyle}
-                onContextMenu={preventContextMenu}
-              >
-                {subtitleParts.join(' · ')}
-              </div>
-            )}
-            {config.showSourceName && source_name && (
-              <div
-                className='flex items-center justify-start mt-2'
-                style={noSelectStyle}
-                onContextMenu={preventContextMenu}
-              >
-                <span
-                  className='relative inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border border-[#d9d9d9] dark:border-[#464646] text-[#5f5f5f] dark:text-[#a8a8a8] transition-all duration-300 ease-out overflow-hidden group-hover:border-[#00be06]/80 group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] group-hover:shadow-sm group-hover:scale-105'
-                  style={noSelectStyle}
-                  onContextMenu={preventContextMenu}
-                >
-                  {/* 背景渐变效果 */}
-                  <span className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/60 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/50 transition-all duration-300'></span>
-
-                  {/* 左侧装饰点 */}
-                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
-
-                  {isLiveCard && (
-                    <Radio
-                      size={12}
-                      className='relative inline-block transition-all duration-300 group-hover:text-[#00be06] dark:group-hover:text-[#1acd50]'
-                    />
-                  )}
-
-                  <span className='relative font-semibold'>{source_name}</span>
-
-                  {/* 右侧装饰点 */}
-                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
-                </span>
-              </div>
-            )}
           </div>
-        </div>
+          {/* 副标题：年份 · 类型 */}
+          {subtitleParts.length > 0 && (
+            <div
+              className='mt-1 px-1 text-xs text-[#5f5f5f] dark:text-[#a8a8a8] line-clamp-1'
+              style={noSelectStyle}
+              onContextMenu={preventContextMenu}
+            >
+              {subtitleParts.join(' · ')}
+            </div>
+          )}
+          {config.showSourceName && source_name && (
+            <div
+              className='flex items-center justify-start mt-2'
+              style={noSelectStyle}
+              onContextMenu={preventContextMenu}
+            >
+              <span
+                className='relative inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border border-[#d9d9d9] dark:border-[#464646] text-[#5f5f5f] dark:text-[#a8a8a8] transition-all duration-300 ease-out overflow-hidden group-hover:border-[#00be06]/80 group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] group-hover:shadow-sm group-hover:scale-105'
+                style={noSelectStyle}
+                onContextMenu={preventContextMenu}
+              >
+                {/* 背景渐变效果 */}
+                <span className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/60 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/50 transition-all duration-300'></span>
 
-        {/* 操作菜单 - 支持右键和长按触发 */}
-        {actionSheetPhase !== 'closed' && (
-          <MobileActionSheet
-            isOpen={showMobileActions}
-            onClose={closeMobileActions}
-            onExited={handleMobileActionsExited}
-            title={actualTitle}
-            poster={imageSrc}
-            actions={mobileActions}
-            sources={actionSheetSources}
-            isAggregate={isAggregate}
-            sourceName={source_name}
-            currentEpisode={currentEpisode}
-            totalEpisodes={actualEpisodes}
-            origin={origin}
-          />
-        )}
-      </>
-    );
-  },
-);
+                {/* 左侧装饰点 */}
+                <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
+
+                {isLiveCard && (
+                  <Radio
+                    size={12}
+                    className='relative inline-block transition-all duration-300 group-hover:text-[#00be06] dark:group-hover:text-[#1acd50]'
+                  />
+                )}
+
+                <span className='relative font-semibold'>{source_name}</span>
+
+                {/* 右侧装饰点 */}
+                <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 操作菜单 - 支持右键和长按触发 */}
+      {actionSheetPhase !== 'closed' && (
+        <MobileActionSheet
+          isOpen={showMobileActions}
+          onClose={closeMobileActions}
+          onExited={handleMobileActionsExited}
+          title={actualTitle}
+          poster={imageSrc}
+          actions={mobileActions}
+          sources={actionSheetSources}
+          isAggregate={isAggregate}
+          sourceName={source_name}
+          currentEpisode={currentEpisode}
+          totalEpisodes={actualEpisodes}
+          origin={origin}
+        />
+      )}
+    </>
+  );
+});
 
 export default VideoCard;

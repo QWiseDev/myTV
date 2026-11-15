@@ -113,7 +113,7 @@ async function fixPlayRecordsTable() {
   `);
 
   console.log('  当前表结构:');
-  columns.forEach(col => {
+  columns.forEach((col) => {
     console.log(`    - ${col.column_name}: ${col.data_type}`);
   });
 

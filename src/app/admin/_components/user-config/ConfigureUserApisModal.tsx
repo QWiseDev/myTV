@@ -106,14 +106,18 @@ export function ConfigureUserApisModal({
       {/* 快速操作按钮 */}
       <div className='flex flex-wrap items-center justify-between mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg'>
         <div className='flex space-x-2'>
-          <button onClick={() => onSetApis([])} className={buttonStyles.quickAction}>
+          <button
+            onClick={() => onSetApis([])}
+            className={buttonStyles.quickAction}
+          >
             全不选（无限制）
           </button>
           <button
             onClick={() => {
               const allApis =
-                sourceConfig?.filter((source) => !source.disabled).map((s) => s.key) ||
-                [];
+                sourceConfig
+                  ?.filter((source) => !source.disabled)
+                  .map((s) => s.key) || [];
               onSetApis(allApis);
             }}
             className={buttonStyles.quickAction}

@@ -22,7 +22,7 @@ const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 // 弱密码告警：PASSWORD 同时是会话签名密钥，长度不足极易被爆破
 if (process.env.PASSWORD && process.env.PASSWORD.length < 8) {
   console.warn(
-    '⚠️ 安全警告：环境变量 PASSWORD 长度不足 8 位，存在被暴力破解的风险，请尽快更换为随机强密码'
+    '⚠️ 安全警告：环境变量 PASSWORD 长度不足 8 位，存在被暴力破解的风险，请尽快更换为随机强密码',
   );
 }
 
@@ -44,7 +44,7 @@ function tooManyAttempts(retryAfterSeconds: number) {
     {
       status: 429,
       headers: { 'Retry-After': String(Math.max(1, retryAfterSeconds)) },
-    }
+    },
   );
 }
 
@@ -56,7 +56,10 @@ function recordLoginFailure(ip: string, username?: string) {
 }
 
 function clearLoginFailures(ip: string, username?: string) {
-  resetRateLimit(loginFailIpKey(ip), username ? loginFailUserKey(username) : null);
+  resetRateLimit(
+    loginFailIpKey(ip),
+    username ? loginFailUserKey(username) : null,
+  );
 }
 
 // 强制动态渲染，避免在构建时预生成
@@ -72,7 +75,7 @@ const STORAGE_TYPE =
 // 生成签名
 async function generateSignature(
   data: string,
-  secret: string
+  secret: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -84,7 +87,7 @@ async function generateSignature(
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   // 生成签名
@@ -101,7 +104,7 @@ async function generateAuthCookie(
   username?: string,
   password?: string,
   role?: 'owner' | 'admin' | 'user',
-  includePassword = false
+  includePassword = false,
 ): Promise<string> {
   const authData: any = { role: role || 'user' };
 
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
     const attemptGate = consumeRateLimit(
       loginAttemptKey(ip),
       LOGIN_ATTEMPT_LIMIT,
-      LOGIN_ATTEMPT_WINDOW_MS
+      LOGIN_ATTEMPT_WINDOW_MS,
     );
     if (!attemptGate.allowed) {
       return tooManyAttempts(attemptGate.retryAfterSeconds);
@@ -137,7 +140,7 @@ export async function POST(req: NextRequest) {
     const ipFailGate = peekRateLimit(
       loginFailIpKey(ip),
       LOGIN_FAILURE_LIMIT,
-      LOGIN_FAILURE_WINDOW_MS
+      LOGIN_FAILURE_WINDOW_MS,
     );
     if (!ipFailGate.allowed) {
       return tooManyAttempts(ipFailGate.retryAfterSeconds);
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
         recordLoginFailure(ip);
         return NextResponse.json(
           { ok: false, error: '密码错误' },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -182,7 +185,7 @@ export async function POST(req: NextRequest) {
         undefined,
         password,
         'user',
-        true
+        true,
       ); // localstorage 模式包含 password
       clearLoginFailures(ip);
       const expires = new Date();
@@ -213,7 +216,7 @@ export async function POST(req: NextRequest) {
     const userFailGate = peekRateLimit(
       loginFailUserKey(username),
       LOGIN_FAILURE_LIMIT,
-      LOGIN_FAILURE_WINDOW_MS
+      LOGIN_FAILURE_WINDOW_MS,
     );
     if (!userFailGate.allowed) {
       return tooManyAttempts(userFailGate.retryAfterSeconds);
@@ -230,7 +233,7 @@ export async function POST(req: NextRequest) {
         username,
         password,
         'owner',
-        false
+        false,
       ); // 数据库模式不包含 password
       clearLoginFailures(ip, username);
       const expires = new Date();
@@ -263,7 +266,7 @@ export async function POST(req: NextRequest) {
         recordLoginFailure(ip, username);
         return NextResponse.json(
           { error: '用户名或密码错误' },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -273,7 +276,7 @@ export async function POST(req: NextRequest) {
         username,
         password,
         user?.role || 'user',
-        false
+        false,
       ); // 数据库模式不包含 password
       clearLoginFailures(ip, username);
       const expires = new Date();

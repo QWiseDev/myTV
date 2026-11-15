@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     if (type && !['movie', 'tv'].includes(type)) {
       return NextResponse.json(
         { error: 'type 参数必须是 movie 或 tv' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -51,37 +51,36 @@ export async function GET(request: NextRequest) {
     if (!refresh) {
       const cachedData = await CalendarCacheManager.getCalendarData();
       if (cachedData) {
-
         // 从缓存中应用过滤和分页
         let filteredItems = cachedData.items;
 
         if (type) {
           filteredItems = filteredItems.filter(
-            (item: any) => item.type === type
+            (item: any) => item.type === type,
           );
         }
 
         if (region && region !== '全部') {
           filteredItems = filteredItems.filter((item: any) =>
-            item.region.includes(region)
+            item.region.includes(region),
           );
         }
 
         if (genre && genre !== '全部') {
           filteredItems = filteredItems.filter((item: any) =>
-            item.genre.includes(genre)
+            item.genre.includes(genre),
           );
         }
 
         if (dateFrom) {
           filteredItems = filteredItems.filter(
-            (item: any) => item.releaseDate >= dateFrom
+            (item: any) => item.releaseDate >= dateFrom,
           );
         }
 
         if (dateTo) {
           filteredItems = filteredItems.filter(
-            (item: any) => item.releaseDate <= dateTo
+            (item: any) => item.releaseDate <= dateTo,
           );
         }
 
@@ -131,9 +130,8 @@ export async function GET(request: NextRequest) {
         filters,
       };
 
-      const saveSuccess = await CalendarCacheManager.saveCalendarData(
-        cacheData
-      );
+      const saveSuccess =
+        await CalendarCacheManager.saveCalendarData(cacheData);
       if (!saveSuccess) {
         console.warn('⚠️ 数据库缓存更新失败，但不影响API响应');
       }
@@ -147,7 +145,7 @@ export async function GET(request: NextRequest) {
         error: '获取发布日历失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -160,7 +158,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-
     // 清除数据库缓存
     await CalendarCacheManager.clearCalendarData();
 
@@ -197,7 +194,7 @@ export async function POST(request: NextRequest) {
         error: '刷新发布日历缓存失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

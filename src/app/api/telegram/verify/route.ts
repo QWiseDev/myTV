@@ -26,7 +26,7 @@ function generatePassword(length = 8): string {
 // 生成签名
 async function generateSignature(
   data: string,
-  secret: string
+  secret: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -37,7 +37,7 @@ async function generateSignature(
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   const signature = await crypto.subtle.sign('HMAC', key, messageData);
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
         {
           status: 400,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        }
+        },
       );
     }
 
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
           {
             status: 401,
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          }
+          },
         );
       }
 
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
         {
           status: 200,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        }
+        },
       );
     }
 
@@ -168,7 +168,7 @@ export async function GET(request: Request) {
         {
           status: 401,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        }
+        },
       );
     }
 
@@ -184,7 +184,7 @@ export async function GET(request: Request) {
         {
           status: 403,
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        }
+        },
       );
     }
 
@@ -213,7 +213,7 @@ export async function GET(request: Request) {
           {
             status: 404,
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          }
+          },
         );
       }
     }
@@ -301,7 +301,7 @@ export async function GET(request: Request) {
       {
         status: 500,
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      }
+      },
     );
   }
 }

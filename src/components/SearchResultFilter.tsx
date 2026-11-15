@@ -40,7 +40,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
   onChange,
 }) => {
   const [activeCategory, setActiveCategory] = useState<SearchFilterKey | null>(
-    null
+    null,
   );
   const [dropdownPosition, setDropdownPosition] = useState<{
     x: number;
@@ -103,7 +103,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
 
   const handleOptionSelect = (
     categoryKey: SearchFilterKey,
-    optionValue: string
+    optionValue: string,
   ) => {
     const newValues = {
       ...mergedValues,
@@ -129,7 +129,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
 
   const isOptionSelected = (
     categoryKey: SearchFilterKey,
-    optionValue: string
+    optionValue: string,
   ) => {
     const value = mergedValues[categoryKey] ?? DEFAULTS[categoryKey];
     return value === optionValue;
@@ -160,7 +160,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
         !Object.values(categoryRefs.current).some(
-          (ref) => ref && ref.contains(event.target as Node)
+          (ref) => ref && ref.contains(event.target as Node),
         )
       ) {
         setActiveCategory(null);
@@ -189,8 +189,8 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
                     ? 'text-gray-900 dark:text-gray-100 cursor-default'
                     : 'text-green-600 dark:text-green-400 cursor-default'
                   : isDefaultValue(category.key)
-                  ? 'text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer'
-                  : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 cursor-pointer'
+                    ? 'text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer'
+                    : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 cursor-pointer'
               }`}
             >
               <span>{getDisplayText(category.key)}</span>
@@ -241,8 +241,8 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
               mergedValues.yearOrder === 'none'
                 ? '排序'
                 : mergedValues.yearOrder === 'desc'
-                ? '降序'
-                : '升序'
+                  ? '降序'
+                  : '升序'
             }排序`}
           >
             <span>年份</span>
@@ -270,7 +270,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
                 : {
                     minWidth: `${Math.max(
                       dropdownPosition.width,
-                      activeCategory === 'title' ? 400 : 240
+                      activeCategory === 'title' ? 400 : 240,
                     )}px`,
                   }),
               maxWidth: '600px',
@@ -299,7 +299,7 @@ const SearchResultFilter: React.FC<SearchResultFilterProps> = ({
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </>
   );

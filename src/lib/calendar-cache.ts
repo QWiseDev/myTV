@@ -88,7 +88,6 @@ export class CalendarCacheManager {
     try {
       await db.deleteCache(CALENDAR_DATA_KEY);
       await db.deleteCache(CALENDAR_TIME_KEY);
-
     } catch (error) {
       console.error('❌ 清除数据库日历缓存失败:', error);
     }

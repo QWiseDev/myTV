@@ -22,7 +22,7 @@ async function main() {
         AND indexdef LIKE '%username%'
       `);
       console.log('索引:', indexResult.rows.length, '个');
-      indexResult.rows.forEach(row => {
+      indexResult.rows.forEach((row) => {
         console.log('  -', row.indexname);
       });
 
@@ -34,7 +34,7 @@ async function main() {
         AND conname LIKE '%username%'
       `);
       console.log('约束:', constraintResult.rows.length, '个');
-      constraintResult.rows.forEach(row => {
+      constraintResult.rows.forEach((row) => {
         console.log('  -', row.conname, '类型:', row.contype);
       });
 
@@ -46,7 +46,7 @@ async function main() {
         AND definition LIKE '%username%'
       `);
       console.log('视图:', viewResult.rows.length, '个');
-      viewResult.rows.forEach(row => {
+      viewResult.rows.forEach((row) => {
         console.log('  -', row.viewname);
       });
 
@@ -58,7 +58,7 @@ async function main() {
         AND prosrc LIKE '%username%'
       `);
       console.log('函数:', funcResult.rows.length, '个');
-      funcResult.rows.forEach(row => {
+      funcResult.rows.forEach((row) => {
         console.log('  -', row.proname);
       });
 
@@ -70,7 +70,7 @@ async function main() {
         AND tgname LIKE '%username%'
       `);
       console.log('触发器:', triggerResult.rows.length, '个');
-      triggerResult.rows.forEach(row => {
+      triggerResult.rows.forEach((row) => {
         console.log('  -', row.tgname);
       });
 
@@ -84,16 +84,14 @@ async function main() {
         ORDER BY attnum
       `);
       console.log('当前表列:');
-      columnResult.rows.forEach(row => {
+      columnResult.rows.forEach((row) => {
         console.log('  -', row.attname, '类型:', row.atttypid);
       });
-
     } finally {
       client.release();
     }
 
     console.log('\n检查完成！');
-
   } catch (err) {
     console.error('错误:', err);
   } finally {

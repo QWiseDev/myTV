@@ -24,7 +24,6 @@ export async function GET(req: NextRequest) {
       })),
       type,
     });
-
   } catch (error) {
     console.error('获取排行榜失败:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });

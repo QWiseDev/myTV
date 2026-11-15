@@ -30,7 +30,7 @@ function MyComponent() {
   const handleButtonClick = () => {
     // 追踪按钮点击
     trackFeatureUsage('button_click', true, {
-      button_name: 'submit_button'
+      button_name: 'submit_button',
     });
   };
 
@@ -70,13 +70,13 @@ function VideoPlayer({ video }) {
     trackComplete,
     trackFavorite,
     trackShare,
-    trackProgress
+    trackProgress,
   } = useVideoAnalytics({
     videoId: video.id,
     videoTitle: video.title,
     videoType: 'movie', // 'movie' | 'tv' | 'episode' | 'live'
     source: 'main_source',
-    duration: video.duration
+    duration: video.duration,
   });
 
   const handlePlay = () => {
@@ -117,7 +117,10 @@ function VideoPlayer({ video }) {
 import { useVideoQualityAnalytics } from '@/hooks/useVideoAnalytics';
 
 function VideoQualityControl({ videoId, videoTitle }) {
-  const { trackQualityChange, trackQualityIssue } = useVideoQualityAnalytics(videoId, videoTitle);
+  const { trackQualityChange, trackQualityIssue } = useVideoQualityAnalytics(
+    videoId,
+    videoTitle,
+  );
 
   const handleQualityChange = (newQuality) => {
     trackQualityChange(currentQuality, newQuality, false); // 手动切换
@@ -130,9 +133,9 @@ function VideoQualityControl({ videoId, videoTitle }) {
   return (
     <div>
       <select onChange={(e) => handleQualityChange(e.target.value)}>
-        <option value="360p">360p</option>
-        <option value="720p">720p</option>
-        <option value="1080p">1080p</option>
+        <option value='360p'>360p</option>
+        <option value='720p'>720p</option>
+        <option value='1080p'>1080p</option>
       </select>
     </div>
   );
@@ -145,7 +148,8 @@ function VideoQualityControl({ videoId, videoTitle }) {
 import { useDanmuAnalytics } from '@/hooks/useVideoAnalytics';
 
 function DanmuSystem({ videoId, videoTitle }) {
-  const { trackDanmuSend, trackDanmuToggle, trackDanmuSearch } = useDanmuAnalytics(videoId, videoTitle);
+  const { trackDanmuSend, trackDanmuToggle, trackDanmuSearch } =
+    useDanmuAnalytics(videoId, videoTitle);
 
   const sendDanmu = (content, position) => {
     trackDanmuSend(content, position);
@@ -164,9 +168,9 @@ function DanmuSystem({ videoId, videoTitle }) {
 
   return (
     <div>
-      <input type="text" placeholder="发送弹幕" onSend={sendDanmu} />
+      <input type='text' placeholder='发送弹幕' onSend={sendDanmu} />
       <button onClick={() => toggleDanmu(true)}>显示弹幕</button>
-      <input type="text" placeholder="搜索弹幕" onSearch={searchDanmu} />
+      <input type='text' placeholder='搜索弹幕' onSearch={searchDanmu} />
     </div>
   );
 }
@@ -180,7 +184,8 @@ function DanmuSystem({ videoId, videoTitle }) {
 import { useUserBehaviorAnalytics } from '@/hooks/useUserBehaviorAnalytics';
 
 function LoginForm() {
-  const { trackRegistration, trackLogin, trackUserError } = useUserBehaviorAnalytics();
+  const { trackRegistration, trackLogin, trackUserError } =
+    useUserBehaviorAnalytics();
 
   const handleLogin = async (credentials) => {
     try {
@@ -196,7 +201,9 @@ function LoginForm() {
       await register(userData);
       trackRegistration('email', { registration_source: 'signup_form' });
     } catch (error) {
-      trackUserError('registration_failed', error.message, { registration_method: 'email' });
+      trackUserError('registration_failed', error.message, {
+        registration_method: 'email',
+      });
     }
   };
 
@@ -228,7 +235,7 @@ function SearchBar() {
       trackSearchQuery(query, results.length, searchTime, {
         category: 'all',
         filters: filters,
-        searchType: 'general'
+        searchType: 'general',
       });
 
       return results;
@@ -236,7 +243,7 @@ function SearchBar() {
       const searchTime = performance.now() - startTime;
       trackSearchQuery(query, 0, searchTime, {
         category: 'all',
-        searchType: 'general'
+        searchType: 'general',
       });
       throw error;
     }
@@ -248,11 +255,11 @@ function SearchBar() {
 
   return (
     <div>
-      <input type="text" onSearch={handleSearch} />
+      <input type='text' onSearch={handleSearch} />
       <select onChange={(e) => handleFilterChange('category', e.target.value)}>
-        <option value="all">全部</option>
-        <option value="movie">电影</option>
-        <option value="tv">电视剧</option>
+        <option value='all'>全部</option>
+        <option value='movie'>电影</option>
+        <option value='tv'>电视剧</option>
       </select>
     </div>
   );
@@ -286,8 +293,8 @@ function SignupFlow() {
 
   return (
     <div>
-      <input onBlur={handleStep1Complete} placeholder="邮箱" />
-      <input onBlur={handleStep2Complete} placeholder="密码" />
+      <input onBlur={handleStep1Complete} placeholder='邮箱' />
+      <input onBlur={handleStep2Complete} placeholder='密码' />
       <button onClick={handleSignupComplete}>完成注册</button>
     </div>
   );
@@ -302,7 +309,8 @@ function SignupFlow() {
 import { useAutoPerformanceMonitoring } from '@/hooks/usePerformanceAnalytics';
 
 function App() {
-  const { startInteractionTiming, endInteractionTiming } = useAutoPerformanceMonitoring();
+  const { startInteractionTiming, endInteractionTiming } =
+    useAutoPerformanceMonitoring();
 
   const handleComplexOperation = async () => {
     const interactionId = 'complex_operation';
@@ -347,11 +355,11 @@ function DataComponent() {
     const startTime = performance.now();
 
     fetch(url)
-      .then(response => {
+      .then((response) => {
         const endTime = performance.now();
         trackResourceLoad(resourceType, url, endTime - startTime, response.ok);
       })
-      .catch(error => {
+      .catch((error) => {
         const endTime = performance.now();
         trackResourceLoad(resourceType, url, endTime - startTime, false);
       });
@@ -360,7 +368,9 @@ function DataComponent() {
   return (
     <div>
       <button onClick={fetchData}>加载数据</button>
-      <button onClick={() => loadResource('image', '/api/image')}>加载图片</button>
+      <button onClick={() => loadResource('image', '/api/image')}>
+        加载图片
+      </button>
     </div>
   );
 }
@@ -384,7 +394,7 @@ function App() {
       // 手动报告错误
       analytics.trackError('manual_error', error.message, {
         operation: 'risky_operation',
-        user_action: 'button_click'
+        user_action: 'button_click',
       });
     }
   };
@@ -407,7 +417,7 @@ function ApiComponent() {
         trackError('api_error', `API request failed: ${response.status}`, {
           endpoint: '/api/data',
           status_code: response.status,
-          method: 'GET'
+          method: 'GET',
         });
       }
 
@@ -415,7 +425,7 @@ function ApiComponent() {
     } catch (error) {
       trackError('api_network_error', error.message, {
         endpoint: '/api/data',
-        error_type: 'network'
+        error_type: 'network',
       });
       throw error;
     }

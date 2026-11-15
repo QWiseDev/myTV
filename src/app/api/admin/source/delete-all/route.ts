@@ -13,7 +13,7 @@ export async function DELETE(request: NextRequest) {
     if (!authInfo || !authInfo.username) {
       return NextResponse.json(
         { success: false, error: '未授权访问' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -23,7 +23,7 @@ export async function DELETE(request: NextRequest) {
     if (username !== process.env.USERNAME) {
       return NextResponse.json(
         { success: false, error: '权限不足，只有站长可以执行此操作' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -39,8 +39,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除视频源失败:', error);
     return NextResponse.json(
       { success: false, error: '删除视频源时发生错误' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-

@@ -40,20 +40,23 @@ export function getAuthInfoFromBrowserCookie(): {
 
   try {
     // 解析 document.cookie
-    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-      const trimmed = cookie.trim();
-      const firstEqualIndex = trimmed.indexOf('=');
+    const cookies = document.cookie.split(';').reduce(
+      (acc, cookie) => {
+        const trimmed = cookie.trim();
+        const firstEqualIndex = trimmed.indexOf('=');
 
-      if (firstEqualIndex > 0) {
-        const key = trimmed.substring(0, firstEqualIndex);
-        const value = trimmed.substring(firstEqualIndex + 1);
-        if (key && value) {
-          acc[key] = value;
+        if (firstEqualIndex > 0) {
+          const key = trimmed.substring(0, firstEqualIndex);
+          const value = trimmed.substring(firstEqualIndex + 1);
+          if (key && value) {
+            acc[key] = value;
+          }
         }
-      }
 
-      return acc;
-    }, {} as Record<string, string>);
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
 
     // 尝试新的 cookie 名称 user_auth，如果没有则尝试旧的 auth
     const authCookie = cookies['user_auth'] || cookies['auth'];

@@ -26,7 +26,7 @@ import { useTvboxDiagnostics } from './hooks/useTvboxDiagnostics';
 export default function TVBoxConfigPage() {
   const router = useRouter();
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(
-    null
+    null,
   );
   const [siteName, setSiteName] = useState('卡拉米影视');
   const [loading, setLoading] = useState(true);
@@ -313,7 +313,7 @@ export default function TVBoxConfigPage() {
                         | 'standard'
                         | 'safe'
                         | 'fast'
-                        | 'yingshicang'
+                        | 'yingshicang',
                     )
                   }
                   className='mr-2 w-4 h-4 text-blue-600 focus:ring-blue-500'
@@ -339,7 +339,7 @@ export default function TVBoxConfigPage() {
                         | 'standard'
                         | 'safe'
                         | 'fast'
-                        | 'yingshicang'
+                        | 'yingshicang',
                     )
                   }
                   className='mr-2 w-4 h-4 text-blue-600 focus:ring-blue-500'
@@ -365,7 +365,7 @@ export default function TVBoxConfigPage() {
                         | 'standard'
                         | 'safe'
                         | 'fast'
-                        | 'yingshicang'
+                        | 'yingshicang',
                     )
                   }
                   className='mr-2 w-4 h-4 text-green-600 focus:ring-green-500'
@@ -391,7 +391,7 @@ export default function TVBoxConfigPage() {
                         | 'standard'
                         | 'safe'
                         | 'fast'
-                        | 'yingshicang'
+                        | 'yingshicang',
                     )
                   }
                   className='mr-2 w-4 h-4 text-purple-600 focus:ring-purple-500'
@@ -410,10 +410,10 @@ export default function TVBoxConfigPage() {
               {configMode === 'standard'
                 ? '📊 包含 IJK 优化、DoH DNS、广告过滤，适合日常使用'
                 : configMode === 'safe'
-                ? '🔒 仅核心配置，TVBox 兼容性问题时使用'
-                : configMode === 'fast'
-                ? '⚡ 优化切换速度，移除超时配置，减少卡顿和 SSL 错误'
-                : '🎬 专为影视仓优化，包含播放规则和兼容性修复'}
+                  ? '🔒 仅核心配置，TVBox 兼容性问题时使用'
+                  : configMode === 'fast'
+                    ? '⚡ 优化切换速度，移除超时配置，减少卡顿和 SSL 错误'
+                    : '🎬 专为影视仓优化，包含播放规则和兼容性修复'}
             </p>
           </div>
 

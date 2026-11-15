@@ -27,10 +27,7 @@ import {
   YouTubeSearchResults,
 } from './_components/YouTubeSearchResults';
 import { useNetdiskSearch } from './hooks/useNetdiskSearch';
-import {
-  SearchFilterValues,
-  useSearchFilters,
-} from './hooks/useSearchFilters';
+import { SearchFilterValues, useSearchFilters } from './hooks/useSearchFilters';
 import { useTmdbActorSearch } from './hooks/useTmdbActorSearch';
 import { useVideoSearch } from './hooks/useVideoSearch';
 import { useYouTubeSearch } from './hooks/useYouTubeSearch';
@@ -278,8 +275,6 @@ function SearchPageClient() {
     tmdbActorResults,
     tmdbActorError,
   ]);
-
-
 
   // 输入框内容变化时触发，显示搜索建议
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

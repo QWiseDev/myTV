@@ -117,10 +117,10 @@ export const formatLoginDisplay = (loginCount: number) => {
       loginCount === 0
         ? '0'
         : loginCount > 10000
-        ? '10000+'
-        : loginCount > 1000
-        ? `${Math.floor(loginCount / 1000)}k+`
-        : loginCount.toString(),
+          ? '10000+'
+          : loginCount > 1000
+            ? `${Math.floor(loginCount / 1000)}k+`
+            : loginCount.toString(),
   };
 };
 
@@ -184,7 +184,7 @@ export const formatLastUpdate = (timestamp: number): string => {
 
 export const getProgressPercentage = (
   playTime: number,
-  totalTime: number
+  totalTime: number,
 ): number => {
   if (!totalTime) return 0;
   return Math.min(Math.round((playTime / totalTime) * 100), 100);

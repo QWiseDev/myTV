@@ -91,7 +91,6 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
 
   // 触发内存清理
   const triggerMemoryCleanup = useCallback(() => {
-
     // 强制垃圾回收（如果支持）
     try {
       const gc = (window as WindowWithGc).gc;
@@ -104,7 +103,6 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
 
     setAutoCleanupTriggered(true);
     setTimeout(() => setAutoCleanupTriggered(false), 3000);
-
   }, []);
 
   // 检查内存状态

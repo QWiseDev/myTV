@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const suggestions = await generateSuggestions(
       config,
       query,
-      authInfo.username
+      authInfo.username,
     );
 
     // 从配置中获取缓存时间，如果没有配置则使用默认值300秒（5分钟）
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
           'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
           'Netlify-Vary': 'query',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('获取搜索建议失败', error);
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 async function generateSuggestions(
   config: AdminConfig,
   query: string,
-  username: string
+  username: string,
 ): Promise<
   Array<{
     text: string;
@@ -80,16 +80,16 @@ async function generateSuggestions(
             (r: any) =>
               config.SiteConfig.DisableYellowFilter ||
               !yellowWords.some((word: string) =>
-                (r.type_name || '').includes(word)
-              )
+                (r.type_name || '').includes(word),
+              ),
           )
           .map((r: any) => r.title)
           .filter(Boolean)
           .flatMap((title: string) => title.split(/[ -:：·、-]/))
           .filter(
-            (w: string) => w.length > 1 && w.toLowerCase().includes(queryLower)
-          )
-      )
+            (w: string) => w.length > 1 && w.toLowerCase().includes(queryLower),
+          ),
+      ),
     ).slice(0, 8);
   }
 

@@ -169,102 +169,100 @@ export function DeepDiagnosticPanel({
                   详细测试结果
                 </h3>
                 <div className='space-y-2 max-h-96 overflow-y-auto'>
-                  {deepDiagnosticResult.jarTests.map(
-                    (test, idx: number) => {
-                      const statusStyle = getJarTestStatusStyle(test.status);
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded border ${statusStyle.containerClass}`}
-                        >
-                          <div className='flex items-center justify-between mb-2'>
-                            <div className='flex items-center gap-2'>
-                              {test.status === 'success' ? (
-                                <CheckCircle2 className='w-4 h-4 text-green-600 dark:text-green-400' />
-                              ) : (
-                                <XCircle className='w-4 h-4 text-red-600 dark:text-red-400' />
-                              )}
-                              <span className='text-sm font-medium text-gray-900 dark:text-white'>
-                                {test.name}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-xs px-2 py-1 rounded ${statusStyle.badgeClass}`}
-                            >
-                              {statusStyle.label}
+                  {deepDiagnosticResult.jarTests.map((test, idx: number) => {
+                    const statusStyle = getJarTestStatusStyle(test.status);
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded border ${statusStyle.containerClass}`}
+                      >
+                        <div className='flex items-center justify-between mb-2'>
+                          <div className='flex items-center gap-2'>
+                            {test.status === 'success' ? (
+                              <CheckCircle2 className='w-4 h-4 text-green-600 dark:text-green-400' />
+                            ) : (
+                              <XCircle className='w-4 h-4 text-red-600 dark:text-red-400' />
+                            )}
+                            <span className='text-sm font-medium text-gray-900 dark:text-white'>
+                              {test.name}
                             </span>
                           </div>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${statusStyle.badgeClass}`}
+                          >
+                            {statusStyle.label}
+                          </span>
+                        </div>
 
-                          <div className='text-xs font-mono text-gray-600 dark:text-gray-400 mb-2 break-all'>
-                            {test.url}
+                        <div className='text-xs font-mono text-gray-600 dark:text-gray-400 mb-2 break-all'>
+                          {test.url}
+                        </div>
+
+                        <div className='grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs'>
+                          <div>
+                            <span className='text-gray-500 dark:text-gray-400'>
+                              响应:
+                            </span>
+                            <span className='ml-1 font-medium text-gray-900 dark:text-white'>
+                              {test.responseTime}ms
+                            </span>
                           </div>
-
-                          <div className='grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs'>
+                          {test.httpStatus && (
                             <div>
                               <span className='text-gray-500 dark:text-gray-400'>
-                                响应:
+                                状态:
                               </span>
                               <span className='ml-1 font-medium text-gray-900 dark:text-white'>
-                                {test.responseTime}ms
+                                {test.httpStatus}
                               </span>
                             </div>
-                            {test.httpStatus && (
-                              <div>
-                                <span className='text-gray-500 dark:text-gray-400'>
-                                  状态:
-                                </span>
-                                <span className='ml-1 font-medium text-gray-900 dark:text-white'>
-                                  {test.httpStatus}
-                                </span>
-                              </div>
-                            )}
-                            {test.fileSize && (
-                              <div>
-                                <span className='text-gray-500 dark:text-gray-400'>
-                                  大小:
-                                </span>
-                                <span className='ml-1 font-medium text-gray-900 dark:text-white'>
-                                  {Math.round(test.fileSize / 1024)}KB
-                                </span>
-                              </div>
-                            )}
-                            {test.isValidJar !== undefined && (
-                              <div>
-                                <span className='text-gray-500 dark:text-gray-400'>
-                                  验证:
-                                </span>
-                                <span
-                                  className={`ml-1 font-medium ${
-                                    test.isValidJar
-                                      ? 'text-green-600 dark:text-green-400'
-                                      : 'text-red-600 dark:text-red-400'
-                                  }`}
-                                >
-                                  {test.isValidJar ? '✓ 有效JAR' : '✗ 无效'}
-                                </span>
-                              </div>
-                            )}
-                            {test.md5 && (
-                              <div className='col-span-2'>
-                                <span className='text-gray-500 dark:text-gray-400'>
-                                  MD5:
-                                </span>
-                                <span className='ml-1 font-mono text-gray-900 dark:text-white'>
-                                  {test.md5}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {test.error && (
-                            <div className='mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-xs text-red-700 dark:text-red-300'>
-                              <strong>错误:</strong> {test.error}
+                          )}
+                          {test.fileSize && (
+                            <div>
+                              <span className='text-gray-500 dark:text-gray-400'>
+                                大小:
+                              </span>
+                              <span className='ml-1 font-medium text-gray-900 dark:text-white'>
+                                {Math.round(test.fileSize / 1024)}KB
+                              </span>
+                            </div>
+                          )}
+                          {test.isValidJar !== undefined && (
+                            <div>
+                              <span className='text-gray-500 dark:text-gray-400'>
+                                验证:
+                              </span>
+                              <span
+                                className={`ml-1 font-medium ${
+                                  test.isValidJar
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-red-600 dark:text-red-400'
+                                }`}
+                              >
+                                {test.isValidJar ? '✓ 有效JAR' : '✗ 无效'}
+                              </span>
+                            </div>
+                          )}
+                          {test.md5 && (
+                            <div className='col-span-2'>
+                              <span className='text-gray-500 dark:text-gray-400'>
+                                MD5:
+                              </span>
+                              <span className='ml-1 font-mono text-gray-900 dark:text-white'>
+                                {test.md5}
+                              </span>
                             </div>
                           )}
                         </div>
-                      );
-                    },
-                  )}
+
+                        {test.error && (
+                          <div className='mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-xs text-red-700 dark:text-red-300'>
+                            <strong>错误:</strong> {test.error}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>
@@ -274,8 +272,7 @@ export function DeepDiagnosticPanel({
 
       {!deepDiagnosticResult && !deepDiagnosticLoading && (
         <p className='text-sm text-gray-500 dark:text-gray-400 text-center py-4'>
-          点击"开始诊断"进行深度 JAR 源测试（包含文件头验证和 MD5
-          校验）
+          点击"开始诊断"进行深度 JAR 源测试（包含文件头验证和 MD5 校验）
         </p>
       )}
     </div>

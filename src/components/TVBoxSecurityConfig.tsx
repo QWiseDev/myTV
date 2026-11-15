@@ -141,7 +141,7 @@ const TVBoxSecurityConfig = ({
     if (!isValidIPOrCIDR(newIP.trim())) {
       showMessage(
         'error',
-        '请输入有效的IP地址或CIDR格式 (例如: 192.168.1.100 或 192.168.1.0/24)'
+        '请输入有效的IP地址或CIDR格式 (例如: 192.168.1.100 或 192.168.1.0/24)',
       );
       return;
     }
@@ -196,7 +196,6 @@ const TVBoxSecurityConfig = ({
         diagnoseUrl += `?token=${encodeURIComponent(securitySettings.token)}`;
       }
 
-
       const response = await fetch(diagnoseUrl);
       const result = await response.json();
 
@@ -210,7 +209,7 @@ const TVBoxSecurityConfig = ({
     } catch (error) {
       showMessage(
         'error',
-        '诊断失败：' + (error instanceof Error ? error.message : '未知错误')
+        '诊断失败：' + (error instanceof Error ? error.message : '未知错误'),
       );
     } finally {
       setIsDiagnosing(false);
@@ -713,7 +712,7 @@ const TVBoxSecurityConfig = ({
                       <div className='text-xs text-gray-600 dark:text-gray-400'>
                         最后修改:{' '}
                         {new Date(
-                          diagnoseResult.spiderLastModified
+                          diagnoseResult.spiderLastModified,
                         ).toLocaleString('zh-CN')}
                       </div>
                     )}
@@ -749,7 +748,7 @@ const TVBoxSecurityConfig = ({
                           <div>
                             • 真实大小:{' '}
                             {Math.round(
-                              (diagnoseResult as any).spider_real_size / 1024
+                              (diagnoseResult as any).spider_real_size / 1024,
                             )}
                             KB
                           </div>

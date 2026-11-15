@@ -35,7 +35,7 @@ export async function POST(request: Request) {
           url: webhookUrl,
           allowed_updates: ['message'],
         }),
-      }
+      },
     );
 
     const result = await response.json();
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     } else {
       return NextResponse.json(
         { error: result.description || 'Webhook 设置失败' },
-        { status: 500 }
+        { status: 500 },
       );
     }
   } catch (error) {
@@ -70,7 +70,7 @@ export async function GET() {
 
     // 获取 webhook 信息
     const response = await fetch(
-      `https://api.telegram.org/bot${telegramConfig.botToken}/getWebhookInfo`
+      `https://api.telegram.org/bot${telegramConfig.botToken}/getWebhookInfo`,
     );
 
     const result = await response.json();

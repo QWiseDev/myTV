@@ -179,104 +179,104 @@ export default function HeroCarousel({
         {slides.map((slide, index) => {
           const info = infoByTitle[slide.title];
           return (
-          <div
-            key={slide.key}
-            aria-hidden={index !== activeIndex}
-            className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-              index === activeIndex
-                ? 'opacity-100'
-                : 'pointer-events-none opacity-0'
-            }`}
-          >
-            {/* 背景层：海报模糊放大垫底，TMDB 横图就绪后叠加清晰横图 */}
-            <Image
-              src={processImageUrl(slide.poster)}
-              alt=''
-              fill
-              priority={index === 0}
-              sizes='100vw'
-              className='scale-110 object-cover blur-2xl brightness-[0.55]'
-              aria-hidden
-            />
-            {info?.backdrop && (
+            <div
+              key={slide.key}
+              aria-hidden={index !== activeIndex}
+              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                index === activeIndex
+                  ? 'opacity-100'
+                  : 'pointer-events-none opacity-0'
+              }`}
+            >
+              {/* 背景层：海报模糊放大垫底，TMDB 横图就绪后叠加清晰横图 */}
               <Image
-                src={info.backdrop}
+                src={processImageUrl(slide.poster)}
                 alt=''
                 fill
+                priority={index === 0}
                 sizes='100vw'
-                className='animate-fade-in object-cover brightness-[0.8]'
+                className='scale-110 object-cover blur-2xl brightness-[0.55]'
                 aria-hidden
               />
-            )}
-            {/* 文案可读性遮罩 */}
-            <div
-              className='pointer-events-none absolute inset-0 bg-gradient-to-r from-black/55 via-black/15 to-transparent'
-              aria-hidden
-            />
-            {/* 前景：左侧文案 + 右侧海报卡 */}
-            <div className='relative flex h-full items-end justify-between gap-6 px-5 pb-12 sm:items-center sm:px-8 sm:pb-6 lg:px-10'>
-              <div className='max-w-[68%] text-white sm:max-w-[60%]'>
-                <div className='mb-2 flex items-center gap-2'>
-                  {slide.rate && (
-                    <span className='inline-flex items-center rounded bg-[#00be06] px-1.5 py-0.5 text-xs font-bold text-white'>
-                      {slide.rate}分
+              {info?.backdrop && (
+                <Image
+                  src={info.backdrop}
+                  alt=''
+                  fill
+                  sizes='100vw'
+                  className='animate-fade-in object-cover brightness-[0.8]'
+                  aria-hidden
+                />
+              )}
+              {/* 文案可读性遮罩 */}
+              <div
+                className='pointer-events-none absolute inset-0 bg-gradient-to-r from-black/55 via-black/15 to-transparent'
+                aria-hidden
+              />
+              {/* 前景：左侧文案 + 右侧海报卡 */}
+              <div className='relative flex h-full items-end justify-between gap-6 px-5 pb-12 sm:items-center sm:px-8 sm:pb-6 lg:px-10'>
+                <div className='max-w-[68%] text-white sm:max-w-[60%]'>
+                  <div className='mb-2 flex items-center gap-2'>
+                    {slide.rate && (
+                      <span className='inline-flex items-center rounded bg-[#00be06] px-1.5 py-0.5 text-xs font-bold text-white'>
+                        {slide.rate}分
+                      </span>
+                    )}
+                    <span className='rounded border border-white/40 px-1.5 py-0.5 text-xs text-white/90'>
+                      {slide.kind === 'continue' ? '继续观看' : '电影'}
                     </span>
+                  </div>
+                  <h2 className='line-clamp-2 text-xl font-bold sm:text-2xl lg:text-3xl'>
+                    {slide.title}
+                  </h2>
+                  <p className='mt-2 line-clamp-1 text-xs text-white/70 sm:text-sm'>
+                    {slide.kind === 'continue'
+                      ? slide.episodeLabel || '从上次的地方继续'
+                      : [
+                          slide.year,
+                          info?.genres?.length
+                            ? info.genres.slice(0, 2).join(' / ')
+                            : '电影',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                  </p>
+                  {info?.overview && (
+                    <p className='mt-2 hidden line-clamp-2 text-xs leading-relaxed text-white/75 sm:block sm:text-sm'>
+                      {info.overview}
+                    </p>
                   )}
-                  <span className='rounded border border-white/40 px-1.5 py-0.5 text-xs text-white/90'>
-                    {slide.kind === 'continue' ? '继续观看' : '电影'}
-                  </span>
-                </div>
-                <h2 className='line-clamp-2 text-xl font-bold sm:text-2xl lg:text-3xl'>
-                  {slide.title}
-                </h2>
-                <p className='mt-2 line-clamp-1 text-xs text-white/70 sm:text-sm'>
-                  {slide.kind === 'continue'
-                    ? (slide.episodeLabel || '从上次的地方继续')
-                    : [
-                        slide.year,
-                        info?.genres?.length
-                          ? info.genres.slice(0, 2).join(' / ')
-                          : '电影',
+                  {((info?.cast?.length ?? 0) > 0 || info?.director) && (
+                    <p className='mt-2 hidden line-clamp-1 text-xs text-white/60 lg:block'>
+                      {[
+                        info?.director ? `导演：${info.director}` : '',
+                        info?.cast?.length
+                          ? `主演：${info.cast.slice(0, 3).join(' / ')}`
+                          : '',
                       ]
                         .filter(Boolean)
-                        .join(' · ')}
-                </p>
-                {info?.overview && (
-                  <p className='mt-2 hidden line-clamp-2 text-xs leading-relaxed text-white/75 sm:block sm:text-sm'>
-                    {info.overview}
-                  </p>
-                )}
-                {((info?.cast?.length ?? 0) > 0 || info?.director) && (
-                  <p className='mt-2 hidden line-clamp-1 text-xs text-white/60 lg:block'>
-                    {[
-                      info?.director ? `导演：${info.director}` : '',
-                      info?.cast?.length
-                        ? `主演：${info.cast.slice(0, 3).join(' / ')}`
-                        : '',
-                    ]
-                      .filter(Boolean)
-                      .join('　')}
-                  </p>
-                )}
-                <Link
-                  href={slide.href}
-                  className='mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#00be06] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] sm:mt-4 sm:px-5'
-                >
-                  <Play size={16} className='fill-current' />
-                  {slide.kind === 'continue' ? '继续播放' : '立即播放'}
-                </Link>
-              </div>
-              <div className='relative hidden aspect-[2/3] w-[150px] shrink-0 overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/20 sm:block lg:w-[180px]'>
-                <Image
-                  src={processImageUrl(slide.poster)}
-                  alt={slide.title}
-                  fill
-                  sizes='180px'
-                  className='object-cover'
-                />
+                        .join('　')}
+                    </p>
+                  )}
+                  <Link
+                    href={slide.href}
+                    className='mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#00be06] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] sm:mt-4 sm:px-5'
+                  >
+                    <Play size={16} className='fill-current' />
+                    {slide.kind === 'continue' ? '继续播放' : '立即播放'}
+                  </Link>
+                </div>
+                <div className='relative hidden aspect-[2/3] w-[150px] shrink-0 overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/20 sm:block lg:w-[180px]'>
+                  <Image
+                    src={processImageUrl(slide.poster)}
+                    alt={slide.title}
+                    fill
+                    sizes='180px'
+                    className='object-cover'
+                  />
+                </div>
               </div>
             </div>
-          </div>
           );
         })}
 
@@ -288,8 +288,7 @@ export default function HeroCarousel({
               aria-label='上一张'
               onClick={() =>
                 setActiveIndex(
-                  (current) =>
-                    (current - 1 + slides.length) % slides.length,
+                  (current) => (current - 1 + slides.length) % slides.length,
                 )
               }
               className='absolute left-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white opacity-0 backdrop-blur transition-opacity duration-300 hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100 sm:flex'

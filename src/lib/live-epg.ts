@@ -14,7 +14,7 @@ import { parseCustomTimeFormat } from '@/lib/time';
  * @returns 清洗后的节目单数组
  */
 export function cleanEpgData(
-  programs: Array<{ start: string; end: string; title: string }>
+  programs: Array<{ start: string; end: string; title: string }>,
 ) {
   if (!programs || programs.length === 0) return programs;
 
@@ -23,12 +23,12 @@ export function cleanEpgData(
   const todayStart = new Date(
     today.getFullYear(),
     today.getMonth(),
-    today.getDate()
+    today.getDate(),
   );
   const todayEnd = new Date(
     today.getFullYear(),
     today.getMonth(),
-    today.getDate() + 1
+    today.getDate() + 1,
   );
 
   // 首先过滤出今日的节目（包括跨天节目）
@@ -40,12 +40,12 @@ export function cleanEpgData(
     const programStartDate = new Date(
       programStart.getFullYear(),
       programStart.getMonth(),
-      programStart.getDate()
+      programStart.getDate(),
     );
     const programEndDate = new Date(
       programEnd.getFullYear(),
       programEnd.getMonth(),
-      programEnd.getDate()
+      programEnd.getDate(),
     );
 
     // 如果节目的开始时间或结束时间在今天，或者节目跨越今天，都算作今天的节目

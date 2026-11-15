@@ -246,7 +246,7 @@ declare module 'artplayer-plugin-danmuku' {
   }
 
   export default function artplayerPluginDanmuku(
-    options: DanmakuOptions
+    options: DanmakuOptions,
   ): (art: Artplayer) => DanmakuPlugin;
 }
 

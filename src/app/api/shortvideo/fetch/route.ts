@@ -193,7 +193,7 @@ async function fetchVideoFromApi(apiUrl: string) {
               Pragma: 'no-cache',
               Expires: '0',
             },
-          }
+          },
         );
       } else {
         if (attempts >= maxAttempts) {
@@ -239,7 +239,7 @@ export async function GET() {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
-      }
+      },
     );
   }
 }
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
           error: '请求格式错误',
           message: '请求体不是有效的JSON格式',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
     if (!apiUrl) {
       return NextResponse.json(
         { success: false, error: '缺少API URL参数' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -294,7 +294,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
-      }
+      },
     );
   }
 }

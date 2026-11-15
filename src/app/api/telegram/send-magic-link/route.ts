@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     if (!telegramUsername || typeof telegramUsername !== 'string') {
       return NextResponse.json(
         { error: '请提供有效的 Telegram 用户名' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     if (!telegramConfig?.enabled) {
       return NextResponse.json(
         { error: 'Telegram 登录未启用' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     try {
       const webhookUrl = `${baseUrl}/api/telegram/webhook`;
       const infoResponse = await fetch(
-        `https://api.telegram.org/bot${telegramConfig.botToken}/getWebhookInfo`
+        `https://api.telegram.org/bot${telegramConfig.botToken}/getWebhookInfo`,
       );
       const info = await infoResponse.json();
 
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
               url: webhookUrl,
               allowed_updates: ['message'],
             }),
-          }
+          },
         );
       }
     } catch (error) {
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     console.error('Magic link send error:', error);
     return NextResponse.json(
       { error: '服务器错误，请稍后重试' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

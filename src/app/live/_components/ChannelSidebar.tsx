@@ -147,8 +147,7 @@ export function ChannelSidebar({
                 >
                   {filteredChannels.length > 0 ? (
                     filteredChannels.map((channel) => {
-                      const isActive =
-                        channel.id === currentChannel?.id;
+                      const isActive = channel.id === currentChannel?.id;
                       return (
                         <button
                           key={channel.id}
@@ -159,8 +158,8 @@ export function ChannelSidebar({
                             isSwitchingSource
                               ? 'opacity-50 cursor-not-allowed'
                               : isActive
-                              ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                              : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                           }`}
                         >
                           <div className='flex items-center gap-3'>
@@ -168,10 +167,8 @@ export function ChannelSidebar({
                               {channel.logo ? (
                                 <img
                                   src={`/api/proxy/logo?url=${encodeURIComponent(
-                                    channel.logo
-                                  )}&source=${
-                                    currentSource?.key || ''
-                                  }`}
+                                    channel.logo,
+                                  )}&source=${currentSource?.key || ''}`}
                                   alt={channel.name}
                                   className='w-full h-full rounded object-contain'
                                   loading='lazy'
@@ -242,8 +239,8 @@ export function ChannelSidebar({
                           isSwitchingSource
                             ? 'opacity-50 cursor-not-allowed'
                             : isActive
-                            ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                              ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                              : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`}
                       >
                         <div className='flex items-center gap-3'>
@@ -251,7 +248,7 @@ export function ChannelSidebar({
                             {channel.logo ? (
                               <img
                                 src={`/api/proxy/logo?url=${encodeURIComponent(
-                                  channel.logo
+                                  channel.logo,
                                 )}&source=${currentSource?.key || ''}`}
                                 alt={channel.name}
                                 className='w-full h-full rounded object-contain'
@@ -270,11 +267,11 @@ export function ChannelSidebar({
                                       new RegExp(
                                         `(${searchQuery.replace(
                                           /[.*+?^${}()|[\]\\]/g,
-                                          '\\$&'
+                                          '\\$&',
                                         )})`,
-                                        'gi'
+                                        'gi',
                                       ),
-                                      '<mark class="bg-yellow-200 dark:bg-yellow-800 px-0.5 rounded">$1</mark>'
+                                      '<mark class="bg-yellow-200 dark:bg-yellow-800 px-0.5 rounded">$1</mark>',
                                     )
                                   : channel.name,
                               }}
@@ -296,8 +293,7 @@ export function ChannelSidebar({
                       未找到匹配的频道
                     </p>
                     <p className='text-sm text-gray-400 dark:text-gray-500 mt-1'>
-                      在当前直播源 "{currentSource?.name}"
-                      中未找到匹配结果
+                      在当前直播源 "{currentSource?.name}" 中未找到匹配结果
                     </p>
                   </div>
                 )}
@@ -370,14 +366,11 @@ export function ChannelSidebar({
             <div className='flex-1 overflow-y-auto space-y-2 pb-20'>
               {liveSources.length > 0 ? (
                 liveSources.map((source) => {
-                  const isCurrentSource =
-                    source.key === currentSource?.key;
+                  const isCurrentSource = source.key === currentSource?.key;
                   return (
                     <div
                       key={source.key}
-                      onClick={() =>
-                        !isCurrentSource && onSourceChange(source)
-                      }
+                      onClick={() => !isCurrentSource && onSourceChange(source)}
                       className={`flex items-start gap-3 px-2 py-3 rounded-lg transition-all select-none duration-200 relative
                         ${
                           isCurrentSource
@@ -396,8 +389,7 @@ export function ChannelSidebar({
                           {source.name}
                         </div>
                         <div className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
-                          {!source.channelNumber ||
-                          source.channelNumber === 0
+                          {!source.channelNumber || source.channelNumber === 0
                             ? '-'
                             : `${source.channelNumber} 个频道`}
                         </div>

@@ -317,8 +317,8 @@ function RegisterPageClient() {
             {loading
               ? '注册中...'
               : success
-              ? '注册成功，正在跳转...'
-              : '立即注册'}
+                ? '注册成功，正在跳转...'
+                : '立即注册'}
           </button>
 
           <div className='pt-5 border-t border-[#2e2e2e]'>

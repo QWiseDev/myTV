@@ -80,7 +80,8 @@ export function UserListTable({
                   (user) =>
                     role === 'owner' ||
                     (role === 'admin' &&
-                      (user.role === 'user' || user.username === currentUsername))
+                      (user.role === 'user' ||
+                        user.username === currentUsername)),
                 );
 
                 return hasAnyPermission ? (
@@ -204,15 +205,15 @@ export function UserListTable({
                           user.role === 'owner'
                             ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'
                             : user.role === 'admin'
-                            ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                              ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                         }`}
                       >
                         {user.role === 'owner'
                           ? '站长'
                           : user.role === 'admin'
-                          ? '管理员'
-                          : '普通用户'}
+                            ? '管理员'
+                            : '普通用户'}
                       </span>
                     </td>
                     <td className='px-6 py-4 whitespace-nowrap'>
@@ -316,11 +317,9 @@ export function UserListTable({
                             <button
                               onClick={() => onRemoveAdmin(user.username)}
                               disabled={isLoading(
-                                `removeAdmin_${user.username}`
+                                `removeAdmin_${user.username}`,
                               )}
-                              className={`${
-                                buttonStyles.roundedSecondary
-                              } ${
+                              className={`${buttonStyles.roundedSecondary} ${
                                 isLoading(`removeAdmin_${user.username}`)
                                   ? 'opacity-50 cursor-not-allowed'
                                   : ''
@@ -346,11 +345,9 @@ export function UserListTable({
                               <button
                                 onClick={() => onUnbanUser(user.username)}
                                 disabled={isLoading(
-                                  `unbanUser_${user.username}`
+                                  `unbanUser_${user.username}`,
                                 )}
-                                className={`${
-                                  buttonStyles.roundedSuccess
-                                } ${
+                                className={`${buttonStyles.roundedSuccess} ${
                                   isLoading(`unbanUser_${user.username}`)
                                     ? 'opacity-50 cursor-not-allowed'
                                     : ''

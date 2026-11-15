@@ -5,7 +5,10 @@ interface BackToTopButtonProps {
   onClick: () => void;
 }
 
-export default function BackToTopButton({ show, onClick }: BackToTopButtonProps) {
+export default function BackToTopButton({
+  show,
+  onClick,
+}: BackToTopButtonProps) {
   return (
     <button
       onClick={onClick}

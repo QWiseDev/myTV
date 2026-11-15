@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -46,9 +46,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   {
     auth: {
-      persistSession: false
-    }
-  }
+      persistSession: false,
+    },
+  },
 );
 
 async function migrateAdminConfig() {
@@ -73,7 +73,9 @@ async function migrateAdminConfig() {
       }
     }
 
-    console.log(`✓ 找到配置，包含 ${configData.SourceConfig?.length || 0} 个源`);
+    console.log(
+      `✓ 找到配置，包含 ${configData.SourceConfig?.length || 0} 个源`,
+    );
 
     console.log('\n=== 写入 Supabase admin_config 表 ===\n');
 
@@ -81,7 +83,7 @@ async function migrateAdminConfig() {
       .from('admin_config')
       .upsert(
         { id: '00000000-0000-0000-0000-000000000001', config: configData },
-        { onConflict: 'id' }
+        { onConflict: 'id' },
       );
 
     if (error) {
@@ -104,23 +106,31 @@ async function migrateAdminConfig() {
       process.exit(1);
     }
 
-    const verifyConfig: any = typeof verifyData.config === 'string'
-      ? JSON.parse(verifyData.config)
-      : verifyData.config;
+    const verifyConfig: any =
+      typeof verifyData.config === 'string'
+        ? JSON.parse(verifyData.config)
+        : verifyData.config;
 
     console.log('✓ 验证成功');
-    console.log(`  SourceConfig 数量: ${verifyConfig.SourceConfig?.length || 0}`);
-    console.log(`  CustomCategories 数量: ${verifyConfig.CustomCategories?.length || 0}`);
+    console.log(
+      `  SourceConfig 数量: ${verifyConfig.SourceConfig?.length || 0}`,
+    );
+    console.log(
+      `  CustomCategories 数量: ${verifyConfig.CustomCategories?.length || 0}`,
+    );
     console.log(`  LiveConfig 数量: ${verifyConfig.LiveConfig?.length || 0}`);
-    console.log(`  UserConfig.Users 数量: ${verifyConfig.UserConfig?.Users?.length || 0}`);
+    console.log(
+      `  UserConfig.Users 数量: ${verifyConfig.UserConfig?.Users?.length || 0}`,
+    );
 
     if (verifyConfig.SourceConfig && verifyConfig.SourceConfig.length > 0) {
       console.log('\n前 5 个源:');
-      verifyConfig.SourceConfig.slice(0, 5).forEach((site: any, index: number) => {
-        console.log(`  [${index}] ${site.key} - ${site.name}`);
-      });
+      verifyConfig.SourceConfig.slice(0, 5).forEach(
+        (site: any, index: number) => {
+          console.log(`  [${index}] ${site.key} - ${site.name}`);
+        },
+      );
     }
-
   } catch (e) {
     console.error('迁移失败:', e);
     process.exit(1);

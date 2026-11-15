@@ -22,7 +22,11 @@ const requestCache = new Map<string, CacheEntry>();
 const pendingRequests = new Map<string, Promise<SearchResult>>();
 
 // 生成缓存键
-function generateCacheKey(source: string, id: string, fallbackTitle: string): string {
+function generateCacheKey(
+  source: string,
+  id: string,
+  fallbackTitle: string,
+): string {
   return `${source}:${id}:${fallbackTitle}`;
 }
 
@@ -55,7 +59,7 @@ function enforceMaxCacheSize(): void {
 function getFromCache(
   source: string,
   id: string,
-  fallbackTitle: string
+  fallbackTitle: string,
 ): SearchResult | null {
   cleanupExpiredCache();
 
@@ -78,7 +82,7 @@ function saveToCache(
   source: string,
   id: string,
   fallbackTitle: string,
-  data: SearchResult
+  data: SearchResult,
 ): void {
   const cacheKey = generateCacheKey(source, id, fallbackTitle);
   requestCache.set(cacheKey, {
@@ -131,7 +135,7 @@ export async function fetchVideoDetail({
           const exactMatch = searchData.find(
             (item: SearchResult) =>
               item.source.toString() === source.toString() &&
-              item.id.toString() === id.toString()
+              item.id.toString() === id.toString(),
           );
           if (exactMatch) {
             result = exactMatch;

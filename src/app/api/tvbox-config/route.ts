@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     // 🔑 获取当前用户的专属配置
     const currentUser = config.UserConfig.Users.find(
-      (u) => u.username === authInfo.username
+      (u) => u.username === authInfo.username,
     );
     const userTvboxToken = currentUser?.tvboxToken || '';
     const userEnabledSources = currentUser?.tvboxEnabledSources || [];
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     console.error('获取 TVBox 配置失败:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

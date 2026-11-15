@@ -71,7 +71,7 @@ export function useLiveSources({
   // 频道相关
   const [currentChannels, setCurrentChannels] = useState<LiveChannel[]>([]);
   const [currentChannel, setCurrentChannel] = useState<LiveChannel | null>(
-    null
+    null,
   );
   const currentChannelRef = useRef<LiveChannel | null>(null);
   useEffect(() => {
@@ -121,7 +121,6 @@ export function useLiveSources({
 
     setIsRefreshingSource(true);
     try {
-
       // 调用后端刷新API
       const response = await fetch('/api/admin/live/refresh', {
         method: 'POST',
@@ -138,7 +137,6 @@ export function useLiveSources({
       if (!result.success) {
         throw new Error(result.error || '刷新直播源失败');
       }
-
 
       // 重新获取直播源列表
       await fetchLiveSources();
@@ -175,7 +173,7 @@ export function useLiveSources({
         const firstSource = sources[0];
         if (needLoadSource) {
           const foundSource = sources.find(
-            (s: LiveSource) => s.key === needLoadSource
+            (s: LiveSource) => s.key === needLoadSource,
           );
           if (foundSource) {
             setCurrentSource(foundSource);
@@ -241,8 +239,8 @@ export function useLiveSources({
         // 更新直播源的频道数为 0
         setLiveSources((prevSources) =>
           prevSources.map((s) =>
-            s.key === source.key ? { ...s, channelNumber: 0 } : s
-          )
+            s.key === source.key ? { ...s, channelNumber: 0 } : s,
+          ),
         );
 
         setIsVideoLoading(false);
@@ -264,8 +262,8 @@ export function useLiveSources({
       // 更新直播源的频道数
       setLiveSources((prevSources) =>
         prevSources.map((s) =>
-          s.key === source.key ? { ...s, channelNumber: channels.length } : s
-        )
+          s.key === source.key ? { ...s, channelNumber: channels.length } : s,
+        ),
       );
 
       // 默认选中第一个频道
@@ -273,7 +271,7 @@ export function useLiveSources({
       if (channels.length > 0) {
         if (needLoadChannel) {
           const foundChannel = channels.find(
-            (c: LiveChannel) => c.id === needLoadChannel
+            (c: LiveChannel) => c.id === needLoadChannel,
           );
           if (foundChannel) {
             selectedChannel = foundChannel;
@@ -296,14 +294,17 @@ export function useLiveSources({
       }
 
       // 按分组组织频道
-      const grouped = channels.reduce((acc, channel) => {
-        const group = channel.group || '其他';
-        if (!acc[group]) {
-          acc[group] = [];
-        }
-        acc[group].push(channel);
-        return acc;
-      }, {} as { [key: string]: LiveChannel[] });
+      const grouped = channels.reduce(
+        (acc, channel) => {
+          const group = channel.group || '其他';
+          if (!acc[group]) {
+            acc[group] = [];
+          }
+          acc[group].push(channel);
+          return acc;
+        },
+        {} as { [key: string]: LiveChannel[] },
+      );
 
       setGroupedChannels(grouped);
 
@@ -311,7 +312,7 @@ export function useLiveSources({
       let targetGroup = '';
       if (needLoadChannel) {
         const foundChannel = channels.find(
-          (c: LiveChannel) => c.id === needLoadChannel
+          (c: LiveChannel) => c.id === needLoadChannel,
         );
         if (foundChannel) {
           targetGroup = foundChannel.group || '其他';
@@ -342,7 +343,7 @@ export function useLiveSources({
         try {
           setIsEpgLoading(true);
           const epgResponse = await fetch(
-            `/api/live/epg?source=${source.key}&tvgId=${selectedChannel.tvgId}`
+            `/api/live/epg?source=${source.key}&tvgId=${selectedChannel.tvgId}`,
           );
           if (epgResponse.ok) {
             const epgResult = await epgResponse.json();
@@ -377,8 +378,8 @@ export function useLiveSources({
       // 更新直播源的频道数为 0
       setLiveSources((prevSources) =>
         prevSources.map((s) =>
-          s.key === source.key ? { ...s, channelNumber: 0 } : s
-        )
+          s.key === source.key ? { ...s, channelNumber: 0 } : s,
+        ),
       );
 
       setIsVideoLoading(false);

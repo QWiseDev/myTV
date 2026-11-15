@@ -25,11 +25,15 @@ export async function GET(_request: NextRequest) {
     }
 
     console.error(`[API-FORCE] LiveConfig 存在: ${!!config.LiveConfig}`);
-    console.error(`[API-FORCE] LiveConfig 长度: ${config.LiveConfig?.length || 0}`);
+    console.error(
+      `[API-FORCE] LiveConfig 长度: ${config.LiveConfig?.length || 0}`,
+    );
 
     if (config.LiveConfig && config.LiveConfig.length > 0) {
       config.LiveConfig.forEach((source, index) => {
-        console.error(`[API-FORCE] [${index}] ${source.name} (${source.key}) - disabled: ${source.disabled}`);
+        console.error(
+          `[API-FORCE] [${index}] ${source.name} (${source.key}) - disabled: ${source.disabled}`,
+        );
       });
     }
 
@@ -44,9 +48,7 @@ export async function GET(_request: NextRequest) {
       });
     }
 
-    const liveSources = config.LiveConfig.filter(
-      (source) => !source.disabled
-    );
+    const liveSources = config.LiveConfig.filter((source) => !source.disabled);
 
     console.error(`[API-FORCE] 过滤后得到 ${liveSources.length} 个可用直播源`);
 
@@ -59,19 +61,20 @@ export async function GET(_request: NextRequest) {
         filtered: liveSources.length,
       },
       forced: true,
-      message: '强制刷新数据'
+      message: '强制刷新数据',
     };
 
     console.error('[API-FORCE] 返回响应:', JSON.stringify(response, null, 2));
 
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control':
+          'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
+        Pragma: 'no-cache',
+        Expires: '0',
         'Surrogate-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        'Vary': '*',
-        'ETag': `"force-refresh-${Date.now()}-${Math.random()}"`,
+        Vary: '*',
+        ETag: `"force-refresh-${Date.now()}-${Math.random()}"`,
       },
     });
   } catch (error) {

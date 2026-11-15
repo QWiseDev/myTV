@@ -5,7 +5,7 @@ import * as fs from 'fs';
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -85,7 +85,9 @@ async function checkUserConfig() {
     console.log(`    禁用: ${targetUser.banned ? '是' : '否'}`);
     if (targetUser.enabledApis) {
       console.log(`    启用的 API 数量: ${targetUser.enabledApis.length}`);
-      console.log(`    启用的 API: ${targetUser.enabledApis.slice(0, 5).join(', ')}${targetUser.enabledApis.length > 5 ? '...' : ''}`);
+      console.log(
+        `    启用的 API: ${targetUser.enabledApis.slice(0, 5).join(', ')}${targetUser.enabledApis.length > 5 ? '...' : ''}`,
+      );
     }
   }
 }

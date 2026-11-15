@@ -30,11 +30,13 @@ import { useDanmakuManagerV2 as useDanmakuManager } from './hooks/useDanmakuMana
 打开 Chrome DevTools → Performance，录制播放过程：
 
 **旧版本**:
+
 - 内存: ~80MB
 - FPS: ~35fps
 - 加载时间: ~1.5s
 
 **新版本**:
+
 - 内存: ~45MB ⬇️ 44%
 - FPS: ~58fps ⬆️ 66%
 - 加载时间: ~0.6s ⬇️ 60%
@@ -87,11 +89,11 @@ const manager = new DanmakuManager({
   container,
   config: {
     enabled: true,
-    opacity: 0.8,        // 透明度
-    fontSize: 30,        // 字体大小
-    speed: 120,          // 滚动速度
-    unlimited: false,    // 是否无限制
-    maxOnScreen: 100,    // 最大同屏数量
+    opacity: 0.8, // 透明度
+    fontSize: 30, // 字体大小
+    speed: 120, // 滚动速度
+    unlimited: false, // 是否无限制
+    maxOnScreen: 100, // 最大同屏数量
   },
 });
 ```
@@ -111,12 +113,14 @@ manager.updateConfig({
 ### Q: 弹幕不显示？
 
 **检查清单**:
+
 1. ✅ 容器是否正确？
 2. ✅ `enabled: true`？
 3. ✅ 弹幕数据是否加载成功？
 4. ✅ 浏览器控制台有错误吗？
 
 **解决方案**:
+
 ```typescript
 // 检查弹幕数量
 console.log('弹幕数量:', manager.getCount());
@@ -128,10 +132,11 @@ console.log('配置:', manager.getConfig());
 ### Q: 性能不好？
 
 **优化建议**:
+
 ```typescript
 manager.updateConfig({
-  maxOnScreen: 30,      // 减少同屏数量
-  unlimited: false,     // 关闭无限制模式
+  maxOnScreen: 30, // 减少同屏数量
+  unlimited: false, // 关闭无限制模式
 });
 ```
 

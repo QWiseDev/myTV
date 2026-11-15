@@ -7,8 +7,8 @@ import { analytics } from '@/lib/analytics';
 interface ClarityTrackerProps {
   projectId?: string;
   enable?: boolean;
-  accountName?: string;    // 用户账号名（优先使用作为userId）
-  displayName?: string;    // 显示名称（如果不提供则使用accountName）
+  accountName?: string; // 用户账号名（优先使用作为userId）
+  displayName?: string; // 显示名称（如果不提供则使用accountName）
   email?: string;
   sessionType?: 'guest' | 'registered' | 'premium';
   customTags?: Record<string, string>;
@@ -21,7 +21,7 @@ export function ClarityTracker({
   displayName,
   email,
   sessionType,
-  customTags
+  customTags,
 }: ClarityTrackerProps) {
   useEffect(() => {
     // 只在客户端和启用时运行
@@ -65,7 +65,6 @@ export function ClarityTracker({
 
         // 增加延迟时间，确保不影响其他动态模块
         setTimeout(initAnalytics, 1000);
-
       } catch (error) {
         console.error('[Clarity] Failed to initialize:', error);
       }
@@ -81,7 +80,15 @@ export function ClarityTracker({
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：setClarityUserIdentifier 为每渲染重建的普通函数，加入依赖会导致 Clarity 初始化 effect 每渲染重复执行
-  }, [projectId, enable, accountName, displayName, email, sessionType, customTags]);
+  }, [
+    projectId,
+    enable,
+    accountName,
+    displayName,
+    email,
+    sessionType,
+    customTags,
+  ]);
 
   // 设置 Clarity 用户识别信息的函数
   const setClarityUserIdentifier = () => {
@@ -107,8 +114,12 @@ export function ClarityTracker({
       }
 
       // 设置用户角色
-      const userRole = sessionType === 'premium' ? 'premium' :
-                      sessionType === 'registered' ? 'registered' : 'guest';
+      const userRole =
+        sessionType === 'premium'
+          ? 'premium'
+          : sessionType === 'registered'
+            ? 'registered'
+            : 'guest';
       window.clarity?.('set', 'userRole', userRole);
 
       // 设置自定义标签
@@ -124,8 +135,6 @@ export function ClarityTracker({
         const emailUser = email.split('@')[0];
         window.clarity?.('set', 'emailDomain', emailUser);
       }
-
-
     } catch (error) {
       console.error('[Clarity] Failed to set user identifier:', error);
     }

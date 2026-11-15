@@ -27,7 +27,7 @@ const DEFAULT_USER_GROUP = (
 // 生成签名
 async function generateSignature(
   data: string,
-  secret: string
+  secret: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -39,7 +39,7 @@ async function generateSignature(
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   // 生成签名
@@ -56,7 +56,7 @@ async function generateAuthCookie(
   username?: string,
   password?: string,
   role?: 'owner' | 'admin' | 'user',
-  includePassword = false
+  includePassword = false,
 ): Promise<string> {
   const authData: any = { role: role || 'user' };
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   const registerGate = consumeRateLimit(
     `register:${getClientIp(req)}`,
     5,
-    60 * 60 * 1000
+    60 * 60 * 1000,
   );
   if (!registerGate.allowed) {
     return NextResponse.json(
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       {
         status: 429,
         headers: { 'Retry-After': String(registerGate.retryAfterSeconds) },
-      }
+      },
     );
   }
 
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     if (STORAGE_TYPE === 'localstorage') {
       return NextResponse.json(
         { error: 'localStorage 模式不支持用户注册' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -112,14 +112,14 @@ export async function POST(req: NextRequest) {
       if (!allowRegister) {
         return NextResponse.json(
           { error: '管理员已关闭用户注册功能' },
-          { status: 403 }
+          { status: 403 },
         );
       }
     } catch (err) {
       console.error('检查注册配置失败', err);
       return NextResponse.json(
         { error: '注册失败，请稍后重试' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     if (password !== confirmPassword) {
       return NextResponse.json(
         { error: '两次输入的密码不一致' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
       return NextResponse.json(
         { error: '用户名只能包含字母、数字和下划线，长度3-20位' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
       if (userExists) {
         return NextResponse.json(
           { error: '该用户名已被注册' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
         }
 
         const defaultGroupExists = config.UserConfig.Tags.some(
-          (tag) => tag.name === DEFAULT_USER_GROUP
+          (tag) => tag.name === DEFAULT_USER_GROUP,
         );
 
         if (!defaultGroupExists) {
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
         username,
         password,
         'user',
-        false
+        false,
       );
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
       console.error('注册用户失败', err);
       return NextResponse.json(
         { error: '注册失败，请稍后重试' },
-        { status: 500 }
+        { status: 500 },
       );
     }
   } catch (error) {

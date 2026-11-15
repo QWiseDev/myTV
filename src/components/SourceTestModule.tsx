@@ -26,7 +26,6 @@ import { PlayTestStatus, usePlayTester } from '@/hooks/usePlayTester';
 import { PlayTesterDrawer } from '@/components/PlayTesterDrawer';
 import VideoCard from '@/components/VideoCard';
 
-
 type SortKey =
   | 'status'
   | 'responseTime'
@@ -40,7 +39,7 @@ export default function SourceTestModule() {
   const [sources, setSources] = useState<ApiSite[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('斗罗大陆');
   const [testResults, setTestResults] = useState<Map<string, SourceTestResult>>(
-    new Map()
+    new Map(),
   );
   const [isTestingAll, setIsTestingAll] = useState(false);
   const [selectedResults, setSelectedResults] = useState<SearchResult[]>([]);
@@ -98,8 +97,8 @@ export default function SourceTestModule() {
             status: 'testing',
             results: [],
             disabled: source.disabled,
-          })
-        )
+          }),
+        ),
     );
 
     const result = await testSource(sourceKey, searchKeyword);
@@ -143,8 +142,8 @@ export default function SourceTestModule() {
               // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- 不变式：source.key 已在上方 initialResults 中预置，get 必然命中
               ...prev.get(source.key)!,
               status: 'testing',
-            })
-          )
+            }),
+          ),
       );
 
       const result = await testSource(source.key, searchKeyword);
@@ -165,9 +164,9 @@ export default function SourceTestModule() {
       // 确保测试结果已更新
       const currentResults = Array.from(testResults.entries());
       const successfulResults = currentResults.filter(
-        ([, result]) => result.status === 'success' && result.results.length > 0
+        ([, result]) =>
+          result.status === 'success' && result.results.length > 0,
       );
-
 
       if (autoPlayTest && successfulResults.length > 0) {
         // 确保在下一个事件循环中执行，避免状态更新冲突
@@ -180,7 +179,6 @@ export default function SourceTestModule() {
 
   // 自动测试视频播放功能
   const handleAutoTestVideos = async (showAlert = true) => {
-
     if (!searchKeyword.trim()) {
       if (showAlert) alert('请输入搜索关键词');
       return;
@@ -197,13 +195,12 @@ export default function SourceTestModule() {
     try {
       // 对所有成功的源进行视频测试
       const successfulResults = Array.from(testResults.entries()).filter(
-        ([, result]) => result.status === 'success' && result.results.length > 0
+        ([, result]) =>
+          result.status === 'success' && result.results.length > 0,
       );
-
 
       for (const [sourceKey, result] of successfulResults) {
         try {
-
           // 更新状态为测试中
           updatePlayStatus(sourceKey, {
             status: 'testing',
@@ -214,9 +211,8 @@ export default function SourceTestModule() {
           const videoTestResult = await autoTestVideoPlayback(
             sourceKey,
             result.sourceName,
-            result.results
+            result.results,
           );
-
 
           // 更新测试状态
           updatePlayStatus(sourceKey, {
@@ -234,13 +230,13 @@ export default function SourceTestModule() {
           });
         }
       }
-
     } catch (error) {
       console.error('自动视频测试过程中发生错误:', error);
     } finally {
       setIsAutoTestingVideos(false);
       const finalSuccessfulResults = Array.from(testResults.entries()).filter(
-        ([, result]) => result.status === 'success' && result.results.length > 0
+        ([, result]) =>
+          result.status === 'success' && result.results.length > 0,
       );
 
       if (showAlert) {
@@ -309,8 +305,8 @@ export default function SourceTestModule() {
       // 本地更新状态
       setSources((prev) =>
         prev.map((s) =>
-          s.key === source.key ? { ...s, disabled: !s.disabled } : s
-        )
+          s.key === source.key ? { ...s, disabled: !s.disabled } : s,
+        ),
       );
       setTestResults(
         (prev) =>
@@ -323,8 +319,8 @@ export default function SourceTestModule() {
                 results: [],
               }),
               disabled: !source.disabled,
-            })
-          )
+            }),
+          ),
       );
     } catch (e) {
       alert(e instanceof Error ? e.message || '操作失败' : '操作失败');
@@ -339,30 +335,30 @@ export default function SourceTestModule() {
 
     const enabledTotal = enabledResults.length;
     const enabledSuccess = enabledResults.filter(
-      (r) => r.status === 'success'
+      (r) => r.status === 'success',
     ).length;
     const enabledError = enabledResults.filter(
-      (r) => r.status === 'error'
+      (r) => r.status === 'error',
     ).length;
     const enabledTimeout = enabledResults.filter(
-      (r) => r.status === 'timeout'
+      (r) => r.status === 'timeout',
     ).length;
     const enabledTesting = enabledResults.filter(
-      (r) => r.status === 'testing'
+      (r) => r.status === 'testing',
     ).length;
 
     const disabledTotal = disabledResults.length;
     const disabledSuccess = disabledResults.filter(
-      (r) => r.status === 'success'
+      (r) => r.status === 'success',
     ).length;
     const disabledError = disabledResults.filter(
-      (r) => r.status === 'error'
+      (r) => r.status === 'error',
     ).length;
     const disabledTimeout = disabledResults.filter(
-      (r) => r.status === 'timeout'
+      (r) => r.status === 'timeout',
     ).length;
     const disabledTesting = disabledResults.filter(
-      (r) => r.status === 'testing'
+      (r) => r.status === 'testing',
     ).length;
 
     const total = results.length;
@@ -373,10 +369,12 @@ export default function SourceTestModule() {
 
     // 视频测试统计
     const playStatuses = Array.from(playTestStatuses.values());
-    const videoTested = playStatuses.filter(p => p.status !== 'idle').length;
-    const videoSuccess = playStatuses.filter(p => p.status === 'success').length;
-    const videoError = playStatuses.filter(p => p.status === 'error').length;
-    const autoTested = playStatuses.filter(p => p.autoTested).length;
+    const videoTested = playStatuses.filter((p) => p.status !== 'idle').length;
+    const videoSuccess = playStatuses.filter(
+      (p) => p.status === 'success',
+    ).length;
+    const videoError = playStatuses.filter((p) => p.status === 'error').length;
+    const autoTested = playStatuses.filter((p) => p.autoTested).length;
 
     return {
       total,
@@ -447,7 +445,7 @@ export default function SourceTestModule() {
       error: '异常',
     };
     return (
-      <div className="space-y-1">
+      <div className='space-y-1'>
         <div
           className={`text-xs font-medium ${colorMap[ps.status]} flex items-center gap-1`}
           title={ps.message || ps.url}
@@ -456,36 +454,40 @@ export default function SourceTestModule() {
           <span>
             播放检测：{labelMap[ps.status]}
             {ps.autoTested && ' (自动)'}
-            {ps.checkedAt ? ` (${new Date(ps.checkedAt).toLocaleTimeString()})` : ''}
+            {ps.checkedAt
+              ? ` (${new Date(ps.checkedAt).toLocaleTimeString()})`
+              : ''}
           </span>
         </div>
 
         {/* HLS 流信息显示 */}
         {ps.streamInfo && (
-          <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">HLS流:</span>
+          <div className='text-xs text-gray-600 dark:text-gray-400 space-y-1'>
+            <div className='flex items-center gap-2'>
+              <span className='font-medium'>HLS流:</span>
               <span>{ps.totalStreams}个清晰度</span>
               {ps.resolution && <span>• {ps.resolution}</span>}
               {ps.bandwidth && <span>• {ps.bandwidth}</span>}
             </div>
             {(ps.maxResolution || ps.minResolution) && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">分辨率:</span>
+              <div className='flex items-center gap-2'>
+                <span className='font-medium'>分辨率:</span>
                 <span>
                   {ps.minResolution} - {ps.maxResolution}
                 </span>
               </div>
             )}
             {ps.codecSet && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">编码:</span>
-                <span className="text-xs truncate max-w-[200px]">{ps.codecSet}</span>
+              <div className='flex items-center gap-2'>
+                <span className='font-medium'>编码:</span>
+                <span className='text-xs truncate max-w-[200px]'>
+                  {ps.codecSet}
+                </span>
               </div>
             )}
             {ps.bandwidthRange && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">带宽范围:</span>
+              <div className='flex items-center gap-2'>
+                <span className='font-medium'>带宽范围:</span>
                 <span>{ps.bandwidthRange}</span>
               </div>
             )}
@@ -669,7 +671,9 @@ export default function SourceTestModule() {
                 disabled={
                   isAutoTestingVideos ||
                   testResults.size === 0 ||
-                  !Array.from(testResults.values()).some(r => r.status === 'success')
+                  !Array.from(testResults.values()).some(
+                    (r) => r.status === 'success',
+                  )
                 }
                 className='px-4 sm:px-6 py-2.5 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700
                          disabled:bg-gray-400 disabled:cursor-not-allowed
@@ -696,7 +700,9 @@ export default function SourceTestModule() {
 
           {/* 搜索测试统计 */}
           <div className='mb-4'>
-            <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>搜索测试</h4>
+            <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              搜索测试
+            </h4>
             <div className='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4'>
               <div className='text-center'>
                 <div className='text-2xl font-bold text-gray-900 dark:text-white'>
@@ -746,7 +752,9 @@ export default function SourceTestModule() {
             <div className='pt-4 border-t border-gray-200 dark:border-gray-700'>
               <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
                 视频测试 {isAutoTestingVideos && '(进行中)'}
-                {stats.autoTested > 0 && !isAutoTestingVideos && `(含自动测试 ${stats.autoTested} 个)`}
+                {stats.autoTested > 0 &&
+                  !isAutoTestingVideos &&
+                  `(含自动测试 ${stats.autoTested} 个)`}
               </h4>
               <div className='grid grid-cols-3 sm:grid-cols-3 gap-3 sm:gap-4'>
                 <div className='text-center'>
@@ -881,7 +889,7 @@ export default function SourceTestModule() {
                   <div className='flex items-center gap-3 flex-1'>
                     {getStatusIcon(
                       result?.status || 'pending',
-                      source.disabled
+                      source.disabled,
                     )}
                     <div className='flex-1 min-w-0'>
                       <div className='flex items-center gap-2 flex-wrap'>
@@ -952,33 +960,35 @@ export default function SourceTestModule() {
                             示例: {result.topMatches.join(' | ')}
                           </div>
                         )}
-                        <div className='mt-1'>{renderPlayStatus(source.key)}</div>
+                        <div className='mt-1'>
+                          {renderPlayStatus(source.key)}
+                        </div>
                       </div>
                     )}
                   </div>
 
                   <div className='flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-3 sm:mt-0 sm:ml-4'>
-                {result?.results && result.results.length > 0 && (
-                  <button
-                    onClick={() => handleViewResults(result.results)}
-                    className='px-3 py-2 sm:py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors'
-                  >
-                    查看结果
-                  </button>
-                )}
-                {result?.results && result.results.length > 0 && (
-                  <button
-                    onClick={() => handleOpenPlayTester(source)}
-                    className='px-3 py-2 sm:py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors whitespace-nowrap'
-                  >
-                    播放检测
-                  </button>
-                )}
+                    {result?.results && result.results.length > 0 && (
+                      <button
+                        onClick={() => handleViewResults(result.results)}
+                        className='px-3 py-2 sm:py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors'
+                      >
+                        查看结果
+                      </button>
+                    )}
+                    {result?.results && result.results.length > 0 && (
+                      <button
+                        onClick={() => handleOpenPlayTester(source)}
+                        className='px-3 py-2 sm:py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors whitespace-nowrap'
+                      >
+                        播放检测
+                      </button>
+                    )}
 
-                <button
-                  onClick={() => handleTestSingle(source.key)}
-                  disabled={result?.status === 'testing'}
-                  className={`px-3 py-2 sm:py-1 text-sm rounded-lg disabled:cursor-not-allowed transition-colors whitespace-nowrap ${
+                    <button
+                      onClick={() => handleTestSingle(source.key)}
+                      disabled={result?.status === 'testing'}
+                      className={`px-3 py-2 sm:py-1 text-sm rounded-lg disabled:cursor-not-allowed transition-colors whitespace-nowrap ${
                         source.disabled
                           ? 'bg-orange-600 text-white hover:bg-orange-700 disabled:bg-gray-400'
                           : 'bg-gray-600 text-white hover:bg-gray-700 disabled:bg-gray-400'
@@ -987,8 +997,8 @@ export default function SourceTestModule() {
                       {result?.status === 'testing'
                         ? '测试中'
                         : source.disabled
-                        ? '测试禁用源'
-                        : '单独测试'}
+                          ? '测试禁用源'
+                          : '单独测试'}
                     </button>
 
                     <button
@@ -1146,7 +1156,7 @@ export default function SourceTestModule() {
               </div>
             </div>
           </>,
-          document.body
+          document.body,
         )}
 
       {/* 播放检测抽屉 */}

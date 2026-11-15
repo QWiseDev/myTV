@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       {
         error: '不支持本地存储进行播放统计查看',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       _operatorRole = 'owner';
     } else {
       const userEntry = config.UserConfig.Users.find(
-        (u) => u.username === username
+        (u) => u.username === username,
       );
       if (!userEntry || userEntry.role !== 'admin' || userEntry.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     const todayStart = new Date(
       now.getFullYear(),
       now.getMonth(),
-      now.getDate()
+      now.getDate(),
     ).getTime();
     let todayNewUsers = 0;
     let totalRegisteredUsers = 0;
@@ -96,16 +96,16 @@ export async function GET(request: NextRequest) {
         const firstDay = new Date(
           firstDate.getFullYear(),
           firstDate.getMonth(),
-          firstDate.getDate()
+          firstDate.getDate(),
         );
         const currentDay = new Date(
           currentDate.getFullYear(),
           currentDate.getMonth(),
-          currentDate.getDate()
+          currentDate.getDate(),
         );
         const registrationDays =
           Math.floor(
-            (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24)
+            (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24),
           ) + 1;
 
         // 统计今日新增用户
@@ -241,16 +241,16 @@ export async function GET(request: NextRequest) {
         const firstDay = new Date(
           firstDate.getFullYear(),
           firstDate.getMonth(),
-          firstDate.getDate()
+          firstDate.getDate(),
         );
         const currentDay = new Date(
           currentDate.getFullYear(),
           currentDate.getMonth(),
-          currentDate.getDate()
+          currentDate.getDate(),
         );
         const registrationDays =
           Math.floor(
-            (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24)
+            (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24),
           ) + 1;
 
         userStats.push({
@@ -351,7 +351,7 @@ export async function GET(request: NextRequest) {
         error: '获取播放统计失败',
         details: (error as Error).message,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

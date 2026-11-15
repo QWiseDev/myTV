@@ -23,12 +23,12 @@ describe('site-health 站点级搜索健康度', () => {
     markSiteSearchTimeout('site-bench', 30 * 1000);
 
     expect(isSiteSearchBenched('site-bench', 30 * 1000 + 1)).toBe(true);
-    expect(
-      isSiteSearchBenched('site-bench', 30 * 1000 + 10 * MINUTE - 1),
-    ).toBe(true);
-    expect(
-      isSiteSearchBenched('site-bench', 30 * 1000 + 10 * MINUTE),
-    ).toBe(false);
+    expect(isSiteSearchBenched('site-bench', 30 * 1000 + 10 * MINUTE - 1)).toBe(
+      true,
+    );
+    expect(isSiteSearchBenched('site-bench', 30 * 1000 + 10 * MINUTE)).toBe(
+      false,
+    );
   });
 
   test('成功响应清零计数并解除隔离', () => {

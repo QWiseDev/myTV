@@ -43,9 +43,7 @@ export function deleteCachedLiveChannels(key: string) {
  * 对指定直播源的全部频道测速（经分片代理通道，与播放路径一致），
  * 自动剔除死链与低于阈值的慢源，并回写缓存与配置中的频道数。
  */
-export async function runSpeedTest(
-  sourceKey: string,
-): Promise<{
+export async function runSpeedTest(sourceKey: string): Promise<{
   key: string;
   name: string;
   total: number;
@@ -536,4 +534,3 @@ function parseM3U(
 
   return { tvgUrl, channels };
 }
-

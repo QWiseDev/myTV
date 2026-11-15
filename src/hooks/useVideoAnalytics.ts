@@ -1,4 +1,4 @@
-import { useCallback, useEffect,useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { useAnalytics } from './useAnalytics';
 
@@ -24,7 +24,7 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackVideoDownload,
     trackPageView,
     trackError,
-    trackVideoLoadTime
+    trackVideoLoadTime,
   } = useAnalytics();
 
   const startTimeRef = useRef<number>(0);
@@ -40,45 +40,51 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackPageView('video_play', videoTitle, {
       video_id: videoId,
       video_type: videoType,
-      source
+      source,
     });
   }, [videoId, videoTitle, videoType, source, trackPageView]);
 
   // 追踪视频开始播放
-  const trackPlay = useCallback((position = 0, quality?: string) => {
-    if (!isPlayingRef.current) {
-      startTimeRef.current = Date.now();
-      sessionStartTimeRef.current = Date.now();
-      isPlayingRef.current = true;
+  const trackPlay = useCallback(
+    (position = 0, quality?: string) => {
+      if (!isPlayingRef.current) {
+        startTimeRef.current = Date.now();
+        sessionStartTimeRef.current = Date.now();
+        isPlayingRef.current = true;
 
-      trackVideoPlay({
-        videoId,
-        videoTitle,
-        videoType,
-        source,
-        duration,
-        position,
-        quality
-      });
-    }
-  }, [videoId, videoTitle, videoType, source, duration, trackVideoPlay]);
+        trackVideoPlay({
+          videoId,
+          videoTitle,
+          videoType,
+          source,
+          duration,
+          position,
+          quality,
+        });
+      }
+    },
+    [videoId, videoTitle, videoType, source, duration, trackVideoPlay],
+  );
 
   // 追踪视频暂停
-  const trackPause = useCallback((position = 0) => {
-    if (isPlayingRef.current) {
-      const watchTime = Date.now() - startTimeRef.current;
-      totalWatchTimeRef.current += watchTime;
-      isPlayingRef.current = false;
+  const trackPause = useCallback(
+    (position = 0) => {
+      if (isPlayingRef.current) {
+        const watchTime = Date.now() - startTimeRef.current;
+        totalWatchTimeRef.current += watchTime;
+        isPlayingRef.current = false;
 
-      trackVideoPause({
-        videoId,
-        videoTitle,
-        videoType,
-        position,
-        duration: totalWatchTimeRef.current
-      });
-    }
-  }, [videoId, videoTitle, videoType, trackVideoPause]);
+        trackVideoPause({
+          videoId,
+          videoTitle,
+          videoType,
+          position,
+          duration: totalWatchTimeRef.current,
+        });
+      }
+    },
+    [videoId, videoTitle, videoType, trackVideoPause],
+  );
 
   // 追踪视频完成
   const trackComplete = useCallback(() => {
@@ -89,7 +95,8 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
         videoId,
         videoTitle,
         videoType,
-        duration: totalWatchTimeRef.current + (Date.now() - startTimeRef.current)
+        duration:
+          totalWatchTimeRef.current + (Date.now() - startTimeRef.current),
       });
     }
   }, [videoId, videoTitle, videoType, trackVideoComplete]);
@@ -99,60 +106,79 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackVideoFavorite({
       videoId,
       videoTitle,
-      videoType
+      videoType,
     });
   }, [videoId, videoTitle, videoType, trackVideoFavorite]);
 
   // 追踪视频分享
-  const trackShare = useCallback((platform: 'wechat' | 'weibo' | 'qq' | 'link' | 'other') => {
-    trackVideoShare({
-      videoId,
-      videoTitle,
-      videoType,
-      platform
-    });
-  }, [videoId, videoTitle, videoType, trackVideoShare]);
+  const trackShare = useCallback(
+    (platform: 'wechat' | 'weibo' | 'qq' | 'link' | 'other') => {
+      trackVideoShare({
+        videoId,
+        videoTitle,
+        videoType,
+        platform,
+      });
+    },
+    [videoId, videoTitle, videoType, trackVideoShare],
+  );
 
   // 追踪视频下载
-  const trackDownload = useCallback((quality: string) => {
-    trackVideoDownload({
-      videoId,
-      videoTitle,
-      videoType,
-      quality
-    });
-  }, [videoId, videoTitle, videoType, trackVideoDownload]);
+  const trackDownload = useCallback(
+    (quality: string) => {
+      trackVideoDownload({
+        videoId,
+        videoTitle,
+        videoType,
+        quality,
+      });
+    },
+    [videoId, videoTitle, videoType, trackVideoDownload],
+  );
 
   // 追踪视频加载时间
-  const trackLoadTime = useCallback((loadTime: number, quality?: string) => {
-    trackVideoLoadTime(loadTime, videoId, quality);
-  }, [videoId, trackVideoLoadTime]);
+  const trackLoadTime = useCallback(
+    (loadTime: number, quality?: string) => {
+      trackVideoLoadTime(loadTime, videoId, quality);
+    },
+    [videoId, trackVideoLoadTime],
+  );
 
   // 追踪播放错误
-  const trackPlaybackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
-    trackError('video_playback_error', errorMessage, {
-      error_type: errorType,
-      video_id: videoId,
-      video_title: videoTitle,
-      video_type: videoType,
-      position: context?.position || 0,
-      quality: context?.quality,
-      source,
-      ...context
-    });
-  }, [videoId, videoTitle, videoType, source, trackError]);
+  const trackPlaybackError = useCallback(
+    (
+      errorType: string,
+      errorMessage: string,
+      context?: Record<string, unknown>,
+    ) => {
+      trackError('video_playback_error', errorMessage, {
+        error_type: errorType,
+        video_id: videoId,
+        video_title: videoTitle,
+        video_type: videoType,
+        position: context?.position || 0,
+        quality: context?.quality,
+        source,
+        ...context,
+      });
+    },
+    [videoId, videoTitle, videoType, source, trackError],
+  );
 
   // 监听视频进度（用于自动完成检测）
-  const trackProgress = useCallback((currentTime: number) => {
-    // 如果视频时长未知或为0，跳过完成检测
-    if (!duration || duration <= 0) return;
+  const trackProgress = useCallback(
+    (currentTime: number) => {
+      // 如果视频时长未知或为0，跳过完成检测
+      if (!duration || duration <= 0) return;
 
-    // 播放到95%时认为是完成
-    const progressPercentage = currentTime / duration;
-    if (progressPercentage >= 0.95 && !hasTrackedCompleteRef.current) {
-      trackComplete();
-    }
-  }, [duration, trackComplete]);
+      // 播放到95%时认为是完成
+      const progressPercentage = currentTime / duration;
+      if (progressPercentage >= 0.95 && !hasTrackedCompleteRef.current) {
+        trackComplete();
+      }
+    },
+    [duration, trackComplete],
+  );
 
   // 清理函数
   useEffect(() => {
@@ -176,9 +202,12 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackProgress,
 
     // 统计信息
-    getTotalWatchTime: () => totalWatchTimeRef.current + (isPlayingRef.current ? Date.now() - startTimeRef.current : 0),
-    getCurrentSessionTime: () => isPlayingRef.current ? Date.now() - sessionStartTimeRef.current : 0,
-    isPlaying: () => isPlayingRef.current
+    getTotalWatchTime: () =>
+      totalWatchTimeRef.current +
+      (isPlayingRef.current ? Date.now() - startTimeRef.current : 0),
+    getCurrentSessionTime: () =>
+      isPlayingRef.current ? Date.now() - sessionStartTimeRef.current : 0,
+    isPlaying: () => isPlayingRef.current,
   };
 }
 
@@ -188,27 +217,33 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
 export function useVideoQualityAnalytics(videoId: string, videoTitle: string) {
   const { trackError, trackFeatureUsage } = useAnalytics();
 
-  const trackQualityChange = useCallback((fromQuality: string, toQuality: string, auto = false) => {
-    trackFeatureUsage('video_quality_change', true, {
-      video_id: videoId,
-      video_title: videoTitle,
-      from_quality: fromQuality,
-      to_quality: toQuality,
-      auto_switch: auto
-    });
-  }, [videoId, videoTitle, trackFeatureUsage]);
+  const trackQualityChange = useCallback(
+    (fromQuality: string, toQuality: string, auto = false) => {
+      trackFeatureUsage('video_quality_change', true, {
+        video_id: videoId,
+        video_title: videoTitle,
+        from_quality: fromQuality,
+        to_quality: toQuality,
+        auto_switch: auto,
+      });
+    },
+    [videoId, videoTitle, trackFeatureUsage],
+  );
 
-  const trackQualityIssue = useCallback((quality: string, issue: string) => {
-    trackError('video_quality_issue', issue, {
-      video_id: videoId,
-      video_title: videoTitle,
-      quality
-    });
-  }, [videoId, videoTitle, trackError]);
+  const trackQualityIssue = useCallback(
+    (quality: string, issue: string) => {
+      trackError('video_quality_issue', issue, {
+        video_id: videoId,
+        video_title: videoTitle,
+        quality,
+      });
+    },
+    [videoId, videoTitle, trackError],
+  );
 
   return {
     trackQualityChange,
-    trackQualityIssue
+    trackQualityIssue,
   };
 }
 
@@ -218,34 +253,43 @@ export function useVideoQualityAnalytics(videoId: string, videoTitle: string) {
 export function useDanmuAnalytics(videoId: string, videoTitle: string) {
   const { trackFeatureUsage, trackSearch } = useAnalytics();
 
-  const trackDanmuSend = useCallback((content: string, position: number) => {
-    trackFeatureUsage('danmu_send', true, {
-      video_id: videoId,
-      video_title: videoTitle,
-      content_length: content.length,
-      position
-    });
-  }, [videoId, videoTitle, trackFeatureUsage]);
+  const trackDanmuSend = useCallback(
+    (content: string, position: number) => {
+      trackFeatureUsage('danmu_send', true, {
+        video_id: videoId,
+        video_title: videoTitle,
+        content_length: content.length,
+        position,
+      });
+    },
+    [videoId, videoTitle, trackFeatureUsage],
+  );
 
-  const trackDanmuToggle = useCallback((enabled: boolean) => {
-    trackFeatureUsage('danmu_toggle', true, {
-      video_id: videoId,
-      video_title: videoTitle,
-      enabled
-    });
-  }, [videoId, videoTitle, trackFeatureUsage]);
+  const trackDanmuToggle = useCallback(
+    (enabled: boolean) => {
+      trackFeatureUsage('danmu_toggle', true, {
+        video_id: videoId,
+        video_title: videoTitle,
+        enabled,
+      });
+    },
+    [videoId, videoTitle, trackFeatureUsage],
+  );
 
-  const trackDanmuSearch = useCallback((keyword: string) => {
-    trackSearch({
-      query: keyword,
-      category: 'danmu',
-      searchType: 'general'
-    });
-  }, [trackSearch]);
+  const trackDanmuSearch = useCallback(
+    (keyword: string) => {
+      trackSearch({
+        query: keyword,
+        category: 'danmu',
+        searchType: 'general',
+      });
+    },
+    [trackSearch],
+  );
 
   return {
     trackDanmuSend,
     trackDanmuToggle,
-    trackDanmuSearch
+    trackDanmuSearch,
   };
 }

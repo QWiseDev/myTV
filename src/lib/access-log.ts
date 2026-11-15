@@ -8,14 +8,14 @@ import { getAuthInfoFromBrowserCookie } from './auth';
  * 访问日志类型定义
  */
 export interface AccessLog {
-  userId?: string;          // 用户ID（如果有登录）
-  username?: string;        // 用户名（如果有登录）
-  action: string;           // 访问的菜单或执行的action
-  pageUrl: string;          // 当前页面URL
-  timestamp: number;        // 访问时间戳
-  ipAddress?: string;       // IP地址（从后端获取）
-  userAgent?: string;       // 用户代理
-  referrer?: string;        // 来源页面
+  userId?: string; // 用户ID（如果有登录）
+  username?: string; // 用户名（如果有登录）
+  action: string; // 访问的菜单或执行的action
+  pageUrl: string; // 当前页面URL
+  timestamp: number; // 访问时间戳
+  ipAddress?: string; // IP地址（从后端获取）
+  userAgent?: string; // 用户代理
+  referrer?: string; // 来源页面
   location?: GeolocationAccessLog; // 地理位置
 }
 
@@ -66,7 +66,10 @@ export class AccessLogService {
    * @param action 访问的菜单或动作，如 'home', 'search', 'play'
    * @param extraData 额外的数据
    */
-  public async logAccess(action: string, extraData?: Record<string, unknown>): Promise<void> {
+  public async logAccess(
+    action: string,
+    extraData?: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.isEnabled) {
       return;
     }
@@ -78,7 +81,9 @@ export class AccessLogService {
       // 🚀 防重复调用机制：在5秒内同一action+URL组合只记录一次
       const lastTime = this.lastLogTime.get(key);
       if (lastTime && now - lastTime < 5000) {
-        console.debug(`[AccessLog] 跳过重复访问记录: ${action} (${Math.round((now - lastTime) / 1000)}秒前)`);
+        console.debug(
+          `[AccessLog] 跳过重复访问记录: ${action} (${Math.round((now - lastTime) / 1000)}秒前)`,
+        );
         return;
       }
 
@@ -95,7 +100,8 @@ export class AccessLogService {
       }
 
       const authInfo = getAuthInfoFromBrowserCookie();
-      const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+      const userAgent =
+        typeof navigator !== 'undefined' ? navigator.userAgent : '';
       const referrer = typeof document !== 'undefined' ? document.referrer : '';
 
       const accessLog: AccessLog = {
@@ -104,11 +110,10 @@ export class AccessLogService {
         timestamp: Date.now(),
         userAgent,
         referrer,
-        userId: authInfo?.username,  // 如果后端需要单独的用户ID可以扩展
+        userId: authInfo?.username, // 如果后端需要单独的用户ID可以扩展
         username: authInfo?.username,
-        ...extraData
+        ...extraData,
       };
-
 
       // 异步发送到后端，不阻塞主流程
       this.sendLogToServer(accessLog).catch((error) => {
@@ -117,13 +122,11 @@ export class AccessLogService {
 
       // 同时更新本地存储以支持快速统计分析
       this.updateLocalStorage(accessLog);
-
     } catch (error) {
       console.error('[AccessLog] 记录访问日志失败:', error);
     }
   }
 
-  
   /**
    * 获取地理位置信息（可选）
    */
@@ -141,14 +144,14 @@ export class AccessLogService {
             longitude: position.coords.longitude,
             city: '', // 需要额外服务来解析城市名
             region: '',
-            country: ''
+            country: '',
           });
         },
         (error) => {
           console.warn('[AccessLog] 获取地理位置失败:', error);
           resolve({});
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
     });
   }
@@ -162,7 +165,7 @@ export class AccessLogService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify(accessLog),
       });
@@ -204,8 +207,9 @@ export class AccessLogService {
       }
 
       localStorage.setItem(historyKey, JSON.stringify(history));
-      console.debug(`[AccessLog] 本地访问历史已更新 (${history.length}/${maxHistory})`);
-
+      console.debug(
+        `[AccessLog] 本地访问历史已更新 (${history.length}/${maxHistory})`,
+      );
     } catch (error) {
       console.error('[AccessLog] 更新本地存储失败:', error);
     }
@@ -229,7 +233,6 @@ export class AccessLogService {
       if (!response.ok) {
         throw new Error(`批量发送失败: HTTP ${response.status}`);
       }
-
     } catch (error) {
       console.error('[AccessLog] 批量发送日志失败:', error);
     }
@@ -239,7 +242,10 @@ export class AccessLogService {
 /**
  * 快速记录访问日志的便捷函数
  */
-export function logAccess(action: string, extraData?: Record<string, unknown>): void {
+export function logAccess(
+  action: string,
+  extraData?: Record<string, unknown>,
+): void {
   if (typeof window === 'undefined') return; // 服务端运行时不记录
 
   AccessLogService.getInstance()
@@ -256,7 +262,7 @@ export function logAccess(action: string, extraData?: Record<string, unknown>): 
  */
 export function useAccessLog(
   action: string,
-  extraData?: Record<string, unknown>
+  extraData?: Record<string, unknown>,
 ): void {
   useEffect(() => {
     logAccess(action, {

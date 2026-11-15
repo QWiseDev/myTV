@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     if (authInfo.username !== process.env.USERNAME) {
       // 非站长，检查用户存在或被封禁
       const user = config.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user) {
         return NextResponse.json({ error: '用户不存在' }, { status: 401 });
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       const config = await db.getEpisodeSkipConfig(
         authInfo.username,
         source,
-        id
+        id,
       );
       return NextResponse.json(config);
     } else {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     console.error('获取剧集跳过配置失败:', error);
     return NextResponse.json(
       { error: '获取剧集跳过配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (authInfo.username !== process.env.USERNAME) {
       // 非站长，检查用户存在或被封禁
       const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user) {
         return NextResponse.json({ error: '用户不存在' }, { status: 401 });
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       authInfo.username,
       source,
       id,
-      episodeSkipConfig
+      episodeSkipConfig,
     );
 
     return NextResponse.json({ success: true });
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     console.error('保存剧集跳过配置失败:', error);
     return NextResponse.json(
       { error: '保存剧集跳过配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest) {
     if (authInfo.username !== process.env.USERNAME) {
       // 非站长，检查用户存在或被封禁
       const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user) {
         return NextResponse.json({ error: '用户不存在' }, { status: 401 });
@@ -147,7 +147,7 @@ export async function DELETE(request: NextRequest) {
     console.error('删除剧集跳过配置失败:', error);
     return NextResponse.json(
       { error: '删除剧集跳过配置失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

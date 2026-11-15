@@ -116,7 +116,7 @@ export function useVideoSearch({
         if (savedFluidSearch !== null) {
           currentFluidSearch = safeJsonParse<boolean>(
             savedFluidSearch,
-            useFluidSearch
+            useFluidSearch,
           );
         } else {
           const defaultFluidSearch =

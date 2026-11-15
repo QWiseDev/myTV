@@ -5,7 +5,7 @@ import * as fs from 'fs';
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -28,7 +28,10 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ 缺少 Supabase 环境变量');
   console.log('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? '已设置' : '未设置');
-  console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? '已设置' : '未设置');
+  console.log(
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY:',
+    supabaseKey ? '已设置' : '未设置',
+  );
   process.exit(1);
 }
 

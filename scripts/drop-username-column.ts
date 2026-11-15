@@ -22,7 +22,9 @@ async function main() {
 
   try {
     console.log('\n1. 删除约束 unique_play_record...');
-    await pgPool.query(`ALTER TABLE play_records DROP CONSTRAINT IF EXISTS unique_play_record`);
+    await pgPool.query(
+      `ALTER TABLE play_records DROP CONSTRAINT IF EXISTS unique_play_record`,
+    );
     console.log('  ✓ 约束已删除');
 
     console.log('\n2. 删除索引 idx_play_records_username...');
@@ -30,7 +32,9 @@ async function main() {
     console.log('  ✓ 索引已删除');
 
     console.log('\n3. 删除 username 列...');
-    await pgPool.query(`ALTER TABLE play_records DROP COLUMN IF EXISTS username`);
+    await pgPool.query(
+      `ALTER TABLE play_records DROP COLUMN IF EXISTS username`,
+    );
     console.log('  ✓ username 列已删除');
 
     console.log('\n4. 创建新的唯一索引...');
@@ -49,14 +53,13 @@ async function main() {
     `);
 
     console.log('  当前列:');
-    rows.forEach(row => {
+    rows.forEach((row) => {
       console.log('    -', row.column_name, ':', row.data_type);
     });
 
     console.log('\n========================================');
     console.log('✓ 所有操作完成！');
     console.log('========================================');
-
   } catch (err) {
     console.error('\n✗ 错误:', err);
     process.exit(1);

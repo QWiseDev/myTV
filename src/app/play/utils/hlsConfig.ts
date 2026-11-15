@@ -465,7 +465,6 @@ export function handleHlsError(
         break;
       }
       case Hls.ErrorTypes.MEDIA_ERROR:
-
         // 尝试恢复媒体错误
         try {
           hls.recoverMediaError();
@@ -475,7 +474,6 @@ export function handleHlsError(
             data.details === Hls.ErrorDetails.MSE_ERROR ||
             data.details === Hls.ErrorDetails.MSE_UNSUPPORTED_CODEC
           ) {
-
             // 尝试重新加载更低码率的级别
             setTimeout(() => {
               if (hls.levels && hls.levels.length > 0) {

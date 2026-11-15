@@ -148,7 +148,7 @@ export const AlertModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };
 
@@ -181,7 +181,7 @@ export const useAlertModal = () => {
 
 export const showError = (
   message: string,
-  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void
+  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void,
 ) => {
   if (showAlert) {
     showAlert({ type: 'error', title: '错误', message, showConfirm: true });
@@ -192,7 +192,7 @@ export const showError = (
 
 export const showSuccess = (
   message: string,
-  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void
+  showAlert?: (config: Omit<AlertModalState, 'isOpen'>) => void,
 ) => {
   if (showAlert) {
     showAlert({ type: 'success', title: '成功', message, timer: 2000 });
@@ -214,7 +214,7 @@ export const useLoadingState = () => {
 
   const withLoading = async (
     key: string,
-    operation: () => Promise<unknown>
+    operation: () => Promise<unknown>,
   ) => {
     setLoading(key, true);
     try {

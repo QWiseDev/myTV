@@ -117,7 +117,7 @@ export default function CacheManager() {
       !confirm(
         `确定要清理${
           CACHE_TYPES.find((t) => t.key === type)?.name || type
-        }缓存吗？`
+        }缓存吗？`,
       )
     ) {
       return;
@@ -144,7 +144,7 @@ export default function CacheManager() {
           window.dispatchEvent(
             new CustomEvent('globalSuccess', {
               detail: { message },
-            })
+            }),
           );
         }
       } else {
@@ -166,7 +166,7 @@ export default function CacheManager() {
   const clearAllCache = async () => {
     if (
       !confirm(
-        '⚠️ 确定要清理所有缓存吗？这将清除豆瓣、TMDB、弹幕、网盘搜索、YouTube搜索等所有缓存数据。'
+        '⚠️ 确定要清理所有缓存吗？这将清除豆瓣、TMDB、弹幕、网盘搜索、YouTube搜索等所有缓存数据。',
       )
     ) {
       return;
@@ -249,9 +249,11 @@ export default function CacheManager() {
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
           {CACHE_TYPES.map((cacheType) => {
             // 各缓存类型统计均含 count/size；仅 douban/tmdb 额外携带 types（渲染处有守卫）
-            const typeStats = stats[
-              cacheType.key as keyof typeof stats
-            ] as { count: number; size: number; types?: Record<string, number> };
+            const typeStats = stats[cacheType.key as keyof typeof stats] as {
+              count: number;
+              size: number;
+              types?: Record<string, number>;
+            };
             const Icon = cacheType.icon;
 
             return (

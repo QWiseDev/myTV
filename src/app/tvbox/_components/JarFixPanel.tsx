@@ -84,8 +84,8 @@ export function JarFixPanel({
                   jarFixResult.status.network_quality === 'good'
                     ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
                     : jarFixResult.status.network_quality === 'fair'
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
-                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
+                      : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
                 }`}
               >
                 <div className='flex items-center justify-between'>
@@ -94,7 +94,8 @@ export function JarFixPanel({
                       网络质量
                     </div>
                     <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
-                      平均响应: {Math.round(jarFixResult.summary.avg_response_time)}
+                      平均响应:{' '}
+                      {Math.round(jarFixResult.summary.avg_response_time)}
                       ms
                     </div>
                   </div>
@@ -103,15 +104,15 @@ export function JarFixPanel({
                       jarFixResult.status.network_quality === 'good'
                         ? 'text-green-600 dark:text-green-400'
                         : jarFixResult.status.network_quality === 'fair'
-                        ? 'text-yellow-600 dark:text-yellow-400'
-                        : 'text-red-600 dark:text-red-400'
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-red-600 dark:text-red-400'
                     }`}
                   >
                     {jarFixResult.status.network_quality === 'good'
                       ? '优秀'
                       : jarFixResult.status.network_quality === 'fair'
-                      ? '良好'
-                      : '较差'}
+                        ? '良好'
+                        : '较差'}
                   </div>
                 </div>
               </div>

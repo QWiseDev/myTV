@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   if (!sourceKey || !typeId) {
     return NextResponse.json(
       { error: '缺少 source 或 type_id 参数' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     if (!source) {
       return NextResponse.json(
         { error: '你没有权限访问该资源源' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     // 苹果CMS常见列表参数：ac=videolist&t=<typeId>&pg=<page>
     const url = `${source.api}?ac=videolist&t=${encodeURIComponent(
-      typeId
+      typeId,
     )}&pg=${page}`;
     const res = await fetch(url, {
       headers: API_CONFIG.search.headers,
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     if (!res.ok) {
       return NextResponse.json(
         { error: `上游返回错误: ${res.status}` },
-        { status: res.status }
+        { status: res.status },
       );
     }
     type AppleCMSItem = {
@@ -78,8 +78,8 @@ export async function GET(request: NextRequest) {
     const list: AppleCMSItem[] = Array.isArray(data.list)
       ? data.list
       : Array.isArray(data.data)
-      ? data.data
-      : [];
+        ? data.data
+        : [];
     const items = list
       .map((r) => ({
         id: String(r.vod_id ?? r.id ?? ''),

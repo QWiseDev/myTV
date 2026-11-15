@@ -32,7 +32,12 @@ export function BatchUserGroupModal({
   loading,
 }: BatchUserGroupModalProps) {
   return (
-    <ModalShell title='批量设置用户组' onClose={onClose} maxWidth='2xl' scrollable={false}>
+    <ModalShell
+      title='批量设置用户组'
+      onClose={onClose}
+      maxWidth='2xl'
+      scrollable={false}
+    >
       <div className='mb-6'>
         <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4'>
           <div className='flex items-center space-x-2 mb-2'>

@@ -63,7 +63,7 @@ export default function AIRecommendModal({
             storedMessages.map((msg: ExtendedAIMessage) => ({
               ...msg,
               timestamp: msg.timestamp || new Date().toISOString(),
-            }))
+            })),
           );
           return; // 有缓存就不显示欢迎消息
         } else {
@@ -138,7 +138,7 @@ export default function AIRecommendModal({
   const handleVideoLinkPlay = (video: any) => {
     if (video.playable && video.embedUrl) {
       setPlayingVideoId(
-        playingVideoId === video.videoId ? null : video.videoId
+        playingVideoId === video.videoId ? null : video.videoId,
       );
     }
   };
@@ -296,7 +296,7 @@ export default function AIRecommendModal({
           {messages.length <= 1 &&
             messages.every(
               (msg) =>
-                msg.role === 'assistant' && msg.content.includes('AI智能助手')
+                msg.role === 'assistant' && msg.content.includes('AI智能助手'),
             ) && (
               <div className='text-center py-8'>
                 <div className='inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4'>
@@ -347,7 +347,7 @@ export default function AIRecommendModal({
                     dangerouslySetInnerHTML={{
                       __html: formatAIResponseWithLinks(
                         message.content,
-                        handleTitleClick
+                        handleTitleClick,
                       ),
                     }}
                     className='prose prose-sm dark:prose-invert max-w-none'
@@ -549,12 +549,12 @@ export default function AIRecommendModal({
                                   className='relative cursor-pointer'
                                   onClick={() => handleVideoLinkPlay(video)}
                                 >
-                                    {/* eslint-disable-next-line @next/next/no-img-element -- 外部视频缩略图，绕过优化器保持直连加载行为 */}
-                                    <img
-                                      src={video.thumbnail}
-                                      alt={video.title}
-                                      className='w-20 h-15 object-cover rounded'
-                                    />
+                                  {/* eslint-disable-next-line @next/next/no-img-element -- 外部视频缩略图，绕过优化器保持直连加载行为 */}
+                                  <img
+                                    src={video.thumbnail}
+                                    alt={video.title}
+                                    className='w-20 h-15 object-cover rounded'
+                                  />
                                   <div className='absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded'>
                                     <div className='bg-red-600 text-white rounded-full p-2'>
                                       <Play className='w-4 h-4' />

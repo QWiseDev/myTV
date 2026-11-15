@@ -120,7 +120,7 @@ export const formatCoins = (amount: number): string => {
 // 验证投注金额
 export const validateBet = (
   bet: number,
-  multiplier: number
+  multiplier: number,
 ): { valid: boolean; message?: string } => {
   const actualBet = bet * multiplier;
 
@@ -128,10 +128,10 @@ export const validateBet = (
     const suggestion =
       bet <= BET_CONFIG.MAX_BET_AMOUNT
         ? `建议将倍率降低到 ${Math.floor(
-            BET_CONFIG.MAX_BET_AMOUNT / bet
+            BET_CONFIG.MAX_BET_AMOUNT / bet,
           )} 倍或以下`
         : `建议基础投注不超过 ${Math.floor(
-            BET_CONFIG.MAX_BET_AMOUNT / multiplier
+            BET_CONFIG.MAX_BET_AMOUNT / multiplier,
           )} 金币（当前倍率${multiplier}x）`;
 
     return {

@@ -1,10 +1,7 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { createPortal } from 'react-dom';
 
-import type {
-  PlayerState,
-  PlayTesterDrawerState,
-} from '@/hooks/usePlayTester';
+import type { PlayerState, PlayTesterDrawerState } from '@/hooks/usePlayTester';
 
 export interface PlayTesterDrawerProps {
   /** 客户端挂载标记，未挂载时不渲染 Portal */
@@ -164,7 +161,7 @@ export function PlayTesterDrawer({
                           >
                             {ep.title || `第${idx + 1}集`}
                           </button>
-                        )
+                        ),
                       )}
                     </div>
                     <div className='text-xs text-gray-500 dark:text-gray-400'>
@@ -180,17 +177,17 @@ export function PlayTesterDrawer({
                           playerState.status === 'error'
                             ? 'text-red-500'
                             : playerState.status === 'playing'
-                            ? 'text-green-600'
-                            : 'text-gray-500'
+                              ? 'text-green-600'
+                              : 'text-gray-500'
                         }`}
                       >
                         {playerState.status === 'loading'
                           ? '检测中...'
                           : playerState.status === 'playing'
-                          ? '播放成功'
-                          : playerState.status === 'error'
-                          ? '播放异常'
-                          : '待检测'}
+                            ? '播放成功'
+                            : playerState.status === 'error'
+                              ? '播放异常'
+                              : '待检测'}
                       </span>
                     </div>
                     <div className='aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center'>
@@ -218,7 +215,7 @@ export function PlayTesterDrawer({
               </div>
             </div>
           </>,
-          document.body
+          document.body,
         )}
     </>
   );

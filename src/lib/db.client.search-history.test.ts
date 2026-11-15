@@ -126,17 +126,19 @@ describe('db.client search-history（redis 模式）', () => {
     document.cookie = `user_auth=${encodeURIComponent(
       JSON.stringify({ username: 'test-user' }),
     )}; path=/`;
-    fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = requestUrl([input]);
-      const method = (init?.method ?? 'GET').toUpperCase();
-      if (url.startsWith('/api/searchhistory')) {
-        if (method === 'GET') {
-          return jsonResponse(serverHistory.shift() ?? ['kw1']);
+    fetchMock = jest.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl([input]);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (url.startsWith('/api/searchhistory')) {
+          if (method === 'GET') {
+            return jsonResponse(serverHistory.shift() ?? ['kw1']);
+          }
+          return jsonResponse({ ok: true });
         }
-        return jsonResponse({ ok: true });
-      }
-      return { ok: false } as Response;
-    });
+        return { ok: false } as Response;
+      },
+    );
     global.fetch = fetchMock as unknown as typeof fetch;
   });
 
@@ -228,9 +230,8 @@ describe('db.client search-history（redis 模式）', () => {
   });
 
   it('deleteSearchHistory 携带编码关键字删除', async () => {
-    const { addSearchHistory, deleteSearchHistory } = await import(
-      './db.client'
-    );
+    const { addSearchHistory, deleteSearchHistory } =
+      await import('./db.client');
     await addSearchHistory('要删除的');
 
     await deleteSearchHistory('要删除的');

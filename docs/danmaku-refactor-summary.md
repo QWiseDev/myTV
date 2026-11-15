@@ -62,6 +62,7 @@ Data Layer (Data Sources)
 **问题**: 旧版本与 Artplayer 深度耦合，难以测试和维护
 
 **解决方案**:
+
 ```typescript
 // 独立使用
 const manager = new DanmakuManager({ container });
@@ -76,8 +77,8 @@ const adapter = createArtplayerDanmakuAdapter(config);
 
 ```typescript
 class DanmakuPool {
-  acquire(): HTMLDivElement;  // 获取元素
-  release(element): void;      // 释放元素
+  acquire(): HTMLDivElement; // 获取元素
+  release(element): void; // 释放元素
 }
 ```
 
@@ -143,12 +144,12 @@ class CustomRenderer extends DanmakuRenderer {
 
 ## 性能对比
 
-| 指标 | 旧版本 | 新版本 | 提升 |
-|------|--------|--------|------|
-| 加载时间 (2万弹幕) | 1.5-2s | 0.5-1s | 50-66% |
-| 内存占用 (2万弹幕) | 80-100MB | 40-50MB | 50% |
-| 渲染帧率 | 30-45fps | 55-60fps | 37-100% |
-| 首屏显示 | 800-1000ms | 300-500ms | 50-62% |
+| 指标               | 旧版本     | 新版本    | 提升    |
+| ------------------ | ---------- | --------- | ------- |
+| 加载时间 (2万弹幕) | 1.5-2s     | 0.5-1s    | 50-66%  |
+| 内存占用 (2万弹幕) | 80-100MB   | 40-50MB   | 50%     |
+| 渲染帧率           | 30-45fps   | 55-60fps  | 37-100% |
+| 首屏显示           | 800-1000ms | 300-500ms | 50-62%  |
 
 ## 文件结构
 
@@ -285,6 +286,7 @@ const useDanmakuManager = USE_NEW_DANMAKU
 **风险**: 新旧版本接口不完全兼容
 
 **应对**:
+
 - 保持接口一致性
 - 提供适配器层
 - 详细的迁移文档
@@ -294,6 +296,7 @@ const useDanmakuManager = USE_NEW_DANMAKU
 **风险**: 某些场景性能不如预期
 
 **应对**:
+
 - 分阶段优化
 - 提供降级方案
 - 持续性能监控
@@ -303,6 +306,7 @@ const useDanmakuManager = USE_NEW_DANMAKU
 **风险**: 新代码可能存在 bug
 
 **应对**:
+
 - 充分测试
 - 灰度发布
 - 快速回滚机制

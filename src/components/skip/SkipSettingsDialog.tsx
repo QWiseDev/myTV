@@ -110,7 +110,7 @@ export function SkipSettingsDialog({
                   });
                   localStorage.setItem(
                     'enableAutoSkip',
-                    JSON.stringify(newValue)
+                    JSON.stringify(newValue),
                   );
                   window.dispatchEvent(new Event('localStorageChanged'));
                 }}
@@ -136,7 +136,7 @@ export function SkipSettingsDialog({
                   });
                   localStorage.setItem(
                     'enableAutoNextEpisode',
-                    JSON.stringify(newValue)
+                    JSON.stringify(newValue),
                   );
                   window.dispatchEvent(new Event('localStorageChanged'));
                 }}

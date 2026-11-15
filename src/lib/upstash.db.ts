@@ -38,7 +38,7 @@ type SlotUserData = Record<string, any>;
 // 添加Upstash Redis操作重试包装器
 async function withRetry<T>(
   operation: () => Promise<T>,
-  maxRetries = 3
+  maxRetries = 3,
 ): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -70,7 +70,10 @@ async function withRetry<T>(
 
 export class UpstashRedisStorage implements IStorage {
   private client: Redis;
-  private userStatsCache: Map<string, { data: UserPlayStat; timestamp: number }> = new Map();
+  private userStatsCache: Map<
+    string,
+    { data: UserPlayStat; timestamp: number }
+  > = new Map();
   private userStatsCacheTTL = 60000; // 60秒缓存
 
   constructor() {
@@ -83,7 +86,7 @@ export class UpstashRedisStorage implements IStorage {
 
     do {
       const [nextCursor, batch] = await withRetry(() =>
-        this.client.scan(cursor, { match: pattern, count: 100 })
+        this.client.scan(cursor, { match: pattern, count: 100 }),
       );
       cursor = String(nextCursor);
       keys.push(...batch);
@@ -117,7 +120,7 @@ export class UpstashRedisStorage implements IStorage {
 
   private async getLoginStats(userName: string): Promise<LoginStats> {
     const stored = await withRetry(() =>
-      this.client.hgetall<Partial<LoginStats>>(this.loginStatsKey(userName))
+      this.client.hgetall<Partial<LoginStats>>(this.loginStatsKey(userName)),
     );
     return this.normalizeLoginStats(stored);
   }
@@ -146,7 +149,7 @@ export class UpstashRedisStorage implements IStorage {
       Object.entries(data).map(([key, value]) => [
         key,
         this.encodeHashValue(value),
-      ])
+      ]),
     );
   }
 
@@ -155,7 +158,7 @@ export class UpstashRedisStorage implements IStorage {
       Object.entries(data).map(([key, value]) => [
         key,
         this.decodeHashValue(value),
-      ])
+      ]),
     );
   }
 
@@ -166,19 +169,17 @@ export class UpstashRedisStorage implements IStorage {
 
   async getPlayRecord(
     userName: string,
-    key: string
+    key: string,
   ): Promise<PlayRecord | null> {
     const hashKey = this.prHashKey(userName);
 
-    return await withRetry(() =>
-      this.client.hget<PlayRecord>(hashKey, key)
-    );
+    return await withRetry(() => this.client.hget<PlayRecord>(hashKey, key));
   }
 
   async setPlayRecord(
     userName: string,
     key: string,
-    record: PlayRecord
+    record: PlayRecord,
   ): Promise<void> {
     const hashKey = this.prHashKey(userName);
 
@@ -186,10 +187,10 @@ export class UpstashRedisStorage implements IStorage {
   }
 
   async getAllPlayRecords(
-    userName: string
+    userName: string,
   ): Promise<Record<string, PlayRecord>> {
     const records = await withRetry(() =>
-      this.client.hgetall<Record<string, PlayRecord>>(this.prHashKey(userName))
+      this.client.hgetall<Record<string, PlayRecord>>(this.prHashKey(userName)),
     );
 
     return records ?? {};
@@ -210,24 +211,26 @@ export class UpstashRedisStorage implements IStorage {
 
   async getFavorite(userName: string, key: string): Promise<Favorite | null> {
     return await withRetry(() =>
-      this.client.hget<Favorite>(this.favHashKey(userName), key)
+      this.client.hget<Favorite>(this.favHashKey(userName), key),
     );
   }
 
   async setFavorite(
     userName: string,
     key: string,
-    favorite: Favorite
+    favorite: Favorite,
   ): Promise<void> {
     await withRetry(() =>
-      this.client.hset(this.favHashKey(userName), { [key]: favorite })
+      this.client.hset(this.favHashKey(userName), { [key]: favorite }),
     );
   }
 
   async getAllFavorites(userName: string): Promise<Record<string, Favorite>> {
     return (
       (await withRetry(() =>
-        this.client.hgetall<Record<string, Favorite>>(this.favHashKey(userName))
+        this.client.hgetall<Record<string, Favorite>>(
+          this.favHashKey(userName),
+        ),
       )) ?? {}
     );
   }
@@ -248,7 +251,7 @@ export class UpstashRedisStorage implements IStorage {
 
   async verifyUser(userName: string, password: string): Promise<boolean> {
     const stored = await withRetry(() =>
-      this.client.get(this.userPwdKey(userName))
+      this.client.get(this.userPwdKey(userName)),
     );
     if (stored === null) return false;
     // 确保比较时都是字符串类型
@@ -259,7 +262,7 @@ export class UpstashRedisStorage implements IStorage {
   async checkUserExist(userName: string): Promise<boolean> {
     // 使用 EXISTS 判断 key 是否存在
     const exists = await withRetry(() =>
-      this.client.exists(this.userPwdKey(userName))
+      this.client.exists(this.userPwdKey(userName)),
     );
     return exists === 1;
   }
@@ -268,7 +271,7 @@ export class UpstashRedisStorage implements IStorage {
   async changePassword(userName: string, newPassword: string): Promise<void> {
     // 简单存储明文密码，生产环境应加密
     await withRetry(() =>
-      this.client.set(this.userPwdKey(userName), newPassword)
+      this.client.set(this.userPwdKey(userName), newPassword),
     );
   }
 
@@ -300,7 +303,7 @@ export class UpstashRedisStorage implements IStorage {
 
   async getSearchHistory(userName: string): Promise<string[]> {
     const result = await withRetry(() =>
-      this.client.lrange(this.shKey(userName), 0, -1)
+      this.client.lrange(this.shKey(userName), 0, -1),
     );
     // 确保返回的都是字符串类型
     return ensureStringArray(result as any[]);
@@ -349,7 +352,7 @@ export class UpstashRedisStorage implements IStorage {
 
   async setAdminConfig(config: AdminConfig): Promise<void> {
     await withRetry(() =>
-      this.client.set(this.adminConfigKey(), JSON.stringify(config))
+      this.client.set(this.adminConfigKey(), JSON.stringify(config)),
     );
   }
 
@@ -361,11 +364,11 @@ export class UpstashRedisStorage implements IStorage {
   async getSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<EpisodeSkipConfig | null> {
     const field = `${source}+${id}`;
     return await withRetry(() =>
-      this.client.hget<EpisodeSkipConfig>(this.skipHashKey(userName), field)
+      this.client.hget<EpisodeSkipConfig>(this.skipHashKey(userName), field),
     );
   }
 
@@ -373,17 +376,19 @@ export class UpstashRedisStorage implements IStorage {
     userName: string,
     source: string,
     id: string,
-    config: EpisodeSkipConfig
+    config: EpisodeSkipConfig,
   ): Promise<void> {
     const field = `${source}+${id}`;
 
-    await withRetry(() => this.client.hset(this.skipHashKey(userName), { [field]: config }));
+    await withRetry(() =>
+      this.client.hset(this.skipHashKey(userName), { [field]: config }),
+    );
   }
 
   async deleteSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<void> {
     const field = `${source}+${id}`;
 
@@ -391,10 +396,12 @@ export class UpstashRedisStorage implements IStorage {
   }
 
   async getAllSkipConfigs(
-    userName: string
+    userName: string,
   ): Promise<{ [key: string]: EpisodeSkipConfig }> {
     const configs = await withRetry(() =>
-      this.client.hgetall<Record<string, EpisodeSkipConfig>>(this.skipHashKey(userName))
+      this.client.hgetall<Record<string, EpisodeSkipConfig>>(
+        this.skipHashKey(userName),
+      ),
     );
 
     return configs ?? {};
@@ -412,10 +419,10 @@ export class UpstashRedisStorage implements IStorage {
   async getEpisodeSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<EpisodeSkipConfig | null> {
     const val = await withRetry(() =>
-      this.client.get(this.episodeSkipConfigKey(userName, source, id))
+      this.client.get(this.episodeSkipConfigKey(userName, source, id)),
     );
     return val ? (val as EpisodeSkipConfig) : null;
   }
@@ -424,25 +431,25 @@ export class UpstashRedisStorage implements IStorage {
     userName: string,
     source: string,
     id: string,
-    config: EpisodeSkipConfig
+    config: EpisodeSkipConfig,
   ): Promise<void> {
     await withRetry(() =>
-      this.client.set(this.episodeSkipConfigKey(userName, source, id), config)
+      this.client.set(this.episodeSkipConfigKey(userName, source, id), config),
     );
   }
 
   async deleteEpisodeSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<void> {
     await withRetry(() =>
-      this.client.del(this.episodeSkipConfigKey(userName, source, id))
+      this.client.del(this.episodeSkipConfigKey(userName, source, id)),
     );
   }
 
   async getAllEpisodeSkipConfigs(
-    userName: string
+    userName: string,
   ): Promise<{ [key: string]: EpisodeSkipConfig }> {
     const pattern = `u:${userName}:episodeskip:*`;
     const keys = await this.scanKeys(pattern);
@@ -484,7 +491,6 @@ export class UpstashRedisStorage implements IStorage {
 
       // 删除管理员配置
       await withRetry(() => this.client.del(this.adminConfigKey()));
-
     } catch (error) {
       console.error('清空数据失败:', error);
       throw new Error('清空数据失败');
@@ -522,7 +528,7 @@ export class UpstashRedisStorage implements IStorage {
   async setCache(
     key: string,
     data: any,
-    expireSeconds?: number
+    expireSeconds?: number,
   ): Promise<void> {
     const cacheKey = this.cacheKey(key);
     const value = JSON.stringify(data);
@@ -581,14 +587,14 @@ export class UpstashRedisStorage implements IStorage {
 
   private async updateSlotRanks(
     userName: string,
-    data: SlotUserData
+    data: SlotUserData,
   ): Promise<void> {
     for (const type of this.getSlotRankTypes()) {
       await withRetry(() =>
         this.client.zadd(this.slotRankKey(type), {
           score: this.getSlotRankScore(data, type),
           member: userName,
-        })
+        }),
       );
     }
   }
@@ -618,7 +624,7 @@ export class UpstashRedisStorage implements IStorage {
 
   async getSlotUserData(userName: string): Promise<SlotUserData | null> {
     const hashData = await withRetry(() =>
-      this.client.hgetall<Record<string, unknown>>(this.slotUserKey(userName))
+      this.client.hgetall<Record<string, unknown>>(this.slotUserKey(userName)),
     );
 
     return hashData && Object.keys(hashData).length > 0
@@ -629,7 +635,7 @@ export class UpstashRedisStorage implements IStorage {
   async setSlotUserData(
     userName: string,
     data: SlotUserData,
-    expireSeconds = 86400 * 30
+    expireSeconds = 86400 * 30,
   ): Promise<void> {
     const key = this.slotUserKey(userName);
     await withRetry(() => this.client.hset(key, this.encodeHashObject(data)));
@@ -640,7 +646,7 @@ export class UpstashRedisStorage implements IStorage {
 
   async listSlotUsers(): Promise<Array<SlotUserData & { username: string }>> {
     const users = await withRetry(() =>
-      this.client.smembers<string[]>(this.slotUsersKey())
+      this.client.smembers<string[]>(this.slotUsersKey()),
     );
 
     const result: Array<SlotUserData & { username: string }> = [];
@@ -655,15 +661,20 @@ export class UpstashRedisStorage implements IStorage {
 
   async getSlotLeaderboard(
     type = 'coins',
-    limit = 10
+    limit = 10,
   ): Promise<Array<SlotUserData & { username: string }>> {
     const rankType = this.getSlotRankTypes().includes(type) ? type : 'coins';
 
     const raw = await withRetry(() =>
-      this.client.zrange(this.slotRankKey(rankType), 0, Math.max(0, limit - 1), {
-        rev: true,
-        withScores: true,
-      })
+      this.client.zrange(
+        this.slotRankKey(rankType),
+        0,
+        Math.max(0, limit - 1),
+        {
+          rev: true,
+          withScores: true,
+        },
+      ),
     );
 
     const result: Array<SlotUserData & { username: string }> = [];
@@ -676,7 +687,10 @@ export class UpstashRedisStorage implements IStorage {
     return result;
   }
 
-  async incrementRateLimit(key: string, expireSeconds: number): Promise<number> {
+  async incrementRateLimit(
+    key: string,
+    expireSeconds: number,
+  ): Promise<number> {
     const count = await withRetry(() => this.client.incr(key));
     if (count === 1) {
       await withRetry(() => this.client.expire(key, expireSeconds));
@@ -709,7 +723,8 @@ export class UpstashRedisStorage implements IStorage {
       let totalWatchTime = 0;
       let totalPlays = 0;
       const sourceCount: Record<string, number> = {};
-      const dailyData: Record<string, { watchTime: number; plays: number }> = {};
+      const dailyData: Record<string, { watchTime: number; plays: number }> =
+        {};
 
       const now = Date.now();
       const todayStart = new Date(now).setHours(0, 0, 0, 0);
@@ -784,7 +799,9 @@ export class UpstashRedisStorage implements IStorage {
           lastPlayTime: userLastPlayTime,
           recentRecords,
           avgWatchTime:
-            playRecords.length > 0 ? userTotalWatchTime / playRecords.length : 0,
+            playRecords.length > 0
+              ? userTotalWatchTime / playRecords.length
+              : 0,
           mostWatchedSource,
           registrationDays,
           lastLoginTime: userLastPlayTime,
@@ -962,12 +979,12 @@ export class UpstashRedisStorage implements IStorage {
 
       // 计算观看影片总数（去重）
       const totalMovies = new Set(
-        playRecords.map((r) => `${r.title}_${r.source_name}_${r.year}`)
+        playRecords.map((r) => `${r.title}_${r.source_name}_${r.year}`),
       ).size;
 
       // 计算首次观看时间
       const firstWatchDate = Math.min(
-        ...playRecords.map((r) => r.save_time || Date.now())
+        ...playRecords.map((r) => r.save_time || Date.now()),
       );
 
       // 获取最近播放记录
@@ -1133,7 +1150,7 @@ export class UpstashRedisStorage implements IStorage {
     _userName: string,
     _source: string,
     _id: string,
-    _watchTime: number
+    _watchTime: number,
   ): Promise<void> {
     try {
       // 清除全站统计缓存，下次查询时重新计算
@@ -1147,7 +1164,7 @@ export class UpstashRedisStorage implements IStorage {
   async updateUserLoginStats(
     userName: string,
     loginTime: number,
-    isFirstLogin?: boolean
+    isFirstLogin?: boolean,
   ): Promise<void> {
     try {
       const loginStatsKey = this.loginStatsKey(userName);
@@ -1158,7 +1175,7 @@ export class UpstashRedisStorage implements IStorage {
           : currentStats.firstLoginTime;
 
       const loginCount = await withRetry(() =>
-        this.client.hincrby(loginStatsKey, 'loginCount', 1)
+        this.client.hincrby(loginStatsKey, 'loginCount', 1),
       );
       const loginStats = {
         loginCount,
@@ -1172,9 +1189,8 @@ export class UpstashRedisStorage implements IStorage {
           firstLoginTime: loginStats.firstLoginTime,
           lastLoginTime: loginStats.lastLoginTime,
           lastLoginDate: loginStats.lastLoginDate,
-        })
+        }),
       );
-
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
       throw error;
@@ -1195,7 +1211,7 @@ export class UpstashRedisStorage implements IStorage {
       action?: string;
     },
     _limit = 50,
-    _offset = 0
+    _offset = 0,
   ): Promise<AccessLog[]> {
     return [];
   }
@@ -1216,7 +1232,7 @@ function getUpstashRedisClient(): Redis {
 
     if (!upstashUrl || !upstashToken) {
       throw new Error(
-        'UPSTASH_URL and UPSTASH_TOKEN env variables must be set'
+        'UPSTASH_URL and UPSTASH_TOKEN env variables must be set',
       );
     }
 
@@ -1231,7 +1247,6 @@ function getUpstashRedisClient(): Redis {
           Math.min(1000 * Math.pow(2, retryCount), 30000),
       },
     });
-
 
     (global as any)[globalKey] = client;
   }

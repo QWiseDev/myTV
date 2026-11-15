@@ -58,20 +58,20 @@
 
 ## 功能总览
 
-| 功能点 | 说明 |
-| ------ | ---- |
-| 内容聚合 | 多源影视搜索、短剧、Bangumi 动漫、TMDB 演员搜索、发布日历 |
-| 播放体验 | ArtPlayer 播放器、HLS.js、Chromecast、跳过片头片尾、剧集切换优化 |
-| 弹幕系统 | 兼容 danmu_api 的第三方弹幕、弹幕样式配置、缓存和性能优化 |
-| 网盘搜索 | PanSou 接入、网盘类型筛选、搜索结果缓存 |
-| IPTV 直播 | m3u/m3u8 直播源、EPG 节目单、多源聚合、频道搜索 |
-| AI 推荐 | OpenAI 兼容接口、模型参数配置、影视推荐对话 |
-| 用户系统 | 登录注册、用户组权限、用户等级、非活跃用户清理 |
-| 观看记录 | 播放记录、继续观看、新剧集提醒、个人/全局播放统计 |
-| TVBox 接入 | TVBox 配置接口、Token 认证、IP 白名单、普通用户访问 |
-| 管理后台 | 配置文件、视频源、直播源、分类、缓存、数据迁移、日志查看 |
-| 多端使用 | Web、Selene 手机端、OrionTV 大屏端 |
-| 存储支持 | Kvrocks、Redis、Upstash、localStorage |
+| 功能点     | 说明                                                             |
+| ---------- | ---------------------------------------------------------------- |
+| 内容聚合   | 多源影视搜索、短剧、Bangumi 动漫、TMDB 演员搜索、发布日历        |
+| 播放体验   | ArtPlayer 播放器、HLS.js、Chromecast、跳过片头片尾、剧集切换优化 |
+| 弹幕系统   | 兼容 danmu_api 的第三方弹幕、弹幕样式配置、缓存和性能优化        |
+| 网盘搜索   | PanSou 接入、网盘类型筛选、搜索结果缓存                          |
+| IPTV 直播  | m3u/m3u8 直播源、EPG 节目单、多源聚合、频道搜索                  |
+| AI 推荐    | OpenAI 兼容接口、模型参数配置、影视推荐对话                      |
+| 用户系统   | 登录注册、用户组权限、用户等级、非活跃用户清理                   |
+| 观看记录   | 播放记录、继续观看、新剧集提醒、个人/全局播放统计                |
+| TVBox 接入 | TVBox 配置接口、Token 认证、IP 白名单、普通用户访问              |
+| 管理后台   | 配置文件、视频源、直播源、分类、缓存、数据迁移、日志查看         |
+| 多端使用   | Web、Selene 手机端、OrionTV 大屏端                               |
+| 存储支持   | Kvrocks、Redis、Upstash、localStorage                            |
 
 ---
 
@@ -332,24 +332,24 @@ docker compose up -d
 
 访问 `http://your-domain:3000/admin` 并使用站长账号登录。
 
-| 模块 | 主要用途 |
-| ---- | -------- |
-| 配置文件 | 编辑 JSON 源配置、配置订阅、拉取远程配置 |
-| 站点配置 | 站点名称、公告、豆瓣代理、搜索页数、缓存时间、TMDB |
-| 用户配置 | 注册开关、用户组、用户权限、封禁、角色、密码 |
-| 视频源配置 | 源增删改查、导入导出、排序、检测 |
-| 源检测 | 测试源可用性、源站浏览和搜索 |
-| 直播源配置 | m3u/m3u8、EPG、频道刷新和排序 |
-| 分类配置 | 自定义豆瓣搜索分类 |
-| 网盘搜索配置 | PanSou 地址、超时、网盘类型 |
-| AI 推荐配置 | OpenAI 兼容接口、模型参数、提示词 |
-| YouTube 配置 | YouTube Data API v3 和演示模式 |
-| 弹幕配置 | 自建 danmu_api 服务地址 |
-| TVBox 安全配置 | Token、IP 白名单、频率限制 |
-| 缓存管理 | 查看和清理各类缓存 |
-| 数据迁移 | 导入导出整站数据 |
-| 访问日志 | 查看站点访问记录 |
-| 用户留言 | 查看和处理用户反馈 |
+| 模块           | 主要用途                                           |
+| -------------- | -------------------------------------------------- |
+| 配置文件       | 编辑 JSON 源配置、配置订阅、拉取远程配置           |
+| 站点配置       | 站点名称、公告、豆瓣代理、搜索页数、缓存时间、TMDB |
+| 用户配置       | 注册开关、用户组、用户权限、封禁、角色、密码       |
+| 视频源配置     | 源增删改查、导入导出、排序、检测                   |
+| 源检测         | 测试源可用性、源站浏览和搜索                       |
+| 直播源配置     | m3u/m3u8、EPG、频道刷新和排序                      |
+| 分类配置       | 自定义豆瓣搜索分类                                 |
+| 网盘搜索配置   | PanSou 地址、超时、网盘类型                        |
+| AI 推荐配置    | OpenAI 兼容接口、模型参数、提示词                  |
+| YouTube 配置   | YouTube Data API v3 和演示模式                     |
+| 弹幕配置       | 自建 danmu_api 服务地址                            |
+| TVBox 安全配置 | Token、IP 白名单、频率限制                         |
+| 缓存管理       | 查看和清理各类缓存                                 |
+| 数据迁移       | 导入导出整站数据                                   |
+| 访问日志       | 查看站点访问记录                                   |
+| 用户留言       | 查看和处理用户反馈                                 |
 
 ---
 
@@ -357,36 +357,36 @@ docker compose up -d
 
 ### 必填变量
 
-| 变量 | 说明 | 示例 |
-| ---- | ---- | ---- |
-| `USERNAME` | 站长账号 | `admin` |
-| `PASSWORD` | 站长密码 | `your_secure_password` |
+| 变量                       | 说明     | 示例                            |
+| -------------------------- | -------- | ------------------------------- |
+| `USERNAME`                 | 站长账号 | `admin`                         |
+| `PASSWORD`                 | 站长密码 | `your_secure_password`          |
 | `NEXT_PUBLIC_STORAGE_TYPE` | 存储类型 | `kvrocks` / `redis` / `upstash` |
 
 ### 存储变量
 
-| 变量 | 说明 | 示例 |
-| ---- | ---- | ---- |
-| `KVROCKS_URL` | Kvrocks 连接 URL | `redis://moontv-kvrocks:6666` |
-| `REDIS_URL` | Redis 连接 URL | `redis://moontv-redis:6379` |
-| `UPSTASH_URL` | Upstash Endpoint | `https://xxx.upstash.io` |
-| `UPSTASH_TOKEN` | Upstash Token | `AxxxxxxxxxxxxxxxxxxxxxxxxxxxQ==` |
+| 变量            | 说明             | 示例                              |
+| --------------- | ---------------- | --------------------------------- |
+| `KVROCKS_URL`   | Kvrocks 连接 URL | `redis://moontv-kvrocks:6666`     |
+| `REDIS_URL`     | Redis 连接 URL   | `redis://moontv-redis:6379`       |
+| `UPSTASH_URL`   | Upstash Endpoint | `https://xxx.upstash.io`          |
+| `UPSTASH_TOKEN` | Upstash Token    | `AxxxxxxxxxxxxxxxxxxxxxxxxxxxQ==` |
 
 ### 常用可选变量
 
-| 变量 | 说明 | 默认值 |
-| ---- | ---- | ------ |
-| `SITE_BASE` | 站点 URL | 空 |
-| `NEXT_PUBLIC_SITE_NAME` | 站点名称 | `卡拉米影视` |
-| `ANNOUNCEMENT` | 站点公告 | 默认公告 |
-| `NEXT_PUBLIC_SHORTDRAMA_API_BASE` | 短剧接口基址 | `https://api.r2afosne.dpdns.org` |
-| `NEXT_PUBLIC_SEARCH_MAX_PAGE` | 搜索最大页数 | `5` |
-| `NEXT_PUBLIC_DOUBAN_PROXY_TYPE` | 豆瓣数据代理类型 | `direct` |
-| `NEXT_PUBLIC_DOUBAN_PROXY` | 自定义豆瓣代理 | 空 |
-| `NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE` | 豆瓣图片代理类型 | `direct` |
-| `NEXT_PUBLIC_DOUBAN_IMAGE_PROXY` | 自定义图片代理 | 空 |
-| `NEXT_PUBLIC_DISABLE_YELLOW_FILTER` | 关闭内容过滤 | `false` |
-| `NEXT_PUBLIC_FLUID_SEARCH` | 流式搜索输出 | `true` |
+| 变量                                  | 说明             | 默认值                           |
+| ------------------------------------- | ---------------- | -------------------------------- |
+| `SITE_BASE`                           | 站点 URL         | 空                               |
+| `NEXT_PUBLIC_SITE_NAME`               | 站点名称         | `卡拉米影视`                     |
+| `ANNOUNCEMENT`                        | 站点公告         | 默认公告                         |
+| `NEXT_PUBLIC_SHORTDRAMA_API_BASE`     | 短剧接口基址     | `https://api.r2afosne.dpdns.org` |
+| `NEXT_PUBLIC_SEARCH_MAX_PAGE`         | 搜索最大页数     | `5`                              |
+| `NEXT_PUBLIC_DOUBAN_PROXY_TYPE`       | 豆瓣数据代理类型 | `direct`                         |
+| `NEXT_PUBLIC_DOUBAN_PROXY`            | 自定义豆瓣代理   | 空                               |
+| `NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE` | 豆瓣图片代理类型 | `direct`                         |
+| `NEXT_PUBLIC_DOUBAN_IMAGE_PROXY`      | 自定义图片代理   | 空                               |
+| `NEXT_PUBLIC_DISABLE_YELLOW_FILTER`   | 关闭内容过滤     | `false`                          |
+| `NEXT_PUBLIC_FLUID_SEARCH`            | 流式搜索输出     | `true`                           |
 
 豆瓣代理类型支持 `direct`、`cors-proxy-zwei`、`cmliussss-cdn-tencent`、`cmliussss-cdn-ali`、`custom`。
 
@@ -452,17 +452,17 @@ services:
 
 ## 技术栈
 
-| 分类 | 主要依赖 |
-| ---- | -------- |
-| 前端框架 | [Next.js 14.2.23](https://nextjs.org/) · App Router |
-| UI & 样式 | [Tailwind CSS 3.4.17](https://tailwindcss.com/) · [Framer Motion 12](https://www.framer.com/motion/) |
-| 语言 | TypeScript 4.9.5 |
-| 播放器 | [ArtPlayer 5.3.0](https://github.com/zhw2590582/ArtPlayer) · [HLS.js 1.6.13](https://github.com/video-dev/hls.js/) · [artplayer-plugin-danmuku 5.2.0](https://github.com/zhw2590582/ArtPlayer) |
-| 数据存储 | Kvrocks · Redis · Upstash · localStorage |
-| 虚拟化 | [react-window 2.2.0](https://github.com/bvaughn/react-window) · ResizeObserver |
-| UI 组件 | [@headlessui/react 2](https://headlessui.com/) · [Lucide Icons](https://lucide.dev/) · [React Icons 5](https://react-icons.github.io/react-icons/) |
-| 质量工具 | ESLint · Prettier · Jest · Husky |
-| 部署 | Docker · Docker Compose |
+| 分类      | 主要依赖                                                                                                                                                                                       |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 前端框架  | [Next.js 14.2.23](https://nextjs.org/) · App Router                                                                                                                                            |
+| UI & 样式 | [Tailwind CSS 3.4.17](https://tailwindcss.com/) · [Framer Motion 12](https://www.framer.com/motion/)                                                                                           |
+| 语言      | TypeScript 4.9.5                                                                                                                                                                               |
+| 播放器    | [ArtPlayer 5.3.0](https://github.com/zhw2590582/ArtPlayer) · [HLS.js 1.6.13](https://github.com/video-dev/hls.js/) · [artplayer-plugin-danmuku 5.2.0](https://github.com/zhw2590582/ArtPlayer) |
+| 数据存储  | Kvrocks · Redis · Upstash · localStorage                                                                                                                                                       |
+| 虚拟化    | [react-window 2.2.0](https://github.com/bvaughn/react-window) · ResizeObserver                                                                                                                 |
+| UI 组件   | [@headlessui/react 2](https://headlessui.com/) · [Lucide Icons](https://lucide.dev/) · [React Icons 5](https://react-icons.github.io/react-icons/)                                             |
+| 质量工具  | ESLint · Prettier · Jest · Husky                                                                                                                                                               |
+| 部署      | Docker · Docker Compose                                                                                                                                                                        |
 
 ---
 

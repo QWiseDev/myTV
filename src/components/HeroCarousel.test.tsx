@@ -51,9 +51,27 @@ afterEach(() => {
 });
 
 const MOVIES: DoubanItem[] = [
-  { id: '1', title: '热门电影一', poster: 'https://img/poster1.jpg', rate: '8.5', year: '2026' },
-  { id: '2', title: '热门电影二', poster: 'https://img/poster2.jpg', rate: '7.2', year: '2025' },
-  { id: '3', title: '热门电影三', poster: 'https://img/poster3.jpg', rate: '6.1', year: '2024' },
+  {
+    id: '1',
+    title: '热门电影一',
+    poster: 'https://img/poster1.jpg',
+    rate: '8.5',
+    year: '2026',
+  },
+  {
+    id: '2',
+    title: '热门电影二',
+    poster: 'https://img/poster2.jpg',
+    rate: '7.2',
+    year: '2025',
+  },
+  {
+    id: '3',
+    title: '热门电影三',
+    poster: 'https://img/poster3.jpg',
+    rate: '6.1',
+    year: '2024',
+  },
 ];
 
 describe('HeroCarousel', () => {
@@ -117,7 +135,9 @@ describe('HeroCarousel', () => {
     expect(await screen.findByText('2026 · 科幻 / 冒险')).toBeInTheDocument();
     expect(screen.getByText('这是一段剧情简介。')).toBeInTheDocument();
     expect(screen.getByText(/导演：导演甲/)).toBeInTheDocument();
-    expect(screen.getByText(/主演：演员甲 \/ 演员乙 \/ 演员丙/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/主演：演员甲 \/ 演员乙 \/ 演员丙/),
+    ).toBeInTheDocument();
     // 无信息帧降级为"电影"占位类型
     expect(screen.getByText('2025 · 电影')).toBeInTheDocument();
   });

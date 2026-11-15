@@ -8,7 +8,6 @@ async function searchFromCaijiAPI(
   episode?: string | null,
 ): Promise<PlatformUrl[]> {
   try {
-
     // 尝试多种标题格式进行搜索
     const searchTitles = [
       title, // 原始标题
@@ -40,13 +39,11 @@ async function searchFromCaijiAPI(
         continue; // 尝试下一个标题
       }
 
-
       // 智能选择最佳匹配结果
       let bestMatch: any = null;
       let exactMatch: any = null;
 
       for (const result of data.list) {
-
         // 标题完全匹配（优先级最高）
         if (result.vod_name === searchTitle || result.vod_name === title) {
           exactMatch = result;
@@ -167,7 +164,6 @@ async function processSelectedResult(
         if (targetUrl.endsWith('.htm')) {
           targetUrl = targetUrl.replace(/\.htm$/, '.html');
         }
-
 
         urls.push({
           platform: platform,

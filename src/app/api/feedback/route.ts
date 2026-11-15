@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     // 检查是否是站长或管理员
     const isOwner = username === process.env.USERNAME;
     const userEntry = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
     const isAdmin = userEntry?.role === 'admin';
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     if (content.length > 500) {
       return NextResponse.json(
         { error: '留言内容过长（最多500字）' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -94,7 +94,7 @@ export async function DELETE(req: NextRequest) {
     // 检查是否是站长或管理员
     const isOwner = username === process.env.USERNAME;
     const userEntry = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
     const isAdmin = userEntry?.role === 'admin';
 
@@ -144,7 +144,7 @@ export async function PATCH(req: NextRequest) {
     // 检查是否是站长或管理员
     const isOwner = username === process.env.USERNAME;
     const userEntry = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
     const isAdmin = userEntry?.role === 'admin';
 

@@ -86,7 +86,7 @@ export function usePlayTester({
 
   const updatePlayStatus = (
     sourceKey: string,
-    patch: Partial<PlayTestStatus> & { status: PlayTestStatus['status'] }
+    patch: Partial<PlayTestStatus> & { status: PlayTestStatus['status'] },
   ) => {
     try {
       setPlayTestStatuses((prev) => {
@@ -96,8 +96,8 @@ export function usePlayTester({
           typeof patch.checkedAt === 'number'
             ? patch.checkedAt
             : patch.status === 'testing'
-            ? current.checkedAt
-            : Date.now();
+              ? current.checkedAt
+              : Date.now();
         next.set(sourceKey, {
           ...current,
           ...patch,
@@ -144,7 +144,11 @@ export function usePlayTester({
 
   const handleOpenPlayTester = (source: ApiSite) => {
     const result = testResults.get(source.key);
-    if (!result || !Array.isArray(result.results) || result.results.length === 0) {
+    if (
+      !result ||
+      !Array.isArray(result.results) ||
+      result.results.length === 0
+    ) {
       alert('请先完成搜索测试，并确保该源返回了搜索结果');
       return;
     }
@@ -222,7 +226,7 @@ export function usePlayTester({
       videoTitle: string;
       sourceKey: string;
       sourceName?: string;
-    }
+    },
   ) => {
     const normalizedUrl = episode.url.trim();
     if (!normalizedUrl) {
@@ -261,7 +265,7 @@ export function usePlayTester({
         Hls = (await import('hls.js')).default;
       } catch (error) {
         handlePlaybackFailure(
-          error instanceof Error ? error.message : 'HLS 播放器加载失败'
+          error instanceof Error ? error.message : 'HLS 播放器加载失败',
         );
         return;
       }
@@ -289,7 +293,6 @@ export function usePlayTester({
           const streamInfo = getHLSStreamInfo(hls);
 
           if (streamInfo) {
-
             // 获取当前流信息
             const currentStream = streamInfo.levels[streamInfo.currentLevel];
             const maxBandwidth = streamInfo.maxBandwidth;
@@ -300,9 +303,10 @@ export function usePlayTester({
               totalStreams: streamInfo.totalLevels,
               maxResolution: streamInfo.maxResolution,
               minResolution: streamInfo.minResolution,
-              bandwidthRange: maxBandwidth && minBandwidth
-                ? `${formatBandwidth(minBandwidth)} - ${formatBandwidth(maxBandwidth)}`
-                : undefined
+              bandwidthRange:
+                maxBandwidth && minBandwidth
+                  ? `${formatBandwidth(minBandwidth)} - ${formatBandwidth(maxBandwidth)}`
+                  : undefined,
             };
 
             // 获取当前流信息
@@ -316,7 +320,7 @@ export function usePlayTester({
             updatePlayStatus(options.sourceKey, {
               status: 'testing',
               message: `HLS 解析成功 - ${streamInfo.totalLevels}个清晰度`,
-              ...updateData
+              ...updateData,
             });
           }
         });
@@ -327,8 +331,8 @@ export function usePlayTester({
               data?.response?.code === 0
                 ? '跨域被拒或未开放 CORS'
                 : data?.response?.code === 403
-                ? '403 禁止访问，可能需要白名单'
-                : data?.details || '未知 HLS 错误';
+                  ? '403 禁止访问，可能需要白名单'
+                  : data?.details || '未知 HLS 错误';
             handlePlaybackFailure(`HLS 错误：${reason}`, data?.response?.url);
           }
         });
@@ -339,7 +343,7 @@ export function usePlayTester({
           } catch (err) {
             handlePlaybackFailure(
               (err instanceof Error ? err.message : undefined) ||
-                'HLS 源加载失败'
+                'HLS 源加载失败',
             );
           }
         });
@@ -398,7 +402,7 @@ export function usePlayTester({
       };
       handlePlaybackFailure(
         messageMap[errorCode] || '播放失败，可能被跨域限制',
-        mediaError?.message
+        mediaError?.message,
       );
     };
     video.addEventListener('playing', handlePlaying);
@@ -412,7 +416,8 @@ export function usePlayTester({
 
   const selectedPlayContext = useMemo(() => {
     if (!playTester.visible) return null;
-    const currentResult = playTester.parsedResults[playTester.selectedResultIndex];
+    const currentResult =
+      playTester.parsedResults[playTester.selectedResultIndex];
     if (!currentResult) return null;
     const line = currentResult.lines[playTester.selectedLineIndex];
     if (!line) return null;

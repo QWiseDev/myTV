@@ -28,33 +28,36 @@ export async function GET(_request: NextRequest) {
 
     if (config.LiveConfig && config.LiveConfig.length > 0) {
       config.LiveConfig.forEach((source, index) => {
-        console.error(`[DATA-API] [${index}] ${source.name} (${source.key}) - disabled: ${source.disabled}`);
+        console.error(
+          `[DATA-API] [${index}] ${source.name} (${source.key}) - disabled: ${source.disabled}`,
+        );
       });
     }
 
     if (!config.LiveConfig) {
       console.error('[DATA-API] LiveConfig 不存在，返回空数据');
-      return NextResponse.json({
-        success: true,
-        data: [],
-        message: 'LiveConfig 不存在',
-        forced: true,
-        timestamp: new Date().toISOString(),
-        debug: {
-          configExists: !!config,
-          liveConfigExists: !!config.LiveConfig,
+      return NextResponse.json(
+        {
+          success: true,
+          data: [],
+          message: 'LiveConfig 不存在',
+          forced: true,
+          timestamp: new Date().toISOString(),
+          debug: {
+            configExists: !!config,
+            liveConfigExists: !!config.LiveConfig,
+          },
         },
-      }, {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-          'ETag': `"data-debug-${Date.now()}"`,
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ETag: `"data-debug-${Date.now()}"`,
+          },
         },
-      });
+      );
     }
 
-    const liveSources = config.LiveConfig.filter(
-      (source) => !source.disabled
-    );
+    const liveSources = config.LiveConfig.filter((source) => !source.disabled);
 
     console.error(`[DATA-API] 过滤后得到 ${liveSources.length} 个可用直播源`);
 
@@ -77,12 +80,13 @@ export async function GET(_request: NextRequest) {
 
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control':
+          'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
+        Pragma: 'no-cache',
+        Expires: '0',
         'Surrogate-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        'Vary': '*',
-        'ETag': `"data-force-${Date.now()}-${Math.random()}"`,
+        Vary: '*',
+        ETag: `"data-force-${Date.now()}-${Math.random()}"`,
       },
     });
   } catch (error) {

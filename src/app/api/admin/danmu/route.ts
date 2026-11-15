@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       {
         error: '不支持本地存储进行管理员配置',
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (typeof rawApiBaseUrl !== 'string') {
       return NextResponse.json(
         { error: '弹幕 API 地址格式错误' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json(
           { error: '弹幕 API 地址格式不正确' },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     if (authInfo.username !== process.env.USERNAME) {
       const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user || user.role !== 'admin' || user.banned) {
         return NextResponse.json({ error: '权限不足' }, { status: 401 });
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store',
         },
-      }
+      },
     );
   } catch (error) {
     console.error('Save danmu config error:', error);
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : 'Internal server error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

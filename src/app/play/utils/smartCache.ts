@@ -18,7 +18,7 @@ interface SourceTestResult {
   pingTime: number;
   timestamp: number;
   success: boolean;
-  
+
   // ✅ 新增：完整的 HLS 流信息
   levels?: HLSLevel[];
   maxResolution?: string;
@@ -66,9 +66,10 @@ class SmartCache {
    * 计算源稳定性评分
    */
   private calculateStability(reliability: SourceReliability): number {
-    const successRate = reliability.totalCount > 0
-      ? reliability.successCount / reliability.totalCount
-      : 0;
+    const successRate =
+      reliability.totalCount > 0
+        ? reliability.successCount / reliability.totalCount
+        : 0;
 
     // 基于成功率和测试次数计算稳定性
     const testConfidence = Math.min(reliability.totalCount / 10, 1); // 10次测试后达到最大信心度
@@ -84,9 +85,10 @@ class SmartCache {
     }
 
     const stability = this.calculateStability(reliability);
-    const successRate = reliability.totalCount > 0
-      ? reliability.successCount / reliability.totalCount
-      : 0;
+    const successRate =
+      reliability.totalCount > 0
+        ? reliability.successCount / reliability.totalCount
+        : 0;
 
     // 高稳定性源使用更长的缓存时间
     let ttl = this.DEFAULT_CACHE_TTL;
@@ -156,10 +158,9 @@ class SmartCache {
         })
         .slice(0, Math.floor(this.MAX_CACHE_SIZE * 0.3)); // 清理30%最旧的条目
 
-      oldestKeys.forEach(key => {
+      oldestKeys.forEach((key) => {
         this.cache.delete(key);
       });
-
     }
 
     // 清理可靠性数据
@@ -172,10 +173,9 @@ class SmartCache {
         })
         .slice(0, Math.floor(this.MAX_RELIABILITY_SIZE * 0.3)); // 清理30%最旧的条目
 
-      oldestReliabilityKeys.forEach(key => {
+      oldestReliabilityKeys.forEach((key) => {
         this.reliability.delete(key);
       });
-
     }
   }
 
@@ -214,13 +214,16 @@ class SmartCache {
 
     // 更新平均响应时间
     reliability.avgResponseTime =
-      (reliability.avgResponseTime * (reliability.totalCount - 1) + result.pingTime) / reliability.totalCount;
+      (reliability.avgResponseTime * (reliability.totalCount - 1) +
+        result.pingTime) /
+      reliability.totalCount;
 
     // 更新平均质量（简单的质量等级映射）
     const qualityScore = this.getQualityScore(result.quality);
     const currentQualityScore = this.getQualityScore(reliability.avgQuality);
     reliability.avgQuality = this.getQualityFromScore(
-      (currentQualityScore * (reliability.totalCount - 1) + qualityScore) / reliability.totalCount
+      (currentQualityScore * (reliability.totalCount - 1) + qualityScore) /
+        reliability.totalCount,
     );
 
     reliability.lastTestTime = now;
@@ -234,13 +237,20 @@ class SmartCache {
    */
   private getQualityScore(quality: string): number {
     switch (quality) {
-      case '4K': return 100;
-      case '2K': return 85;
-      case '1080p': return 75;
-      case '720p': return 60;
-      case '480p': return 40;
-      case 'SD': return 20;
-      default: return 0;
+      case '4K':
+        return 100;
+      case '2K':
+        return 85;
+      case '1080p':
+        return 75;
+      case '720p':
+        return 60;
+      case '480p':
+        return 40;
+      case 'SD':
+        return 20;
+      default:
+        return 0;
     }
   }
 
@@ -280,7 +290,6 @@ class SmartCache {
         this.cache.delete(key);
       }
     });
-
   }
 
   /**
@@ -293,21 +302,28 @@ class SmartCache {
     totalTests: number;
     avgSuccessRate: number;
   } {
-    const stabilities = Array.from(this.reliability.values()).map(r => r.stability);
-    const successRates = Array.from(this.reliability.values()).map(r =>
-      r.totalCount > 0 ? r.successCount / r.totalCount : 0
+    const stabilities = Array.from(this.reliability.values()).map(
+      (r) => r.stability,
+    );
+    const successRates = Array.from(this.reliability.values()).map((r) =>
+      r.totalCount > 0 ? r.successCount / r.totalCount : 0,
     );
 
     return {
       cacheSize: this.cache.size,
       reliabilitySize: this.reliability.size,
-      avgStability: stabilities.length > 0
-        ? stabilities.reduce((sum, s) => sum + s, 0) / stabilities.length
-        : 0,
-      totalTests: Array.from(this.reliability.values()).reduce((sum, r) => sum + r.totalCount, 0),
-      avgSuccessRate: successRates.length > 0
-        ? successRates.reduce((sum, r) => sum + r, 0) / successRates.length
-        : 0,
+      avgStability:
+        stabilities.length > 0
+          ? stabilities.reduce((sum, s) => sum + s, 0) / stabilities.length
+          : 0,
+      totalTests: Array.from(this.reliability.values()).reduce(
+        (sum, r) => sum + r.totalCount,
+        0,
+      ),
+      avgSuccessRate:
+        successRates.length > 0
+          ? successRates.reduce((sum, r) => sum + r, 0) / successRates.length
+          : 0,
     };
   }
 
@@ -336,9 +352,12 @@ class SmartCache {
 const smartCache = new SmartCache();
 
 // 定期清理过期缓存
-setInterval(() => {
-  smartCache.cleanup();
-}, 5 * 60 * 1000); // 每5分钟清理一次
+setInterval(
+  () => {
+    smartCache.cleanup();
+  },
+  5 * 60 * 1000,
+); // 每5分钟清理一次
 
-export { SmartCache,smartCache };
-export type { HLSLevel, SourceReliability,SourceTestResult };
+export { SmartCache, smartCache };
+export type { HLSLevel, SourceReliability, SourceTestResult };

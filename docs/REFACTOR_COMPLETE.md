@@ -13,11 +13,13 @@
 **提交**: `79d7037`
 
 **成果**:
+
 - 独立弹幕引擎，解耦 Artplayer
 - 分层架构：Engine → Data → Adapter
 - 性能提升：内存⬇️50%, 加载⬆️60%, 帧率⬆️66%
 
 **文件**:
+
 ```
 src/lib/danmaku/
 ├── engine/
@@ -38,11 +40,13 @@ src/lib/danmaku/
 **提交**: `043210f`, `68847e3`
 
 **成果**:
+
 - 5 个独立 UI 组件
 - 单一职责原则
 - 易于测试和复用
 
 **文件**:
+
 ```
 src/components/play/
 ├── PlayerContainer.tsx    (40行)
@@ -57,11 +61,13 @@ src/components/play/
 **提交**: `c40d89b`
 
 **成果**:
+
 - 3 个业务 Hooks
 - 逻辑与 UI 分离
 - 提高可测试性
 
 **文件**:
+
 ```
 src/app/play/hooks/
 ├── useVideoPlayer.ts      (50行)
@@ -93,13 +99,13 @@ lib/danmaku/:      ~1236 行 (引擎层)
 
 ### 架构改进
 
-| 维度 | 重构前 | 重构后 |
-|------|--------|--------|
-| 单文件最大行数 | 4786 | 300 (⬇️ 94%) |
-| 组件复用性 | ❌ | ✅ |
-| 可测试性 | ❌ | ✅ |
-| 可维护性 | ⚠️ | ✅ |
-| 性能 | ⚠️ | ✅ (弹幕提升 50-66%) |
+| 维度           | 重构前 | 重构后               |
+| -------------- | ------ | -------------------- |
+| 单文件最大行数 | 4786   | 300 (⬇️ 94%)         |
+| 组件复用性     | ❌     | ✅                   |
+| 可测试性       | ❌     | ✅                   |
+| 可维护性       | ⚠️     | ✅                   |
+| 性能           | ⚠️     | ✅ (弹幕提升 50-66%) |
 
 ---
 
@@ -188,12 +194,14 @@ export default function PlayPage() {
 ## 📚 文档
 
 ### 重构文档
+
 - [总体进度](./REFACTOR_PROGRESS.md)
 - [弹幕重构方案](./danmaku-refactor-plan.md)
 - [Play Page 重构计划](./play-page-refactor-plan.md)
 - [JSX 拆分示例](./jsx-refactor-example.md)
 
 ### 使用文档
+
 - [弹幕系统 README](../src/lib/danmaku/README.md)
 - [弹幕快速开始](./danmaku-quick-start.md)
 - [弹幕迁移指南](./danmaku-migration-guide.md)
@@ -203,11 +211,13 @@ export default function PlayPage() {
 ## 🎯 下一步建议
 
 ### 立即可做
+
 1. ✅ 在 page.tsx 中集成新组件
 2. ✅ 测试功能是否正常
 3. ✅ 性能测试和优化
 
 ### 后续优化
+
 1. 添加单元测试
 2. 完善 TypeScript 类型
 3. 优化性能瓶颈

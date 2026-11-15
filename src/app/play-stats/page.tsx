@@ -35,7 +35,7 @@ const PersonalStatsPanel = dynamic(
   {
     loading: () => <SectionSkeleton />,
     ssr: false,
-  }
+  },
 );
 
 const LocalStorageNotice = dynamic(
@@ -43,7 +43,7 @@ const LocalStorageNotice = dynamic(
   {
     loading: () => <SectionSkeleton />,
     ssr: false,
-  }
+  },
 );
 
 const PlayStatsPage = () => {
@@ -69,7 +69,7 @@ const PlayStatsPage = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
-    null
+    null,
   );
   const [activeTab, setActiveTab] = useState<'admin' | 'personal'>('admin');
   const [upcomingReleases, setUpcomingReleases] = useState<
@@ -234,7 +234,7 @@ const PlayStatsPage = () => {
       const response = await fetch(
         `/api/release-calendar?dateFrom=${
           today.toISOString().split('T')[0]
-        }&dateTo=${twoWeeks.toISOString().split('T')[0]}`
+        }&dateTo=${twoWeeks.toISOString().split('T')[0]}`,
       );
 
       if (response.ok) {
@@ -295,7 +295,7 @@ const PlayStatsPage = () => {
 
       router.push(`/play?${params.toString()}`);
     },
-    [router]
+    [router],
   );
 
   const navigateToReleaseCalendar = useCallback(() => {
@@ -305,7 +305,8 @@ const PlayStatsPage = () => {
   const storageType =
     (typeof window !== 'undefined' &&
       (window as unknown as { RUNTIME_CONFIG?: { STORAGE_TYPE?: string } })
-        .RUNTIME_CONFIG?.STORAGE_TYPE) || 'localstorage';
+        .RUNTIME_CONFIG?.STORAGE_TYPE) ||
+    'localstorage';
 
   useEffect(() => {
     const auth = getAuthInfoFromBrowserCookie();
@@ -314,7 +315,6 @@ const PlayStatsPage = () => {
       return;
     }
 
-    
     setAuthInfo(auth);
     setIsAdmin(auth.role === 'admin' || auth.role === 'owner');
   }, [router, storageType]);
@@ -350,7 +350,7 @@ const PlayStatsPage = () => {
       return () => {
         window.removeEventListener(
           'playRecordsUpdated',
-          handlePlayRecordsUpdate
+          handlePlayRecordsUpdate,
         );
         // 清理防抖定时器
         if (checkTimeoutRef.current) {

@@ -1,12 +1,18 @@
 'use client';
 
-import { createContext, ReactNode,useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
 import { ClarityTracker } from './ClarityTracker';
 
 interface UserInfo {
-  accountName?: string;    // 账号名（用作userId）
-  displayName?: string;    // 显示名称
+  accountName?: string; // 账号名（用作userId）
+  displayName?: string; // 显示名称
   email?: string;
   sessionType?: 'guest' | 'registered' | 'premium';
   customTags?: Record<string, string>;
@@ -32,13 +38,13 @@ export function ClarityProvider({
   children,
   projectId,
   enable = true,
-  initialUser = { sessionType: 'guest' }
+  initialUser = { sessionType: 'guest' },
 }: ClarityProviderProps) {
   const [user, setUser] = useState<UserInfo>(initialUser);
 
   // 更新用户信息
   const updateUser = (userInfo: Partial<UserInfo>) => {
-    setUser(prev => ({ ...prev, ...userInfo }));
+    setUser((prev) => ({ ...prev, ...userInfo }));
   };
 
   // 完全设置用户身份（通常在登录时使用）
@@ -54,7 +60,10 @@ export function ClarityProvider({
   // 从localStorage或用户管理系统获取用户信息的示例
   useEffect(() => {
     // 可以在这里从localStorage、cookies或用户认证系统获取用户信息
-    const savedUserInfo = typeof window !== 'undefined' ? localStorage.getItem('clarity_user_info') : null;
+    const savedUserInfo =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('clarity_user_info')
+        : null;
 
     if (savedUserInfo) {
       try {
@@ -77,7 +86,7 @@ export function ClarityProvider({
     user,
     updateUser,
     logout,
-    identify
+    identify,
   };
 
   return (
@@ -110,10 +119,14 @@ export function useClarityUser() {
   const { updateUser, identify, logout, user } = useClarity();
 
   // 用户登录
-  const login = (userInfo: Omit<UserInfo, 'sessionType'> & { sessionType?: 'guest' | 'registered' | 'premium' }) => {
+  const login = (
+    userInfo: Omit<UserInfo, 'sessionType'> & {
+      sessionType?: 'guest' | 'registered' | 'premium';
+    },
+  ) => {
     const userData = {
       ...userInfo,
-      sessionType: userInfo.sessionType || 'registered'
+      sessionType: userInfo.sessionType || 'registered',
     };
     identify(userData);
   };
@@ -128,8 +141,8 @@ export function useClarityUser() {
     updateUser({
       customTags: {
         ...user.customTags,
-        [key]: value
-      }
+        [key]: value,
+      },
     });
   };
 
@@ -148,6 +161,6 @@ export function useClarityUser() {
     addTag,
     removeTag,
     updateUser,
-    identify
+    identify,
   };
 }

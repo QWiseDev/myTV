@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   if (authInfo.username !== process.env.USERNAME) {
     return NextResponse.json(
       { error: 'Forbidden: Owner access required' },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: '获取缓存统计失败',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -60,7 +60,7 @@ export async function DELETE(request: NextRequest) {
   if (authInfo.username !== process.env.USERNAME) {
     return NextResponse.json(
       { error: 'Forbidden: Owner access required' },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -118,7 +118,7 @@ export async function DELETE(request: NextRequest) {
             success: false,
             error: '无效的缓存类型',
           },
-          { status: 400 }
+          { status: 400 },
         );
     }
 
@@ -136,14 +136,13 @@ export async function DELETE(request: NextRequest) {
         success: false,
         error: '清理缓存失败',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // 获取缓存统计信息
 async function getCacheStats() {
-
   // 直接使用数据库统计（支持KVRocks/Upstash/Redis）
   const dbStats = await DatabaseCacheManager.getSimpleCacheStats();
 
@@ -188,7 +187,7 @@ async function clearDoubanCache(): Promise<number> {
   // 清理localStorage中的豆瓣缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('douban-') || key.startsWith('bangumi-')
+      (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -210,7 +209,7 @@ async function clearTmdbCache(): Promise<number> {
   // 清理localStorage中的TMDB缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('tmdb-')
+      key.startsWith('tmdb-'),
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -232,7 +231,7 @@ async function clearDanmuCache(): Promise<number> {
   // 清理localStorage中的弹幕缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache'
+      (key) => key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache',
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -254,7 +253,7 @@ async function clearYouTubeCache(): Promise<number> {
   // 清理localStorage中的YouTube缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('youtube-search')
+      key.startsWith('youtube-search'),
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -276,7 +275,7 @@ async function clearNetdiskCache(): Promise<number> {
   // 清理localStorage中的网盘缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('netdisk-search')
+      key.startsWith('netdisk-search'),
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -303,7 +302,7 @@ async function clearSearchCache(): Promise<number> {
   // 清理localStorage中的搜索缓存（兜底）
   if (typeof localStorage !== 'undefined') {
     const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('search-') || key.startsWith('cache-')
+      (key) => key.startsWith('search-') || key.startsWith('cache-'),
     );
     keys.forEach((key) => {
       localStorage.removeItem(key);
@@ -351,7 +350,6 @@ async function clearExpiredCache(): Promise<number> {
         clearedCount++;
       }
     });
-
   }
 
   return clearedCount;

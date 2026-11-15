@@ -39,7 +39,7 @@ export default function ReleaseCalendarPage() {
 
   // 视图模式
   const [viewMode, setViewMode] = useState<'grid' | 'timeline' | 'calendar'>(
-    'grid'
+    'grid',
   );
 
   // 返回顶部按钮状态
@@ -136,7 +136,7 @@ export default function ReleaseCalendarPage() {
 
   // 前端过滤逻辑
   const applyClientSideFilters = (
-    data: ReleaseCalendarResult
+    data: ReleaseCalendarResult,
   ): ReleaseCalendarResult => {
     return applyClientSideFiltersWithParams(data, filters);
   };
@@ -144,41 +144,41 @@ export default function ReleaseCalendarPage() {
   // 前端过滤逻辑（可以指定过滤参数）
   const applyClientSideFiltersWithParams = (
     data: ReleaseCalendarResult,
-    filterParams: typeof filters
+    filterParams: typeof filters,
   ): ReleaseCalendarResult => {
     let filteredItems = [...data.items];
 
     if (filterParams.type) {
       filteredItems = filteredItems.filter(
-        (item) => item.type === filterParams.type
+        (item) => item.type === filterParams.type,
       );
     }
 
     if (filterParams.region && filterParams.region !== '全部') {
       const region = filterParams.region;
       filteredItems = filteredItems.filter((item) =>
-        item.region.includes(region)
+        item.region.includes(region),
       );
     }
 
     if (filterParams.genre && filterParams.genre !== '全部') {
       const genre = filterParams.genre;
       filteredItems = filteredItems.filter((item) =>
-        item.genre.includes(genre)
+        item.genre.includes(genre),
       );
     }
 
     if (filterParams.dateFrom) {
       const dateFrom = filterParams.dateFrom;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate >= dateFrom
+        (item) => item.releaseDate >= dateFrom,
       );
     }
 
     if (filterParams.dateTo) {
       const dateTo = filterParams.dateTo;
       filteredItems = filteredItems.filter(
-        (item) => item.releaseDate <= dateTo
+        (item) => item.releaseDate <= dateTo,
       );
     }
 
@@ -191,7 +191,7 @@ export default function ReleaseCalendarPage() {
           item.director
             .toLowerCase()
             .includes(filterParams.search.toLowerCase()) ||
-          item.actors.toLowerCase().includes(filterParams.search.toLowerCase())
+          item.actors.toLowerCase().includes(filterParams.search.toLowerCase()),
       );
     }
 
@@ -212,7 +212,6 @@ export default function ReleaseCalendarPage() {
 
   // 处理刷新按钮点击（简化版，清除数据库缓存并刷新）
   const handleRefreshClick = async () => {
-
     try {
       // 清除遗留的localStorage缓存（兼容性清理）
       localStorage.removeItem('release_calendar_all_data');
@@ -243,13 +242,13 @@ export default function ReleaseCalendarPage() {
     // 遗留缓存可能已损坏，解析失败时按无缓存处理，回退到重新拉取
     const allData = readJsonFromStorage<ReleaseCalendarResult | null>(
       'release_calendar_all_data',
-      null
+      null,
     );
     if (allData) {
       // 直接使用重置后的过滤条件，而不是依赖state（state更新是异步的）
       const filteredData = applyClientSideFiltersWithParams(
         allData,
-        resetFiltersState
+        resetFiltersState,
       );
       setData(filteredData);
     } else {
@@ -600,8 +599,8 @@ export default function ReleaseCalendarPage() {
                         self.findIndex(
                           (t) =>
                             t.title === item.title &&
-                            t.director === item.director
-                        )
+                            t.director === item.director,
+                        ),
                     );
                     return uniqueCurrentItems;
                   })().map((item) => {
@@ -768,7 +767,7 @@ export default function ReleaseCalendarPage() {
                             >
                               {day}
                             </div>
-                          )
+                          ),
                         )}
                       </div>
 
@@ -781,11 +780,11 @@ export default function ReleaseCalendarPage() {
                           const firstDay = new Date(
                             currentYear,
                             currentMonth,
-                            1
+                            1,
                           );
                           const startDate = new Date(firstDay);
                           startDate.setDate(
-                            startDate.getDate() - firstDay.getDay()
+                            startDate.getDate() - firstDay.getDay(),
                           );
 
                           const days = [];
@@ -799,16 +798,16 @@ export default function ReleaseCalendarPage() {
                             for (let day = 0; day < 7; day++) {
                               // 避免时区问题，使用本地日期格式
                               const dateStr = `${current.getFullYear()}-${String(
-                                current.getMonth() + 1
+                                current.getMonth() + 1,
                               ).padStart(2, '0')}-${String(
-                                current.getDate()
+                                current.getDate(),
                               ).padStart(2, '0')}`;
                               const isCurrentMonth =
                                 current.getMonth() === currentMonth;
                               const isToday =
                                 current.toDateString() === today.toDateString();
                               const dayItems = allItems.filter(
-                                (item) => item.releaseDate === dateStr
+                                (item) => item.releaseDate === dateStr,
                               );
                               // 去重：按title和director去重
                               const uniqueDayItems = dayItems.filter(
@@ -817,8 +816,8 @@ export default function ReleaseCalendarPage() {
                                   self.findIndex(
                                     (t) =>
                                       t.title === item.title &&
-                                      t.director === item.director
-                                  )
+                                      t.director === item.director,
+                                  ),
                               );
 
                               days.push(
@@ -844,8 +843,8 @@ export default function ReleaseCalendarPage() {
                                       isToday
                                         ? 'text-blue-600 dark:text-blue-400'
                                         : !isCurrentMonth
-                                        ? 'text-gray-400'
-                                        : 'text-gray-900 dark:text-white'
+                                          ? 'text-gray-400'
+                                          : 'text-gray-900 dark:text-white'
                                     }`}
                                   >
                                     {current.getDate()}
@@ -885,7 +884,7 @@ export default function ReleaseCalendarPage() {
                                       </button>
                                     )}
                                   </div>
-                                </div>
+                                </div>,
                               );
 
                               current.setDate(current.getDate() + 1);
@@ -907,7 +906,7 @@ export default function ReleaseCalendarPage() {
                         const lastDay = new Date(
                           currentYear,
                           currentMonth + 1,
-                          0
+                          0,
                         );
 
                         // 使用全部数据而不是分页数据
@@ -919,14 +918,14 @@ export default function ReleaseCalendarPage() {
 
                         while (current <= lastDay) {
                           const dateStr = `${current.getFullYear()}-${String(
-                            current.getMonth() + 1
+                            current.getMonth() + 1,
                           ).padStart(2, '0')}-${String(
-                            current.getDate()
+                            current.getDate(),
                           ).padStart(2, '0')}`;
                           const isToday =
                             current.toDateString() === today.toDateString();
                           const dayItems = allItems.filter(
-                            (item) => item.releaseDate === dateStr
+                            (item) => item.releaseDate === dateStr,
                           );
                           // 去重：按title和director去重
                           const uniqueDayItems = dayItems.filter(
@@ -935,8 +934,8 @@ export default function ReleaseCalendarPage() {
                               self.findIndex(
                                 (t) =>
                                   t.title === item.title &&
-                                  t.director === item.director
-                              )
+                                  t.director === item.director,
+                              ),
                           );
 
                           if (uniqueDayItems.length > 0) {
@@ -1027,7 +1026,7 @@ export default function ReleaseCalendarPage() {
                                 ))}
                               </div>
                             </div>
-                          )
+                          ),
                         );
                       })()}
                     </div>
@@ -1037,14 +1036,14 @@ export default function ReleaseCalendarPage() {
                   {(() => {
                     const today = new Date();
                     const todayStr = `${today.getFullYear()}-${String(
-                      today.getMonth() + 1
+                      today.getMonth() + 1,
                     ).padStart(2, '0')}-${String(today.getDate()).padStart(
                       2,
-                      '0'
+                      '0',
                     )}`;
                     const allItems = data?.items || [];
                     const todayItems = allItems.filter(
-                      (item) => item.releaseDate === todayStr
+                      (item) => item.releaseDate === todayStr,
                     );
 
                     // 去重：按title和director去重
@@ -1054,8 +1053,8 @@ export default function ReleaseCalendarPage() {
                         self.findIndex(
                           (t) =>
                             t.title === item.title &&
-                            t.director === item.director
-                        )
+                            t.director === item.director,
+                        ),
                     );
 
                     if (uniqueTodayItems.length > 0) {
@@ -1106,22 +1105,25 @@ export default function ReleaseCalendarPage() {
 
                   <div className='space-y-8'>
                     {Object.entries(
-                      (data?.items || []).reduce((acc, item) => {
-                        const date = item.releaseDate;
-                        if (!acc[date]) acc[date] = [];
-                        acc[date].push(item);
-                        return acc;
-                      }, {} as Record<string, ReleaseCalendarItem[]>)
+                      (data?.items || []).reduce(
+                        (acc, item) => {
+                          const date = item.releaseDate;
+                          if (!acc[date]) acc[date] = [];
+                          acc[date].push(item);
+                          return acc;
+                        },
+                        {} as Record<string, ReleaseCalendarItem[]>,
+                      ),
                     )
                       .sort(([a], [b]) => a.localeCompare(b))
                       .map(([date, items], _index) => {
                         const today = new Date();
                         const currentDate = new Date(date);
                         const todayStr = `${today.getFullYear()}-${String(
-                          today.getMonth() + 1
+                          today.getMonth() + 1,
                         ).padStart(2, '0')}-${String(today.getDate()).padStart(
                           2,
-                          '0'
+                          '0',
                         )}`;
                         const isToday = date === todayStr;
                         const isPast = currentDate < today && !isToday;
@@ -1134,8 +1136,8 @@ export default function ReleaseCalendarPage() {
                             self.findIndex(
                               (t) =>
                                 t.title === item.title &&
-                                t.director === item.director
-                            )
+                                t.director === item.director,
+                            ),
                         );
 
                         return (
@@ -1146,8 +1148,8 @@ export default function ReleaseCalendarPage() {
                                 isToday
                                   ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/50'
                                   : isPast
-                                  ? 'bg-gray-400'
-                                  : 'bg-blue-500 shadow-lg shadow-blue-500/30'
+                                    ? 'bg-gray-400'
+                                    : 'bg-blue-500 shadow-lg shadow-blue-500/30'
                               }`}
                             >
                               {isToday && (
@@ -1163,8 +1165,8 @@ export default function ReleaseCalendarPage() {
                                 isToday
                                   ? 'border-red-500 ring-2 ring-red-500/20'
                                   : isPast
-                                  ? 'border-gray-300 dark:border-gray-600 opacity-75'
-                                  : 'border-blue-200 dark:border-blue-800'
+                                    ? 'border-gray-300 dark:border-gray-600 opacity-75'
+                                    : 'border-blue-200 dark:border-blue-800'
                               }`}
                             >
                               {/* 日期头部 */}
@@ -1173,8 +1175,8 @@ export default function ReleaseCalendarPage() {
                                   isToday
                                     ? 'bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-red-200 dark:border-red-800'
                                     : isPast
-                                    ? 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                                    : 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800'
+                                      ? 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                                      : 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800'
                                 }`}
                               >
                                 <div className='flex items-center justify-between'>
@@ -1184,8 +1186,8 @@ export default function ReleaseCalendarPage() {
                                         isToday
                                           ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
                                           : isPast
-                                          ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                          : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                                            ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                            : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                                       }`}
                                     >
                                       <Calendar className='w-5 h-5' />
@@ -1196,8 +1198,8 @@ export default function ReleaseCalendarPage() {
                                           isToday
                                             ? 'text-red-800 dark:text-red-300'
                                             : isPast
-                                            ? 'text-gray-700 dark:text-gray-300'
-                                            : 'text-blue-800 dark:text-blue-300'
+                                              ? 'text-gray-700 dark:text-gray-300'
+                                              : 'text-blue-800 dark:text-blue-300'
                                         }`}
                                       >
                                         {formatDate(date)}

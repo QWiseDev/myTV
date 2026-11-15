@@ -7,7 +7,6 @@ export const runtime = 'nodejs';
 let isRunning = false;
 
 export async function GET(_request: NextRequest) {
-
   if (isRunning) {
     return NextResponse.json({
       success: false,
@@ -69,10 +68,9 @@ export async function GET(_request: NextRequest) {
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     isRunning = false;
   }
 }
-

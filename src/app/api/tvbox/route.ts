@@ -35,7 +35,7 @@ function getClientIP(request: NextRequest): string {
 async function checkRateLimit(
   ip: string,
   limit = 60,
-  windowMs = 60000
+  windowMs = 60000,
 ): Promise<boolean> {
   const now = Date.now();
   const windowStart = Math.floor(now / windowMs) * windowMs; // 对齐到时间窗口开始
@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
             error: 'Invalid token. Please add ?token=YOUR_TOKEN to the URL',
             hint: '请在URL中添加 ?token=你的密钥 参数',
           },
-          { status: 401 }
+          { status: 401 },
         );
       }
     }
@@ -253,7 +253,7 @@ export async function GET(request: NextRequest) {
             error: `Access denied for IP: ${clientIP}`,
             hint: '该IP地址不在白名单中',
           },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
             error: 'Rate limit exceeded',
             hint: `访问频率超限，每分钟最多${rateLimit}次请求`,
           },
-          { status: 429 }
+          { status: 429 },
         );
       }
     }
@@ -283,13 +283,13 @@ export async function GET(request: NextRequest) {
     if (sourceConfigs.length === 0) {
       return NextResponse.json(
         { error: '没有配置任何视频源' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     // 过滤掉被禁用的源站和没有API地址的源站
     let enabledSources = sourceConfigs.filter(
-      (source) => !source.disabled && source.api && source.api.trim() !== ''
+      (source) => !source.disabled && source.api && source.api.trim() !== '',
     );
 
     // 🔑 新增：应用用户的源限制（如果有）
@@ -299,7 +299,7 @@ export async function GET(request: NextRequest) {
     ) {
       const allowedSourceKeys = new Set(currentUser.tvboxEnabledSources);
       enabledSources = enabledSources.filter((source) =>
-        allowedSourceKeys.has(source.key)
+        allowedSourceKeys.has(source.key),
       );
     }
 
@@ -444,7 +444,7 @@ export async function GET(request: NextRequest) {
                       'User-Agent': 'TVBox/1.0.0',
                     },
                   }),
-                10000 // 10秒超时
+                10000, // 10秒超时
               );
 
               if (response.ok) {
@@ -453,7 +453,7 @@ export async function GET(request: NextRequest) {
                   return data.class
                     .map(
                       (cat: { type_name?: string; name?: string }) =>
-                        cat.type_name || cat.name || ''
+                        cat.type_name || cat.name || '',
                     )
                     .filter((name: string) => name);
                 }
@@ -466,30 +466,30 @@ export async function GET(request: NextRequest) {
                   error.name === 'AbortError'
                 ) {
                   console.warn(
-                    `[TVBox] 获取源站 ${source.name} 分类超时(10s)，使用默认分类`
+                    `[TVBox] 获取源站 ${source.name} 分类超时(10s)，使用默认分类`,
                   );
                 } else if (
                   error.message.includes('JSON') ||
                   error.message.includes('parse')
                 ) {
                   console.warn(
-                    `[TVBox] 源站 ${source.name} 返回的分类数据格式错误，使用默认分类`
+                    `[TVBox] 源站 ${source.name} 返回的分类数据格式错误，使用默认分类`,
                   );
                 } else if (
                   error.message.includes('ENOTFOUND') ||
                   error.message.includes('ECONNREFUSED')
                 ) {
                   console.warn(
-                    `[TVBox] 无法连接到源站 ${source.name}，使用默认分类`
+                    `[TVBox] 无法连接到源站 ${source.name}，使用默认分类`,
                   );
                 } else {
                   console.warn(
-                    `[TVBox] 获取源站 ${source.name} 分类失败: ${error.message}，使用默认分类`
+                    `[TVBox] 获取源站 ${source.name} 分类失败: ${error.message}，使用默认分类`,
                   );
                 }
               } else {
                 console.warn(
-                  `[TVBox] 获取源站 ${source.name} 分类失败（未知错误），使用默认分类`
+                  `[TVBox] 获取源站 ${source.name} 分类失败（未知错误），使用默认分类`,
                 );
               }
             }
@@ -516,7 +516,7 @@ export async function GET(request: NextRequest) {
             timeout: siteTimeout, // 超时时间
             retry: siteRetry, // 重试次数
           };
-        })
+        }),
       ),
 
       // 解析源配置（添加一些常用的解析源）
@@ -639,7 +639,7 @@ export async function GET(request: NextRequest) {
       // 直播源（合并所有启用的直播源为一个，解决TVBox多源限制）
       lives: (() => {
         const enabledLives = (config.LiveConfig || []).filter(
-          (live) => !live.disabled
+          (live) => !live.disabled,
         );
         if (enabledLives.length === 0) return [];
 
@@ -761,7 +761,7 @@ export async function GET(request: NextRequest) {
       console.warn(
         `[Spider] 远程 jar 获取失败，使用本地代理: ${
           finalSpiderUrl.split(';')[0]
-        }`
+        }`,
       );
     }
 
@@ -811,32 +811,33 @@ export async function GET(request: NextRequest) {
               retry?: unknown;
               header?: Record<string, string>;
               changeable?: number;
-            }
+            },
           ) => {
-          const fastSite = { ...site };
-          // 快速模式：移除可能导致卡顿的配置
-          delete fastSite.timeout;
-          delete fastSite.retry;
+            const fastSite = { ...site };
+            // 快速模式：移除可能导致卡顿的配置
+            delete fastSite.timeout;
+            delete fastSite.retry;
 
-          // 优化请求头，提升响应速度
-          if (fastSite.type === 3) {
-            fastSite.header = { 'User-Agent': 'okhttp/3.15' };
-          } else {
-            fastSite.header = {
-              'User-Agent':
-                'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36',
-              Connection: 'close',
-            };
-          }
+            // 优化请求头，提升响应速度
+            if (fastSite.type === 3) {
+              fastSite.header = { 'User-Agent': 'okhttp/3.15' };
+            } else {
+              fastSite.header = {
+                'User-Agent':
+                  'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36',
+                Connection: 'close',
+              };
+            }
 
-          // 强制启用快速切换相关功能
-          fastSite.searchable = 1;
-          fastSite.quickSearch = 1;
-          fastSite.filterable = 1;
-          fastSite.changeable = 1;
+            // 强制启用快速切换相关功能
+            fastSite.searchable = 1;
+            fastSite.quickSearch = 1;
+            fastSite.filterable = 1;
+            fastSite.changeable = 1;
 
-          return fastSite;
-        }),
+            return fastSite;
+          },
+        ),
         lives: tvboxConfig.lives,
         parses: [
           {
@@ -949,7 +950,7 @@ export async function GET(request: NextRequest) {
         error: 'TVBox配置生成失败',
         details: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

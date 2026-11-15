@@ -39,3 +39,11 @@ yarn-error.log*
 CHANGELOG.md
 
 pnpm-lock.yaml
+
+# python venv（pip 元数据非代码）
+/venv_convert
+
+# 项目工具状态与内部文档（非代码）
+/.codestable
+/.trae
+/.agents

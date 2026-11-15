@@ -71,16 +71,19 @@ body {
 body {
   color: rgb(var(--foreground-rgb));
   background: var(--claude-bg);
-  font-family: 'Anthropic Sans', ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:
+    'Anthropic Sans',
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
 }
 
 html:not(.dark) body {
-  background: radial-gradient(
-      circle at 14% 0%,
-      rgba(0, 190, 6, 0.10),
-      transparent 24rem
-    ),
+  background:
+    radial-gradient(circle at 14% 0%, rgba(0, 190, 6, 0.1), transparent 24rem),
     linear-gradient(180deg, #ffffff 0%, #f7f7f7 52%, #efefef 100%);
   background-attachment: fixed;
 }
@@ -91,7 +94,8 @@ html.dark {
 }
 
 html.dark body {
-  background: radial-gradient(
+  background:
+    radial-gradient(
       circle at 12% 0%,
       rgba(26, 205, 80, 0.12),
       transparent 24rem
@@ -247,12 +251,16 @@ html:not(.dark)::view-transition-new(root) {
     opacity: 1 !important;
     transform: translateY(0) !important;
     pointer-events: auto !important;
-    transition: opacity 0.15s ease 0.1s, transform 0.15s ease 0.1s !important; /* 0.1s显示延迟 */
+    transition:
+      opacity 0.15s ease 0.1s,
+      transform 0.15s ease 0.1s !important; /* 0.1s显示延迟 */
   }
 
   /* 音量面板默认隐藏状态，和弹幕一样的延迟 */
   .art-volume-panel {
-    transition: opacity 0.15s ease 0.3s, transform 0.15s ease 0.3s !important; /* 0.3s隐藏延迟 */
+    transition:
+      opacity 0.15s ease 0.3s,
+      transform 0.15s ease 0.3s !important; /* 0.3s隐藏延迟 */
   }
 }
 
@@ -339,7 +347,9 @@ html:not(.dark)::view-transition-new(root) {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
-    transition: opacity 0.15s ease 0.3s, visibility 0s ease 0.45s; /* 0.3s隐藏延迟 */
+    transition:
+      opacity 0.15s ease 0.3s,
+      visibility 0s ease 0.45s; /* 0.3s隐藏延迟 */
   }
 
   /* 面板内部元素在显示时可交互 */

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (!username) {
       return NextResponse.json(
         { error: 'Username is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     // 检查权限：只有 owner 和 admin 可以管理用户 Token
     const currentUser = config.UserConfig.Users.find(
-      (u) => u.username === authInfo.username
+      (u) => u.username === authInfo.username,
     );
     if (
       !currentUser ||
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // 查找目标用户
     const targetUser = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'Cannot modify admin or owner users' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     console.error('Update user TVBox token failed:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -111,7 +111,7 @@ export async function DELETE(request: NextRequest) {
     if (!username) {
       return NextResponse.json(
         { error: 'Username is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -120,7 +120,7 @@ export async function DELETE(request: NextRequest) {
 
     // 检查权限
     const currentUser = config.UserConfig.Users.find(
-      (u) => u.username === authInfo.username
+      (u) => u.username === authInfo.username,
     );
     if (
       !currentUser ||
@@ -131,7 +131,7 @@ export async function DELETE(request: NextRequest) {
 
     // 查找目标用户
     const targetUser = config.UserConfig.Users.find(
-      (u) => u.username === username
+      (u) => u.username === username,
     );
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -144,7 +144,7 @@ export async function DELETE(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'Cannot modify admin or owner users' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -161,7 +161,7 @@ export async function DELETE(request: NextRequest) {
     console.error('Delete user TVBox token failed:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

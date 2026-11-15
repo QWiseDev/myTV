@@ -44,19 +44,14 @@ export function GroupTabBar({
           const container = groupContainerRef.current;
           if (container) {
             const handleWheel = (e: WheelEvent) => {
-              if (
-                container.scrollWidth >
-                container.clientWidth
-              ) {
+              if (container.scrollWidth > container.clientWidth) {
                 e.preventDefault();
                 container.scrollLeft += e.deltaY;
               }
             };
-            container.addEventListener(
-              'wheel',
-              handleWheel,
-              { passive: false }
-            );
+            container.addEventListener('wheel', handleWheel, {
+              passive: false,
+            });
             // 将事件处理器存储在容器上，以便后续移除
             (container as any)._wheelHandler = handleWheel;
           }
@@ -64,52 +59,46 @@ export function GroupTabBar({
         onMouseLeave={() => {
           // 鼠标离开分组标签区域时，移除滚轮事件监听
           const container = groupContainerRef.current;
-          if (
-            container &&
-            (container as any)._wheelHandler
-          ) {
+          if (container && (container as any)._wheelHandler) {
             container.removeEventListener(
               'wheel',
-              (container as any)._wheelHandler
+              (container as any)._wheelHandler,
             );
             delete (container as any)._wheelHandler;
           }
         }}
       >
         <div className='flex gap-4 min-w-max'>
-          {Object.keys(groupedChannels).map(
-            (group, index) => (
-              <button
-                key={group}
-                data-group={group}
-                ref={(el) => {
-                  groupButtonRefs.current[index] = el;
-                }}
-                onClick={() => onGroupChange(group)}
-                disabled={isSwitchingSource}
-                className={`w-20 relative py-2 text-sm font-medium transition-colors flex-shrink-0 text-center overflow-hidden
+          {Object.keys(groupedChannels).map((group, index) => (
+            <button
+              key={group}
+              data-group={group}
+              ref={(el) => {
+                groupButtonRefs.current[index] = el;
+              }}
+              onClick={() => onGroupChange(group)}
+              disabled={isSwitchingSource}
+              className={`w-20 relative py-2 text-sm font-medium transition-colors flex-shrink-0 text-center overflow-hidden
              ${
                isSwitchingSource
                  ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
                  : selectedGroup === group
-                 ? 'text-green-500 dark:text-green-400'
-                 : 'text-gray-700 hover:text-green-600 dark:text-gray-300 dark:hover:text-green-400'
+                   ? 'text-green-500 dark:text-green-400'
+                   : 'text-gray-700 hover:text-green-600 dark:text-gray-300 dark:hover:text-green-400'
              }
            `.trim()}
+            >
+              <div
+                className='px-1 overflow-hidden whitespace-nowrap'
+                title={group}
               >
-                <div
-                  className='px-1 overflow-hidden whitespace-nowrap'
-                  title={group}
-                >
-                  {group}
-                </div>
-                {selectedGroup === group &&
-                  !isSwitchingSource && (
-                    <div className='absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 dark:bg-green-400' />
-                  )}
-              </button>
-            )
-          )}
+                {group}
+              </div>
+              {selectedGroup === group && !isSwitchingSource && (
+                <div className='absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 dark:bg-green-400' />
+              )}
+            </button>
+          ))}
         </div>
       </div>
     </div>

@@ -66,12 +66,9 @@ describe('clearAllFavorites', () => {
 
     const { clearAllFavorites, getAllFavorites } = await import('./db.client');
     await expect(getAllFavorites()).resolves.toEqual(favorites);
-    window.addEventListener(
-      'favoritesUpdated',
-      ((event: CustomEvent) => {
-        favoriteUpdates.push(event.detail);
-      }) as EventListener,
-    );
+    window.addEventListener('favoritesUpdated', ((event: CustomEvent) => {
+      favoriteUpdates.push(event.detail);
+    }) as EventListener);
 
     await expect(clearAllFavorites()).rejects.toThrow(
       '请求 /api/favorites 失败: 500',
@@ -128,8 +125,34 @@ describe('db.client favorites 缓存优先读（redis 模式）', () => {
       callCount += 1;
       return jsonResponse(
         callCount === 1
-          ? { 'src+1': { title: '初始', source_name: '源', year: '2026', cover: '', total_episodes: 1, save_time: 1 } }
-          : { 'src+1': { title: '初始', source_name: '源', year: '2026', cover: '', total_episodes: 1, save_time: 1 }, 'src+2': { title: '新增', source_name: '源', year: '2026', cover: '', total_episodes: 1, save_time: 2 } },
+          ? {
+              'src+1': {
+                title: '初始',
+                source_name: '源',
+                year: '2026',
+                cover: '',
+                total_episodes: 1,
+                save_time: 1,
+              },
+            }
+          : {
+              'src+1': {
+                title: '初始',
+                source_name: '源',
+                year: '2026',
+                cover: '',
+                total_episodes: 1,
+                save_time: 1,
+              },
+              'src+2': {
+                title: '新增',
+                source_name: '源',
+                year: '2026',
+                cover: '',
+                total_episodes: 1,
+                save_time: 2,
+              },
+            },
       );
     });
     global.fetch = fetchMock as unknown as typeof fetch;

@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
     if (!baseUrl) {
       return NextResponse.json(
         { ok: false, error: 'cannot determine base url' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
 
       // 检查私网地址
       const privateApis = sites.filter(
-        (s: any) => typeof s?.api === 'string' && isPrivateHost(s.api)
+        (s: any) => typeof s?.api === 'string' && isPrivateHost(s.api),
       ).length;
       result.privateApis = privateApis;
       if (privateApis > 0) {
@@ -201,7 +201,7 @@ export async function GET(req: NextRequest) {
 
           if (!healthCheck.accessible) {
             result.issues.push(
-              `spider unreachable: ${healthCheck.status || healthCheck.error}`
+              `spider unreachable: ${healthCheck.status || healthCheck.error}`,
             );
           } else {
             // 验证文件大小（spider jar 通常大于 100KB）
@@ -210,7 +210,7 @@ export async function GET(req: NextRequest) {
               result.spiderSizeKB = Math.round(sizeKB);
               if (sizeKB < 50) {
                 result.issues.push(
-                  `spider jar size suspicious: ${result.spiderSizeKB}KB (expected >100KB)`
+                  `spider jar size suspicious: ${result.spiderSizeKB}KB (expected >100KB)`,
                 );
               }
             }
@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
     console.error('Diagnose failed', e);
     return NextResponse.json(
       { ok: false, error: e?.message || 'unknown error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

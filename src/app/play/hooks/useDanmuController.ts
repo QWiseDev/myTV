@@ -60,7 +60,11 @@ export function useDanmuController({
   > => {
     const getCurrentRequestInput = () => ({
       manualEpisodeId: readDanmakuSelection(
-        danmakuMediaKey(videoTitleRef.current, videoYearRef.current, videoDoubanIdRef.current),
+        danmakuMediaKey(
+          videoTitleRef.current,
+          videoYearRef.current,
+          videoDoubanIdRef.current,
+        ),
         currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current,
       )?.episodeId,
       enabled: externalDanmuEnabledRef.current,

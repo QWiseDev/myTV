@@ -6,9 +6,7 @@ import { createPortal } from 'react-dom';
 import { AdminConfig } from '@/lib/admin.types';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 
-import {
-  TVBoxTokenModal,
-} from '@/components/TVBoxTokenManager';
+import { TVBoxTokenModal } from '@/components/TVBoxTokenManager';
 
 import {
   AlertModal,
@@ -97,7 +95,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
     tvboxEnabledSources?: string[];
   } | null>(null);
   const [selectedTVBoxSources, setSelectedTVBoxSources] = useState<string[]>(
-    []
+    [],
   );
 
   // 当前登录用户名
@@ -110,7 +108,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         (user) =>
           role === 'owner' ||
           (role === 'admin' &&
-            (user.role === 'user' || user.username === currentUsername))
+            (user.role === 'user' || user.username === currentUsername)),
       ).length || 0;
     return selectedUsers.size === selectableUserCount && selectedUsers.size > 0;
   }, [selectedUsers.size, config?.UserConfig?.Users, role, currentUsername]);
@@ -122,7 +120,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
   const handleUserGroupAction = async (
     action: 'add' | 'edit' | 'delete',
     groupName: string,
-    enabledApis?: string[]
+    enabledApis?: string[],
   ) => {
     return withLoading(`userGroup_${action}_${groupName}`, async () => {
       try {
@@ -156,9 +154,9 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
           action === 'add'
             ? '用户组添加成功'
             : action === 'edit'
-            ? '用户组更新成功'
-            : '用户组删除成功',
-          showAlert
+              ? '用户组更新成功'
+              : '用户组删除成功',
+          showAlert,
         );
       } catch (err) {
         showError(err instanceof Error ? err.message : '操作失败', showAlert);
@@ -177,7 +175,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
     handleUserGroupAction(
       'edit',
       editingUserGroup.name,
-      editingUserGroup.enabledApis
+      editingUserGroup.enabledApis,
     );
   };
 
@@ -185,7 +183,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
     // 计算会受影响的用户数量
     const affectedUsers =
       config?.UserConfig?.Users?.filter(
-        (user) => user.tags && user.tags.includes(groupName)
+        (user) => user.tags && user.tags.includes(groupName),
       ) || [];
 
     setDeletingUserGroup({
@@ -222,7 +220,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
   // 为用户分配用户组
   const handleAssignUserGroup = async (
     username: string,
-    userGroups: string[]
+    userGroups: string[],
   ) => {
     return withLoading(`assignUserGroup_${username}`, async () => {
       try {
@@ -256,19 +254,19 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
 
   const handleUnbanUser = async (uname: string) => {
     await withLoading(`unbanUser_${uname}`, () =>
-      handleUserAction('unban', uname)
+      handleUserAction('unban', uname),
     );
   };
 
   const handleSetAdmin = async (uname: string) => {
     await withLoading(`setAdmin_${uname}`, () =>
-      handleUserAction('setAdmin', uname)
+      handleUserAction('setAdmin', uname),
     );
   };
 
   const handleRemoveAdmin = async (uname: string) => {
     await withLoading(`removeAdmin_${uname}`, () =>
-      handleUserAction('cancelAdmin', uname)
+      handleUserAction('cancelAdmin', uname),
     );
   };
 
@@ -279,7 +277,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         'add',
         newUser.username,
         newUser.password,
-        newUser.userGroup
+        newUser.userGroup,
       );
       setNewUser({ username: '', password: '', userGroup: '' });
       setShowAddUserForm(false);
@@ -294,11 +292,11 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         await handleUserAction(
           'changePassword',
           changePasswordUser.username,
-          changePasswordUser.password
+          changePasswordUser.password,
         );
         setChangePasswordUser({ username: '', password: '' });
         setShowChangePasswordForm(false);
-      }
+      },
     );
   };
 
@@ -342,7 +340,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         try {
           await handleAssignUserGroup(
             selectedUserForGroup.username,
-            selectedUserGroups
+            selectedUserGroups,
           );
           setShowConfigureUserGroupModal(false);
           setSelectedUserForGroup(null);
@@ -350,7 +348,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         } catch (err) {
           // 错误处理已在 handleAssignUserGroup 中处理
         }
-      }
+      },
     );
   };
 
@@ -376,14 +374,14 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             (user) =>
               role === 'owner' ||
               (role === 'admin' &&
-                (user.role === 'user' || user.username === currentUsername))
+                (user.role === 'user' || user.username === currentUsername)),
           ).map((u) => u.username) || [];
         setSelectedUsers(new Set(selectableUsernames));
       } else {
         setSelectedUsers(new Set());
       }
     },
-    [config?.UserConfig?.Users, role, currentUsername]
+    [config?.UserConfig?.Users, role, currentUsername],
   );
 
   // 批量设置用户组
@@ -413,7 +411,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
         setSelectedUserGroup('');
         showSuccess(
           `已为 ${userCount} 个用户设置用户组: ${userGroup}`,
-          showAlert
+          showAlert,
         );
 
         // 刷新配置
@@ -469,7 +467,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
       | 'deleteUser',
     targetUsername: string,
     targetPassword?: string,
-    userGroup?: string
+    userGroup?: string,
   ) => {
     try {
       const res = await fetch('/api/admin/user', {
@@ -815,7 +813,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             loading={isLoading(`saveUserApis_${selectedUser?.username}`)}
             sourceConfig={config?.SourceConfig}
           />,
-          document.body
+          document.body,
         )}
 
       {/* 添加用户组弹窗 */}
@@ -853,7 +851,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             sourceConfig={config?.SourceConfig}
             checkboxAccent='blue'
           />,
-          document.body
+          document.body,
         )}
 
       {/* 编辑用户组弹窗 */}
@@ -872,12 +870,12 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                         ? [...prev.enabledApis, api]
                         : prev.enabledApis.filter((a) => a !== api),
                     }
-                  : null
+                  : null,
               )
             }
             onSetEnabledApis={(apis) =>
               setEditingUserGroup((prev) =>
-                prev ? { ...prev, enabledApis: apis } : null
+                prev ? { ...prev, enabledApis: apis } : null,
               )
             }
             onClose={() => {
@@ -888,13 +886,13 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             submitLabel='保存修改'
             submittingLabel='保存中...'
             submitDisabled={isLoading(
-              `userGroup_edit_${editingUserGroup?.name}`
+              `userGroup_edit_${editingUserGroup?.name}`,
             )}
             loading={isLoading(`userGroup_edit_${editingUserGroup?.name}`)}
             sourceConfig={config?.SourceConfig}
             checkboxAccent='purple'
           />,
-          document.body
+          document.body,
         )}
 
       {/* 配置用户组弹窗 */}
@@ -915,10 +913,10 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             }}
             onSave={handleSaveUserGroups}
             loading={isLoading(
-              `saveUserGroups_${selectedUserForGroup?.username}`
+              `saveUserGroups_${selectedUserForGroup?.username}`,
             )}
           />,
-          document.body
+          document.body,
         )}
 
       {/* 删除用户组确认弹窗 */}
@@ -935,7 +933,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             onConfirm={handleConfirmDeleteUserGroup}
             loading={isLoading(`userGroup_delete_${deletingUserGroup?.name}`)}
           />,
-          document.body
+          document.body,
         )}
 
       {/* 删除用户确认弹窗 */}
@@ -950,7 +948,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             }}
             onConfirm={handleConfirmDeleteUser}
           />,
-          document.body
+          document.body,
         )}
 
       {/* TVBox Token 管理弹窗 */}
@@ -971,7 +969,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             }}
             onUpdate={refreshConfig}
           />,
-          document.body
+          document.body,
         )}
 
       {/* 批量设置用户组弹窗 */}
@@ -989,7 +987,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             onConfirm={() => handleBatchSetUserGroup(selectedUserGroup)}
             loading={isLoading('batchSetUserGroup')}
           />,
-          document.body
+          document.body,
         )}
 
       {/* 通用弹窗组件 */}

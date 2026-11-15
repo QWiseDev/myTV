@@ -58,7 +58,9 @@ function LoginPageClient() {
         if (data.TelegramAuthConfig?.enabled) {
           setTelegramEnabled(true);
         }
-      } catch (error) { /* 忽略错误 */ }
+      } catch (error) {
+        /* 忽略错误 */
+      }
     };
 
     fetchTelegramConfig();
@@ -190,9 +192,7 @@ function LoginPageClient() {
           <div className='mb-5 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[#00be06]/15'>
             <span className='h-3.5 w-3.5 rounded-full bg-[#00be06]' />
           </div>
-          <h1 className='mb-2 text-3xl font-bold text-[#f5f5f5]'>
-            {siteName}
-          </h1>
+          <h1 className='mb-2 text-3xl font-bold text-[#f5f5f5]'>{siteName}</h1>
           <p className='text-sm text-[#a8a8a8]'>欢迎回来，请登录您的账户</p>
         </div>
 

@@ -14,8 +14,5 @@
     "containerClassName"
   ],
   "typescript.preferences.importModuleSpecifier": "non-relative",
-  "claudeCode.environmentVariables": [
-    
-
-  ]
+  "claudeCode.environmentVariables": []
 }

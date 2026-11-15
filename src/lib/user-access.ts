@@ -27,7 +27,7 @@ export interface ResolvedUser {
 }
 
 export async function resolveUserAccess(
-  username: string
+  username: string,
 ): Promise<ResolvedUser> {
   let config = await getConfig();
 
@@ -69,7 +69,7 @@ export async function resolveUserAccess(
 type GuardResult = { response: NextResponse } | { resolved: ResolvedUser };
 
 export async function ensureUserAccessOrResponse(
-  username: string
+  username: string,
 ): Promise<GuardResult> {
   try {
     const resolved = await resolveUserAccess(username);
@@ -89,7 +89,7 @@ export async function ensureUserAccessOrResponse(
     return {
       response: NextResponse.json(
         { error: 'Internal Server Error' },
-        { status: 500 }
+        { status: 500 },
       ),
     };
   }

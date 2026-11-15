@@ -18,17 +18,17 @@ function calculateRegistrationDays(startDate: number): number {
   const firstDay = new Date(
     firstDate.getFullYear(),
     firstDate.getMonth(),
-    firstDate.getDate()
+    firstDate.getDate(),
   );
   const currentDay = new Date(
     currentDate.getFullYear(),
     currentDate.getMonth(),
-    currentDate.getDate()
+    currentDate.getDate(),
   );
 
   // 计算自然日差值并加1
   const daysDiff = Math.floor(
-    (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24)
+    (currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24),
   );
   return daysDiff + 1;
 }
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
             '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
           supportedTypes: ['redis', 'upstash', 'kvrocks'],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     console.error('获取用户个人统计失败:', err);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -116,7 +116,6 @@ export async function GET(request: NextRequest) {
 // POST 方法：更新用户统计数据（用于智能观看时间统计）
 export async function POST(request: NextRequest) {
   try {
-
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -131,7 +130,7 @@ export async function POST(request: NextRequest) {
             '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
           supportedTypes: ['redis', 'upstash', 'kvrocks'],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -146,7 +145,7 @@ export async function POST(request: NextRequest) {
     if (typeof watchTime !== 'number' || !movieKey || !timestamp) {
       return NextResponse.json(
         { error: '参数错误：需要 watchTime, movieKey, timestamp' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -183,7 +182,7 @@ export async function POST(request: NextRequest) {
             ? (error as Error)?.message
             : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -191,7 +190,6 @@ export async function POST(request: NextRequest) {
 // PUT 方法：记录用户登入时间
 export async function PUT(request: NextRequest) {
   try {
-
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -206,7 +204,7 @@ export async function PUT(request: NextRequest) {
             '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
           supportedTypes: ['redis', 'upstash', 'kvrocks'],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -216,7 +214,7 @@ export async function PUT(request: NextRequest) {
     // 检查用户权限
     if (authInfo.username !== username) {
       const user = config.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user) {
         return NextResponse.json({ error: '用户不存在' }, { status: 401 });
@@ -232,7 +230,7 @@ export async function PUT(request: NextRequest) {
     if (!loginTime || typeof loginTime !== 'number') {
       return NextResponse.json(
         { error: '参数错误：需要 loginTime' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -257,7 +255,7 @@ export async function PUT(request: NextRequest) {
       await db.updateUserLoginStats(
         authInfo.username,
         loginTime,
-        updatedStats.loginCount === 1
+        updatedStats.loginCount === 1,
       );
     } catch (saveError) {
       console.error('保存登入统计失败:', saveError);
@@ -280,7 +278,7 @@ export async function PUT(request: NextRequest) {
             ? (error as Error)?.message
             : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -302,7 +300,7 @@ export async function DELETE(request: NextRequest) {
             '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
           supportedTypes: ['redis', 'upstash', 'kvrocks'],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -318,7 +316,7 @@ export async function DELETE(request: NextRequest) {
     console.error('清除用户统计数据失败:', error);
     return NextResponse.json(
       { error: '清除用户统计数据失败' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

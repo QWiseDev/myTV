@@ -15,7 +15,6 @@ function formatBytes(bytes: number): string {
 export class DatabaseCacheManager {
   // 获取Redis兼容数据库中的缓存统计（支持KVRocks、Upstash、Redis）
   static async getKVRocksCacheStats() {
-
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
       tmdb: { count: 0, size: 0, types: {} as Record<string, number> },
@@ -26,9 +25,7 @@ export class DatabaseCacheManager {
     };
 
     try {
-
       const allCacheKeys = await db.keys('cache:*');
-
 
       if (allCacheKeys.length === 0) {
         return stats;
@@ -42,7 +39,7 @@ export class DatabaseCacheManager {
             console.warn(`获取缓存键 ${fullKey} 失败:`, error);
             return null;
           }
-        })
+        }),
       );
 
       allCacheKeys.forEach((fullKey: string, idx: number) => {
@@ -101,7 +98,6 @@ export class DatabaseCacheManager {
 
   // 获取缓存统计信息（支持KVRocks/Upstash/Redis，localStorage作为备用）
   static async getSimpleCacheStats() {
-
     // 从 Redis兼容数据库 获取统计（支持KVRocks、Upstash、Redis）
     const redisStats = await DatabaseCacheManager.getKVRocksCacheStats();
     if (redisStats) {
@@ -142,9 +138,8 @@ export class DatabaseCacheManager {
           key.startsWith('youtube-search') ||
           key.startsWith('search-') ||
           key.startsWith('cache-') ||
-          key === 'lunatv_danmu_cache'
+          key === 'lunatv_danmu_cache',
       );
-
 
       keys.forEach((key) => {
         const data = localStorage.getItem(key);
@@ -202,7 +197,7 @@ export class DatabaseCacheManager {
 
   // 清理指定类型的缓存
   static async clearCacheByType(
-    type: 'douban' | 'tmdb' | 'danmu' | 'netdisk' | 'youtube'
+    type: 'douban' | 'tmdb' | 'danmu' | 'netdisk' | 'youtube',
   ): Promise<number> {
     let clearedCount = 0;
 
@@ -216,7 +211,7 @@ export class DatabaseCacheManager {
           // 清理localStorage中的TMDB缓存（兜底）
           if (typeof localStorage !== 'undefined') {
             const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('tmdb-')
+              key.startsWith('tmdb-'),
             );
             keys.forEach((key) => {
               localStorage.removeItem(key);
@@ -232,7 +227,7 @@ export class DatabaseCacheManager {
           // 清理localStorage中的网盘缓存（兜底）
           if (typeof localStorage !== 'undefined') {
             const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('netdisk-search')
+              key.startsWith('netdisk-search'),
             );
             keys.forEach((key) => {
               localStorage.removeItem(key);
@@ -245,7 +240,7 @@ export class DatabaseCacheManager {
           // 清理localStorage中的YouTube缓存（兜底）
           if (typeof localStorage !== 'undefined') {
             const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('youtube-search')
+              key.startsWith('youtube-search'),
             );
             keys.forEach((key) => {
               localStorage.removeItem(key);

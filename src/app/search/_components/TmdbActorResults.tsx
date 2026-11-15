@@ -103,9 +103,7 @@ export function TmdbActorResults({
               }
             }}
             isVisible={tmdbFilterVisible}
-            onToggleVisible={() =>
-              setTmdbFilterVisible(!tmdbFilterVisible)
-            }
+            onToggleVisible={() => setTmdbFilterVisible(!tmdbFilterVisible)}
             resultCount={tmdbActorResults?.length || 0}
           />
         </div>

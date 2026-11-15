@@ -45,9 +45,8 @@ function createDeferred() {
 
 describe('play record mutations', () => {
   beforeAll(async () => {
-    ({ savePlayRecordMutation, serializePlayRecordMutation } = await import(
-      './play-record-mutations'
-    ));
+    ({ savePlayRecordMutation, serializePlayRecordMutation } =
+      await import('./play-record-mutations'));
   });
 
   beforeEach(() => {

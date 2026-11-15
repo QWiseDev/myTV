@@ -6,7 +6,7 @@ import { createHash } from 'crypto';
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -83,20 +83,19 @@ async function migrateUsers() {
     const userId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    const passwordHash = user.password_hash || 
-                        createHash('sha256').update('default123').digest('hex');
+    const passwordHash =
+      user.password_hash ||
+      createHash('sha256').update('default123').digest('hex');
 
-    const { error: insertError } = await supabase
-      .from('profiles')
-      .insert({
-        id: userId,
-        username: user.username,
-        password_hash: passwordHash,
-        role: user.role || 'user',
-        banned: user.banned || false,
-        created_at: now,
-        updated_at: now,
-      });
+    const { error: insertError } = await supabase.from('profiles').insert({
+      id: userId,
+      username: user.username,
+      password_hash: passwordHash,
+      role: user.role || 'user',
+      banned: user.banned || false,
+      created_at: now,
+      updated_at: now,
+    });
 
     if (insertError) {
       console.error(`  ❌ 迁移失败: ${insertError.message}\n`);

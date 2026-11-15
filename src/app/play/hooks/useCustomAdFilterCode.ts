@@ -18,7 +18,9 @@ export function useCustomAdFilterCode() {
 
     const loadCustomAdFilterCode = async () => {
       try {
-        const cachedCode = localStorage.getItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY);
+        const cachedCode = localStorage.getItem(
+          CUSTOM_AD_FILTER_CODE_CACHE_KEY,
+        );
         const cachedVersion = localStorage.getItem(
           CUSTOM_AD_FILTER_VERSION_CACHE_KEY,
         );

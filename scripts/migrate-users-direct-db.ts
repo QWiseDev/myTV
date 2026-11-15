@@ -53,9 +53,9 @@ async function migrateUsers() {
     FROM profiles
   `);
 
-  const existingUsernames = new Set(existingProfiles.map(p => p.username));
+  const existingUsernames = new Set(existingProfiles.map((p) => p.username));
   console.log(`  已有 ${existingProfiles.length} 个用户:`);
-  existingProfiles.forEach(profile => {
+  existingProfiles.forEach((profile) => {
     console.log(`    - ${profile.username} (ID: ${profile.id})`);
   });
 
@@ -87,10 +87,13 @@ async function migrateUsers() {
       const banned = adminUser.banned === 'true' || adminUser.banned === true;
       const now = new Date();
 
-      await pgPool.query(`
+      await pgPool.query(
+        `
         INSERT INTO profiles (id, username, password_hash, role, banned, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [userId, adminUser.username, passwordHash, role, banned, now, now]);
+      `,
+        [userId, adminUser.username, passwordHash, role, banned, now, now],
+      );
 
       console.log(`  ✓ 成功: ${adminUser.username} -> ${userId}`);
       migratedCount++;
@@ -117,8 +120,10 @@ async function migrateUsers() {
       ORDER BY created_at DESC
     `);
 
-    allProfiles.forEach(profile => {
-      console.log(`  - ${profile.username} (${profile.role}) ${profile.banned ? '[已禁用]' : ''}`);
+    allProfiles.forEach((profile) => {
+      console.log(
+        `  - ${profile.username} (${profile.role}) ${profile.banned ? '[已禁用]' : ''}`,
+      );
     });
   }
 

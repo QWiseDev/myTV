@@ -70,7 +70,8 @@ export default async function RootLayout({
     DISABLE_YELLOW_FILTER: disableYellowFilter,
     CUSTOM_CATEGORIES: customCategories,
     FLUID_SEARCH: fluidSearch,
-    CLARITY_PROJECT_ID: process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || 'u6fla6fy8x',
+    CLARITY_PROJECT_ID:
+      process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || 'u6fla6fy8x',
     CLARITY_ENABLED: process.env.NODE_ENV === 'production', // 仅在生产环境启用
   };
 
@@ -100,9 +101,7 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body
-        className="min-h-screen bg-white text-gray-900 dark:bg-black dark:text-gray-200 font-loading"
-      >
+      <body className='min-h-screen bg-white text-gray-900 dark:bg-black dark:text-gray-200 font-loading'>
         <ThemeProvider
           attribute='class'
           defaultTheme='system'

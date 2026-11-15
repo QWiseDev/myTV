@@ -2,11 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db } from '@/lib/db';
-import {
-  checkWin,
-  getRandomSymbol,
-  SLOT_SYMBOLS,
-} from '@/lib/slot-config';
+import { checkWin, getRandomSymbol, SLOT_SYMBOLS } from '@/lib/slot-config';
 
 export const runtime = 'nodejs';
 
@@ -27,7 +23,10 @@ const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 const burstStore = new Map<string, { count: number; resetTime: number }>(); // 突发请求限制
 
 // 限速惩罚存储（用户标识 -> { 触发次数, 惩罚开始时间, 惩罚结束时间 }）
-const penaltyStore = new Map<string, { violationCount: number; penaltyStartTime: number; penaltyEndTime: number }>();
+const penaltyStore = new Map<
+  string,
+  { violationCount: number; penaltyStartTime: number; penaltyEndTime: number }
+>();
 const hardBanStore = new Map<string, { endTime: number; reason: string }>(); // 硬封禁存储
 
 // 定期清理过期记录
@@ -63,7 +62,11 @@ setInterval(() => {
 /**
  * 检查是否被硬封禁
  */
-function checkHardBan(identifier: string): { isBanned: boolean; endTime: number; reason: string } {
+function checkHardBan(identifier: string): {
+  isBanned: boolean;
+  endTime: number;
+  reason: string;
+} {
   const ban = hardBanStore.get(identifier);
   const now = Date.now();
 
@@ -77,7 +80,14 @@ function checkHardBan(identifier: string): { isBanned: boolean; endTime: number;
 /**
  * 处理限速违规，增加惩罚
  */
-function handleRateLimitViolation(identifier: string): { isPenaltyActive: boolean; multiplier: number; remainingPenaltyTime: number; isHardBanned: boolean; banEndTime?: number; banReason?: string } {
+function handleRateLimitViolation(identifier: string): {
+  isPenaltyActive: boolean;
+  multiplier: number;
+  remainingPenaltyTime: number;
+  isHardBanned: boolean;
+  banEndTime?: number;
+  banReason?: string;
+} {
   const now = Date.now();
   const existingPenalty = penaltyStore.get(identifier);
 
@@ -87,14 +97,14 @@ function handleRateLimitViolation(identifier: string): { isPenaltyActive: boolea
     penaltyStore.set(identifier, {
       violationCount: 1,
       penaltyStartTime: now,
-      penaltyEndTime
+      penaltyEndTime,
     });
     console.log(`用户 ${identifier} 首次触发限速，开始10分钟惩罚`);
     return {
       isPenaltyActive: true,
       multiplier: PENALTY_MULTIPLIER_INCREMENT + 1, // 2 + 1 = 3倍概率
       remainingPenaltyTime: PENALTY_DURATION_MS,
-      isHardBanned: false
+      isHardBanned: false,
     };
   } else {
     // 惩罚期间再次违规，增加惩罚倍数
@@ -105,17 +115,19 @@ function handleRateLimitViolation(identifier: string): { isPenaltyActive: boolea
     penaltyStore.set(identifier, {
       violationCount: newViolationCount,
       penaltyStartTime: existingPenalty.penaltyStartTime,
-      penaltyEndTime
+      penaltyEndTime,
     });
 
     const multiplier = PENALTY_MULTIPLIER_INCREMENT * newViolationCount + 1;
-    console.log(`用户 ${identifier} 惩罚期间再次违规！第 ${newViolationCount} 次违规，律师函概率 ${multiplier} 倍`);
+    console.log(
+      `用户 ${identifier} 惩罚期间再次违规！第 ${newViolationCount} 次违规，律师函概率 ${multiplier} 倍`,
+    );
 
     return {
       isPenaltyActive: true,
       multiplier,
       remainingPenaltyTime: remainingTime,
-      isHardBanned: false
+      isHardBanned: false,
     };
   }
 }
@@ -123,12 +135,22 @@ function handleRateLimitViolation(identifier: string): { isPenaltyActive: boolea
 /**
  * 获取用户惩罚状态
  */
-function getUserPenaltyStatus(identifier: string): { isActive: boolean; multiplier: number; remainingTime: number; violationCount: number } {
+function getUserPenaltyStatus(identifier: string): {
+  isActive: boolean;
+  multiplier: number;
+  remainingTime: number;
+  violationCount: number;
+} {
   const penalty = penaltyStore.get(identifier);
   const now = Date.now();
 
   if (!penalty || now > penalty.penaltyEndTime) {
-    return { isActive: false, multiplier: 1, remainingTime: 0, violationCount: 0 };
+    return {
+      isActive: false,
+      multiplier: 1,
+      remainingTime: 0,
+      violationCount: 0,
+    };
   }
 
   const multiplier = PENALTY_MULTIPLIER_INCREMENT * penalty.violationCount + 1;
@@ -138,14 +160,18 @@ function getUserPenaltyStatus(identifier: string): { isActive: boolean; multipli
     isActive: true,
     multiplier,
     remainingTime,
-    violationCount: penalty.violationCount
+    violationCount: penalty.violationCount,
   };
 }
 
 /**
  * 突发速率限制检查（防止短时间大量请求）
  */
-function checkBurstLimit(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
+function checkBurstLimit(identifier: string): {
+  allowed: boolean;
+  remaining: number;
+  resetTime: number;
+} {
   const now = Date.now();
   const record = burstStore.get(identifier);
 
@@ -166,14 +192,18 @@ function checkBurstLimit(identifier: string): { allowed: boolean; remaining: num
   return {
     allowed: true,
     remaining: BURST_LIMIT - record.count,
-    resetTime: record.resetTime
+    resetTime: record.resetTime,
   };
 }
 
 /**
  * 速率限制中间件
  */
-function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
+function checkRateLimit(identifier: string): {
+  allowed: boolean;
+  remaining: number;
+  resetTime: number;
+} {
   const now = Date.now();
   const record = rateLimitStore.get(identifier);
 
@@ -194,7 +224,7 @@ function checkRateLimit(identifier: string): { allowed: boolean; remaining: numb
   return {
     allowed: true,
     remaining: MAX_REQUESTS_PER_WINDOW - record.count,
-    resetTime: record.resetTime
+    resetTime: record.resetTime,
   };
 }
 
@@ -226,7 +256,9 @@ function createDefaultSlotUserData(): SlotUserData {
   };
 }
 
-function normalizeSlotUserData(data: Partial<SlotUserData> | null): SlotUserData {
+function normalizeSlotUserData(
+  data: Partial<SlotUserData> | null,
+): SlotUserData {
   const specialSymbols = data?.specialSymbols;
   return {
     ...createDefaultSlotUserData(),
@@ -250,7 +282,10 @@ async function getUserSlotData(userName: string): Promise<SlotUserData> {
 }
 
 // 保存用户数据
-async function saveUserSlotData(userName: string, data: SlotUserData): Promise<void> {
+async function saveUserSlotData(
+  userName: string,
+  data: SlotUserData,
+): Promise<void> {
   try {
     await db.setSlotUserData(userName, data, 86400 * 30); // 30天过期
     console.log(`Saved slot data for user: ${userName}`);
@@ -262,13 +297,19 @@ async function saveUserSlotData(userName: string, data: SlotUserData): Promise<v
 // 使用共享的动态权重计算函数和符号生成函数
 
 // 生成4个老虎机结果
-function generateSlotResults(betAmount: number, userData: SlotUserData, penaltyMultiplier = 1): string[] {
+function generateSlotResults(
+  betAmount: number,
+  userData: SlotUserData,
+  penaltyMultiplier = 1,
+): string[] {
   const results = [];
   for (let i = 0; i < 4; i++) {
     const symbol = getRandomSymbol(SYMBOLS, userData.coins);
     // 5%概率生成特殊符号
     if (Math.random() < 0.05 && userData.specialSymbols?.length > 0) {
-      const specialIdx = Math.floor(Math.random() * userData.specialSymbols.length);
+      const specialIdx = Math.floor(
+        Math.random() * userData.specialSymbols.length,
+      );
       results.push(userData.specialSymbols[specialIdx]);
     } else {
       results.push(symbol);
@@ -283,26 +324,35 @@ function generateSlotResults(betAmount: number, userData: SlotUserData, penaltyM
   // 根据投注金额计算基础惩罚概率
   let punishmentChance = Math.min(
     basePunishmentChance +
-    ((betAmount - 10) / (maxBet - 10)) * (maxPunishmentChance - basePunishmentChance),
-    maxPunishmentChance
+      ((betAmount - 10) / (maxBet - 10)) *
+        (maxPunishmentChance - basePunishmentChance),
+    maxPunishmentChance,
   );
 
   // 应用惩罚倍数
   punishmentChance = Math.min(punishmentChance * penaltyMultiplier, 0.95); // 最高95%概率
 
-  console.log(`惩罚概率计算: 基础${(punishmentChance / penaltyMultiplier * 100).toFixed(1)}%, 倍数${penaltyMultiplier}x, 最终${(punishmentChance * 100).toFixed(1)}%`);
+  console.log(
+    `惩罚概率计算: 基础${((punishmentChance / penaltyMultiplier) * 100).toFixed(1)}%, 倍数${penaltyMultiplier}x, 最终${(punishmentChance * 100).toFixed(1)}%`,
+  );
 
   // 应用惩罚概率调整
   if (Math.random() < punishmentChance) {
     // 强制生成惩罚组合
     const punishments = [
-      ['lawyer'],                    // 1律师函
-      ['lawyer', 'lawyer'],          // 2律师函
+      ['lawyer'], // 1律师函
+      ['lawyer', 'lawyer'], // 2律师函
       ['lawyer', 'lawyer', 'lawyer'], // 3律师函
     ];
 
     // 根据投注金额选择惩罚（投注越大，惩罚越重）
-    const selectedPunishment = punishments[Math.floor(Math.random() * Math.min(punishments.length, Math.ceil(betAmount / 50)))];
+    const selectedPunishment =
+      punishments[
+        Math.floor(
+          Math.random() *
+            Math.min(punishments.length, Math.ceil(betAmount / 50)),
+        )
+      ];
 
     // 将惩罚符号插入结果
     for (let i = 0; i < selectedPunishment.length && i < 4; i++) {
@@ -319,7 +369,12 @@ function generateSlotResults(betAmount: number, userData: SlotUserData, penaltyM
 }
 
 // 幸运轮盘奖励
-function spinLuckyWheel(betAmount: number): { type: string; value: number; name: string; betRefund?: number } {
+function spinLuckyWheel(betAmount: number): {
+  type: string;
+  value: number;
+  name: string;
+  betRefund?: number;
+} {
   const rewards = [
     { type: 'coins', value: 50, weight: 30, name: '50金币' },
     { type: 'coins', value: 100, weight: 25, name: '100金币' },
@@ -337,21 +392,23 @@ function spinLuckyWheel(betAmount: number): { type: string; value: number; name:
     if (random <= 0) {
       return {
         ...reward,
-        betRefund: betAmount // 返回当前投注金额作为免费奖励
+        betRefund: betAmount, // 返回当前投注金额作为免费奖励
       };
     }
   }
 
   return {
     ...rewards[0],
-    betRefund: betAmount // 返回当前投注金额作为免费奖励
+    betRefund: betAmount, // 返回当前投注金额作为免费奖励
   };
 }
 
 // 使用共享的checkWin函数
 
 // 用户认证中间件
-async function authenticateUser(req: NextRequest): Promise<{ username: string | null; error?: string }> {
+async function authenticateUser(
+  req: NextRequest,
+): Promise<{ username: string | null; error?: string }> {
   const authCookie = req.cookies.get('user_auth')?.value;
 
   if (!authCookie) {
@@ -377,7 +434,7 @@ export async function POST(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -395,7 +452,7 @@ export async function POST(req: NextRequest) {
           reason: hardBanResult.reason,
           retryAfter,
           banEndTime: hardBanResult.endTime,
-          remainingTime: retryAfter
+          remainingTime: retryAfter,
         }),
         {
           status: 403,
@@ -403,9 +460,9 @@ export async function POST(req: NextRequest) {
             'Retry-After': retryAfter.toString(),
             'Content-Type': 'application/json',
             'X-Ban-Reason': hardBanResult.reason,
-            'X-Ban-End-Time': new Date(hardBanResult.endTime).toISOString()
-          }
-        }
+            'X-Ban-End-Time': new Date(hardBanResult.endTime).toISOString(),
+          },
+        },
       );
     }
 
@@ -418,7 +475,7 @@ export async function POST(req: NextRequest) {
           error: '请求过于频繁，请稍后再试',
           code: 'BURST_LIMIT_EXCEEDED',
           message: '短时间内的请求次数过多，请等待片刻后再试',
-          retryAfter
+          retryAfter,
         }),
         {
           status: 429,
@@ -426,9 +483,9 @@ export async function POST(req: NextRequest) {
             'Retry-After': retryAfter.toString(),
             'Content-Type': 'application/json',
             'X-Burst-Limit': BURST_LIMIT.toString(),
-            'X-Burst-Window': BURST_WINDOW_MS.toString()
-          }
-        }
+            'X-Burst-Window': BURST_WINDOW_MS.toString(),
+          },
+        },
       );
     }
 
@@ -439,14 +496,19 @@ export async function POST(req: NextRequest) {
     const headers = new Headers();
     headers.set('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW.toString());
     headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-    headers.set('X-RateLimit-Reset', new Date(rateLimitResult.resetTime).toISOString());
+    headers.set(
+      'X-RateLimit-Reset',
+      new Date(rateLimitResult.resetTime).toISOString(),
+    );
     headers.set('X-Burst-Limit', BURST_LIMIT.toString());
     headers.set('X-Burst-Remaining', burstResult.remaining.toString());
 
     if (!rateLimitResult.allowed) {
       // 处理限速违规，增加惩罚
       const penaltyResult = handleRateLimitViolation(identifier);
-      const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
+      const retryAfter = Math.ceil(
+        (rateLimitResult.resetTime - Date.now()) / 1000,
+      );
 
       // 如果触发硬封禁，返回硬封禁响应
       if (penaltyResult.isHardBanned) {
@@ -457,7 +519,7 @@ export async function POST(req: NextRequest) {
             reason: penaltyResult.banReason,
             retryAfter,
             banEndTime: penaltyResult.banEndTime,
-            remainingTime: retryAfter
+            remainingTime: retryAfter,
           }),
           {
             status: 403,
@@ -465,9 +527,11 @@ export async function POST(req: NextRequest) {
               'Retry-After': retryAfter.toString(),
               'Content-Type': 'application/json',
               'X-Ban-Reason': penaltyResult.banReason || '',
-              'X-Ban-End-Time': penaltyResult.banEndTime ? new Date(penaltyResult.banEndTime).toISOString() : ''
-            }
-          }
+              'X-Ban-End-Time': penaltyResult.banEndTime
+                ? new Date(penaltyResult.banEndTime).toISOString()
+                : '',
+            },
+          },
         );
       }
 
@@ -481,8 +545,8 @@ export async function POST(req: NextRequest) {
             isActive: penaltyResult.isPenaltyActive,
             multiplier: penaltyResult.multiplier,
             remainingPenaltyTime: penaltyResult.remainingPenaltyTime,
-            message: `惩罚已激活！律师函概率增加${penaltyResult.multiplier}倍，持续10分钟！`
-          }
+            message: `惩罚已激活！律师函概率增加${penaltyResult.multiplier}倍，持续10分钟！`,
+          },
         }),
         {
           status: 429,
@@ -492,29 +556,38 @@ export async function POST(req: NextRequest) {
             'Content-Type': 'application/json',
             'X-Penalty-Active': penaltyResult.isPenaltyActive.toString(),
             'X-Penalty-Multiplier': penaltyResult.multiplier.toString(),
-            'X-Penalty-Remaining-Time': penaltyResult.remainingPenaltyTime.toString()
-          }
-        }
+            'X-Penalty-Remaining-Time':
+              penaltyResult.remainingPenaltyTime.toString(),
+          },
+        },
       );
     }
 
     // 从请求中获取投注金额和倍率
-    const { betAmount = 10, multiplier = 1 } = await req.json().catch(() => ({ betAmount: 10, multiplier: 1 }));
+    const { betAmount = 10, multiplier = 1 } = await req
+      .json()
+      .catch(() => ({ betAmount: 10, multiplier: 1 }));
 
     // 验证投注金额格式和范围
     if (!Number.isInteger(betAmount) || betAmount < 1) {
-      return NextResponse.json({
-        error: '投注金额必须是正整数',
-        received: betAmount
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: '投注金额必须是正整数',
+          received: betAmount,
+        },
+        { status: 400 },
+      );
     }
 
     // 验证倍率格式和范围
     if (!Number.isInteger(multiplier) || multiplier < 1 || multiplier > 5) {
-      return NextResponse.json({
-        error: '倍率必须是1-5之间的整数',
-        received: multiplier
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: '倍率必须是1-5之间的整数',
+          received: multiplier,
+        },
+        { status: 400 },
+      );
     }
 
     // 计算实际投注金额（基础投注 × 倍率）
@@ -523,16 +596,20 @@ export async function POST(req: NextRequest) {
     // 限制最大实际投注金额为10万金币
     const MAX_BET_AMOUNT = 100000;
     if (actualBetAmount > MAX_BET_AMOUNT) {
-      return NextResponse.json({
-        error: `总投注金额（基础投注×倍率）超出限制，最大允许投注 ${MAX_BET_AMOUNT.toLocaleString()} 金币`,
-        baseBetAmount: betAmount,
-        multiplier: multiplier,
-        totalBetAmount: actualBetAmount,
-        maxAllowed: MAX_BET_AMOUNT,
-        suggestion: betAmount <= MAX_BET_AMOUNT
-          ? `建议将倍率降低到 ${Math.floor(MAX_BET_AMOUNT / betAmount)} 倍或以下`
-          : `建议基础投注不超过 ${Math.floor(MAX_BET_AMOUNT / multiplier)} 金币`
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: `总投注金额（基础投注×倍率）超出限制，最大允许投注 ${MAX_BET_AMOUNT.toLocaleString()} 金币`,
+          baseBetAmount: betAmount,
+          multiplier: multiplier,
+          totalBetAmount: actualBetAmount,
+          maxAllowed: MAX_BET_AMOUNT,
+          suggestion:
+            betAmount <= MAX_BET_AMOUNT
+              ? `建议将倍率降低到 ${Math.floor(MAX_BET_AMOUNT / betAmount)} 倍或以下`
+              : `建议基础投注不超过 ${Math.floor(MAX_BET_AMOUNT / multiplier)} 金币`,
+        },
+        { status: 400 },
+      );
     }
 
     // 获取用户数据
@@ -540,13 +617,16 @@ export async function POST(req: NextRequest) {
 
     // 检查金币余额（使用实际投注金额）
     if (userData.coins < actualBetAmount) {
-      return NextResponse.json({
-        error: '金币不足，无法进行抽奖',
-        coins: userData.coins,
-        required: actualBetAmount,
-        baseBetAmount: betAmount,
-        multiplier: multiplier
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: '金币不足，无法进行抽奖',
+          coins: userData.coins,
+          required: actualBetAmount,
+          baseBetAmount: betAmount,
+          multiplier: multiplier,
+        },
+        { status: 400 },
+      );
     }
 
     // 检查用户惩罚状态
@@ -554,7 +634,11 @@ export async function POST(req: NextRequest) {
     console.log(`用户 ${identifier} 惩罚状态:`, penaltyStatus);
 
     // 生成抽奖结果（应用惩罚倍数，使用实际投注金额）
-    const results = generateSlotResults(actualBetAmount, userData, penaltyStatus.multiplier);
+    const results = generateSlotResults(
+      actualBetAmount,
+      userData,
+      penaltyStatus.multiplier,
+    );
     const result = checkWin(results);
 
     // 计算金币变化（基于实际投注金额）
@@ -562,7 +646,7 @@ export async function POST(req: NextRequest) {
 
     if (result.type === 'win') {
       // 中奖：扣除实际投注 + 奖励（奖励基于实际投注）
-      coinChange = -actualBetAmount + (result.multiplier * actualBetAmount);
+      coinChange = -actualBetAmount + result.multiplier * actualBetAmount;
     } else if (result.type === 'punishment') {
       // 惩罚：multiplier是负数，表示要扣除的倍数
       // 例如 multiplier: -1 表示扣除1倍实际投注金额
@@ -628,7 +712,10 @@ export async function POST(req: NextRequest) {
           name: result.name,
           multiplier: result.multiplier,
           winAmount: winAmount > 0 ? winAmount : 0,
-          betAmount: result.type === 'punishment' ? Math.abs(coinChange) : actualBetAmount,
+          betAmount:
+            result.type === 'punishment'
+              ? Math.abs(coinChange)
+              : actualBetAmount,
           coinChange: coinChange,
           baseBetAmount: betAmount,
           userMultiplier: multiplier, // 用户选择的倍率
@@ -648,27 +735,23 @@ export async function POST(req: NextRequest) {
           multiplier: penaltyStatus.multiplier,
           remainingTime: penaltyStatus.remainingTime,
           violationCount: penaltyStatus.violationCount,
-          message: penaltyStatus.isActive ?
-            `⚠️ 惩罚激活中！律师函概率增加${penaltyStatus.multiplier}倍！剩余时间：${Math.ceil(penaltyStatus.remainingTime / 1000 / 60)}分钟` :
-            null
-        }
+          message: penaltyStatus.isActive
+            ? `⚠️ 惩罚激活中！律师函概率增加${penaltyStatus.multiplier}倍！剩余时间：${Math.ceil(penaltyStatus.remainingTime / 1000 / 60)}分钟`
+            : null,
+        },
       },
       {
         headers: {
           ...Object.fromEntries(headers.entries()),
           'X-Penalty-Active': penaltyStatus.isActive.toString(),
           'X-Penalty-Multiplier': penaltyStatus.multiplier.toString(),
-          'X-Penalty-Remaining-Time': penaltyStatus.remainingTime.toString()
-        }
-      }
+          'X-Penalty-Remaining-Time': penaltyStatus.remainingTime.toString(),
+        },
+      },
     );
-
   } catch (error) {
     console.error('老虎机抽奖异常:', error);
-    return NextResponse.json(
-      { error: '服务器错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }
 
@@ -680,7 +763,7 @@ export async function GET(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -691,24 +774,29 @@ export async function GET(req: NextRequest) {
     const headers = new Headers();
     headers.set('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW.toString());
     headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-    headers.set('X-RateLimit-Reset', new Date(rateLimitResult.resetTime).toISOString());
+    headers.set(
+      'X-RateLimit-Reset',
+      new Date(rateLimitResult.resetTime).toISOString(),
+    );
 
     if (!rateLimitResult.allowed) {
-      const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
+      const retryAfter = Math.ceil(
+        (rateLimitResult.resetTime - Date.now()) / 1000,
+      );
       return new NextResponse(
         JSON.stringify({
           error: '请求过于频繁，请稍后再试',
           code: 'RATE_LIMIT_EXCEEDED',
-          retryAfter
+          retryAfter,
         }),
         {
           status: 429,
           headers: {
             ...Object.fromEntries(headers.entries()),
             'Retry-After': retryAfter.toString(),
-            'Content-Type': 'application/json'
-          }
-        }
+            'Content-Type': 'application/json',
+          },
+        },
       );
     }
 
@@ -720,14 +808,10 @@ export async function GET(req: NextRequest) {
         success: true,
         user: userData,
       },
-      { headers }
+      { headers },
     );
-
   } catch (error) {
     console.error('获取老虎机用户数据异常:', error);
-    return NextResponse.json(
-      { error: '服务器错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }

@@ -53,15 +53,14 @@ export async function GET(request: NextRequest) {
     const result = {
       info: Object.fromEntries(entries) as Record<
         string,
-        | {
-            backdrop: string;
-            overview: string;
-            tagline?: string;
-            genres: string[];
-            cast: string[];
-            director?: string;
-          }
-        | null
+        {
+          backdrop: string;
+          overview: string;
+          tagline?: string;
+          genres: string[];
+          cast: string[];
+          director?: string;
+        } | null
       >,
     };
 

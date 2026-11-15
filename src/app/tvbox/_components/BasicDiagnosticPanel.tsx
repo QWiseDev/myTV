@@ -62,7 +62,9 @@ export function BasicDiagnosticPanel({
                   ✓ 基本信息
                 </h3>
                 <div className='grid grid-cols-2 gap-2 text-sm'>
-                  <div className='text-gray-600 dark:text-gray-400'>状态码:</div>
+                  <div className='text-gray-600 dark:text-gray-400'>
+                    状态码:
+                  </div>
                   <div className='text-gray-900 dark:text-gray-100 font-medium'>
                     {diagnosisResult.status || 'N/A'}
                   </div>
@@ -74,7 +76,9 @@ export function BasicDiagnosticPanel({
                     {diagnosisResult.contentType || 'N/A'}
                   </div>
 
-                  <div className='text-gray-600 dark:text-gray-400'>JSON解析:</div>
+                  <div className='text-gray-600 dark:text-gray-400'>
+                    JSON解析:
+                  </div>
                   <div
                     className={
                       diagnosisResult.hasJson
@@ -151,9 +155,9 @@ export function BasicDiagnosticPanel({
                 {diagnosisResult.spiderLastModified && (
                   <p className='text-xs text-gray-500 dark:text-gray-400 mt-2'>
                     最后修改:{' '}
-                    {new Date(diagnosisResult.spiderLastModified).toLocaleString(
-                      'zh-CN',
-                    )}
+                    {new Date(
+                      diagnosisResult.spiderLastModified,
+                    ).toLocaleString('zh-CN')}
                   </p>
                 )}
               </div>
@@ -249,9 +253,7 @@ export function BasicDiagnosticPanel({
                       ⚠️ JAR 获取建议
                     </p>
                     <ul className='text-xs text-yellow-700 dark:text-yellow-400 space-y-1'>
-                      <li>
-                        • 所有远程源均不可用，正在使用内置备用 JAR
-                      </li>
+                      <li>• 所有远程源均不可用，正在使用内置备用 JAR</li>
                       <li>• 建议检查网络连接或点击"刷新 JAR"重试</li>
                     </ul>
                   </div>
@@ -265,13 +267,9 @@ export function BasicDiagnosticPanel({
                         💡 优化建议
                       </p>
                       <ul className='text-xs text-blue-700 dark:text-blue-400 space-y-1'>
-                        <li>
-                          • 多个源失败后才成功，建议检查网络稳定性
-                        </li>
+                        <li>• 多个源失败后才成功，建议检查网络稳定性</li>
                         {diagnosisResult.spider_url?.includes('github') && (
-                          <li>
-                            • GitHub 源访问可能受限，建议配置代理
-                          </li>
+                          <li>• GitHub 源访问可能受限，建议配置代理</li>
                         )}
                       </ul>
                     </div>
@@ -363,19 +361,18 @@ export function BasicDiagnosticPanel({
                 )}
 
               {/* 问题列表 */}
-              {diagnosisResult.issues &&
-                diagnosisResult.issues.length > 0 && (
-                  <div className='p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg'>
-                    <h3 className='font-semibold text-orange-800 dark:text-orange-300 mb-2'>
-                      发现问题:
-                    </h3>
-                    <ul className='text-sm text-orange-700 dark:text-orange-300 space-y-1'>
-                      {diagnosisResult.issues.map((issue, idx) => (
-                        <li key={idx}>• {issue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+              {diagnosisResult.issues && diagnosisResult.issues.length > 0 && (
+                <div className='p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg'>
+                  <h3 className='font-semibold text-orange-800 dark:text-orange-300 mb-2'>
+                    发现问题:
+                  </h3>
+                  <ul className='text-sm text-orange-700 dark:text-orange-300 space-y-1'>
+                    {diagnosisResult.issues.map((issue, idx) => (
+                      <li key={idx}>• {issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </>
           )}
         </div>

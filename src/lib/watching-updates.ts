@@ -579,7 +579,9 @@ function isWatchingUpdatesCacheExpired(data: WatchingUpdatesCache): boolean {
   return Date.now() - data.timestamp > getWatchingUpdatesCacheDuration();
 }
 
-function readWatchingUpdatesCache(errorMessage: string): WatchingUpdatesCache | null {
+function readWatchingUpdatesCache(
+  errorMessage: string,
+): WatchingUpdatesCache | null {
   try {
     if (STORAGE_TYPE !== 'localstorage') {
       if (!memoryWatchingUpdatesCache) {

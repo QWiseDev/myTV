@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
           'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
           'Netlify-Vary': 'query',
         },
-      }
+      },
     );
   }
 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     return withAbortableTimeout(
       async () => searchFromApi(site, query),
-      SEARCH_SITE_TIMEOUT_MS
+      SEARCH_SITE_TIMEOUT_MS,
     )
       .then((results) => {
         markSiteSearchSuccess(site.key);
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
           'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
           'Netlify-Vary': 'query',
         },
-      }
+      },
     );
   } catch (error) {
     return NextResponse.json({ error: '搜索失败' }, { status: 500 });

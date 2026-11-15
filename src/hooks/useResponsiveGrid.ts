@@ -8,7 +8,7 @@ interface GridDimensions {
 }
 
 export const useResponsiveGrid = (
-  containerRef?: React.RefObject<HTMLElement>
+  containerRef?: React.RefObject<HTMLElement>,
 ): GridDimensions => {
   const [dimensions, setDimensions] = useState<GridDimensions>({
     columnCount: 3,
@@ -38,19 +38,25 @@ export const useResponsiveGrid = (
       let columnCount: number;
 
       // 响应式列数计算
-      if (containerWidth >= 1536) columnCount = 8; // 2xl
-      else if (containerWidth >= 1280) columnCount = 7; // xl
-      else if (containerWidth >= 1024) columnCount = 6; // lg
-      else if (containerWidth >= 768) columnCount = 5; // md
-      else if (containerWidth >= 640) columnCount = 4; // sm
-      else if (containerWidth >= 475) columnCount = 3; // xs
+      if (containerWidth >= 1536)
+        columnCount = 8; // 2xl
+      else if (containerWidth >= 1280)
+        columnCount = 7; // xl
+      else if (containerWidth >= 1024)
+        columnCount = 6; // lg
+      else if (containerWidth >= 768)
+        columnCount = 5; // md
+      else if (containerWidth >= 640)
+        columnCount = 4; // sm
+      else if (containerWidth >= 475)
+        columnCount = 3; // xs
       else columnCount = 2; // mobile
 
       // 计算项目尺寸
       const gap = columnCount > 3 ? 32 : 8; // 大屏更大间距
       const totalGapWidth = gap * (columnCount - 1);
       const itemWidth = Math.floor(
-        (containerWidth - totalGapWidth) / columnCount
+        (containerWidth - totalGapWidth) / columnCount,
       );
 
       // 根据海报比例计算高度 (2:3) + 标题和来源信息高度
@@ -65,11 +71,10 @@ export const useResponsiveGrid = (
         containerWidth,
       });
     },
-    [containerRef]
+    [containerRef],
   );
 
   useLayoutEffect(() => {
-
     // 使用递归重试机制
     let cleanup: (() => void) | null = null;
     let retryCount = 0;
@@ -88,7 +93,6 @@ export const useResponsiveGrid = (
       }
 
       const element = containerRef.current;
-
 
       // 如果宽度为0，延迟重试
       if (element.offsetWidth === 0) {

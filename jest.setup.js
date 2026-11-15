@@ -15,7 +15,10 @@ for (const key of [
   'WritableStream',
   'TransformStream',
 ]) {
-  if (typeof globalThis[key] === 'undefined' && typeof hostGlobal[key] !== 'undefined') {
+  if (
+    typeof globalThis[key] === 'undefined' &&
+    typeof hostGlobal[key] !== 'undefined'
+  ) {
     globalThis[key] = hostGlobal[key];
   }
 }

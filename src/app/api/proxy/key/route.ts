@@ -59,12 +59,11 @@ function cleanupExpiredCache() {
   // 如果缓存仍然过大，删除最老的条目
   if (keyCache.size > MAX_CACHE_SIZE) {
     const entries = Array.from(keyCache.entries()).sort(
-      (a, b) => a[1].timestamp - b[1].timestamp
+      (a, b) => a[1].timestamp - b[1].timestamp,
     );
     const toDelete = entries.slice(0, entries.length - MAX_CACHE_SIZE);
     toDelete.forEach(([key]) => keyCache.delete(key));
   }
-
 }
 
 export async function GET(request: Request) {
@@ -120,7 +119,6 @@ export async function GET(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
   try {
-
     const isHttps = decodedUrl.startsWith('https:');
     const agent = isHttps ? httpsAgent : httpAgent;
 
@@ -166,7 +164,7 @@ export async function GET(request: Request) {
         {
           error: `Failed to fetch key: ${response.status} ${response.statusText}`,
         },
-        { status: response.status >= 500 ? 500 : response.status }
+        { status: response.status >= 500 ? 500 : response.status },
       );
     }
 
@@ -213,14 +211,14 @@ export async function GET(request: Request) {
     if (error.name === 'AbortError') {
       return NextResponse.json(
         { error: 'Key request timeout' },
-        { status: 408 }
+        { status: 408 },
       );
     }
 
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
       return NextResponse.json(
         { error: 'Network connection failed' },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
@@ -233,7 +231,7 @@ export async function GET(request: Request) {
         details:
           process.env.NODE_ENV === 'development' ? error.message : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     clearTimeout(timeoutId);

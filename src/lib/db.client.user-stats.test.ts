@@ -158,18 +158,16 @@ describe('db.client user-stats（redis 模式）', () => {
   });
 
   it('服务器失败时基于本地播放记录计算统计并兜底 search_title', async () => {
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.startsWith('/api/user/my-stats')) {
-          return { ok: false, status: 500 } as Response;
-        }
-        if (url.startsWith('/api/playrecords')) {
-          return jsonResponse({ 'src+1': localPlayRecord });
-        }
-        return { ok: false } as Response;
-      },
-    );
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/user/my-stats')) {
+        return { ok: false, status: 500 } as Response;
+      }
+      if (url.startsWith('/api/playrecords')) {
+        return jsonResponse({ 'src+1': localPlayRecord });
+      }
+      return { ok: false } as Response;
+    });
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const { getUserStats } = await import('./db.client');
 
@@ -284,9 +282,10 @@ describe('db.client user-stats（localStorage 模式）', () => {
     await updateUserStats(record);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    const stored = JSON.parse(
-      localStorage.getItem(USER_STATS_KEY) || '{}',
-    ) as { totalWatchTime: number; totalMovies: number };
+    const stored = JSON.parse(localStorage.getItem(USER_STATS_KEY) || '{}') as {
+      totalWatchTime: number;
+      totalMovies: number;
+    };
     expect(stored.totalWatchTime).toBe(50);
     expect(stored.totalMovies).toBe(0);
     expect(localStorage.getItem(LAST_PROGRESS_KEY)).toBe('50');

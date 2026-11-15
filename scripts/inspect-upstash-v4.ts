@@ -7,9 +7,9 @@ const redis = new Redis({
 
 async function main() {
   const keys = await redis.keys('*');
-  
+
   console.log('=== 活动统计数据 ===');
-  const actionKeys = keys.filter(k => k.startsWith('al:action:'));
+  const actionKeys = keys.filter((k) => k.startsWith('al:action:'));
   for (const key of actionKeys) {
     const type = await redis.type(key);
     console.log(`\n${key} (type: ${type}):`);
@@ -32,7 +32,7 @@ async function main() {
   }
 
   console.log('\n=== 索引统计数据 ===');
-  const indexKeys = keys.filter(k => k.startsWith('al:index:'));
+  const indexKeys = keys.filter((k) => k.startsWith('al:index:'));
   for (const key of indexKeys) {
     const type = await redis.type(key);
     console.log(`\n${key} (type: ${type}):`);
@@ -55,7 +55,9 @@ async function main() {
   }
 
   console.log('\n=== 日期统计数据 ===');
-  const dateKeys = keys.filter(k => k.match(/^al:user:[^:]+:\d{4}-\d{2}-\d{2}$/));
+  const dateKeys = keys.filter((k) =>
+    k.match(/^al:user:[^:]+:\d{4}-\d{2}-\d{2}$/),
+  );
   for (const key of dateKeys) {
     const type = await redis.type(key);
     console.log(`\n${key} (type: ${type}):`);

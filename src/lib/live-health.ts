@@ -114,8 +114,10 @@ export interface SpeedTestResult {
 
 function speedTestConfig(opts: SpeedTestOptions) {
   return {
-    windowMs: opts.windowMs ?? parseInt(process.env.LIVE_SPEED_WINDOW_MS || '3000', 10),
-    minKBps: opts.minKBps ?? parseFloat(process.env.LIVE_SPEED_MIN_KBPS || '150'),
+    windowMs:
+      opts.windowMs ?? parseInt(process.env.LIVE_SPEED_WINDOW_MS || '3000', 10),
+    minKBps:
+      opts.minKBps ?? parseFloat(process.env.LIVE_SPEED_MIN_KBPS || '150'),
   };
 }
 
@@ -184,7 +186,10 @@ async function resolveSegmentUrl(
     return null;
   }
   const head = await readHeadText(resp, 65536);
-  const isPlaylist = head.includes('#EXTM3U') || head.includes('#EXTINF') || head.includes('#EXT-X');
+  const isPlaylist =
+    head.includes('#EXTM3U') ||
+    head.includes('#EXTINF') ||
+    head.includes('#EXT-X');
   if (!isPlaylist) {
     // 非列表内容（直接媒体流）：返回原始地址，由调用方测同一响应流
     return null;
@@ -195,7 +200,10 @@ async function resolveSegmentUrl(
 
   const lines = head.split('\n').map((l) => l.trim());
   const mediaLines = lines.filter((l) => l && !l.startsWith('#'));
-  if (lines.some((l) => l.startsWith('#EXT-X-STREAM-INF')) && mediaLines.length > 0) {
+  if (
+    lines.some((l) => l.startsWith('#EXT-X-STREAM-INF')) &&
+    mediaLines.length > 0
+  ) {
     // 主播放列表：取第一个变体再展开一层
     const variantUrl = resolveUrl(base, mediaLines[0]);
     try {
@@ -212,7 +220,10 @@ async function resolveSegmentUrl(
       const vBase = getBaseUrl(
         (probeUrl && vResp.headers.get('X-Final-Url')) || vResp.url,
       );
-      const vMedia = vHead.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+      const vMedia = vHead
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'));
       return vMedia.length > 0 ? resolveUrl(vBase, vMedia[0]) : null;
     } catch {
       return null;
@@ -227,10 +238,19 @@ async function measureOneChannel(
   opts: SpeedTestOptions,
   speedCfg: { windowMs: number; minKBps: number },
 ): Promise<ChannelSpeed> {
-  const dead: ChannelSpeed = { name: channel.name, url: channel.url, speedKBps: 0 };
+  const dead: ChannelSpeed = {
+    name: channel.name,
+    url: channel.url,
+    speedKBps: 0,
+  };
   try {
     const probeUrl = opts.probeUrl;
-    const segmentUrl = await resolveSegmentUrl(channel.url, opts.ua, opts, probeUrl);
+    const segmentUrl = await resolveSegmentUrl(
+      channel.url,
+      opts.ua,
+      opts,
+      probeUrl,
+    );
     if (!segmentUrl) {
       // 非列表直连媒体：重新请求同一地址测流
       const target = probeUrl ? probeUrl(channel.url) : channel.url;
@@ -244,7 +264,11 @@ async function measureOneChannel(
         return dead;
       }
       const speed = await measureStreamSpeed(resp, speedCfg.windowMs);
-      return { name: channel.name, url: channel.url, speedKBps: Math.round(speed) };
+      return {
+        name: channel.name,
+        url: channel.url,
+        speedKBps: Math.round(speed),
+      };
     }
     const target = probeUrl ? probeUrl(segmentUrl) : segmentUrl;
     const resp = await fetch(target, {
@@ -303,7 +327,9 @@ export async function runChannelSpeedTest(
   return {
     results,
     kept,
-    slowRemoved: results.filter((r) => r.speedKBps > 0 && r.speedKBps < speedCfg.minKBps).length,
+    slowRemoved: results.filter(
+      (r) => r.speedKBps > 0 && r.speedKBps < speedCfg.minKBps,
+    ).length,
     deadRemoved: results.filter((r) => r.speedKBps === 0).length,
   };
 }

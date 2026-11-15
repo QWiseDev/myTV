@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  ChevronDown,
-  ExternalLink,
-  RotateCcw,
-} from 'lucide-react';
+import { ChevronDown, ExternalLink, RotateCcw } from 'lucide-react';
 import { memo } from 'react';
 
 import { useDoubanComments } from '@/hooks/useDoubanComments';

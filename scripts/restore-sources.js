@@ -38,7 +38,10 @@ async function restoreSources(backupFile) {
     }
 
     // 将备份的视频源添加到当前配置中
-    adminConfig.SourceConfig = [...(adminConfig.SourceConfig || []), ...backupData];
+    adminConfig.SourceConfig = [
+      ...(adminConfig.SourceConfig || []),
+      ...backupData,
+    ];
 
     // 执行自我检查以确保配置一致性
     adminConfig = await configSelfCheck(adminConfig);
@@ -58,13 +61,17 @@ async function restoreSources(backupFile) {
 
     console.log('\n📋 恢复的视频源:');
     restoredSources.slice(-backupData.length).forEach((source, index) => {
-      console.log(`   ${restoreSources.length - backupData.length + index + 1}. ${source.name} (${source.key})`);
+      console.log(
+        `   ${restoreSources.length - backupData.length + index + 1}. ${source.name} (${source.key})`,
+      );
     });
 
     console.log('\n💡 提示:');
     console.log('   - 所有视频源已从备份文件中恢复');
     console.log('   - 您可以在管理后台查看和管理视频源');
-    console.log(`   - 如需重新删除，请运行: node scripts/delete-all-sources.js`);
+    console.log(
+      `   - 如需重新删除，请运行: node scripts/delete-all-sources.js`,
+    );
 
     process.exit(0);
   } catch (error) {
@@ -83,7 +90,9 @@ if (require.main === module) {
     console.log('   node scripts/restore-sources.js <backup-file>');
     console.log('');
     console.log('示例:');
-    console.log('   node scripts/restore-sources.js sources-backup-1234567890.json');
+    console.log(
+      '   node scripts/restore-sources.js sources-backup-1234567890.json',
+    );
     console.log('');
     process.exit(1);
   }

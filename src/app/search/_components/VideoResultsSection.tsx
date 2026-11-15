@@ -141,9 +141,7 @@ export function VideoResultsSection({
                 type='checkbox'
                 className='sr-only peer'
                 checked={viewMode === 'agg'}
-                onChange={() =>
-                  setViewMode(viewMode === 'agg' ? 'all' : 'agg')
-                }
+                onChange={() => setViewMode(viewMode === 'agg' ? 'all' : 'agg')}
               />
               <div className='w-11 h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full peer-checked:from-emerald-400 peer-checked:to-green-500 transition-all duration-300 dark:from-gray-600 dark:to-gray-700 dark:peer-checked:from-emerald-500 dark:peer-checked:to-green-600 shadow-inner'></div>
               <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-all duration-300 peer-checked:translate-x-5 shadow-lg peer-checked:shadow-emerald-300 dark:peer-checked:shadow-emerald-500/50 peer-checked:scale-105'></div>

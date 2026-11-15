@@ -29,7 +29,10 @@ const FavoriteIcon = ({ filled }: { filled: boolean }) => {
   );
 };
 
-export default function FavoriteButton({ favorited, onClick }: FavoriteButtonProps) {
+export default function FavoriteButton({
+  favorited,
+  onClick,
+}: FavoriteButtonProps) {
   return (
     <button
       onClick={onClick}

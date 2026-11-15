@@ -22,8 +22,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const forceRebuild =
-      searchParams.get('force') === '1' ||
-      searchParams.get('force') === 'true';
+      searchParams.get('force') === '1' || searchParams.get('force') === 'true';
 
     let updates = forceRebuild
       ? null
@@ -45,7 +44,7 @@ export async function GET(request: NextRequest) {
     console.error('获取追更提醒缓存失败:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

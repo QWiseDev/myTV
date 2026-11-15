@@ -60,7 +60,7 @@ export default function TVBoxExplorePage() {
   const [activeSiteKey, setActiveSiteKey] = useState<string>('');
   const activeSite = useMemo(
     () => sites.find((s) => s.key === activeSiteKey),
-    [sites, activeSiteKey]
+    [sites, activeSiteKey],
   );
 
   const [activeCategory, setActiveCategory] = useState<string>('');
@@ -143,8 +143,8 @@ export default function TVBoxExplorePage() {
         // 使用源测试接口直接查询该源，避免严格匹配导致无结果
         const res = await fetch(
           `/api/source-test?source=${encodeURIComponent(
-            siteKey
-          )}&q=${encodeURIComponent(category)}`
+            siteKey,
+          )}&q=${encodeURIComponent(category)}`,
         );
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as {
@@ -187,7 +187,7 @@ export default function TVBoxExplorePage() {
         setLoadingResults(false);
       }
     },
-    []
+    [],
   );
 
   // 当站点/分类变化时触发搜索

@@ -43,14 +43,14 @@ function getTimestamps(key: string, windowMs: number, now: number): number[] {
 export function peekRateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
 ): RateLimitResult {
   const now = Date.now();
   const timestamps = getTimestamps(key, windowMs, now);
   if (timestamps.length >= limit) {
     const retryAfterSeconds = Math.max(
       1,
-      Math.ceil((timestamps[0] + windowMs - now) / 1000)
+      Math.ceil((timestamps[0] + windowMs - now) / 1000),
     );
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
@@ -65,7 +65,7 @@ export function peekRateLimit(
 export function consumeRateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
 ): RateLimitResult {
   const result = peekRateLimit(key, limit, windowMs);
   if (!result.allowed) {

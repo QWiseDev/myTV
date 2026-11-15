@@ -69,7 +69,7 @@ export class SupabaseStorage implements IStorage {
 
   async getPlayRecord(
     userName: string,
-    key: string
+    key: string,
   ): Promise<PlayRecord | null> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -111,7 +111,7 @@ export class SupabaseStorage implements IStorage {
   async setPlayRecord(
     userName: string,
     key: string,
-    record: PlayRecord
+    record: PlayRecord,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -138,7 +138,7 @@ export class SupabaseStorage implements IStorage {
           search_title: record.search_title,
           remarks: record.remarks,
         },
-        { onConflict: 'user_id, source, source_id' }
+        { onConflict: 'user_id, source, source_id' },
       );
 
       if (error) throw error;
@@ -149,7 +149,7 @@ export class SupabaseStorage implements IStorage {
   }
 
   async getAllPlayRecords(
-    userName: string
+    userName: string,
   ): Promise<Record<string, PlayRecord>> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -210,10 +210,7 @@ export class SupabaseStorage implements IStorage {
     }
   }
 
-  async getFavorite(
-    userName: string,
-    key: string
-  ): Promise<Favorite | null> {
+  async getFavorite(userName: string, key: string): Promise<Favorite | null> {
     try {
       const userId = await this.getUserIdByUsername(userName);
       if (!userId) return null;
@@ -250,7 +247,7 @@ export class SupabaseStorage implements IStorage {
   async setFavorite(
     userName: string,
     key: string,
-    favorite: Favorite
+    favorite: Favorite,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -273,7 +270,7 @@ export class SupabaseStorage implements IStorage {
           search_title: favorite.search_title,
           origin: favorite.origin || 'vod',
         },
-        { onConflict: 'user_id, source, source_id' }
+        { onConflict: 'user_id, source, source_id' },
       );
 
       if (error) throw error;
@@ -561,7 +558,7 @@ export class SupabaseStorage implements IStorage {
   async getSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<EpisodeSkipConfig | null> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -594,25 +591,23 @@ export class SupabaseStorage implements IStorage {
     userName: string,
     source: string,
     id: string,
-    config: EpisodeSkipConfig
+    config: EpisodeSkipConfig,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
       if (!userId) throw new Error('用户不存在');
 
-      const { error } = await this.client
-        .from('episode_skip_configs')
-        .upsert(
-          {
-            user_id: userId,
-            source,
-            source_id: id,
-            title: config.title,
-            segments: config.segments,
-            updated_time: new Date(config.updated_time || Date.now()),
-          },
-          { onConflict: 'user_id, source, source_id' }
-        );
+      const { error } = await this.client.from('episode_skip_configs').upsert(
+        {
+          user_id: userId,
+          source,
+          source_id: id,
+          title: config.title,
+          segments: config.segments,
+          updated_time: new Date(config.updated_time || Date.now()),
+        },
+        { onConflict: 'user_id, source, source_id' },
+      );
 
       if (error) throw error;
     } catch (err) {
@@ -624,7 +619,7 @@ export class SupabaseStorage implements IStorage {
   async deleteSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -644,7 +639,7 @@ export class SupabaseStorage implements IStorage {
   }
 
   async getAllSkipConfigs(
-    userName: string
+    userName: string,
   ): Promise<Record<string, EpisodeSkipConfig>> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -680,7 +675,7 @@ export class SupabaseStorage implements IStorage {
   async getEpisodeSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<EpisodeSkipConfig | null> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -713,25 +708,23 @@ export class SupabaseStorage implements IStorage {
     userName: string,
     source: string,
     id: string,
-    config: EpisodeSkipConfig
+    config: EpisodeSkipConfig,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
       if (!userId) throw new Error('用户不存在');
 
-      const { error } = await this.client
-        .from('episode_skip_configs')
-        .upsert(
-          {
-            user_id: userId,
-            source,
-            source_id: id,
-            title: config.title,
-            segments: config.segments,
-            updated_time: new Date(config.updated_time || Date.now()),
-          },
-          { onConflict: 'user_id, source, source_id' }
-        );
+      const { error } = await this.client.from('episode_skip_configs').upsert(
+        {
+          user_id: userId,
+          source,
+          source_id: id,
+          title: config.title,
+          segments: config.segments,
+          updated_time: new Date(config.updated_time || Date.now()),
+        },
+        { onConflict: 'user_id, source, source_id' },
+      );
 
       if (error) throw error;
     } catch (err) {
@@ -743,7 +736,7 @@ export class SupabaseStorage implements IStorage {
   async deleteEpisodeSkipConfig(
     userName: string,
     source: string,
-    id: string
+    id: string,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -763,7 +756,7 @@ export class SupabaseStorage implements IStorage {
   }
 
   async getAllEpisodeSkipConfigs(
-    userName: string
+    userName: string,
   ): Promise<Record<string, EpisodeSkipConfig>> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -850,7 +843,7 @@ export class SupabaseStorage implements IStorage {
   async setCache(
     key: string,
     data: any,
-    expireSeconds?: number
+    expireSeconds?: number,
   ): Promise<void> {
     try {
       const value = JSON.stringify(data);
@@ -865,7 +858,7 @@ export class SupabaseStorage implements IStorage {
           expires_at: expiresAt,
           created_at: new Date().toISOString(),
         },
-        { onConflict: 'key' }
+        { onConflict: 'key' },
       );
 
       if (error) throw error;
@@ -949,10 +942,12 @@ export class SupabaseStorage implements IStorage {
       let totalWatchTime = 0;
       let totalPlays = 0;
       let todayNewUsers = 0;
-      const sourceStats: Record<string, { count: number; watchTime: number }> = {};
-      const dailyStats: Record<string, { plays: number; watchTime: number }> = {};
+      const sourceStats: Record<string, { count: number; watchTime: number }> =
+        {};
+      const dailyStats: Record<string, { plays: number; watchTime: number }> =
+        {};
       const registrationTrend: Record<string, number> = {};
-      const userMap = new Map<string, typeof users[0]>();
+      const userMap = new Map<string, (typeof users)[0]>();
       for (const user of users || []) {
         userMap.set(user.id, user);
         if (new Date(user.created_at) >= today) {
@@ -996,7 +991,7 @@ export class SupabaseStorage implements IStorage {
                 : 0,
             mostWatchedSource: '',
             registrationDays: Math.floor(
-              (Date.now() - createdAt) / (24 * 60 * 60 * 1000)
+              (Date.now() - createdAt) / (24 * 60 * 60 * 1000),
             ),
             lastLoginTime: stat.last_login_time?.getTime() || 0,
             loginCount: stat.login_count || 0,
@@ -1052,13 +1047,13 @@ export class SupabaseStorage implements IStorage {
         .sort((a, b) => a.date.localeCompare(b.date));
 
       const dailyActiveUsers = userStatsResult.filter(
-        (u) => (u.lastLoginTime || 0) >= today.getTime()
+        (u) => (u.lastLoginTime || 0) >= today.getTime(),
       ).length;
       const weeklyActiveUsers = userStatsResult.filter(
-        (u) => (u.lastLoginTime || 0) >= weekAgo.getTime()
+        (u) => (u.lastLoginTime || 0) >= weekAgo.getTime(),
       ).length;
       const monthlyActiveUsers = userStatsResult.filter(
-        (u) => (u.lastLoginTime || 0) >= monthAgo.getTime()
+        (u) => (u.lastLoginTime || 0) >= monthAgo.getTime(),
       ).length;
 
       return {
@@ -1196,7 +1191,7 @@ export class SupabaseStorage implements IStorage {
     _userName: string,
     _source: string,
     _id: string,
-    _watchTime: number
+    _watchTime: number,
   ): Promise<void> {
     // Placeholder for future implementation
   }
@@ -1204,7 +1199,7 @@ export class SupabaseStorage implements IStorage {
   async updateUserLoginStats(
     userName: string,
     loginTime: number,
-    _isFirstLogin?: boolean
+    _isFirstLogin?: boolean,
   ): Promise<void> {
     try {
       const userId = await this.getUserIdByUsername(userName);
@@ -1252,7 +1247,7 @@ export class SupabaseStorage implements IStorage {
       action?: string;
     },
     limit = 50,
-    offset = 0
+    offset = 0,
   ): Promise<AccessLog[]> {
     try {
       let query = this.client

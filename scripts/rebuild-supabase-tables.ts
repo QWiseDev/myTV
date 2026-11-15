@@ -21,7 +21,7 @@ async function dropTables() {
     'favorites',
     'play_records',
     'profiles',
-    'admin_config'
+    'admin_config',
   ];
 
   for (const table of tables) {
@@ -195,7 +195,7 @@ async function createIndexes() {
     'CREATE INDEX IF NOT EXISTS idx_access_logs_username ON access_logs(username)',
     'CREATE INDEX IF NOT EXISTS idx_access_logs_created ON access_logs(created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_cache_store_key ON cache_store(key)',
-    'CREATE INDEX IF NOT EXISTS idx_cache_store_expires ON cache_store(expires_at)'
+    'CREATE INDEX IF NOT EXISTS idx_cache_store_expires ON cache_store(expires_at)',
   ];
 
   for (const indexSQL of indexes) {
@@ -221,7 +221,7 @@ async function setupRLS() {
     'search_history',
     'user_statistics',
     'access_logs',
-    'cache_store'
+    'cache_store',
   ];
 
   for (const table of tables) {
@@ -355,9 +355,7 @@ async function insertInitialData() {
   console.log('========================================\n');
 
   try {
-    await pgPool.query(
-      `INSERT INTO admin_config (config) VALUES ('{}')`
-    );
+    await pgPool.query(`INSERT INTO admin_config (config) VALUES ('{}')`);
     console.log('  ✓ 已插入默认管理员配置');
   } catch (err: any) {
     console.error('  ✗ 插入管理员配置失败:', err.message);
@@ -378,7 +376,7 @@ async function verifyTables() {
     'search_history',
     'user_statistics',
     'access_logs',
-    'cache_store'
+    'cache_store',
   ];
 
   for (const table of tables) {
@@ -395,10 +393,26 @@ async function verifyTables() {
 
   console.log('\n  验证唯一约束');
   const constraints = [
-    { table: 'play_records', name: 'unique_play_record', columns: ['username', 'source', 'source_id'] },
-    { table: 'favorites', name: 'unique_favorite', columns: ['username', 'source', 'source_id'] },
-    { table: 'episode_skip_configs', name: 'unique_skip_config', columns: ['username', 'source', 'source_id'] },
-    { table: 'search_history', name: 'unique_search_history', columns: ['username', 'keyword'] }
+    {
+      table: 'play_records',
+      name: 'unique_play_record',
+      columns: ['username', 'source', 'source_id'],
+    },
+    {
+      table: 'favorites',
+      name: 'unique_favorite',
+      columns: ['username', 'source', 'source_id'],
+    },
+    {
+      table: 'episode_skip_configs',
+      name: 'unique_skip_config',
+      columns: ['username', 'source', 'source_id'],
+    },
+    {
+      table: 'search_history',
+      name: 'unique_search_history',
+      columns: ['username', 'keyword'],
+    },
   ];
 
   for (const constraint of constraints) {

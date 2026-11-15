@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     console.warn(`已拦截未授权的 cron 调用: ${auth.message}`);
     return NextResponse.json(
       { success: false, message: auth.message },
-      { status: auth.status }
+      { status: auth.status },
     );
   }
 
@@ -365,7 +365,7 @@ async function cleanupInactiveUsers() {
         try {
           userExists = (await withAbortableTimeout(
             async () => db.checkUserExist(user.username),
-            5000
+            5000,
           )) as boolean;
         } catch (err) {
           console.error(`  ❌ 检查用户存在状态失败: ${err}, 跳过该用户`);
@@ -381,7 +381,7 @@ async function cleanupInactiveUsers() {
         try {
           userStats = (await withAbortableTimeout(
             async () => db.getUserPlayStat(user.username),
-            5000
+            5000,
           )) as {
             lastLoginTime?: number;
             firstLoginTime?: number;

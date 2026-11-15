@@ -55,7 +55,6 @@ export function getHLSStreamInfo(
       const cached = smartCache.get(m3u8Url);
 
       if (cached?.levels && Array.isArray(cached.levels)) {
-
         const levels = cached.levels.map((level, index): StreamInfo => {
           const resolution = `${level.width}x${level.height}`;
           const bandwidthText = formatBandwidth(level.bitrate);

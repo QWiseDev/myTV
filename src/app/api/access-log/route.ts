@@ -27,13 +27,14 @@ export async function POST(request: NextRequest) {
 
     // 优先级：CloudFlare > Vercel > X-Original-For > X-Client-IP > X-Forwarded-For > X-Real-IP
     // （Next 15 移除了 request.ip，回退到 X-Forwarded-For/X-Real-IP 头）
-    const remoteAddr = cfConnectingIp ||
-                      xVercelForwardedFor ||
-                      xOriginalFor ||
-                      xClientIp ||
-                      forwardedFor?.split(',')[0]?.trim() ||
-                      realIp ||
-                      '';
+    const remoteAddr =
+      cfConnectingIp ||
+      xVercelForwardedFor ||
+      xOriginalFor ||
+      xClientIp ||
+      forwardedFor?.split(',')[0]?.trim() ||
+      realIp ||
+      '';
 
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (!body || typeof body.action !== 'string' || !body.action.trim()) {
       return NextResponse.json(
         { error: '缺少有效的操作标识' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       ipAddress: remoteAddr, // 使用后端获取的IP地址，忽略前端传来的
       userAgent: body.userAgent || request.headers.get('user-agent') || '',
       referrer: body.referrer,
-      location: body.location || undefined
+      location: body.location || undefined,
     };
 
     // 响应先行，日志落库放到响应后执行（Next 15 after()）
@@ -72,13 +73,9 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true }, { status: 200 });
-
   } catch (error) {
     console.error('[AccessLog] POST 错误:', error);
-    return NextResponse.json(
-      { error: '服务器内部错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器内部错误' }, { status: 500 });
   }
 }
 
@@ -100,7 +97,6 @@ export async function GET(request: NextRequest) {
       const ip = forwardedFor?.split(',')[0]?.trim() || realIp || '';
 
       return NextResponse.json({ ip }, { status: 200 });
-
     } catch (error) {
       console.error('[AccessLog-IP] 获取IP地址错误:', error);
       return NextResponse.json({ ip: 'unknown', error: true }, { status: 200 });
@@ -132,7 +128,7 @@ export async function GET(request: NextRequest) {
       if (authInfo.username !== myUsername) {
         return NextResponse.json(
           { error: '无权限查询其他用户的访问日志' },
-          { status: 403 }
+          { status: 403 },
         );
       }
       queryUsername = username;
@@ -150,13 +146,9 @@ export async function GET(request: NextRequest) {
     const accessLogs = await db.getAccessLogs(filters, limit, offset);
 
     return NextResponse.json({ accessLogs }, { status: 200 });
-
   } catch (error) {
     console.error('[AccessLog] 查询访问日志错误:', error);
-    return NextResponse.json(
-      { error: '服务器内部错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器内部错误' }, { status: 500 });
   }
 }
 
@@ -180,7 +172,7 @@ export async function DELETE(request: NextRequest) {
     if (authInfo.username !== myUsername) {
       return NextResponse.json(
         { error: '无权限删除访问日志' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -188,7 +180,7 @@ export async function DELETE(request: NextRequest) {
     if (confirmDelete !== 'true') {
       return NextResponse.json(
         { error: '请添加确认参数 ?confirm=true 来执行删除操作' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -204,23 +196,16 @@ export async function DELETE(request: NextRequest) {
         {
           success: true,
           message: `成功删除 ${deletedCount} 条访问日志`,
-          deletedCount: deletedCount
+          deletedCount: deletedCount,
         },
-        { status: 200 }
+        { status: 200 },
       );
     } catch (dbError) {
       console.error('[AccessLog] 删除访问日志失败:', dbError);
-      return NextResponse.json(
-        { error: '删除访问日志失败' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: '删除访问日志失败' }, { status: 500 });
     }
-
   } catch (error) {
     console.error('[AccessLog] DELETE 错误:', error);
-    return NextResponse.json(
-      { error: '服务器内部错误' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '服务器内部错误' }, { status: 500 });
   }
 }

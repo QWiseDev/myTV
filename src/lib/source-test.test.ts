@@ -31,8 +31,16 @@ describe('parsePlayableLines / parseSearchResultsForPlayback', () => {
     // '第1集' 匹配 ^第?\d+ 前缀，按原实现回退为线路编号
     expect(lines[0].label).toBe('线路1');
     expect(lines[0].episodes).toEqual([
-      { title: '第1集', url: 'https://cdn.example.com/1.m3u8', episodeIndex: 0 },
-      { title: '第2集', url: 'https://cdn.example.com/2.m3u8', episodeIndex: 1 },
+      {
+        title: '第1集',
+        url: 'https://cdn.example.com/1.m3u8',
+        episodeIndex: 0,
+      },
+      {
+        title: '第2集',
+        url: 'https://cdn.example.com/2.m3u8',
+        episodeIndex: 1,
+      },
     ]);
     expect(lines[1].label).toBe('线路2');
     expect(lines[1].episodes[0].title).toBe('第1集');
@@ -68,9 +76,8 @@ describe('parsePlayableLines / parseSearchResultsForPlayback', () => {
 
 describe('computeMatchRate / computeTopMatches', () => {
   it('按标题包含关键词计算命中率与前三示例', async () => {
-    const { computeMatchRate, computeTopMatches } = await import(
-      './source-test'
-    );
+    const { computeMatchRate, computeTopMatches } =
+      await import('./source-test');
 
     const results = [
       { title: '斗罗大陆' },
@@ -103,7 +110,7 @@ describe('testSource', () => {
             vod_content: '简介',
           },
         ],
-      })
+      }),
     ) as unknown as typeof fetch;
     const { testSource } = await import('./source-test');
 
@@ -127,7 +134,7 @@ describe('testSource', () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ sourceError: '源搜索超时' }, false, 408)
+        jsonResponse({ sourceError: '源搜索超时' }, false, 408),
       )
       .mockResolvedValueOnce(jsonResponse({ error: '服务错误' }, false, 500));
     const { testSource } = await import('./source-test');
@@ -190,7 +197,7 @@ describe('getAllApiSites', () => {
     global.fetch = jest.fn(async () =>
       jsonResponse({
         sources: [{ key: 'a', name: '源A', api: 'https://api.example' }],
-      })
+      }),
     ) as unknown as typeof fetch;
     const { getAllApiSites } = await import('./source-test');
 
@@ -210,7 +217,7 @@ describe('getAllApiSites', () => {
             { source: 'a', source_name: '源A重复' },
             { source: 'b' },
           ],
-        })
+        }),
       );
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const { getAllApiSites } = await import('./source-test');

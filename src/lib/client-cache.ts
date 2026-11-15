@@ -1,5 +1,8 @@
 export class ClientCache {
-  private static memory = new Map<string, { data: unknown; expireAt: number }>();
+  private static memory = new Map<
+    string,
+    { data: unknown; expireAt: number }
+  >();
   private static pendingGets = new Map<string, Promise<unknown | null>>();
   private static readonly DEFAULT_MEMORY_EXPIRE = 60 * 1000;
 
@@ -31,7 +34,7 @@ export class ClientCache {
   }
 
   private static async fetchAndCache<T = unknown>(
-    key: string
+    key: string,
   ): Promise<T | null> {
     try {
       const response = await fetch(`/api/cache?key=${encodeURIComponent(key)}`);
@@ -53,7 +56,7 @@ export class ClientCache {
   static async set(
     key: string,
     data: unknown,
-    expireSeconds?: number
+    expireSeconds?: number,
   ): Promise<void> {
     try {
       const response = await fetch('/api/cache', {
@@ -69,7 +72,8 @@ export class ClientCache {
       this.memory.set(key, {
         data,
         expireAt:
-          Date.now() + (expireSeconds ? expireSeconds * 1000 : this.DEFAULT_MEMORY_EXPIRE),
+          Date.now() +
+          (expireSeconds ? expireSeconds * 1000 : this.DEFAULT_MEMORY_EXPIRE),
       });
     } catch (error) {
       console.error('设置缓存失败:', error);
@@ -83,7 +87,7 @@ export class ClientCache {
         `/api/cache?key=${encodeURIComponent(key)}`,
         {
           method: 'DELETE',
-        }
+        },
       );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

@@ -148,7 +148,9 @@ export interface FavoriteToggleParams {
 export function canToggleVideoCardFavorite(
   params: FavoriteToggleParams,
 ): params is FavoriteToggleParams & { source: string; id: string } {
-  return params.from !== 'douban' && Boolean(params.source) && Boolean(params.id);
+  return (
+    params.from !== 'douban' && Boolean(params.source) && Boolean(params.id)
+  );
 }
 
 /**

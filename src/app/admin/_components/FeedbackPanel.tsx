@@ -75,7 +75,7 @@ const FeedbackPanel = ({ role }: FeedbackPanelProps) => {
 
       if (res.ok) {
         setFeedbacks((prev) =>
-          prev.map((f) => (f.id === id ? { ...f, read } : f))
+          prev.map((f) => (f.id === id ? { ...f, read } : f)),
         );
       }
     } catch (error) {

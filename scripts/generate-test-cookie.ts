@@ -4,7 +4,7 @@ import * as path from 'path';
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -21,7 +21,10 @@ function loadEnv(filePath: string) {
 
 loadEnv(path.join(__dirname, '../.env'));
 
-async function generateSignature(data: string, secret: string): Promise<string> {
+async function generateSignature(
+  data: string,
+  secret: string,
+): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const messageData = encoder.encode(data);
@@ -31,7 +34,7 @@ async function generateSignature(data: string, secret: string): Promise<string> 
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   const signature = await crypto.subtle.sign('HMAC', key, messageData);
@@ -45,7 +48,7 @@ async function generateAuthCookie(
   username?: string,
   password?: string,
   role?: 'owner' | 'admin' | 'user',
-  includePassword = false
+  includePassword = false,
 ): Promise<string> {
   const authData: any = { role: role || 'user' };
 

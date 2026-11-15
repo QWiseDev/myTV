@@ -37,11 +37,11 @@ describe('playerUiEnhancements', () => {
 
   test('removes progress conflict listeners and interval on cleanup', () => {
     const progressControl = document.querySelector(
-      '.art-control-progress'
+      '.art-control-progress',
     ) as HTMLElement;
     const removeProgressListener = jest.spyOn(
       progressControl,
-      'removeEventListener'
+      'removeEventListener',
     );
     const removeDocumentListener = jest.spyOn(document, 'removeEventListener');
 
@@ -52,15 +52,15 @@ describe('playerUiEnhancements', () => {
 
     expect(removeProgressListener).toHaveBeenCalledWith(
       'mousedown',
-      expect.any(Function)
+      expect.any(Function),
     );
     expect(removeDocumentListener).toHaveBeenCalledWith(
       'mousemove',
-      expect.any(Function)
+      expect.any(Function),
     );
     expect(removeDocumentListener).toHaveBeenCalledWith(
       'mouseup',
-      expect.any(Function)
+      expect.any(Function),
     );
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -72,7 +72,7 @@ describe('playerUiEnhancements', () => {
 
     expect(typeof cleanup).toBe('function');
     expect(typeof artPlayerRef.current.__uiEnhancementsCleanup).toBe(
-      'function'
+      'function',
     );
   });
 });

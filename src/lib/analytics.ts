@@ -69,7 +69,6 @@ class ClarityAnalytics {
     if (userType) {
       this.setUserType(userType);
     }
-
   }
 
   /**
@@ -118,7 +117,7 @@ class ClarityAnalytics {
       source: event.source || 'unknown',
       duration: event.duration,
       quality: event.quality || 'unknown',
-      position: event.position || 0
+      position: event.position || 0,
     });
   }
 
@@ -130,7 +129,7 @@ class ClarityAnalytics {
       video_id: event.videoId,
       video_title: event.videoTitle,
       position: event.position || 0,
-      watch_time: event.position || 0
+      watch_time: event.position || 0,
     });
   }
 
@@ -142,7 +141,7 @@ class ClarityAnalytics {
       video_id: event.videoId,
       video_title: event.videoTitle,
       video_type: event.videoType || 'unknown',
-      total_duration: event.duration
+      total_duration: event.duration,
     });
   }
 
@@ -153,7 +152,7 @@ class ClarityAnalytics {
     this.trackEvent('video_favorite', {
       video_id: event.videoId,
       video_title: event.videoTitle,
-      video_type: event.videoType || 'unknown'
+      video_type: event.videoType || 'unknown',
     });
   }
 
@@ -165,7 +164,7 @@ class ClarityAnalytics {
       video_id: event.videoId,
       video_title: event.videoTitle,
       video_type: event.videoType || 'unknown',
-      platform: event.platform
+      platform: event.platform,
     });
   }
 
@@ -177,7 +176,7 @@ class ClarityAnalytics {
       video_id: event.videoId,
       video_title: event.videoTitle,
       video_type: event.videoType || 'unknown',
-      quality: event.quality || 'unknown'
+      quality: event.quality || 'unknown',
     });
   }
 
@@ -190,7 +189,7 @@ class ClarityAnalytics {
     this.trackEvent('user_registration', {
       user_id: event.userId,
       registration_method: event.method,
-      metadata: event.metadata
+      metadata: event.metadata,
     });
   }
 
@@ -201,7 +200,7 @@ class ClarityAnalytics {
     this.trackEvent('user_login', {
       user_id: event.userId,
       login_method: event.method,
-      metadata: event.metadata
+      metadata: event.metadata,
     });
   }
 
@@ -210,7 +209,7 @@ class ClarityAnalytics {
    */
   trackUserLogout(event: UserEvent) {
     this.trackEvent('user_logout', {
-      user_id: event.userId
+      user_id: event.userId,
     });
   }
 
@@ -223,18 +222,22 @@ class ClarityAnalytics {
       category: event.category,
       results_count: event.resultsCount,
       filters: event.filters,
-      search_type: event.searchType || 'general'
+      search_type: event.searchType || 'general',
     });
   }
 
   /**
    * 追踪页面浏览
    */
-  trackPageView(page: string, title?: string, metadata?: Record<string, unknown>) {
+  trackPageView(
+    page: string,
+    title?: string,
+    metadata?: Record<string, unknown>,
+  ) {
     this.trackEvent('page_view', {
       page,
       title: title || page,
-      ...metadata
+      ...metadata,
     });
   }
 
@@ -244,7 +247,7 @@ class ClarityAnalytics {
   trackCategoryView(category: string, subcategory?: string) {
     this.trackEvent('category_view', {
       category,
-      subcategory
+      subcategory,
     });
   }
 
@@ -257,7 +260,7 @@ class ClarityAnalytics {
     this.trackEvent('performance_page_load', {
       load_time: loadTime,
       page: page || window.location.pathname,
-      user_agent: navigator.userAgent
+      user_agent: navigator.userAgent,
     });
   }
 
@@ -268,32 +271,40 @@ class ClarityAnalytics {
     this.trackEvent('performance_video_load', {
       load_time: loadTime,
       video_id: videoId,
-      quality: quality || 'unknown'
+      quality: quality || 'unknown',
     });
   }
 
   /**
    * 追踪API请求性能
    */
-  trackApiPerformance(apiEndpoint: string, responseTime: number, statusCode: number) {
+  trackApiPerformance(
+    apiEndpoint: string,
+    responseTime: number,
+    statusCode: number,
+  ) {
     this.trackEvent('performance_api', {
       api_endpoint: apiEndpoint,
       response_time: responseTime,
-      status_code: statusCode
+      status_code: statusCode,
     });
   }
 
   /**
    * 追踪错误事件
    */
-  trackError(errorType: string, errorMessage: string, context?: Record<string, unknown>) {
+  trackError(
+    errorType: string,
+    errorMessage: string,
+    context?: Record<string, unknown>,
+  ) {
     this.trackEvent('error', {
       error_type: errorType,
       error_message: errorMessage,
       page: window.location.pathname,
       user_agent: navigator.userAgent,
       timestamp: Date.now(),
-      ...context
+      ...context,
     });
   }
 
@@ -309,7 +320,7 @@ class ClarityAnalytics {
       currency: event.currency || 'CNY',
       step: event.step,
       success: event.success !== false,
-      ...event.metadata
+      ...event.metadata,
     });
   }
 
@@ -319,18 +330,22 @@ class ClarityAnalytics {
   trackUserRetention(dayCount: number) {
     this.trackEvent('user_retention', {
       day_count: dayCount,
-      user_id: this.userId
+      user_id: this.userId,
     });
   }
 
   /**
    * 追踪功能使用情况
    */
-  trackFeatureUsage(featureName: string, used = true, metadata?: Record<string, unknown>) {
+  trackFeatureUsage(
+    featureName: string,
+    used = true,
+    metadata?: Record<string, unknown>,
+  ) {
     this.trackEvent('feature_usage', {
       feature_name: featureName,
       used,
-      ...metadata
+      ...metadata,
     });
   }
 
@@ -363,7 +378,11 @@ class ClarityAnalytics {
     if (typeof window !== 'undefined' && window.clarity) {
       // 从localStorage获取用户信息并初始化
       const userId = localStorage.getItem('user_id');
-      const userType = localStorage.getItem('user_type') as 'guest' | 'registered' | 'premium' || 'guest';
+      const userType =
+        (localStorage.getItem('user_type') as
+          | 'guest'
+          | 'registered'
+          | 'premium') || 'guest';
 
       this.init(userId || undefined, userType);
     }
@@ -372,7 +391,11 @@ class ClarityAnalytics {
   /**
    * 将事件加入队列，等待初始化后发送
    */
-  private eventQueue: Array<{ eventName: string; properties: Record<string, unknown>; timestamp: number }> = [];
+  private eventQueue: Array<{
+    eventName: string;
+    properties: Record<string, unknown>;
+    timestamp: number;
+  }> = [];
   private queueProcessTimer: NodeJS.Timeout | null = null;
   private retryCount = 0;
   private maxRetries = 5; // 最多重试5次
@@ -388,7 +411,7 @@ class ClarityAnalytics {
     this.eventQueue.push({
       eventName,
       properties,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     if (this.eventQueue.length > 50) {
@@ -422,23 +445,31 @@ class ClarityAnalytics {
 
       events.forEach(({ eventName, properties, timestamp }) => {
         // 为队列事件添加延迟标记
-        this.sendEvent(eventName, { ...properties, queued: true, queueTimestamp: timestamp });
+        this.sendEvent(eventName, {
+          ...properties,
+          queued: true,
+          queueTimestamp: timestamp,
+        });
       });
-
     } else {
       // 增加重试计数
       this.retryCount++;
 
       // 如果重试次数超过限制，清空队列停止重试
       if (this.retryCount >= this.maxRetries) {
-        console.warn(`[Analytics] Max retries (${this.maxRetries}) reached, clearing queue`);
+        console.warn(
+          `[Analytics] Max retries (${this.maxRetries}) reached, clearing queue`,
+        );
         this.eventQueue.splice(0); // 清空队列
         this.queueProcessTimer = null;
       } else {
         // 继续重试，但增加延迟时间
         const delay = 1000 * Math.pow(2, this.retryCount); // 指数退避
 
-        this.queueProcessTimer = setTimeout(() => this.processEventQueue(), delay);
+        this.queueProcessTimer = setTimeout(
+          () => this.processEventQueue(),
+          delay,
+        );
       }
     }
   }
@@ -455,12 +486,11 @@ class ClarityAnalytics {
         referrer: document.referrer,
         user_type: this.userType,
         user_id: this.userId,
-        ...properties
+        ...properties,
       };
 
       // 发送到 Clarity
       window.clarity?.('event', eventName, enrichedProperties);
-
     } catch (error) {
       console.error(`[Analytics] Failed to track event ${eventName}:`, error);
     }
@@ -470,7 +500,9 @@ class ClarityAnalytics {
    * 检查是否已初始化
    */
   isReady() {
-    return this.isInitialized && typeof window !== 'undefined' && window.clarity;
+    return (
+      this.isInitialized && typeof window !== 'undefined' && window.clarity
+    );
   }
 }
 

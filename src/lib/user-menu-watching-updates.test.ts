@@ -86,7 +86,9 @@ describe('buildUserMenuWatchingUpdatesState', () => {
     expect(state.newEpisodeSeries.map((series) => series.videoId)).toEqual([
       'video+with-plus',
     ]);
-    expect(getUserMenuNewEpisodesCount(state, 'source+video+with-plus')).toBe(3);
+    expect(getUserMenuNewEpisodesCount(state, 'source+video+with-plus')).toBe(
+      3,
+    );
     expect(getUserMenuNewEpisodesCount(state, 'source+continue-only')).toBe(0);
   });
 });

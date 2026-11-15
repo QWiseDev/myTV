@@ -43,7 +43,10 @@ function rankBadgeClass(rank: number): string {
  * （分类 tab + 两列影片条目：序号角标 + 海报 + 标题/备注/元信息）。
  * 仅桌面端搜索框挂载。
  */
-export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelProps) {
+export default function HeaderSearchPanel({
+  open,
+  onClose,
+}: HeaderSearchPanelProps) {
   const router = useRouter();
   const listAbortRef = useRef<AbortController | null>(null);
   const listCacheRef = useRef(new Map<string, SourceItem[]>());
@@ -53,7 +56,9 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
   const [sourceName, setSourceName] = useState('');
   const [categories, setCategories] = useState<SourceCategory[]>([]);
   const [categoriesFailed, setCategoriesFailed] = useState(false);
-  const [activeTypeId, setActiveTypeId] = useState<string | number | null>(null);
+  const [activeTypeId, setActiveTypeId] = useState<string | number | null>(
+    null,
+  );
   const [items, setItems] = useState<SourceItem[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(false);
@@ -83,7 +88,8 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
     fetch('/api/searchhistory')
       .then((res) => (res.ok ? res.json() : []))
       .then((list: string[]) => {
-        if (!cancelled) setHistory(Array.isArray(list) ? list.slice(0, 12) : []);
+        if (!cancelled)
+          setHistory(Array.isArray(list) ? list.slice(0, 12) : []);
       })
       .catch(() => {
         // 历史获取失败时静默保持为空
@@ -108,7 +114,7 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
         activeSourceRef.current = first.key;
         setSourceName(first.name || '');
         const cRes = await fetch(
-          `/api/source-browser/categories?source=${encodeURIComponent(first.key)}`
+          `/api/source-browser/categories?source=${encodeURIComponent(first.key)}`,
         );
         if (!cRes.ok) throw new Error('categories');
         const cData = await cRes.json();
@@ -147,9 +153,9 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
     setListError(false);
     fetch(
       `/api/source-browser/list?source=${encodeURIComponent(
-        activeSourceRef.current
+        activeSourceRef.current,
       )}&type_id=${encodeURIComponent(String(activeTypeId))}&page=1`,
-      { signal: controller.signal }
+      { signal: controller.signal },
     )
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('list'))))
       .then((data) => {
@@ -329,14 +335,15 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
                             className='object-cover'
                             onError={(e) => {
                               // 加载失败时隐藏图片，露出占位图标
-                              (e.currentTarget as HTMLImageElement).style.display =
-                                'none';
+                              (
+                                e.currentTarget as HTMLImageElement
+                              ).style.display = 'none';
                             }}
                           />
                         )}
                         <span
                           className={`absolute left-0 top-0 flex h-5 w-5 items-center justify-center rounded-br-md rounded-tl-md text-xs font-bold text-white ${rankBadgeClass(
-                            index + 1
+                            index + 1,
                           )}`}
                         >
                           {index + 1}
@@ -354,10 +361,7 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
                           )}
                         </div>
                         <p className='mt-1 truncate text-xs text-[#9a9a9a] dark:text-[#8a8a8a]'>
-                          {[
-                            item.type_name,
-                            item.year,
-                          ]
+                          {[item.type_name, item.year]
                             .filter(Boolean)
                             .join(' / ')}
                         </p>
@@ -374,7 +378,9 @@ export default function HeaderSearchPanel({ open, onClose }: HeaderSearchPanelPr
             </>
           ) : (
             <p className='py-6 text-center text-sm text-[#9a9a9a] dark:text-[#6f6f6f]'>
-              {categoriesFailed ? '片源分类加载失败，请稍后重试' : '正在加载片源分类…'}
+              {categoriesFailed
+                ? '片源分类加载失败，请稍后重试'
+                : '正在加载片源分类…'}
             </p>
           )}
         </div>

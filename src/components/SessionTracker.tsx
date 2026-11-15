@@ -38,7 +38,6 @@ export function SessionTracker() {
           now - parseInt(lastRecordedLogin) > sessionTimeout;
 
         if (shouldRecordLogin) {
-
           // 记录新的登入时间
           const response = await fetch('/api/user/my-stats', {
             method: 'PUT',

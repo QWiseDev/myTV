@@ -46,11 +46,15 @@ export async function GET(request: Request) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
     return NextResponse.json(
       { error: 'limit 必须在 1-50 之间' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  if (!Number.isSafeInteger(start) || start < 0 || !['new_score', 'time'].includes(sort)) {
+  if (
+    !Number.isSafeInteger(start) ||
+    start < 0 ||
+    !['new_score', 'time'].includes(sort)
+  ) {
     return NextResponse.json({ error: 'start 不能小于 0' }, { status: 400 });
   }
 
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
     const timeSinceLastRequest = now - lastRequestTime;
     if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
       await new Promise((resolve) =>
-        setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+        setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest),
       );
     }
     lastRequestTime = Date.now();
@@ -95,9 +99,10 @@ export async function GET(request: Request) {
       },
     };
 
-    const response = await fetchDoubanWithVerification(target, fetchOptions).finally(
-      () => clearTimeout(timeoutId),
-    );
+    const response = await fetchDoubanWithVerification(
+      target,
+      fetchOptions,
+    ).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -122,7 +127,7 @@ export async function GET(request: Request) {
               'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
               'Netlify-Vary': 'query',
             },
-          }
+          },
         );
       }
       throw new Error(`HTTP error! Status: ${response.status}`);
@@ -142,7 +147,10 @@ export async function GET(request: Request) {
 
     // 解析短评列表
     if (isDoubanChallengePage(html)) {
-      return NextResponse.json({ error: '豆瓣暂时要求验证，请稍后重试' }, { status: 503 });
+      return NextResponse.json(
+        { error: '豆瓣暂时要求验证，请稍后重试' },
+        { status: 503 },
+      );
     }
     const { comments, hasMore, nextStart } = parseDoubanCommentsPage(html);
 
@@ -167,12 +175,12 @@ export async function GET(request: Request) {
           'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
           'Netlify-Vary': 'query',
         },
-      }
+      },
     );
   } catch (error) {
     return NextResponse.json(
       { error: '获取豆瓣短评失败，请稍后重试' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

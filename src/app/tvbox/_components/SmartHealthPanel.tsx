@@ -110,8 +110,8 @@ export function SmartHealthPanel({
                         smartHealthResult.reachability.health_score >= 75
                           ? 'text-green-600 dark:text-green-400'
                           : smartHealthResult.reachability.health_score >= 50
-                          ? 'text-yellow-600 dark:text-yellow-400'
-                          : 'text-red-600 dark:text-red-400'
+                            ? 'text-yellow-600 dark:text-yellow-400'
+                            : 'text-red-600 dark:text-red-400'
                       }`}
                     >
                       {smartHealthResult.reachability.health_score}
@@ -120,8 +120,8 @@ export function SmartHealthPanel({
                       {smartHealthResult.status.overall === 'excellent'
                         ? '优秀'
                         : smartHealthResult.status.overall === 'good'
-                        ? '良好'
-                        : '需关注'}
+                          ? '良好'
+                          : '需关注'}
                     </div>
                   </div>
                 </div>

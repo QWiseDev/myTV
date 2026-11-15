@@ -44,10 +44,7 @@ export function isSiteSearchBenched(
   return Boolean(state && state.benchedUntil > now);
 }
 
-export function markSiteSearchTimeout(
-  siteKey: string,
-  now = Date.now(),
-): void {
+export function markSiteSearchTimeout(siteKey: string, now = Date.now()): void {
   const state = getSiteState(siteKey);
   state.consecutiveTimeouts =
     now - state.lastTimeoutAt <= SITE_BENCH_WINDOW_MS

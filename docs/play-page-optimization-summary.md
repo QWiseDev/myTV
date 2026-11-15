@@ -11,11 +11,13 @@
 **目标**: 统一状态管理，提升类型安全
 
 **改动**:
+
 - 将 30+ 个独立的 useState 迁移到统一的 usePlayerState (基于 useReducer)
 - 实现类型安全的 action 和 state 更新
 - 集中管理播放器、弹幕、UI、加载等所有状态
 
 **收益**:
+
 - ✅ 状态更新逻辑集中化
 - ✅ 类型安全得到保障
 - ✅ 减少状态管理复杂度
@@ -26,10 +28,12 @@
 **目标**: 优化高频事件处理
 
 **改动**:
+
 - 对 timeupdate 事件应用 useThrottle (500ms)
 - 减少播放进度更新的频率
 
 **收益**:
+
 - ✅ 减少不必要的重渲染
 - ✅ 降低 CPU 使用率
 - ✅ 提升播放流畅度
@@ -39,11 +43,13 @@
 **目标**: 缓存昂贵的计算结果
 
 **改动**:
+
 - 缓存总集数计算: `useMemo(() => detail?.episodes?.length || 0, [detail?.episodes])`
 - 缓存弹幕缓存键: `useMemo(() => ${videoTitle}_${videoYear}_${videoDoubanId}_${episodeNum}, [...])`
 - 缓存设备检测结果: `useMemo(() => detectDevice(), [])`
 
 **收益**:
+
 - ✅ 避免重复计算
 - ✅ 减少字符串拼接操作
 - ✅ 设备检测只执行一次
@@ -53,11 +59,13 @@
 **目标**: 统一错误处理逻辑
 
 **改动**:
+
 - 替换 initAll 函数中的 3 处 `setError()` 为 `errorHandler.handleError()`
 - 替换 fetchSourceDetail 中的 `console.error` 为 `errorHandler.handleError()`
 - 替换 fetchSourcesData 中的 `console.error` 为 `errorHandler.handleError()`
 
 **收益**:
+
 - ✅ 统一的错误处理接口
 - ✅ 自动错误日志记录
 - ✅ 支持自动重试机制
@@ -79,6 +87,7 @@
 ## 构建验证
 
 所有阶段均通过构建验证:
+
 ```bash
 npm run build
 ✓ Compiled successfully
@@ -123,6 +132,7 @@ npm run build
 ## 性能指标
 
 优化前后对比 (预期):
+
 - 渲染次数: ↓ 30-40%
 - 内存使用: ↓ 10-15%
 - CPU 使用: ↓ 20-30%

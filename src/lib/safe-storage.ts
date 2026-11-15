@@ -24,7 +24,9 @@ export function safeJsonParse<T>(
   }
 }
 
-function resolveStorage(storage?: JsonStorageLike | null): JsonStorageLike | null {
+function resolveStorage(
+  storage?: JsonStorageLike | null,
+): JsonStorageLike | null {
   if (storage) return storage;
   if (typeof window === 'undefined') return null;
   try {

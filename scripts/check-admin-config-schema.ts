@@ -29,15 +29,19 @@ async function checkSchema() {
   `);
 
   console.log('  列:');
-  columns.forEach(col => {
-    console.log(`    - ${col.column_name}: ${col.data_type} (${col.is_nullable})`);
+  columns.forEach((col) => {
+    console.log(
+      `    - ${col.column_name}: ${col.data_type} (${col.is_nullable})`,
+    );
   });
 
   console.log('\n2. 查看 admin_config 表数据...');
-  const { rows: adminData } = await pgPool.query('SELECT * FROM admin_config LIMIT 10');
+  const { rows: adminData } = await pgPool.query(
+    'SELECT * FROM admin_config LIMIT 10',
+  );
 
   console.log(`  共 ${adminData.length} 条记录:`);
-  adminData.forEach(row => {
+  adminData.forEach((row) => {
     console.log('  -', JSON.stringify(row, null, 2));
   });
 

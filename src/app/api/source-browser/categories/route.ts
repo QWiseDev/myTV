@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     if (!source) {
       return NextResponse.json(
         { error: '你没有权限访问该资源源' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     if (!res.ok) {
       return NextResponse.json(
         { error: `上游返回错误: ${res.status}` },
-        { status: res.status }
+        { status: res.status },
       );
     }
     type AppleCMSClass = {
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         type_name: c.type_name ?? c.typename ?? c.name,
       }))
       .filter((c): c is { type_id: string | number; type_name: string } =>
-        Boolean(c.type_id && c.type_name)
+        Boolean(c.type_id && c.type_name),
       );
 
     return NextResponse.json({ categories });

@@ -10,7 +10,9 @@ export const runtime = 'nodejs';
 const ADMIN_USERS = ['admin', 'qiuwei']; // 添加你的管理员用户名
 
 // 用户认证中间件
-async function authenticateAdmin(req: NextRequest): Promise<{ username: string | null; error?: string }> {
+async function authenticateAdmin(
+  req: NextRequest,
+): Promise<{ username: string | null; error?: string }> {
   const authCookie = req.cookies.get('user_auth')?.value;
 
   if (!authCookie) {
@@ -41,14 +43,17 @@ export async function GET(req: NextRequest) {
     // 管理员认证
     const auth = await authenticateAdmin(req);
     if (auth.error || !auth.username) {
-      return NextResponse.json({ error: auth.error || '认证失败' }, { status: 403 });
+      return NextResponse.json(
+        { error: auth.error || '认证失败' },
+        { status: 403 },
+      );
     }
 
     try {
       const userList = await db.listSlotUsers();
       return NextResponse.json({
         success: true,
-        users: userList
+        users: userList,
       });
     } catch (error) {
       console.error('Failed to get user data:', error);
@@ -56,9 +61,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      users: []
+      users: [],
     });
-
   } catch (error) {
     console.error('获取用户列表失败:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
@@ -71,7 +75,10 @@ export async function POST(req: NextRequest) {
     // 管理员认证
     const auth = await authenticateAdmin(req);
     if (auth.error || !auth.username) {
-      return NextResponse.json({ error: auth.error || '认证失败' }, { status: 403 });
+      return NextResponse.json(
+        { error: auth.error || '认证失败' },
+        { status: 403 },
+      );
     }
 
     const { username, coins } = await req.json();
@@ -95,10 +102,9 @@ export async function POST(req: NextRequest) {
       success: true,
       user: {
         username,
-        ...userData
-      }
+        ...userData,
+      },
     });
-
   } catch (error) {
     console.error('更新用户金币失败:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });

@@ -555,9 +555,7 @@ describe('VideoCard behavior', () => {
     fireEvent.click(favoriteButton as SVGElement);
     expect(mockNavigateVideoCardPlayUrl).not.toHaveBeenCalled();
     openActionSheet();
-    fireEvent.click(
-      await screen.findByRole('button', { name: '添加收藏' }),
-    );
+    fireEvent.click(await screen.findByRole('button', { name: '添加收藏' }));
 
     expect(mockSaveFavorite).toHaveBeenCalledTimes(1);
 
@@ -574,12 +572,7 @@ describe('VideoCard behavior', () => {
       .mockReturnValueOnce(firstMutation.promise)
       .mockReturnValueOnce(secondMutation.promise);
     const renderCard = (id: string, title: string) => (
-      <VideoCard
-        from='playrecord'
-        id={id}
-        source='source-a'
-        title={title}
-      />
+      <VideoCard from='playrecord' id={id} source='source-a' title={title} />
     );
     const { rerender } = render(renderCard('video-a', '影片 A'));
 
@@ -608,9 +601,9 @@ describe('VideoCard behavior', () => {
       await flushAsyncWork();
     });
     expect(
-      screen.getByRole('button', { name: '收藏 影片 A' }).getAttribute(
-        'aria-pressed',
-      ),
+      screen
+        .getByRole('button', { name: '收藏 影片 A' })
+        .getAttribute('aria-pressed'),
     ).toBe('false');
 
     await act(async () => {
@@ -618,9 +611,9 @@ describe('VideoCard behavior', () => {
       await flushAsyncWork();
     });
     expect(
-      screen.getByRole('button', { name: '取消收藏 影片 A' }).getAttribute(
-        'aria-pressed',
-      ),
+      screen
+        .getByRole('button', { name: '取消收藏 影片 A' })
+        .getAttribute('aria-pressed'),
     ).toBe('true');
   });
 
@@ -1048,9 +1041,7 @@ describe('VideoCard behavior', () => {
     openActionSheet();
 
     await act(async () => {
-      fireEvent.click(
-        await screen.findByRole('button', { name: '删除记录' }),
-      );
+      fireEvent.click(await screen.findByRole('button', { name: '删除记录' }));
       await flushAsyncWork();
     });
 

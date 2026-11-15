@@ -23,18 +23,18 @@ export function SlotReels({
   randomSymbolSequences,
 }: SlotReelsProps) {
   return (
-    <div className="flex justify-center gap-2 mb-4">
+    <div className='flex justify-center gap-2 mb-4'>
       {reels.map((symbol, index) => (
         <div
           key={index}
-          className="slot-reel-container relative w-20 h-20 border-4 border-yellow-500 rounded-lg overflow-hidden bg-gradient-to-b from-blue-900 to-purple-900 shadow-2xl"
+          className='slot-reel-container relative w-20 h-20 border-4 border-yellow-500 rounded-lg overflow-hidden bg-gradient-to-b from-blue-900 to-purple-900 shadow-2xl'
           style={{
             boxShadow:
               'rgba(251, 191, 36, 0.6) 0px 0px 20px, rgba(0, 0, 0, 0.5) 0px 0px 20px inset',
           }}
         >
           <div
-            className="slot-reel relative h-full w-full overflow-hidden"
+            className='slot-reel relative h-full w-full overflow-hidden'
             style={{
               transform: 'translateZ(0)',
               backfaceVisibility: 'hidden',
@@ -42,7 +42,7 @@ export function SlotReels({
             }}
           >
             <div
-              className="slot-symbols relative w-full flex flex-col"
+              className='slot-symbols relative w-full flex flex-col'
               style={{
                 willChange: 'transform',
                 transform: spinning[index]
@@ -62,7 +62,7 @@ export function SlotReels({
                   return (
                     <div
                       key={i}
-                      className="slot-symbol w-full h-20 flex items-center justify-center p-2 flex-shrink-0"
+                      className='slot-symbol w-full h-20 flex items-center justify-center p-2 flex-shrink-0'
                       style={{
                         contain: 'layout style paint',
                       }}
@@ -70,25 +70,25 @@ export function SlotReels({
                       <img
                         src={sequenceSymbol.image}
                         alt={sequenceSymbol.name}
-                        className="max-w-full max-h-full object-contain"
+                        className='max-w-full max-h-full object-contain'
                         style={{
                           filter: 'drop-shadow(rgba(0, 0, 0, 0.4) 0px 4px 8px)',
                           imageRendering: 'crisp-edges',
                           transform: 'translateZ(0)',
                           willChange: 'transform',
                         }}
-                        loading="eager"
+                        loading='eager'
                       />
                     </div>
                   );
                 })
               ) : (
                 // 停止时只显示当前符号
-                <div className="slot-symbol w-full h-20 flex items-center justify-center p-2 flex-shrink-0">
+                <div className='slot-symbol w-full h-20 flex items-center justify-center p-2 flex-shrink-0'>
                   <img
                     src={symbol.image}
                     alt={symbol.name}
-                    className="max-w-full max-h-full object-contain"
+                    className='max-w-full max-h-full object-contain'
                     style={{
                       filter: 'drop-shadow(rgba(0, 0, 0, 0.4) 0px 4px 8px)',
                       imageRendering: 'crisp-edges',
@@ -103,7 +103,7 @@ export function SlotReels({
           {/* 旋转时的边框动画 */}
           {spinning[index] && (
             <div
-              className="absolute inset-0 border-4 border-yellow-400 rounded-lg pointer-events-none animate-pulse"
+              className='absolute inset-0 border-4 border-yellow-400 rounded-lg pointer-events-none animate-pulse'
               style={{
                 boxShadow: 'rgba(251, 191, 36, 0.8) 0px 0px 20px inset',
               }}

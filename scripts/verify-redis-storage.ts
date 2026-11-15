@@ -92,7 +92,10 @@ async function main() {
 
     const userStats = await storage.getUserPlayStat(userName);
     assert(userStats.loginCount === 2, 'loginCount failed');
-    assert(userStats.firstLoginTime === firstLoginTime, 'firstLoginTime failed');
+    assert(
+      userStats.firstLoginTime === firstLoginTime,
+      'firstLoginTime failed',
+    );
     assert(userStats.lastLoginTime === secondLoginTime, 'lastLoginTime failed');
 
     await (storage as any).setSlotUserData(
@@ -139,8 +142,14 @@ async function main() {
     );
 
     const rateKey = `codex:rate:${userName}`;
-    const firstRateCount = await (storage as any).incrementRateLimit(rateKey, 60);
-    const secondRateCount = await (storage as any).incrementRateLimit(rateKey, 60);
+    const firstRateCount = await (storage as any).incrementRateLimit(
+      rateKey,
+      60,
+    );
+    const secondRateCount = await (storage as any).incrementRateLimit(
+      rateKey,
+      60,
+    );
     assert(firstRateCount === 1, 'incrementRateLimit first count failed');
     assert(secondRateCount === 2, 'incrementRateLimit second count failed');
 
@@ -187,7 +196,11 @@ async function main() {
       await storage.deleteCache(`codex:verify:${userName}`);
       await (storage as any).client.del(`slot:user:${userName}`);
       await (storage as any).client.del(`codex:rate:${userName}`);
-      await (storage as any).client.sendCommand(['SREM', 'slot:users', userName]);
+      await (storage as any).client.sendCommand([
+        'SREM',
+        'slot:users',
+        userName,
+      ]);
       await (storage as any).client.sendCommand([
         'ZREM',
         'slot:rank:coins',

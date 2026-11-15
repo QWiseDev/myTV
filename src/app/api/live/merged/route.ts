@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest) {
 
     // 获取所有启用的直播源
     const enabledLives = (config.LiveConfig || []).filter(
-      (live) => !live.disabled
+      (live) => !live.disabled,
     );
 
     if (enabledLives.length === 0) {

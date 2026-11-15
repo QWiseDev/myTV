@@ -51,7 +51,7 @@ export function useSlotSound(soundEnabled: boolean) {
                   oscillator.start();
                   gainNode.gain.exponentialRampToValueAtTime(
                     0.001,
-                    audioContext.currentTime + 0.2
+                    audioContext.currentTime + 0.2,
                   );
                   oscillator.stop(audioContext.currentTime + 0.2);
                 }, i * 80);
@@ -80,7 +80,7 @@ export function useSlotSound(soundEnabled: boolean) {
           frequency: number,
           duration: number,
           type: OscillatorType = 'sine',
-          volume = 0.1
+          volume = 0.1,
         ) => {
           const audioContext = getAudioContext();
           const oscillator = audioContext.createOscillator();
@@ -96,7 +96,7 @@ export function useSlotSound(soundEnabled: boolean) {
           oscillator.start();
           gainNode.gain.exponentialRampToValueAtTime(
             0.001,
-            audioContext.currentTime + duration
+            audioContext.currentTime + duration,
           );
           oscillator.stop(audioContext.currentTime + duration);
         };
@@ -170,8 +170,9 @@ export function useSlotSound(soundEnabled: boolean) {
                   // 添加和声
                   if (freq > 500) {
                     setTimeout(
-                      () => playTone(freq * 1.5, duration * 0.8, 'triangle', 0.08),
-                      50
+                      () =>
+                        playTone(freq * 1.5, duration * 0.8, 'triangle', 0.08),
+                      50,
                     );
                   }
                 }, delay);
@@ -196,7 +197,7 @@ export function useSlotSound(soundEnabled: boolean) {
         console.log(`Playing sound: ${type}`, error);
       }
     },
-    [soundEnabled]
+    [soundEnabled],
   );
 
   // 组件卸载时释放 AudioContext
@@ -262,7 +263,9 @@ export function useSlotBackgroundMusic(enabled: boolean) {
       if (document.hidden) {
         audioRef.current?.pause();
       } else if (audioRef.current && enabled) {
-        audioRef.current.play().catch((e) => console.log('Resume play failed:', e));
+        audioRef.current
+          .play()
+          .catch((e) => console.log('Resume play failed:', e));
       }
     };
 

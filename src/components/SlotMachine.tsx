@@ -44,7 +44,10 @@ import { SlotSpinOverlays } from './slot-machine/SlotSpinOverlays';
 import { SlotJackpotBanner, SlotTitleHeader } from './slot-machine/SlotTopBars';
 import { SlotUserPanelModal } from './slot-machine/SlotUserPanelModal';
 import { SlotWinBanners } from './slot-machine/SlotWinBanners';
-import { useSlotBackgroundMusic, useSlotSound } from './slot-machine/useSlotAudio';
+import {
+  useSlotBackgroundMusic,
+  useSlotSound,
+} from './slot-machine/useSlotAudio';
 import { getDebugInfo, getRandomSymbol } from '../lib/slot-config';
 
 interface SlotMachineProps {
@@ -60,10 +63,17 @@ export default function SlotMachine({
 }: SlotMachineProps) {
   const [coins, setCoins] = useState(initialCoins);
   const [bet, setBet] = useState(100); // 更新默认投注为100
-  const [reels, setReels] = useState([SYMBOLS[0], SYMBOLS[1], SYMBOLS[2], SYMBOLS[3]]);
+  const [reels, setReels] = useState([
+    SYMBOLS[0],
+    SYMBOLS[1],
+    SYMBOLS[2],
+    SYMBOLS[3],
+  ]);
   const [spinning, setSpinning] = useState([false, false, false, false]);
   const [scrollOffsets, setScrollOffsets] = useState([0, 0, 0, 0]);
-  const [randomSymbolSequences, setRandomSymbolSequences] = useState<string[][]>([]);
+  const [randomSymbolSequences, setRandomSymbolSequences] = useState<
+    string[][]
+  >([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [lastWin, setLastWin] = useState(0);
   const [showWin, setShowWin] = useState(false);
@@ -86,12 +96,14 @@ export default function SlotMachine({
   const [_loseStreak, setLoseStreak] = useState(0);
   const [chestCount, setChestCount] = useState(0);
   const [showLuckyWheel, setShowLuckyWheel] = useState(false);
-  const [luckyWheelReward, setLuckyWheelReward] = useState<LuckyWheelReward | null>(null);
+  const [luckyWheelReward, setLuckyWheelReward] =
+    useState<LuckyWheelReward | null>(null);
   const [message, setMessage] = useState<SlotMessage | null>(null);
   const [showChestNotif, setShowChestNotif] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
-  const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>('coins');
+  const [leaderboardType, setLeaderboardType] =
+    useState<LeaderboardType>('coins');
 
   // 侯总视频弹窗和奖池翻倍状态
   const [showHouZongVideo, setShowHouZongVideo] = useState(false);
@@ -115,7 +127,8 @@ export default function SlotMachine({
   const [showSuperPenaltyMode, setShowSuperPenaltyMode] = useState(false);
 
   // 限速惩罚状态
-  const [penaltyStatus, setPenaltyStatus] = useState<PenaltyStatus>(initialPenaltyStatus);
+  const [penaltyStatus, setPenaltyStatus] =
+    useState<PenaltyStatus>(initialPenaltyStatus);
   const [showPenaltyWarning, setShowPenaltyWarning] = useState(false);
   const [penaltyWarningMessage, setPenaltyWarningMessage] = useState('');
 
@@ -151,7 +164,7 @@ export default function SlotMachine({
 
     // 增加累积奖金池（每次下注的50%加入奖池，确保至少增加5金币）
     const jackpotIncrease = Math.max(5, Math.floor(actualBet * 0.5));
-    setProgressiveJackpot(prev => prev + jackpotIncrease);
+    setProgressiveJackpot((prev) => prev + jackpotIncrease);
 
     // 启动4个转轴旋转
     setSpinning([true, true, true, true]);
@@ -168,8 +181,8 @@ export default function SlotMachine({
         },
         body: JSON.stringify({
           betAmount: bet,
-          multiplier: multiplier
-        })
+          multiplier: multiplier,
+        }),
       });
 
       if (!response.ok) {
@@ -195,18 +208,18 @@ export default function SlotMachine({
         coinChange: data.result.coinChange,
         newCoins: data.user.coins,
         winAmount: data.result.winAmount,
-        betAmount: data.result.betAmount
+        betAmount: data.result.betAmount,
       });
 
       // 逐个停止转轴，增加悬念感
       for (let i = 0; i < 4; i++) {
-        await new Promise(resolve => setTimeout(resolve, 250 + i * 100));
-        setReels(prev => {
+        await new Promise((resolve) => setTimeout(resolve, 250 + i * 100));
+        setReels((prev) => {
           const newReels = [...prev];
           newReels[i] = resultSymbols[i];
           return newReels;
         });
-        setSpinning(prev => {
+        setSpinning((prev) => {
           const newSpinning = [...prev];
           newSpinning[i] = false;
           return newSpinning;
@@ -215,7 +228,7 @@ export default function SlotMachine({
       }
 
       // 等待所有转轴停止后显示结果
-      await new Promise(resolve => setTimeout(resolve, 125));
+      await new Promise((resolve) => setTimeout(resolve, 125));
 
       const { result } = data;
       setLastWin(result.winAmount);
@@ -252,12 +265,18 @@ export default function SlotMachine({
         setLastWin(-result.betAmount); // 显示实际扣除的金额（正数显示为负数）
 
         // 计算惩罚牌数量并处理累积大奖
-        const lawyerCount = data.results.filter((s: string) => s === 'lawyer').length;
-        const miCarCount = data.results.filter((s: string) => MI_CAR_IDS.includes(s)).length;
+        const lawyerCount = data.results.filter(
+          (s: string) => s === 'lawyer',
+        ).length;
+        const miCarCount = data.results.filter((s: string) =>
+          MI_CAR_IDS.includes(s),
+        ).length;
         const totalPunishmentCount = lawyerCount + miCarCount;
 
         // 检查超级惩罚模式
-        const isSuperPenaltyMode = (miCarCount >= 3 && lawyerCount >= 1) || (miCarCount >= 2 && lawyerCount >= 2);
+        const isSuperPenaltyMode =
+          (miCarCount >= 3 && lawyerCount >= 1) ||
+          (miCarCount >= 2 && lawyerCount >= 2);
 
         // 检查惩罚牌数量并处理弹窗
         if (totalPunishmentCount >= 2) {
@@ -270,12 +289,16 @@ export default function SlotMachine({
             // 超级惩罚：20倍投注扣除
             const currentBet = bet * multiplier;
             const superPenaltyAmount = currentBet * 20;
-            setCoins(prev => Math.max(0, prev - superPenaltyAmount));
+            setCoins((prev) => Math.max(0, prev - superPenaltyAmount));
             setLastWin(-superPenaltyAmount);
 
             // 累积奖池清空
             setProgressiveJackpot(0);
-          } else if (lawyerCount >= 1 && miCarCount >= 1 && totalPunishmentCount === 2) {
+          } else if (
+            lawyerCount >= 1 &&
+            miCarCount >= 1 &&
+            totalPunishmentCount === 2
+          ) {
             // 法务部出动组合（律师函+任意小米汽车）
             setShowLegalDepartmentGif(true);
             setTimeout(() => setShowLegalDepartmentGif(false), 5000);
@@ -325,11 +348,14 @@ export default function SlotMachine({
         }
 
         // 记录惩罚历史
-        setSpinHistory(prev => [{
-          symbols: data.results,
-          win: -result.betAmount, // 记录为负数表示扣除
-          type: result.name
-        }, ...prev.slice(0, 10)]);
+        setSpinHistory((prev) => [
+          {
+            symbols: data.results,
+            win: -result.betAmount, // 记录为负数表示扣除
+            type: result.name,
+          },
+          ...prev.slice(0, 10),
+        ]);
 
         setShowWin(true);
         setWinType('punishment');
@@ -339,11 +365,14 @@ export default function SlotMachine({
         setTimeout(() => setShowWin(false), 3000);
       } else if (result.winAmount > 0) {
         // 记录历史
-        setSpinHistory(prev => [{
-          symbols: data.results,
-          win: result.winAmount,
-          type: result.name
-        }, ...prev.slice(0, 10)]);
+        setSpinHistory((prev) => [
+          {
+            symbols: data.results,
+            win: result.winAmount,
+            type: result.name,
+          },
+          ...prev.slice(0, 10),
+        ]);
 
         // 判断是否大奖
         const isJackpot = result.multiplier >= 50;
@@ -352,7 +381,9 @@ export default function SlotMachine({
         const isXqBonus = result.name === 'xqBonus' || result.name === 'xqOnly';
 
         // 判断是否侯总奖励触发
-        const isHouZongBonus = ['fourHz', 'threeHz', 'twoHz'].includes(result.name);
+        const isHouZongBonus = ['fourHz', 'threeHz', 'twoHz'].includes(
+          result.name,
+        );
         if (isHouZongBonus) {
           setIsHouZongBonus(true);
         }
@@ -372,21 +403,24 @@ export default function SlotMachine({
             实际奖池奖金: jackpotPrize,
             后端计算奖金: result.winAmount,
             投注金额: actualBet,
-            用户余额: coins
+            用户余额: coins,
           });
 
           // 防护措施：确保奖池奖金不超过奖池余额的10倍
-          const safeJackpotPrize = Math.min(jackpotPrize, Math.floor(progressiveJackpot * 10));
+          const safeJackpotPrize = Math.min(
+            jackpotPrize,
+            Math.floor(progressiveJackpot * 10),
+          );
 
-          setCoins(prev => prev + safeJackpotPrize);
-          setProgressiveJackpot(prev => prev - safeJackpotPrize);
+          setCoins((prev) => prev + safeJackpotPrize);
+          setProgressiveJackpot((prev) => prev - safeJackpotPrize);
 
           // 修正显示的中奖金额为实际奖池奖金，而不是后端计算的普通倍数
           setLastWin(safeJackpotPrize);
 
           // 更新最大赢取和总获胜
-          setBiggestWin(prev => Math.max(prev, safeJackpotPrize));
-          setTotalWins(prev => prev + 1);
+          setBiggestWin((prev) => Math.max(prev, safeJackpotPrize));
+          setTotalWins((prev) => prev + 1);
 
           // 4秒后隐藏徐棋卡特效
           setTimeout(() => setShowXqCard(false), 4000);
@@ -396,7 +430,9 @@ export default function SlotMachine({
           playSound('jackpot');
 
           // 计算侯总数量并翻倍奖池
-          const houZongCount = data.results.filter((s: string) => HOUZONG_IDS.includes(s)).length;
+          const houZongCount = data.results.filter((s: string) =>
+            HOUZONG_IDS.includes(s),
+          ).length;
 
           if (houZongCount >= 2) {
             // 奖池翻倍动画
@@ -410,12 +446,12 @@ export default function SlotMachine({
 
             // 奖励也翻倍
             const doubledReward = result.winAmount * 2;
-            setCoins(prev => prev + (doubledReward - result.winAmount));
+            setCoins((prev) => prev + (doubledReward - result.winAmount));
             setLastWin(doubledReward);
 
             // 更新统计
-            setBiggestWin(prev => Math.max(prev, doubledReward));
-            setTotalWins(prev => prev + 1);
+            setBiggestWin((prev) => Math.max(prev, doubledReward));
+            setTotalWins((prev) => prev + 1);
 
             // 3秒后隐藏奖池翻倍动画
             setTimeout(() => setShowJackpotDouble(false), 3000);
@@ -436,23 +472,26 @@ export default function SlotMachine({
             实际奖池奖金: jackpotPrize,
             后端计算奖金: result.winAmount,
             投注金额: actualBet,
-            用户余额: coins
+            用户余额: coins,
           });
 
           // 防护措施：确保奖池奖金不超过奖池余额的10倍
-          const safeJackpotPrize = Math.min(jackpotPrize, Math.floor(progressiveJackpot * 10));
+          const safeJackpotPrize = Math.min(
+            jackpotPrize,
+            Math.floor(progressiveJackpot * 10),
+          );
 
-          setCoins(prev => prev + safeJackpotPrize);
-          setProgressiveJackpot(prev => prev - safeJackpotPrize);
+          setCoins((prev) => prev + safeJackpotPrize);
+          setProgressiveJackpot((prev) => prev - safeJackpotPrize);
 
           // 修正显示的中奖金额为实际奖池奖金，而不是后端计算的普通倍数
           setLastWin(safeJackpotPrize);
 
           // 更新最大赢取和总获胜
-          setBiggestWin(prev => Math.max(prev, safeJackpotPrize));
-          setTotalWins(prev => prev + 1);
+          setBiggestWin((prev) => Math.max(prev, safeJackpotPrize));
+          setTotalWins((prev) => prev + 1);
         } else {
-          setWinStreak(prev => prev + 1);
+          setWinStreak((prev) => prev + 1);
           if (result.winAmount >= actualBet * 10) {
             playSound('bigwin');
           } else {
@@ -461,7 +500,13 @@ export default function SlotMachine({
         }
 
         setShowWin(true);
-        setWinType(result.multiplier >= 10 ? 'special' : result.multiplier >= 5 ? 'three' : 'two');
+        setWinType(
+          result.multiplier >= 10
+            ? 'special'
+            : result.multiplier >= 5
+              ? 'three'
+              : 'two',
+        );
 
         // 3秒后隐藏提示
         setTimeout(() => setShowWin(false), 3000);
@@ -473,13 +518,15 @@ export default function SlotMachine({
         setWinStreak(0);
 
         // 记录未中奖历史
-        setSpinHistory(prev => [{
-          symbols: data.results,
-          win: 0,
-          type: result.name
-        }, ...prev.slice(0, 10)]);
+        setSpinHistory((prev) => [
+          {
+            symbols: data.results,
+            win: 0,
+            type: result.name,
+          },
+          ...prev.slice(0, 10),
+        ]);
       }
-
     } catch (error: any) {
       console.error('抽奖失败:', error);
 
@@ -499,7 +546,10 @@ export default function SlotMachine({
       }
 
       // 显示错误信息
-      if (error.message?.includes('请求过于频繁') || error.message?.includes('RATE_LIMIT_EXCEEDED')) {
+      if (
+        error.message?.includes('请求过于频繁') ||
+        error.message?.includes('RATE_LIMIT_EXCEEDED')
+      ) {
         let errorMessage = '操作过于频繁，请稍后再试（每分钟最多30次）';
 
         if (penaltyData && penaltyData.message) {
@@ -533,14 +583,14 @@ export default function SlotMachine({
     } finally {
       setIsPlaying(false);
     }
-  // 保持原始依赖数组不变：progressiveJackpot 通过闭包读取，与重构前行为一致
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 保持原始依赖数组不变：progressiveJackpot 通过闭包读取，与重构前行为一致
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coins, bet, isPlaying, multiplier, playSound]);
 
   // 预加载所有符号图片，避免滚动时加载卡顿
   useEffect(() => {
     const preloadImages = () => {
-      SYMBOLS.forEach(symbol => {
+      SYMBOLS.forEach((symbol) => {
         const img = new Image();
         img.src = symbol.image;
         img.loading = 'eager';
@@ -574,58 +624,65 @@ export default function SlotMachine({
   }, []);
 
   // 获取排行榜
-  const fetchLeaderboard = useCallback(async (type: LeaderboardType = 'coins') => {
-    try {
-      const response = await fetch(`/api/slot/leaderboard?type=${type}`);
-      if (response.ok) {
-        const data = await response.json();
-        setLeaderboard(data.leaderboard || []);
-        setLeaderboardType(type);
+  const fetchLeaderboard = useCallback(
+    async (type: LeaderboardType = 'coins') => {
+      try {
+        const response = await fetch(`/api/slot/leaderboard?type=${type}`);
+        if (response.ok) {
+          const data = await response.json();
+          setLeaderboard(data.leaderboard || []);
+          setLeaderboardType(type);
+        }
+      } catch (error) {
+        console.error('获取排行榜失败:', error);
       }
-    } catch (error) {
-      console.error('获取排行榜失败:', error);
-    }
-  }, []);
+    },
+    [],
+  );
 
   // 重置用户账户
-  const resetAccount = useCallback(async (initialCoins = 1000) => {
-    try {
-      const confirmed = window.confirm(`确定要重置账户吗？\n\n这将清空所有记录，并重新开始游戏。\n初始金币: ${initialCoins}`);
-      if (!confirmed) return;
+  const resetAccount = useCallback(
+    async (initialCoins = 1000) => {
+      try {
+        const confirmed = window.confirm(
+          `确定要重置账户吗？\n\n这将清空所有记录，并重新开始游戏。\n初始金币: ${initialCoins}`,
+        );
+        if (!confirmed) return;
 
-      const response = await fetch('/api/slot/user', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ initialCoins }),
-      });
+        const response = await fetch('/api/slot/user', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ initialCoins }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '重置失败');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '重置失败');
+        }
+
+        const data = await response.json();
+
+        // 重置前端状态
+        setCoins(data.user.coins);
+        setTotalWins(data.user.totalWins);
+        setBiggestWin(data.user.biggestWin);
+        setSpinHistory([]);
+        setWinStreak(0);
+        setLoseStreak(0);
+        setChestCount(0);
+        setShowUserPanel(false);
+
+        alert('账户已重置成功！');
+        playSound('coin');
+      } catch (error: any) {
+        console.error('重置账户失败:', error);
+        alert(error.message || '重置失败，请稍后重试');
       }
-
-      const data = await response.json();
-
-      // 重置前端状态
-      setCoins(data.user.coins);
-      setTotalWins(data.user.totalWins);
-      setBiggestWin(data.user.biggestWin);
-      setSpinHistory([]);
-      setWinStreak(0);
-      setLoseStreak(0);
-      setChestCount(0);
-      setShowUserPanel(false);
-
-      alert('账户已重置成功！');
-      playSound('coin');
-
-    } catch (error: any) {
-      console.error('重置账户失败:', error);
-      alert(error.message || '重置失败，请稍后重试');
-    }
-  }, [playSound]);
+    },
+    [playSound],
+  );
 
   // 使用共享的调试函数
   const getDebugInfoCallback = useCallback(() => {
@@ -635,12 +692,16 @@ export default function SlotMachine({
   // 基于权重的符号生成函数 - 使用共享函数
   const generateWeightedSymbol = useCallback(() => {
     const symbolId = getRandomSymbol(SYMBOLS, coins);
-    return SYMBOLS.find(s => s.id === symbolId) || SYMBOLS[0];
+    return SYMBOLS.find((s) => s.id === symbolId) || SYMBOLS[0];
   }, [coins]);
 
   // 测试函数：强制生成100个符号，统计侯总出现次数
   const testSymbolGeneration = useCallback(() => {
-    if (typeof window === 'undefined' || (process.env.NODE_ENV !== 'development' && window.location.hostname !== 'localhost')) {
+    if (
+      typeof window === 'undefined' ||
+      (process.env.NODE_ENV !== 'development' &&
+        window.location.hostname !== 'localhost')
+    ) {
       return;
     }
 
@@ -656,7 +717,7 @@ export default function SlotMachine({
       }
     }
 
-    const actualPercentage = (hzCount / 100 * 100).toFixed(2);
+    const actualPercentage = ((hzCount / 100) * 100).toFixed(2);
     const expectedPercentage = getDebugInfoCallback().hzPercentage;
 
     console.log('=== 测试结果 ===');
@@ -679,19 +740,23 @@ export default function SlotMachine({
       const deltaTime = currentTime - lastTime;
 
       // 降低帧率到30fps，减少CPU使用率
-      if (deltaTime >= 33) { // 约30fps
-        setScrollOffsets(prev => prev.map((offset, index) =>
-          spinning[index] ? (offset + 20) % (30 * 80) : offset // 稍微慢一点的滚动速度
-        ));
+      if (deltaTime >= 33) {
+        // 约30fps
+        setScrollOffsets((prev) =>
+          prev.map(
+            (offset, index) =>
+              spinning[index] ? (offset + 20) % (30 * 80) : offset, // 稍微慢一点的滚动速度
+          ),
+        );
         lastTime = currentTime;
       }
 
-      if (spinning.some(s => s)) {
+      if (spinning.some((s) => s)) {
         animationFrameId = requestAnimationFrame(animate);
       }
     };
 
-    if (spinning.some(s => s)) {
+    if (spinning.some((s) => s)) {
       animationFrameId = requestAnimationFrame(animate);
     }
 
@@ -715,28 +780,37 @@ export default function SlotMachine({
   const debugInfo = getDebugInfoCallback();
 
   return (
-    <div className={`w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-2xl shadow-2xl border border-purple-500/30 ${compact ? 'p-2' : 'p-4'} relative overflow-hidden`}>
+    <div
+      className={`w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-2xl shadow-2xl border border-purple-500/30 ${compact ? 'p-2' : 'p-4'} relative overflow-hidden`}
+    >
       {/* 消息提示 */}
       {message && (
-        <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium animate-pulse ${
-          message.type === 'success' ? 'bg-green-500 text-white' :
-          message.type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-500 text-white'
-        }`}>
+        <div
+          className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium animate-pulse ${
+            message.type === 'success'
+              ? 'bg-green-500 text-white'
+              : message.type === 'error'
+                ? 'bg-red-500 text-white'
+                : 'bg-blue-500 text-white'
+          }`}
+        >
           {message.text}
         </div>
       )}
 
       {/* 背景装饰 */}
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-0 left-0 w-32 h-32 bg-yellow-400 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-48 h-48 bg-pink-400 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400 rounded-full blur-3xl animate-pulse delay-500"></div>
+      <div className='absolute inset-0 opacity-20'>
+        <div className='absolute top-0 left-0 w-32 h-32 bg-yellow-400 rounded-full blur-3xl animate-pulse'></div>
+        <div className='absolute bottom-0 right-0 w-48 h-48 bg-pink-400 rounded-full blur-3xl animate-pulse delay-1000'></div>
+        <div className='absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400 rounded-full blur-3xl animate-pulse delay-500'></div>
       </div>
 
-      <div className="relative z-10">
+      <div className='relative z-10'>
         {/* 累积大奖显示 */}
-        <SlotJackpotBanner jackpot={progressiveJackpot} showReduction={showJackpotReduction} />
+        <SlotJackpotBanner
+          jackpot={progressiveJackpot}
+          showReduction={showJackpotReduction}
+        />
 
         {/* 旋转结果全屏特效弹窗 */}
         <SlotSpinOverlays
@@ -777,8 +851,8 @@ export default function SlotMachine({
         />
 
         {/* 老虎机主体 */}
-        <div className="bg-gradient-to-b from-red-800 to-red-900 rounded-xl p-4 mb-4 shadow-inner border-4 border-yellow-600">
-          <div className="bg-black/50 rounded-lg p-4">
+        <div className='bg-gradient-to-b from-red-800 to-red-900 rounded-xl p-4 mb-4 shadow-inner border-4 border-yellow-600'>
+          <div className='bg-black/50 rounded-lg p-4'>
             {/* 转轴 - 4转轴系统 */}
             <SlotReels
               reels={reels}
@@ -801,7 +875,7 @@ export default function SlotMachine({
         </div>
 
         {/* 旋转按钮 - 移动到投注区上方 */}
-        <div className="text-center mb-6">
+        <div className='text-center mb-6'>
           <button
             onClick={spin}
             disabled={isPlaying || coins < bet * multiplier}
@@ -812,15 +886,19 @@ export default function SlotMachine({
             }`}
           >
             {isPlaying ? (
-              <span className="flex items-center gap-3">
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span className='flex items-center gap-3'>
+                <div className='w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin'></div>
                 旋转中...
               </span>
             ) : (
-              <span className="flex items-center gap-3">
-                <Zap className="w-6 h-6" />
+              <span className='flex items-center gap-3'>
+                <Zap className='w-6 h-6' />
                 旋转 (💰{formatCoins(bet)})
-                {multiplier > 1 && <span className="text-yellow-300 text-sm">({multiplier}x)</span>}
+                {multiplier > 1 && (
+                  <span className='text-yellow-300 text-sm'>
+                    ({multiplier}x)
+                  </span>
+                )}
               </span>
             )}
           </button>
@@ -851,7 +929,7 @@ export default function SlotMachine({
           bet={bet}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
           {/* 游戏规则 - 原网站规则 */}
           <SlotRulesPanel
             coins={coins}

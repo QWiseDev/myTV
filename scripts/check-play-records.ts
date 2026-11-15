@@ -23,7 +23,7 @@ async function main() {
         ORDER BY username
       `);
       console.log('  用户数:', users.length);
-      users.forEach(user => {
+      users.forEach((user) => {
         console.log('    -', user.username, 'id:', user.id, 'role:', user.role);
       });
 
@@ -35,9 +35,11 @@ async function main() {
         LIMIT 20
       `);
       console.log('  播放记录数:', records.length);
-      records.forEach(record => {
-        const user = users.find(u => u.id === record.user_id);
-        console.log(`    - ${record.title} (用户: ${user?.username || '未知'}, 来源: ${record.source}, ID: ${record.source_id})`);
+      records.forEach((record) => {
+        const user = users.find((u) => u.id === record.user_id);
+        console.log(
+          `    - ${record.title} (用户: ${user?.username || '未知'}, 来源: ${record.source}, ID: ${record.source_id})`,
+        );
       });
 
       console.log('\n3. 检查各用户的播放记录数...');
@@ -48,7 +50,7 @@ async function main() {
         GROUP BY p.id, p.username
         ORDER BY record_count DESC
       `);
-      counts.forEach(row => {
+      counts.forEach((row) => {
         console.log(`    ${row.username}: ${row.record_count} 条播放记录`);
       });
 
@@ -59,7 +61,6 @@ async function main() {
         WHERE user_id IS NULL
       `);
       console.log(`  user_id 为空的记录数: ${nullRecords[0].count}`);
-
     } finally {
       client.release();
     }
@@ -67,7 +68,6 @@ async function main() {
     console.log('\n========================================');
     console.log('检查完成！');
     console.log('========================================');
-
   } catch (err) {
     console.error('错误:', err);
   } finally {

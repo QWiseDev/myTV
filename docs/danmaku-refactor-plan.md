@@ -5,6 +5,7 @@
 ### 1.1 当前架构问题
 
 **核心问题：**
+
 - 弹幕逻辑与 Artplayer 插件深度耦合，难以独立测试和维护
 - 数据加载、渲染、配置管理混杂在一起，职责不清
 - 缺乏统一的弹幕数据模型和状态管理
@@ -35,6 +36,7 @@
 ### 1.2 功能需求梳理
 
 **核心功能：**
+
 1. 弹幕加载（外部API + 本地数据库）
 2. 弹幕发送和保存
 3. 弹幕渲染和显示
@@ -43,12 +45,14 @@
 6. 弹幕缓存管理
 
 **性能需求：**
+
 - 支持 2万+ 弹幕流畅播放
 - 首屏加载时间 < 500ms
 - 内存占用 < 50MB
 - 渲染帧率 ≥ 60fps
 
 **扩展需求：**
+
 - 支持多种弹幕源
 - 支持弹幕导入/导出
 - 支持弹幕统计和分析
@@ -95,6 +99,7 @@
 **职责：** 弹幕生命周期管理、渲染调度、性能优化
 
 **接口设计：**
+
 ```typescript
 interface DanmakuEngine {
   // 初始化
@@ -123,6 +128,7 @@ interface DanmakuEngine {
 **职责：** 统一数据源接口，支持多种数据来源
 
 **接口设计：**
+
 ```typescript
 interface DanmakuDataSource {
   fetch(params: FetchParams): Promise<Danmaku[]>;
@@ -131,9 +137,9 @@ interface DanmakuDataSource {
 }
 
 // 实现类
-class ExternalAPISource implements DanmakuDataSource { }
-class LocalDBSource implements DanmakuDataSource { }
-class CacheSource implements DanmakuDataSource { }
+class ExternalAPISource implements DanmakuDataSource {}
+class LocalDBSource implements DanmakuDataSource {}
+class CacheSource implements DanmakuDataSource {}
 ```
 
 #### 2.2.3 DanmakuRenderer (渲染引擎)
@@ -141,10 +147,12 @@ class CacheSource implements DanmakuDataSource { }
 **职责：** 高性能弹幕渲染，支持 Canvas/CSS 双模式
 
 **技术选型：**
+
 - **Canvas 模式**：适用于大量弹幕（>1000条）
 - **CSS 模式**：适用于少量弹幕，更好的可访问性
 
 **优化策略：**
+
 - 虚拟化渲染（只渲染可见区域）
 - 对象池复用（减少 GC）
 - RAF 调度（60fps 流畅渲染）
@@ -167,9 +175,9 @@ interface Danmaku {
 }
 
 enum DanmakuMode {
-  SCROLL = 0,    // 滚动
-  TOP = 1,       // 顶部
-  BOTTOM = 2,    // 底部
+  SCROLL = 0, // 滚动
+  TOP = 1, // 顶部
+  BOTTOM = 2, // 底部
 }
 
 // 弹幕配置
@@ -200,12 +208,14 @@ interface DanmakuFilter {
 **目标：** 实现独立的弹幕引擎，解耦播放器依赖
 
 **任务：**
+
 1. 创建 `DanmakuEngine` 核心类
 2. 实现基础渲染引擎（Canvas 模式）
 3. 实现对象池和虚拟化
 4. 编写单元测试
 
 **产出：**
+
 - `src/lib/danmaku/engine/DanmakuEngine.ts`
 - `src/lib/danmaku/engine/DanmakuRenderer.ts`
 - `src/lib/danmaku/engine/DanmakuPool.ts`
@@ -215,12 +225,14 @@ interface DanmakuFilter {
 **目标：** 统一数据源接口，优化数据加载
 
 **任务：**
+
 1. 抽象 `DanmakuDataSource` 接口
 2. 实现各数据源适配器
 3. 优化缓存策略
 4. 实现数据预加载
 
 **产出：**
+
 - `src/lib/danmaku/data/DanmakuDataSource.ts`
 - `src/lib/danmaku/data/ExternalAPISource.ts`
 - `src/lib/danmaku/data/LocalDBSource.ts`
@@ -231,12 +243,14 @@ interface DanmakuFilter {
 **目标：** 重构 Hook，适配新架构
 
 **任务：**
+
 1. 重构 `useDanmakuManager`
 2. 创建 `useDanmakuConfig`
 3. 创建 `useDanmakuFilter`
 4. 更新类型定义
 
 **产出：**
+
 - `src/app/play/hooks/useDanmakuManager.ts` (重构)
 - `src/app/play/hooks/useDanmakuConfig.ts` (新增)
 - `src/lib/danmaku/types.ts` (统一类型)
@@ -246,12 +260,14 @@ interface DanmakuFilter {
 **目标：** 集成到播放器，验证功能和性能
 
 **任务：**
+
 1. 适配 Artplayer 插件
 2. 性能测试和优化
 3. 兼容性测试
 4. 文档编写
 
 **产出：**
+
 - 集成测试报告
 - 性能对比数据
 - 使用文档
@@ -270,7 +286,7 @@ class VirtualizedRenderer {
     // 只渲染当前时间 ±5秒的弹幕
     const timeWindow = 5;
     this.visibleDanmakus = this.allDanmakus.filter(
-      d => Math.abs(d.time - currentTime) <= timeWindow
+      (d) => Math.abs(d.time - currentTime) <= timeWindow,
     );
   }
 }
@@ -301,7 +317,7 @@ class SegmentLoader {
   private readonly SEGMENT_DURATION = 300; // 5分钟
 
   load(danmakus: Danmaku[]) {
-    danmakus.forEach(d => {
+    danmakus.forEach((d) => {
       const segmentId = Math.floor(d.time / this.SEGMENT_DURATION);
       if (!this.segments.has(segmentId)) {
         this.segments.set(segmentId, []);
@@ -320,16 +336,19 @@ class SegmentLoader {
 ### 4.2 渲染引擎选择
 
 **Canvas 模式优势：**
+
 - 高性能，适合大量弹幕
 - 完全控制渲染流程
 - 更好的动画性能
 
 **CSS 模式优势：**
+
 - 实现简单
 - 更好的可访问性
 - 支持复杂样式
 
 **推荐方案：** 根据弹幕数量自动切换
+
 - < 500 条：CSS 模式
 - ≥ 500 条：Canvas 模式
 
@@ -365,11 +384,11 @@ class ArtplayerDanmakuAdapter {
 
 ### 5.1 技术风险
 
-| 风险 | 影响 | 概率 | 应对措施 |
-|------|------|------|----------|
-| Canvas 渲染兼容性 | 高 | 低 | 提供 CSS 降级方案 |
-| 性能不达标 | 高 | 中 | 分阶段优化，保留旧实现 |
-| 数据迁移问题 | 中 | 低 | 保持数据格式兼容 |
+| 风险              | 影响 | 概率 | 应对措施               |
+| ----------------- | ---- | ---- | ---------------------- |
+| Canvas 渲染兼容性 | 高   | 低   | 提供 CSS 降级方案      |
+| 性能不达标        | 高   | 中   | 分阶段优化，保留旧实现 |
+| 数据迁移问题      | 中   | 低   | 保持数据格式兼容       |
 
 ### 5.2 进度风险
 

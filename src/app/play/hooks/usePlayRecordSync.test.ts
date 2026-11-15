@@ -10,7 +10,7 @@ describe('shouldRestorePlayRecordTime', () => {
         isEpisodeChanging: true,
         isSourceChanging: false,
         isSameEpisodeRecord: true,
-      })
+      }),
     ).toBe(true);
   });
 
@@ -23,7 +23,7 @@ describe('shouldRestorePlayRecordTime', () => {
         isEpisodeChanging: false,
         isSourceChanging: true,
         isSameEpisodeRecord: true,
-      })
+      }),
     ).toBe(true);
   });
 
@@ -36,7 +36,7 @@ describe('shouldRestorePlayRecordTime', () => {
         isEpisodeChanging: false,
         isSourceChanging: true,
         isSameEpisodeRecord: true,
-      })
+      }),
     ).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe('shouldRestorePlayRecordTime', () => {
         isEpisodeChanging: false,
         isSourceChanging: false,
         isSameEpisodeRecord: true,
-      })
+      }),
     ).toBe(false);
   });
 });

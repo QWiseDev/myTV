@@ -26,7 +26,7 @@ function createSource(overrides: Partial<SearchResult>): SearchResult {
 describe('sourceDetails', () => {
   test('buildSourceKey: combines source and id', () => {
     expect(buildSourceKey(createSource({ source: 's1', id: 'a' }))).toBe(
-      's1-a'
+      's1-a',
     );
   });
 
@@ -51,7 +51,7 @@ describe('sourceDetails', () => {
         createSource({ source: 's1', id: 'a' }),
         createSource({ source: 's1', id: 'b' }),
       ],
-      { source: 's1', id: 'b' }
+      { source: 's1', id: 'b' },
     );
 
     expect(result?.id).toBe('b');
@@ -81,7 +81,7 @@ describe('sourceDetails', () => {
         title: 'detail title',
         poster: 'poster.jpg',
         douban_id: 456,
-      })
+      }),
     );
 
     const result = await hydrateSourceDetail(source, fetchDetail);

@@ -13,7 +13,7 @@ const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 // 内容类型到搜索关键词的映射
 const getContentTypeQuery = (
   originalQuery: string,
-  contentType: string
+  contentType: string,
 ): string => {
   if (contentType === 'all') return originalQuery;
 
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
     const hasPermission = await hasSpecialFeaturePermission(
       username,
       'youtube-search',
-      config
+      config,
     );
     if (!hasPermission) {
       return NextResponse.json(
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
             Pragma: 'no-cache',
             'Surrogate-Control': 'no-store',
           },
-        }
+        },
       );
     }
     const youtubeConfig = config.YouTubeConfig;
@@ -179,15 +179,16 @@ export async function GET(request: NextRequest) {
             Pragma: 'no-cache',
             'Surrogate-Control': 'no-store',
           },
-        }
+        },
       );
     }
 
     const maxResults = Math.min(
       parseInt(
-        searchParams.get('maxResults') || String(youtubeConfig.maxResults || 25)
+        searchParams.get('maxResults') ||
+          String(youtubeConfig.maxResults || 25),
       ),
-      50
+      50,
     );
 
     // YouTube搜索缓存：60分钟（因为YouTube内容更新频率相对较低）
@@ -200,7 +201,7 @@ export async function GET(request: NextRequest) {
     const cacheKey = `youtube-search-${youtubeConfig.enabled}-${
       youtubeConfig.enableDemo
     }-${maxResults}-${encodeURIComponent(
-      query
+      query,
     )}-${contentType}-${order}-${enabledRegionsStr}-${enabledCategoriesStr}`;
 
     // 服务端直接调用数据库（不用ClientCache，避免HTTP循环调用）
@@ -214,7 +215,6 @@ export async function GET(request: NextRequest) {
           cacheTimestamp: new Date().toISOString(),
         });
       }
-
     } catch (cacheError) {
       console.warn('YouTube搜索缓存读取失败:', cacheError);
       // 缓存失败不影响主流程，继续执行
@@ -241,8 +241,8 @@ export async function GET(request: NextRequest) {
         if (filterKeywords.length > 0) {
           filteredResults = filteredResults.filter((video) =>
             filterKeywords.some((keyword) =>
-              video.snippet.title.toLowerCase().includes(keyword)
-            )
+              video.snippet.title.toLowerCase().includes(keyword),
+            ),
           );
         }
       }
@@ -346,7 +346,7 @@ export async function GET(request: NextRequest) {
           success: false,
           error: errorMessage,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 

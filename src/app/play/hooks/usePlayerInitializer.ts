@@ -1,10 +1,6 @@
 'use client';
 
-import type {
-  Dispatch,
-  MutableRefObject,
-  SetStateAction,
-} from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { useEffect, useRef } from 'react';
 
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
@@ -19,7 +15,10 @@ import {
 } from '../utils/artplayerConfig';
 import type { ArtplayerRuntimeModules } from '../utils/artplayerLoader';
 import { loadArtplayerModules } from '../utils/artplayerLoader';
-import { getOptimizedDanmakuConfig, saveDanmakuConfigToStorage } from '../utils/danmakuConfig';
+import {
+  getOptimizedDanmakuConfig,
+  saveDanmakuConfigToStorage,
+} from '../utils/danmakuConfig';
 import {
   type DanmakuItemLike,
   isDanmakuAbortError,
@@ -30,7 +29,10 @@ import {
 } from '../utils/danmakuRuntime';
 import { createAdFilterHlsLoader } from '../utils/hlsAdFilterLoader';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
-import { restoreMutedVolumeOnFirstPlay, scheduleAutoPlayWithFallback } from '../utils/playerAutoPlay';
+import {
+  restoreMutedVolumeOnFirstPlay,
+  scheduleAutoPlayWithFallback,
+} from '../utils/playerAutoPlay';
 import { detectPlayerBrowserSupport } from '../utils/playerBrowserSupport';
 import {
   type PlayerMediaSwitchResult,
@@ -931,10 +933,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
       // 选集会先更新 episodeIndex，再由 useEpisodeDanmuSync 写入对应 URL。
       // 过渡 render 仍携带旧 URL，必须等待下一次 render，避免对旧媒体误发 switch。
-      if (
-        expectedVideoUrl !== null &&
-        videoUrl.trim() !== expectedVideoUrl
-      ) {
+      if (expectedVideoUrl !== null && videoUrl.trim() !== expectedVideoUrl) {
         return;
       }
 

@@ -21,14 +21,24 @@ async function executeSqlFile(pool: Pool, filePath: string): Promise<void> {
   while (pos < sql.length) {
     const char = sql[pos];
 
-    if (!inDollarQuote && char === '-' && pos + 1 < sql.length && sql[pos + 1] === '-') {
+    if (
+      !inDollarQuote &&
+      char === '-' &&
+      pos + 1 < sql.length &&
+      sql[pos + 1] === '-'
+    ) {
       while (pos < sql.length && sql[pos] !== '\n') {
         pos++;
       }
       continue;
     }
 
-    if (!inDollarQuote && char === '/' && pos + 1 < sql.length && sql[pos + 1] === '*') {
+    if (
+      !inDollarQuote &&
+      char === '/' &&
+      pos + 1 < sql.length &&
+      sql[pos + 1] === '*'
+    ) {
       pos += 2;
       while (pos < sql.length - 1) {
         if (sql[pos] === '*' && sql[pos + 1] === '/') {
@@ -75,7 +85,11 @@ async function executeSqlFile(pool: Pool, filePath: string): Promise<void> {
 
     if (!inDollarQuote && char === ';') {
       const statement = currentStatement.trim();
-      if (statement.length > 5 && !statement.startsWith('--') && !statement.startsWith('/*')) {
+      if (
+        statement.length > 5 &&
+        !statement.startsWith('--') &&
+        !statement.startsWith('/*')
+      ) {
         statements.push(statement);
       }
       currentStatement = '';
@@ -96,7 +110,14 @@ async function executeSqlFile(pool: Pool, filePath: string): Promise<void> {
       await pool.query(statement);
       successCount++;
     } catch (error: any) {
-      const ignoredErrors = ['42P07', '42710', '42P01', '42P16', '42701', '42P04'];
+      const ignoredErrors = [
+        '42P07',
+        '42710',
+        '42P01',
+        '42P16',
+        '42701',
+        '42P04',
+      ];
       if (!ignoredErrors.includes(error.code)) {
         console.error(`语句 ${i + 1} 执行失败:`, error.message);
         console.error(`语句内容:`, statement.substring(0, 200) + '...');
@@ -105,7 +126,9 @@ async function executeSqlFile(pool: Pool, filePath: string): Promise<void> {
     }
   }
 
-  console.log(`✓ ${filePath} 执行完成 (${successCount}/${statements.length} 语句成功)`);
+  console.log(
+    `✓ ${filePath} 执行完成 (${successCount}/${statements.length} 语句成功)`,
+  );
 }
 
 async function setupSupabase(): Promise<void> {

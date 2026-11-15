@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 function loadEnv(filePath: string) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    content.split('\n').forEach(line => {
+    content.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
@@ -78,7 +78,9 @@ async function checkUpstashAdminConfig() {
         if (c.SourceConfig && c.SourceConfig.length > 0) {
           console.log('\n源列表:');
           c.SourceConfig.forEach((site: any, index: number) => {
-            console.log(`  [${index}] ${site.key} - ${site.name} (${site.api ? '有API' : '无API'})`);
+            console.log(
+              `  [${index}] ${site.key} - ${site.name} (${site.api ? '有API' : '无API'})`,
+            );
           });
         }
       }
@@ -87,7 +89,6 @@ async function checkUpstashAdminConfig() {
     console.log('\n=== 检查所有以 admin: 开头的键 ===\n');
     const adminKeys = await redis.keys('admin:*');
     console.log('找到的 admin 键:', adminKeys);
-
   } catch (e) {
     console.error('检查失败:', e);
     process.exit(1);

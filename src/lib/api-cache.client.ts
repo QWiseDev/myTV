@@ -54,7 +54,10 @@ async function extractErrorMessage(response: Response): Promise<string | null> {
 /**
  * 生成缓存键
  */
-function generateCacheKey(url: string, params?: Record<string, unknown>): string {
+function generateCacheKey(
+  url: string,
+  params?: Record<string, unknown>,
+): string {
   const paramStr = params ? `:${JSON.stringify(params)}` : '';
   return `${url}${paramStr}`;
 }
@@ -104,7 +107,10 @@ function enforceMaxCacheSize(): void {
 /**
  * 从缓存获取数据
  */
-function getFromCache<T>(url: string, params?: Record<string, unknown>): T | null {
+function getFromCache<T>(
+  url: string,
+  params?: Record<string, unknown>,
+): T | null {
   cleanupExpiredCache();
 
   const cacheKey = generateCacheKey(url, params);
@@ -127,7 +133,11 @@ function getFromCache<T>(url: string, params?: Record<string, unknown>): T | nul
 /**
  * 保存到缓存
  */
-function saveToCache<T>(url: string, data: T, params?: Record<string, unknown>): void {
+function saveToCache<T>(
+  url: string,
+  data: T,
+  params?: Record<string, unknown>,
+): void {
   const cacheKey = generateCacheKey(url, params);
   requestCache.set(cacheKey, {
     data,
@@ -166,10 +176,10 @@ export function clearAllCache(): void {
 export async function cachedFetch<T = unknown>(
   url: string,
   options?: RequestInit,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
 ): Promise<T> {
   // 先检查缓存（只对 GET 请求启用缓存）
-  if ((!options || options.method === 'GET' || !options.method)) {
+  if (!options || options.method === 'GET' || !options.method) {
     const cached = getFromCache<T>(url, params);
     if (cached) {
       return cached;
@@ -193,14 +203,17 @@ export async function cachedFetch<T = unknown>(
         throw new Error(
           message
             ? `HTTP error! status: ${response.status} - ${message}`
-            : `HTTP error! status: ${response.status}`
+            : `HTTP error! status: ${response.status}`,
         );
       }
 
       const data = await response.json();
 
       // 对成功的 GET 请求结果进行缓存
-      if (response.ok && (!options || options.method === 'GET' || !options.method)) {
+      if (
+        response.ok &&
+        (!options || options.method === 'GET' || !options.method)
+      ) {
         saveToCache(url, data, params);
       }
 
@@ -224,12 +237,13 @@ export async function cachedFetch<T = unknown>(
  */
 export async function cachedGet<T = unknown>(
   url: string,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ): Promise<T> {
   // 构建完整的 URL
-  const fullUrl = params && Object.keys(params).length > 0
-    ? `${url}${url.includes('?') ? '&' : '?'}${new URLSearchParams(params as Record<string, string>).toString()}`
-    : url;
+  const fullUrl =
+    params && Object.keys(params).length > 0
+      ? `${url}${url.includes('?') ? '&' : '?'}${new URLSearchParams(params as Record<string, string>).toString()}`
+      : url;
 
   return cachedFetch<T>(fullUrl, undefined, params);
 }

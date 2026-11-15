@@ -34,7 +34,9 @@ function createDefaultSlotUserData(): SlotUserData {
   };
 }
 
-function normalizeSlotUserData(data: Partial<SlotUserData> | null): SlotUserData {
+function normalizeSlotUserData(
+  data: Partial<SlotUserData> | null,
+): SlotUserData {
   return {
     ...createDefaultSlotUserData(),
     ...(data || {}),
@@ -56,7 +58,10 @@ async function getUserSlotData(userName: string): Promise<SlotUserData> {
 }
 
 // 保存用户数据
-async function saveUserSlotData(userName: string, data: SlotUserData): Promise<void> {
+async function saveUserSlotData(
+  userName: string,
+  data: SlotUserData,
+): Promise<void> {
   try {
     await db.setSlotUserData(userName, data, 86400 * 30); // 30天过期
   } catch (error) {
@@ -65,7 +70,9 @@ async function saveUserSlotData(userName: string, data: SlotUserData): Promise<v
 }
 
 // 用户认证中间件
-async function authenticateUser(req: NextRequest): Promise<{ username: string | null; error?: string }> {
+async function authenticateUser(
+  req: NextRequest,
+): Promise<{ username: string | null; error?: string }> {
   const authCookie = req.cookies.get('user_auth')?.value;
 
   if (!authCookie) {
@@ -90,7 +97,10 @@ export async function GET(req: NextRequest) {
     // 用户认证
     const auth = await authenticateUser(req);
     if (auth.error || !auth.username) {
-      return NextResponse.json({ error: auth.error || '认证失败' }, { status: 401 });
+      return NextResponse.json(
+        { error: auth.error || '认证失败' },
+        { status: 401 },
+      );
     }
 
     // 获取用户数据
@@ -107,7 +117,6 @@ export async function GET(req: NextRequest) {
       success: true,
       user: userData,
     });
-
   } catch (error) {
     console.error('获取老虎机用户数据异常:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
@@ -120,14 +129,24 @@ export async function DELETE(req: NextRequest) {
     // 用户认证
     const auth = await authenticateUser(req);
     if (auth.error || !auth.username) {
-      return NextResponse.json({ error: auth.error || '认证失败' }, { status: 401 });
+      return NextResponse.json(
+        { error: auth.error || '认证失败' },
+        { status: 401 },
+      );
     }
 
     // 获取请求参数
     const { initialCoins = 1000 } = await req.json().catch(() => ({}));
 
-    if (typeof initialCoins !== 'number' || initialCoins < 0 || initialCoins > 100000) {
-      return NextResponse.json({ error: '无效的初始金额，范围应为0-100000' }, { status: 400 });
+    if (
+      typeof initialCoins !== 'number' ||
+      initialCoins < 0 ||
+      initialCoins > 100000
+    ) {
+      return NextResponse.json(
+        { error: '无效的初始金额，范围应为0-100000' },
+        { status: 400 },
+      );
     }
 
     // 创建新的用户数据
@@ -152,7 +171,6 @@ export async function DELETE(req: NextRequest) {
       message: '账户已重置',
       user: newUserData,
     });
-
   } catch (error) {
     console.error('重置用户数据异常:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
@@ -165,7 +183,10 @@ export async function PATCH(req: NextRequest) {
     // 用户认证
     const auth = await authenticateUser(req);
     if (auth.error || !auth.username) {
-      return NextResponse.json({ error: auth.error || '认证失败' }, { status: 401 });
+      return NextResponse.json(
+        { error: auth.error || '认证失败' },
+        { status: 401 },
+      );
     }
 
     // 获取请求参数
@@ -177,7 +198,10 @@ export async function PATCH(req: NextRequest) {
 
     // 限制单次增减范围
     if (Math.abs(coins) > 10000) {
-      return NextResponse.json({ error: '单次操作不能超过10000金币' }, { status: 400 });
+      return NextResponse.json(
+        { error: '单次操作不能超过10000金币' },
+        { status: 400 },
+      );
     }
 
     // 获取当前用户数据
@@ -190,7 +214,9 @@ export async function PATCH(req: NextRequest) {
     await saveUserSlotData(auth.username, userData);
 
     // 记录操作日志（可选）
-    console.log(`用户 ${auth.username} ${coins > 0 ? '增加' : '减少'} ${Math.abs(coins)} 金币，原因: ${reason || '管理员操作'}`);
+    console.log(
+      `用户 ${auth.username} ${coins > 0 ? '增加' : '减少'} ${Math.abs(coins)} 金币，原因: ${reason || '管理员操作'}`,
+    );
 
     return NextResponse.json({
       success: true,
@@ -198,7 +224,6 @@ export async function PATCH(req: NextRequest) {
       coins: userData.coins,
       changeAmount: coins,
     });
-
   } catch (error) {
     console.error('修改用户金币异常:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });

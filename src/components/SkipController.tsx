@@ -116,7 +116,7 @@ export default function SkipController({
         loaded: true,
       });
     },
-    [skipConfigIdentity]
+    [skipConfigIdentity],
   );
   const skipConfigRequestGenerationRef = useRef(0);
   const [showSkipButton, setShowSkipButton] = useState(false);
@@ -178,7 +178,7 @@ export default function SkipController({
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener(
         'localStorageChanged',
-        handleLocalSettingsChange
+        handleLocalSettingsChange,
       );
     };
   }, []);
@@ -195,16 +195,11 @@ export default function SkipController({
   const episodeSwitchCooldownRef = useRef<number>(0);
 
   // 管理面板拖动定位（位置持久化到 localStorage）
-  const {
-    position,
-    isDragging,
-    panelRef,
-    handleMouseDown,
-    handleTouchStart,
-  } = useDraggablePanel('skipControllerPosition', () => ({
-    x: 16,
-    y: window.innerHeight - 200,
-  }));
+  const { position, isDragging, panelRef, handleMouseDown, handleTouchStart } =
+    useDraggablePanel('skipControllerPosition', () => ({
+      x: 16,
+      y: window.innerHeight - 200,
+    }));
 
   // 快速标记当前时间为片头结束
   const markCurrentAsOpeningEnd = useCallback(() => {
@@ -218,7 +213,7 @@ export default function SkipController({
       // 显示提示
       if (artPlayerRef.current.notice) {
         artPlayerRef.current.notice.show = `已标记片头结束: ${secondsToTime(
-          currentTime
+          currentTime,
         )}`;
       }
     }
@@ -240,7 +235,7 @@ export default function SkipController({
         // 显示提示
         if (artPlayerRef.current.notice) {
           artPlayerRef.current.notice.show = `已标记片尾开始: 剩余${secondsToTime(
-            remainingTime
+            remainingTime,
           )}`;
         }
       }
@@ -254,7 +249,7 @@ export default function SkipController({
         // 显示提示
         if (artPlayerRef.current.notice) {
           artPlayerRef.current.notice.show = `已标记片尾开始: ${secondsToTime(
-            currentTime
+            currentTime,
           )}`;
         }
       }
@@ -300,7 +295,7 @@ export default function SkipController({
 
       setCurrentSkipSegment(null);
     },
-    [artPlayerRef, onNextEpisode]
+    [artPlayerRef, onNextEpisode],
   );
 
   // 计算当前生效的跳过片段配置
@@ -381,7 +376,7 @@ export default function SkipController({
 
       // 也就是直接使用 memo 后的结果
       const currentSegment = effectiveSegments.find(
-        (segment) => time >= segment.start && time <= segment.end
+        (segment) => time >= segment.start && time <= segment.end,
       );
 
       // 🔥 关键修复：使用 source + id + episodeIndex 作为集数标识，确保不同集数有不同的ID
@@ -390,7 +385,6 @@ export default function SkipController({
 
       // 比较片段类型而不是对象引用（避免临时对象导致的重复触发）
       if (currentSegment && currentSegment.type !== currentSkipSegment?.type) {
-
         // 🔥 关键修复：检查是否已经处理过这个片段（同一集同一片段类型）
         if (
           lastProcessed &&
@@ -443,7 +437,7 @@ export default function SkipController({
       effectiveSegments,
       currentSkipSegment?.type,
       handleAutoSkip,
-    ] // 🔥 含 episodeIndex/source 用于防重复检查，currentSkipSegment 用于片段类型比较
+    ], // 🔥 含 episodeIndex/source 用于防重复检查，currentSkipSegment 用于片段类型比较
   );
 
   // 执行跳过
@@ -659,7 +653,7 @@ export default function SkipController({
 
       try {
         const updatedSegments = skipConfig.segments.filter(
-          (_, i) => i !== index
+          (_, i) => i !== index,
         );
 
         if (updatedSegments.length === 0) {
@@ -683,7 +677,7 @@ export default function SkipController({
         alert('删除失败，请重试');
       }
     },
-    [id, setSkipConfig, skipConfig, source]
+    [id, setSkipConfig, skipConfig, source],
   );
 
   // 计算实际的 segments（处理 remaining 模式）
@@ -710,11 +704,11 @@ export default function SkipController({
 
   const restoreBatchSettings = useCallback(() => {
     const openingSegment = skipConfig?.segments.find(
-      (segment) => segment.type === 'opening'
+      (segment) => segment.type === 'opening',
     );
     const endingValues = getEndingBatchTimeValues(
       skipConfig?.segments.find((segment) => segment.type === 'ending'),
-      duration
+      duration,
     );
 
     setBatchSettings((prev) => ({
@@ -722,9 +716,7 @@ export default function SkipController({
       openingStart: openingSegment
         ? secondsToTime(openingSegment.start)
         : '0:00',
-      openingEnd: openingSegment
-        ? secondsToTime(openingSegment.end)
-        : '1:30',
+      openingEnd: openingSegment ? secondsToTime(openingSegment.end) : '1:30',
       endingStart:
         endingValues?.startSeconds !== null &&
         endingValues?.startSeconds !== undefined

@@ -31,8 +31,10 @@ loadEnv(path.join(__dirname, '../.env'));
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-  { auth: { persistSession: false } }
+  process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '',
+  { auth: { persistSession: false } },
 );
 
 async function analyzeConfig() {
@@ -58,13 +60,17 @@ async function analyzeConfig() {
     if (Array.isArray(value)) {
       console.log(`  ${key}: 数组 (${value.length} 项)`);
       if (value.length > 0) {
-        console.log(`    第一项: ${JSON.stringify(value[0]).substring(0, 100)}...`);
+        console.log(
+          `    第一项: ${JSON.stringify(value[0]).substring(0, 100)}...`,
+        );
       }
     } else if (typeof value === 'object' && value !== null) {
       console.log(`  ${key}: 对象`);
       console.log(`    键: ${Object.keys(value).join(', ')}`);
     } else {
-      console.log(`  ${key}: ${typeof value} (${String(value).substring(0, 50)})`);
+      console.log(
+        `  ${key}: ${typeof value} (${String(value).substring(0, 50)})`,
+      );
     }
   }
 
@@ -86,7 +92,9 @@ async function analyzeConfig() {
   const sourceConfigSize = JSON.stringify(config.SourceConfig).length;
   console.log(`\n配置总大小: ${(configSize / 1024).toFixed(2)} KB`);
   console.log(`SourceConfig 大小: ${(sourceConfigSize / 1024).toFixed(2)} KB`);
-  console.log(`SourceConfig 占比: ${((sourceConfigSize / configSize) * 100).toFixed(1)}%`);
+  console.log(
+    `SourceConfig 占比: ${((sourceConfigSize / configSize) * 100).toFixed(1)}%`,
+  );
 }
 
 analyzeConfig().catch(console.error);

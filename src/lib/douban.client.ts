@@ -62,7 +62,7 @@ async function getCache(key: string): Promise<any | null> {
 async function setCache(
   key: string,
   data: any,
-  expireSeconds: number
+  expireSeconds: number,
 ): Promise<void> {
   try {
     // 主要存储：统一存储
@@ -96,7 +96,7 @@ async function cleanExpiredCache(): Promise<void> {
     // 清理localStorage中的过期缓存（兼容性）
     if (typeof localStorage !== 'undefined') {
       const keys = Object.keys(localStorage).filter(
-        (key) => key.startsWith('douban-') || key.startsWith('bangumi-')
+        (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
       );
 
       keys.forEach((key) => {
@@ -113,7 +113,6 @@ async function cleanExpiredCache(): Promise<void> {
           localStorage.removeItem(key);
         }
       });
-
     }
   } catch (e) {
     console.warn('清理过期缓存失败:', e);
@@ -131,7 +130,7 @@ export function getDoubanCacheStats(): {
   }
 
   const keys = Object.keys(localStorage).filter(
-    (key) => key.startsWith('douban-') || key.startsWith('bangumi-')
+    (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
   );
   const byType: Record<string, number> = {};
   let totalSize = 0;
@@ -158,7 +157,7 @@ export function clearDoubanCache(): void {
   if (typeof localStorage === 'undefined') return;
 
   const keys = Object.keys(localStorage).filter(
-    (key) => key.startsWith('douban-') || key.startsWith('bangumi-')
+    (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
   );
   keys.forEach((key) => localStorage.removeItem(key));
 }
@@ -172,7 +171,6 @@ export async function initDoubanCache(): Promise<void> {
 
   // 每10分钟清理一次过期缓存
   setInterval(() => cleanExpiredCache(), 10 * 60 * 1000);
-
 }
 
 interface DoubanCategoriesParams {
@@ -391,7 +389,7 @@ interface DoubanListParams {
 }
 
 export async function getDoubanList(
-  params: DoubanListParams
+  params: DoubanListParams,
 ): Promise<DoubanResult> {
   const { tag, type, pageLimit = 20, pageStart = 0 } = params;
 
@@ -418,7 +416,7 @@ export async function getDoubanList(
     case 'direct':
     default:
       const response = await fetch(
-        `/api/douban?tag=${tag}&type=${type}&pageSize=${pageLimit}&pageStart=${pageStart}`
+        `/api/douban?tag=${tag}&type=${type}&pageSize=${pageLimit}&pageStart=${pageStart}`,
       );
       result = await response.json();
       break;
@@ -436,7 +434,7 @@ export async function fetchDoubanList(
   params: DoubanListParams,
   proxyUrl: string,
   useTencentCDN = false,
-  useAliCDN = false
+  useAliCDN = false,
 ): Promise<DoubanResult> {
   const { tag, type, pageLimit = 20, pageStart = 0 } = params;
 
@@ -460,8 +458,8 @@ export async function fetchDoubanList(
   const target = useTencentCDN
     ? `https://movie.douban.cmliussss.net/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`
     : useAliCDN
-    ? `https://movie.douban.cmliussss.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`
-    : `https://movie.douban.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`;
+      ? `https://movie.douban.cmliussss.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`
+      : `https://movie.douban.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`;
 
   try {
     const doubanData = await fetchJsonWithTimeout<DoubanListApiResponse>(
@@ -489,7 +487,7 @@ export async function fetchDoubanList(
       window.dispatchEvent(
         new CustomEvent('globalError', {
           detail: { message: '获取豆瓣列表数据失败' },
-        })
+        }),
       );
     }
     throw new Error(`获取豆瓣分类数据失败: ${(error as Error).message}`);
@@ -510,7 +508,7 @@ interface DoubanRecommendsParams {
 }
 
 export async function getDoubanRecommends(
-  params: DoubanRecommendsParams
+  params: DoubanRecommendsParams,
 ): Promise<DoubanResult> {
   const {
     kind,
@@ -556,13 +554,13 @@ export async function getDoubanRecommends(
     case 'cors-proxy-zwei':
       result = await fetchDoubanRecommends(
         params,
-        'https://ciao-cors.is-an.org/'
+        'https://ciao-cors.is-an.org/',
       );
       break;
     case 'direct':
     default:
       const response = await fetch(
-        `/api/douban/recommends?kind=${kind}&limit=${pageLimit}&start=${pageStart}&category=${category}&format=${format}&region=${region}&year=${year}&platform=${platform}&sort=${sort}&label=${label}`
+        `/api/douban/recommends?kind=${kind}&limit=${pageLimit}&start=${pageStart}&category=${category}&format=${format}&region=${region}&year=${year}&platform=${platform}&sort=${sort}&label=${label}`,
       );
       result = await response.json();
       break;
@@ -622,7 +620,6 @@ export async function getDoubanDetails(id: string): Promise<{
     if (isValid) {
       return cached;
     }
-
   }
 
   try {
@@ -659,7 +656,7 @@ async function fetchDoubanRecommends(
   params: DoubanRecommendsParams,
   proxyUrl: string,
   useTencentCDN = false,
-  useAliCDN = false
+  useAliCDN = false,
 ): Promise<DoubanResult> {
   const { kind, pageLimit = 20, pageStart = 0 } = params;
   let { category, format, region, year, platform, sort, label } = params;
@@ -716,8 +713,8 @@ async function fetchDoubanRecommends(
   const baseUrl = useTencentCDN
     ? `https://m.douban.cmliussss.net/rexxar/api/v2/${kind}/recommend`
     : useAliCDN
-    ? `https://m.douban.cmliussss.com/rexxar/api/v2/${kind}/recommend`
-    : `https://m.douban.com/rexxar/api/v2/${kind}/recommend`;
+      ? `https://m.douban.cmliussss.com/rexxar/api/v2/${kind}/recommend`
+      : `https://m.douban.com/rexxar/api/v2/${kind}/recommend`;
   const reqParams = new URLSearchParams();
   reqParams.append('refresh', '0');
   reqParams.append('start', pageStart.toString());
@@ -767,7 +764,7 @@ interface DoubanActorSearchParams {
 }
 
 export async function getDoubanActorMovies(
-  params: DoubanActorSearchParams
+  params: DoubanActorSearchParams,
 ): Promise<DoubanResult> {
   const { actorName, type = 'movie', pageLimit = 20, pageStart = 0 } = params;
 
@@ -791,7 +788,7 @@ export async function getDoubanActorMovies(
   try {
     // 使用豆瓣搜索API
     const searchUrl = `https://search.douban.com/movie/subject_search?search_text=${encodeURIComponent(
-      actorName.trim()
+      actorName.trim(),
     )}`;
 
     const response = await fetch(searchUrl, {
@@ -911,7 +908,7 @@ const pendingDoubanCommentRequests = new Map<
 >();
 
 export async function getDoubanComments(
-  params: DoubanCommentsParams
+  params: DoubanCommentsParams,
 ): Promise<DoubanCommentsResult> {
   const { id, start = 0, limit = 10, sort = 'new_score' } = params;
 
@@ -959,7 +956,6 @@ export async function getDoubanComments(
       ) {
         return cached as DoubanCommentsResult;
       }
-
     }
   }
 
@@ -969,7 +965,7 @@ export async function getDoubanComments(
   const requestPromise = (async (): Promise<DoubanCommentsResult> => {
     try {
       const response = await fetch(
-        `/api/douban/comments?id=${id}&start=${start}&limit=${limit}&sort=${sort}`
+        `/api/douban/comments?id=${id}&start=${start}&limit=${limit}&sort=${sort}`,
       );
 
       if (!response.ok) {
@@ -1005,7 +1001,6 @@ export async function getDoubanComments(
                 },
               } as any);
         await setCache(cacheKey, resultToCache, expireSeconds);
-
       }
 
       return result;

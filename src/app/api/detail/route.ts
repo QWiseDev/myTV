@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached.data, {
         headers: {
           'Cache-Control': `public, max-age=${Math.floor(remainingTime / 1000)}, s-maxage=${Math.floor(remainingTime / 1000)}`,
-          'ETag': `"${cacheKey}-${cached.timestamp}"`,
+          ETag: `"${cacheKey}-${cached.timestamp}"`,
         },
       });
     }
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     // 💾 更新缓存
     detailCache.set(cacheKey, {
       data: result,
-      timestamp: now
+      timestamp: now,
     });
 
     // 定期清理过期缓存（避免内存泄漏）
@@ -76,13 +76,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, {
       headers: {
         'Cache-Control': `public, max-age=${DETAIL_CACHE_DURATION / 1000}, s-maxage=${DETAIL_CACHE_DURATION / 1000}`,
-        'ETag': `"${cacheKey}-${now}"`,
+        ETag: `"${cacheKey}-${now}"`,
       },
     });
   } catch (error) {
     return NextResponse.json(
       { error: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

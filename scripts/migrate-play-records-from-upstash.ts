@@ -24,11 +24,11 @@ const pgPool = new Pool({ connectionString: PG_CONNECTION_STRING });
 type UpstashPlayRecord = Record<string, any>;
 
 async function getUserPlayRecordEntries(
-  username: string
+  username: string,
 ): Promise<Array<{ key: string; record: UpstashPlayRecord }>> {
-  const hashRecords = await upstashRedis.hgetall<Record<string, UpstashPlayRecord>>(
-    `u:${username}:prh`
-  );
+  const hashRecords = await upstashRedis.hgetall<
+    Record<string, UpstashPlayRecord>
+  >(`u:${username}:prh`);
 
   if (hashRecords && Object.keys(hashRecords).length > 0) {
     return Object.entries(hashRecords).map(([key, record]) => ({
@@ -157,7 +157,7 @@ async function main() {
               record.remarks || '',
               new Date(record.save_time || Date.now()),
               new Date(record.save_time || Date.now()),
-            ]
+            ],
           );
           migratedCount++;
         } catch (err) {

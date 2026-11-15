@@ -37,7 +37,7 @@ export function ChannelInfoPanel({
               {currentChannel.logo ? (
                 <img
                   src={`/api/proxy/logo?url=${encodeURIComponent(
-                    currentChannel.logo
+                    currentChannel.logo,
                   )}&source=${currentSource?.key || ''}`}
                   alt={currentChannel.name}
                   className='w-full h-full rounded object-contain'

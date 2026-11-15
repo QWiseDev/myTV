@@ -18,7 +18,7 @@ function sha512Hex(input: string): string {
 
 function extractHiddenValue(html: string, id: string): string | null {
   const match = html.match(
-    new RegExp(`id=["']${id}["'][^>]*value=["']([^"']+)["']`)
+    new RegExp(`id=["']${id}["'][^>]*value=["']([^"']+)["']`),
   );
   return match ? match[1] : null;
 }
@@ -50,13 +50,15 @@ function toCookieHeader(setCookies: string[]): string {
 export function solvePowNonce(
   cha: string,
   difficulty = 4,
-  maxIterations = 5_000_000
+  maxIterations = 5_000_000,
 ): number {
   const targetPrefix = '0'.repeat(difficulty);
   for (let nonce = 1; nonce <= maxIterations; nonce++) {
     if (sha512Hex(cha + nonce).startsWith(targetPrefix)) return nonce;
   }
-  throw new Error(`PoW 解算失败（difficulty=${difficulty}，max=${maxIterations}）`);
+  throw new Error(
+    `PoW 解算失败（difficulty=${difficulty}，max=${maxIterations}）`,
+  );
 }
 
 export async function bypassDoubanPowChallenge(options: {
@@ -133,4 +135,3 @@ export async function bypassDoubanPowChallenge(options: {
   const html = await realResponse.text();
   return { html };
 }
-

@@ -1,6 +1,7 @@
 # Play 模块优化方案详细设计
 
 ## 文档信息
+
 - **创建日期**: 2025-11-01
 - **目标模块**: src/app/play
 - **优化目标**: 提升代码质量、性能和可维护性
@@ -8,6 +9,7 @@
 ---
 
 ## 📋 目录
+
 - [高优先级优化](#高优先级优化)
   - [1. 拆分 page.tsx 大文件](#1-拆分-pagetsx-大文件)
   - [2. 统一状态管理](#2-统一状态管理)
@@ -24,6 +26,7 @@
 ### 1. 拆分 page.tsx 大文件
 
 #### 问题分析
+
 - **当前状态**: page.tsx 有 4690 行代码
 - **影响**:
   - 难以理解和维护
@@ -32,14 +35,17 @@
   - IDE 性能下降
 
 #### 优化目标
+
 将 page.tsx 拆分为多个职责清晰的模块，每个文件不超过 500 行
 
 #### 实施步骤
 
 ##### 1.1 创建类型定义文件 (30 分钟)
+
 **文件**: `src/app/play/types/index.ts`
 
 **内容**:
+
 ```typescript
 // 播放器状态类型
 export interface PlayerState {
@@ -127,16 +133,19 @@ export interface PlayRecord {
 ```
 
 **验收标准**:
+
 - ✅ 所有类型定义清晰准确
 - ✅ 无 any 类型
 - ✅ 导出所有必要的类型
 
 ##### 1.2 提取状态管理逻辑 (45 分钟)
+
 **文件**: `src/app/play/hooks/usePlayerState.ts`
 
 **功能**: 使用 useReducer 统一管理播放器状态
 
 **内容结构**:
+
 ```typescript
 // State 类型定义
 interface PlayPageState {
@@ -162,7 +171,10 @@ type PlayPageAction =
   | { type: 'RESET_STATE' };
 
 // Reducer 函数
-function playPageReducer(state: PlayPageState, action: PlayPageAction): PlayPageState;
+function playPageReducer(
+  state: PlayPageState,
+  action: PlayPageAction,
+): PlayPageState;
 
 // Hook
 export const usePlayerState = (initialState: Partial<PlayPageState>) => {
@@ -182,16 +194,19 @@ export const usePlayerState = (initialState: Partial<PlayPageState>) => {
 ```
 
 **验收标准**:
+
 - ✅ 所有分散的 useState 合并到 useReducer
 - ✅ 提供类型安全的 dispatch actions
 - ✅ 状态更新逻辑清晰
 
 ##### 1.3 提取播放器初始化逻辑 (60 分钟)
+
 **文件**: `src/app/play/core/initPlayer.ts`
 
 **功能**: 封装播放器初始化的核心逻辑
 
 **拆分子函数**:
+
 ```typescript
 // 1. 创建 HLS 配置
 export const createHlsConfig = (options: {
@@ -240,16 +255,19 @@ export const initializePlayer = async (options: InitPlayerOptions) => {
 ```
 
 **验收标准**:
+
 - ✅ initPlayer 函数不超过 200 行
 - ✅ 每个子函数职责单一
 - ✅ 所有参数类型化
 
 ##### 1.4 提取换源逻辑 (45 分钟)
+
 **文件**: `src/app/play/core/sourceManager.ts`
 
 **功能**: 管理播放源切换逻辑
 
 **内容结构**:
+
 ```typescript
 export interface SourceTestResult {
   quality: string;
@@ -274,7 +292,7 @@ export class SourceManager {
 
   // 批量测试所有播放源
   async testAllSources(
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
   ): Promise<SourceTestResult[]>;
 
   // 获取最佳播放源
@@ -299,16 +317,19 @@ export const useSourceManager = (sources: PlaySource[]) => {
 ```
 
 **验收标准**:
+
 - ✅ 换源逻辑独立封装
 - ✅ 支持测速和评分
 - ✅ 提供清晰的 API
 
 ##### 1.5 提取集数选择逻辑 (30 分钟)
+
 **文件**: `src/app/play/components/EpisodeManager.tsx`
 
 **功能**: 独立的集数管理组件
 
 **内容结构**:
+
 ```typescript
 interface EpisodeManagerProps {
   episodes: Episode[];
@@ -334,16 +355,19 @@ export const EpisodeManager: React.FC<EpisodeManagerProps> = ({
 ```
 
 **验收标准**:
+
 - ✅ 组件独立可复用
 - ✅ Props 类型清晰
 - ✅ UI 与逻辑分离
 
 ##### 1.6 重构主页面 (60 分钟)
+
 **文件**: `src/app/play/page.tsx` (重构后)
 
 **目标**: 主页面只负责协调各模块，不超过 300 行
 
 **结构**:
+
 ```typescript
 export default function PlayPage() {
   // 1. 使用统一的状态管理
@@ -384,6 +408,7 @@ export default function PlayPage() {
 ```
 
 **验收标准**:
+
 - ✅ 主文件不超过 300 行
 - ✅ 逻辑清晰易读
 - ✅ 功能完整无缺失
@@ -393,6 +418,7 @@ export default function PlayPage() {
 ### 2. 统一状态管理
 
 #### 问题分析
+
 - **当前状态**: 30+ 个 useState/useRef 分散各处
 - **影响**:
   - 状态更新逻辑混乱
@@ -400,14 +426,17 @@ export default function PlayPage() {
   - 容易产生状态不一致
 
 #### 优化目标
+
 使用 useReducer 统一管理相关状态，提供清晰的状态更新接口
 
 #### 实施步骤
 
 ##### 2.1 设计状态结构 (30 分钟)
+
 **文件**: `src/app/play/hooks/usePlayerState.ts`
 
 **状态树设计**:
+
 ```typescript
 interface PlayPageState {
   // 视频信息
@@ -486,14 +515,17 @@ interface PlayPageState {
 ```
 
 **验收标准**:
+
 - ✅ 状态结构清晰合理
 - ✅ 所有状态都有明确类型
 - ✅ 避免嵌套过深
 
 ##### 2.2 实现 Reducer (45 分钟)
+
 **文件**: `src/app/play/hooks/usePlayerState.ts`
 
 **Action 类型定义**:
+
 ```typescript
 type PlayPageAction =
   // 视频信息更新
@@ -508,7 +540,10 @@ type PlayPageAction =
   // 播放器状态更新
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_LOADING_STAGE'; payload: PlayPageState['player']['loadingStage'] }
+  | {
+      type: 'SET_LOADING_STAGE';
+      payload: PlayPageState['player']['loadingStage'];
+    }
   | { type: 'SET_SPEED_TEST_PROGRESS'; payload: SpeedTestProgress | null }
 
   // 弹幕状态更新
@@ -518,7 +553,10 @@ type PlayPageAction =
   // 播放源更新
   | { type: 'SET_SOURCES'; payload: PlaySource[] }
   | { type: 'SET_CURRENT_SOURCE'; payload: number }
-  | { type: 'SET_SOURCE_TEST_RESULT'; payload: { index: number; result: SourceTestResult } }
+  | {
+      type: 'SET_SOURCE_TEST_RESULT';
+      payload: { index: number; result: SourceTestResult };
+    }
 
   // UI 状态更新
   | { type: 'TOGGLE_SKIP_SETTING' }
@@ -540,10 +578,11 @@ type PlayPageAction =
 ```
 
 **Reducer 实现**:
+
 ```typescript
 function playPageReducer(
   state: PlayPageState,
-  action: PlayPageAction
+  action: PlayPageAction,
 ): PlayPageState {
   switch (action.type) {
     case 'SET_VIDEO_INFO':
@@ -589,68 +628,71 @@ function playPageReducer(
 ```
 
 **验收标准**:
+
 - ✅ 所有 action 都有对应处理
 - ✅ 状态更新不可变
 - ✅ 类型安全
 
 ##### 2.3 创建便捷的 Hook API (30 分钟)
+
 **文件**: `src/app/play/hooks/usePlayerState.ts`
 
 ```typescript
 export const usePlayerState = (initialState?: Partial<PlayPageState>) => {
-  const [state, dispatch] = useReducer(
-    playPageReducer,
-    { ...defaultInitialState, ...initialState }
-  );
+  const [state, dispatch] = useReducer(playPageReducer, {
+    ...defaultInitialState,
+    ...initialState,
+  });
 
   // 提供便捷的 actions
-  const actions = useMemo(() => ({
-    // 视频相关
-    setVideoInfo: (info: Partial<PlayPageState['video']>) =>
-      dispatch({ type: 'SET_VIDEO_INFO', payload: info }),
-    setVideoUrl: (url: string) =>
-      dispatch({ type: 'SET_VIDEO_URL', payload: url }),
+  const actions = useMemo(
+    () => ({
+      // 视频相关
+      setVideoInfo: (info: Partial<PlayPageState['video']>) =>
+        dispatch({ type: 'SET_VIDEO_INFO', payload: info }),
+      setVideoUrl: (url: string) =>
+        dispatch({ type: 'SET_VIDEO_URL', payload: url }),
 
-    // 播放相关
-    setPlaybackInfo: (info: Partial<PlayPageState['playback']>) =>
-      dispatch({ type: 'SET_PLAYBACK_INFO', payload: info }),
-    setCurrentTime: (time: number) =>
-      dispatch({ type: 'SET_CURRENT_TIME', payload: time }),
-    setEpisode: (index: number) =>
-      dispatch({ type: 'SET_EPISODE', payload: index }),
+      // 播放相关
+      setPlaybackInfo: (info: Partial<PlayPageState['playback']>) =>
+        dispatch({ type: 'SET_PLAYBACK_INFO', payload: info }),
+      setCurrentTime: (time: number) =>
+        dispatch({ type: 'SET_CURRENT_TIME', payload: time }),
+      setEpisode: (index: number) =>
+        dispatch({ type: 'SET_EPISODE', payload: index }),
 
-    // 播放器状态
-    setLoading: (loading: boolean) =>
-      dispatch({ type: 'SET_LOADING', payload: loading }),
-    setError: (error: string | null) =>
-      dispatch({ type: 'SET_ERROR', payload: error }),
+      // 播放器状态
+      setLoading: (loading: boolean) =>
+        dispatch({ type: 'SET_LOADING', payload: loading }),
+      setError: (error: string | null) =>
+        dispatch({ type: 'SET_ERROR', payload: error }),
 
-    // 弹幕
-    setDanmakuConfig: (config: Partial<PlayPageState['danmaku']>) =>
-      dispatch({ type: 'SET_DANMAKU_CONFIG', payload: config }),
-    toggleDanmaku: () =>
-      dispatch({ type: 'TOGGLE_DANMAKU' }),
+      // 弹幕
+      setDanmakuConfig: (config: Partial<PlayPageState['danmaku']>) =>
+        dispatch({ type: 'SET_DANMAKU_CONFIG', payload: config }),
+      toggleDanmaku: () => dispatch({ type: 'TOGGLE_DANMAKU' }),
 
-    // UI
-    toggleSkipSetting: () =>
-      dispatch({ type: 'TOGGLE_SKIP_SETTING' }),
-    setSelectedTab: (tab: string) =>
-      dispatch({ type: 'SET_SELECTED_TAB', payload: tab }),
+      // UI
+      toggleSkipSetting: () => dispatch({ type: 'TOGGLE_SKIP_SETTING' }),
+      setSelectedTab: (tab: string) =>
+        dispatch({ type: 'SET_SELECTED_TAB', payload: tab }),
 
-    // 批量更新
-    batchUpdate: (updates: Partial<PlayPageState>) =>
-      dispatch({ type: 'BATCH_UPDATE', payload: updates }),
+      // 批量更新
+      batchUpdate: (updates: Partial<PlayPageState>) =>
+        dispatch({ type: 'BATCH_UPDATE', payload: updates }),
 
-    // 重置
-    reset: () =>
-      dispatch({ type: 'RESET_STATE' }),
-  }), []);
+      // 重置
+      reset: () => dispatch({ type: 'RESET_STATE' }),
+    }),
+    [],
+  );
 
   return { state, actions, dispatch };
 };
 ```
 
 **验收标准**:
+
 - ✅ API 简洁易用
 - ✅ 提供类型提示
 - ✅ 性能优化（useMemo）
@@ -660,6 +702,7 @@ export const usePlayerState = (initialState?: Partial<PlayPageState>) => {
 ### 3. 提取重复的弹幕加载逻辑
 
 #### 问题分析
+
 - **当前状态**: 弹幕加载逻辑在 4 处重复
 - **影响**:
   - 代码冗余
@@ -667,20 +710,24 @@ export const usePlayerState = (initialState?: Partial<PlayPageState>) => {
   - 行为不一致风险
 
 #### 优化目标
+
 创建统一的弹幕管理 Hook，封装所有弹幕相关逻辑
 
 #### 实施步骤
 
 ##### 3.1 创建弹幕管理 Hook (60 分钟)
+
 **文件**: `src/app/play/hooks/useDanmakuManager.ts`
 
 **功能清单**:
+
 - 弹幕加载（外部 + 本地）
 - 弹幕缓存管理
 - 弹幕发送
 - 弹幕配置管理
 
 **实现**:
+
 ```typescript
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { loadDanmuFromCache, saveDanmuToCache } from '../utils/danmuCache';
@@ -811,7 +858,14 @@ export const useDanmakuManager = ({
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [enabled, player, generateLoadKey, loadFromCache, loadFromAPI, loadFromLocal]);
+  }, [
+    enabled,
+    player,
+    generateLoadKey,
+    loadFromCache,
+    loadFromAPI,
+    loadFromLocal,
+  ]);
 
   // 清除弹幕
   const clearDanmaku = useCallback(() => {
@@ -823,47 +877,60 @@ export const useDanmakuManager = ({
   }, [player]);
 
   // 发送弹幕
-  const sendDanmaku = useCallback((text: string, color: string, type: number) => {
-    if (!player?.plugins?.artplayerPluginDanmuku) return;
+  const sendDanmaku = useCallback(
+    (text: string, color: string, type: number) => {
+      if (!player?.plugins?.artplayerPluginDanmuku) return;
 
-    const danmu: DanmakuItem = {
-      text,
-      color,
-      type,
-      time: player.currentTime,
-    };
+      const danmu: DanmakuItem = {
+        text,
+        color,
+        type,
+        time: player.currentTime,
+      };
 
-    player.plugins.artplayerPluginDanmuku.emit(danmu);
+      player.plugins.artplayerPluginDanmuku.emit(danmu);
 
-    // TODO: 保存到本地数据库
-  }, [player]);
+      // TODO: 保存到本地数据库
+    },
+    [player],
+  );
 
   // 更新弹幕配置
-  const updateConfig = useCallback((config: Partial<DanmakuConfig>) => {
-    if (!player?.plugins?.artplayerPluginDanmuku) return;
+  const updateConfig = useCallback(
+    (config: Partial<DanmakuConfig>) => {
+      if (!player?.plugins?.artplayerPluginDanmuku) return;
 
-    const plugin = player.plugins.artplayerPluginDanmuku;
+      const plugin = player.plugins.artplayerPluginDanmuku;
 
-    if (config.opacity !== undefined) {
-      plugin.option.opacity = config.opacity;
-    }
-    if (config.fontSize !== undefined) {
-      plugin.option.fontSize = config.fontSize;
-    }
-    if (config.speed !== undefined) {
-      plugin.option.speed = config.speed;
-    }
-    if (config.unlimited !== undefined) {
-      plugin.option.unlimited = config.unlimited;
-    }
-  }, [player]);
+      if (config.opacity !== undefined) {
+        plugin.option.opacity = config.opacity;
+      }
+      if (config.fontSize !== undefined) {
+        plugin.option.fontSize = config.fontSize;
+      }
+      if (config.speed !== undefined) {
+        plugin.option.speed = config.speed;
+      }
+      if (config.unlimited !== undefined) {
+        plugin.option.unlimited = config.unlimited;
+      }
+    },
+    [player],
+  );
 
   // 当视频或集数变化时，重新加载弹幕
   useEffect(() => {
     if (enabled && player) {
       loadDanmaku();
     }
-  }, [enabled, player, videoTitle, videoDoubanId, currentEpisodeIndex, loadDanmaku]);
+  }, [
+    enabled,
+    player,
+    videoTitle,
+    videoDoubanId,
+    currentEpisodeIndex,
+    loadDanmaku,
+  ]);
 
   return {
     loading,
@@ -878,6 +945,7 @@ export const useDanmakuManager = ({
 ```
 
 **验收标准**:
+
 - ✅ 统一弹幕加载逻辑
 - ✅ 支持缓存机制
 - ✅ 错误处理完善
@@ -890,30 +958,42 @@ export const useDanmakuManager = ({
 ### 4. 性能优化
 
 #### 问题分析
+
 - **当前状态**:
   - useEffect 依赖不当导致重复渲染
   - 未使用 useMemo/useCallback 优化
   - timeupdate 事件处理频率过高
 
 #### 优化目标
+
 减少不必要的渲染和计算，提升页面流畅度
 
 #### 实施步骤
 
 ##### 4.1 优化 useEffect 依赖 (30 分钟)
+
 **目标**: 精确控制副作用执行时机
 
 **优化点**:
+
 1. 移除不必要的依赖
 2. 使用 useCallback 稳定回调函数
 3. 使用 useRef 存储不需要触发渲染的值
 
 **示例**:
+
 ```typescript
 // ❌ 之前：依赖过多导致频繁执行
 useEffect(() => {
   loadDanmaku();
-}, [videoTitle, videoYear, videoDoubanId, currentEpisodeIndex, player, enabled]);
+}, [
+  videoTitle,
+  videoYear,
+  videoDoubanId,
+  currentEpisodeIndex,
+  player,
+  enabled,
+]);
 
 // ✅ 之后：使用 useCallback + 精确依赖
 const loadDanmaku = useCallback(async () => {
@@ -932,25 +1012,29 @@ useEffect(() => {
 ```
 
 **验收标准**:
+
 - ✅ 移除所有 eslint-disable 注释
 - ✅ 依赖数组精确
 - ✅ 无不必要的重复执行
 
 ##### 4.2 使用 useMemo 缓存计算结果 (30 分钟)
+
 **目标**: 避免重复计算
 
 **优化点**:
+
 ```typescript
 // 1. 缓存弹幕加载键
 const danmuLoadKey = useMemo(
-  () => `${videoTitle}_${videoYear}_${videoDoubanId}_${currentEpisodeIndex + 1}`,
-  [videoTitle, videoYear, videoDoubanId, currentEpisodeIndex]
+  () =>
+    `${videoTitle}_${videoYear}_${videoDoubanId}_${currentEpisodeIndex + 1}`,
+  [videoTitle, videoYear, videoDoubanId, currentEpisodeIndex],
 );
 
 // 2. 缓存播放源列表
 const sortedSources = useMemo(
   () => sources.sort((a, b) => (b.score || 0) - (a.score || 0)),
-  [sources]
+  [sources],
 );
 
 // 3. 缓存集数分组
@@ -963,22 +1047,28 @@ const episodeGroups = useMemo(() => {
 }, [episodes]);
 
 // 4. 缓存设备信息
-const deviceInfo = useMemo(() => ({
-  isMobile: /Mobile|Android|iPhone/i.test(navigator.userAgent),
-  isIOS: /iPhone|iPad|iPod/i.test(navigator.userAgent),
-  isAndroid: /Android/i.test(navigator.userAgent),
-}), []);
+const deviceInfo = useMemo(
+  () => ({
+    isMobile: /Mobile|Android|iPhone/i.test(navigator.userAgent),
+    isIOS: /iPhone|iPad|iPod/i.test(navigator.userAgent),
+    isAndroid: /Android/i.test(navigator.userAgent),
+  }),
+  [],
+);
 ```
 
 **验收标准**:
+
 - ✅ 所有昂贵计算都使用 useMemo
 - ✅ 依赖数组准确
 - ✅ 性能提升可测量
 
 ##### 4.3 使用 useCallback 稳定函数引用 (30 分钟)
+
 **目标**: 避免子组件不必要的重渲染
 
 **优化点**:
+
 ```typescript
 // 1. 集数切换回调
 const handleEpisodeChange = useCallback((index: number) => {
@@ -987,9 +1077,12 @@ const handleEpisodeChange = useCallback((index: number) => {
 }, []); // 使用 setState 函数形式，不依赖外部变量
 
 // 2. 换源回调
-const handleSourceChange = useCallback((index: number) => {
-  switchToSource(index);
-}, [switchToSource]);
+const handleSourceChange = useCallback(
+  (index: number) => {
+    switchToSource(index);
+  },
+  [switchToSource],
+);
 
 // 3. 播放器事件回调
 const handleTimeUpdate = useCallback((currentTime: number) => {
@@ -999,25 +1092,28 @@ const handleTimeUpdate = useCallback((currentTime: number) => {
 
 const handleVideoEnded = useCallback(() => {
   // 自动播放下一集
-  setCurrentEpisodeIndex(prev => prev + 1);
+  setCurrentEpisodeIndex((prev) => prev + 1);
 }, []);
 ```
 
 **验收标准**:
+
 - ✅ 所有传给子组件的函数都使用 useCallback
 - ✅ 依赖数组最小化
 - ✅ 子组件重渲染次数减少
 
 ##### 4.4 节流 timeupdate 事件 (30 分钟)
+
 **文件**: `src/app/play/hooks/useThrottle.ts`
 
 **实现节流 Hook**:
+
 ```typescript
 import { useRef, useCallback, useEffect } from 'react';
 
 export const useThrottle = <T extends (...args: any[]) => any>(
   callback: T,
-  delay: number
+  delay: number,
 ): T => {
   const lastRun = useRef(Date.now());
   const timeoutRef = useRef<NodeJS.Timeout>();
@@ -1038,7 +1134,7 @@ export const useThrottle = <T extends (...args: any[]) => any>(
         }, delay - timeSinceLastRun);
       }
     },
-    [callback, delay]
+    [callback, delay],
   ) as T;
 
   useEffect(() => {
@@ -1054,6 +1150,7 @@ export const useThrottle = <T extends (...args: any[]) => any>(
 ```
 
 **使用节流**:
+
 ```typescript
 // 在播放器事件中使用
 const throttledTimeUpdate = useThrottle((currentTime: number) => {
@@ -1071,14 +1168,17 @@ player.on('video:timeupdate', () => {
 ```
 
 **验收标准**:
+
 - ✅ timeupdate 执行频率降低到 1 次/秒
 - ✅ UI 更新流畅
 - ✅ 性能指标改善
 
 ##### 4.5 懒加载组件 (20 分钟)
+
 **目标**: 减少初始加载时间
 
 **实现**:
+
 ```typescript
 import dynamic from 'next/dynamic';
 
@@ -1097,6 +1197,7 @@ const SkipSettings = dynamic(() => import('./components/SkipSettings'), {
 ```
 
 **验收标准**:
+
 - ✅ 初始包体积减小
 - ✅ 首屏加载时间缩短
 - ✅ 懒加载组件正常工作
@@ -1106,6 +1207,7 @@ const SkipSettings = dynamic(() => import('./components/SkipSettings'), {
 ### 5. 增强类型安全
 
 #### 问题分析
+
 - **当前状态**: 大量使用 any 类型
 - **影响**:
   - 失去类型检查保护
@@ -1113,11 +1215,13 @@ const SkipSettings = dynamic(() => import('./components/SkipSettings'), {
   - 运行时错误风险高
 
 #### 优化目标
+
 消除所有 any 类型，提供完整的类型定义
 
 #### 实施步骤
 
 ##### 5.1 定义 Artplayer 类型 (30 分钟)
+
 **文件**: `src/types/artplayer.d.ts`
 
 ```typescript
@@ -1187,11 +1291,13 @@ declare module 'artplayer' {
 ```
 
 **验收标准**:
+
 - ✅ Artplayer 相关代码无 any
 - ✅ IDE 提供准确提示
 - ✅ 类型检查通过
 
 ##### 5.2 定义弹幕插件类型 (20 分钟)
+
 **文件**: `src/types/danmaku.d.ts`
 
 ```typescript
@@ -1241,17 +1347,19 @@ declare module 'artplayer-plugin-danmuku' {
   }
 
   export default function artplayerPluginDanmuku(
-    options: DanmakuOptions
+    options: DanmakuOptions,
   ): (art: Artplayer) => DanmakuPlugin;
 }
 ```
 
 **验收标准**:
+
 - ✅ 弹幕相关代码无 any
 - ✅ 弹幕配置类型安全
 - ✅ 类型检查通过
 
 ##### 5.3 定义数据库类型 (20 分钟)
+
 **文件**: `src/types/database.d.ts`
 
 ```typescript
@@ -1300,14 +1408,17 @@ export interface VideoSkipData {
 ```
 
 **验收标准**:
+
 - ✅ 数据库操作类型安全
 - ✅ 所有数据模型有类型定义
 - ✅ 类型检查通过
 
 ##### 5.4 更新组件 Props 类型 (30 分钟)
+
 **目标**: 为所有组件定义精确的 Props 类型
 
 **示例**:
+
 ```typescript
 // VideoPlayer.tsx
 interface VideoPlayerProps {
@@ -1342,6 +1453,7 @@ interface SourceSelectorProps {
 ```
 
 **验收标准**:
+
 - ✅ 所有组件有明确的 Props 类型
 - ✅ 可选属性标记正确
 - ✅ 无 any 类型
@@ -1351,6 +1463,7 @@ interface SourceSelectorProps {
 ### 6. 统一错误处理
 
 #### 问题分析
+
 - **当前状态**: 错误处理逻辑分散
 - **影响**:
   - 错误信息不统一
@@ -1358,11 +1471,13 @@ interface SourceSelectorProps {
   - 用户体验不一致
 
 #### 优化目标
+
 创建统一的错误处理机制，提供一致的错误体验
 
 #### 实施步骤
 
 ##### 6.1 定义错误类型 (20 分钟)
+
 **文件**: `src/app/play/utils/errors.ts`
 
 ```typescript
@@ -1398,7 +1513,7 @@ export class PlayError extends Error {
     public code: PlayErrorCode,
     message: string,
     public details?: unknown,
-    public recoverable: boolean = true
+    public recoverable: boolean = true,
   ) {
     super(message);
     this.name = 'PlayError';
@@ -1430,11 +1545,13 @@ export class PlayError extends Error {
 ```
 
 **验收标准**:
+
 - ✅ 错误类型完整
 - ✅ 错误消息友好
 - ✅ 支持错误分类
 
 ##### 6.2 创建错误处理 Hook (30 分钟)
+
 **文件**: `src/app/play/hooks/useErrorHandler.ts`
 
 ```typescript
@@ -1464,17 +1581,14 @@ export const useErrorHandler = () => {
       playError = new PlayError(
         PlayErrorCode.UNKNOWN_ERROR,
         error.message,
-        error
+        error,
       );
     } else {
-      playError = new PlayError(
-        PlayErrorCode.UNKNOWN_ERROR,
-        String(error)
-      );
+      playError = new PlayError(PlayErrorCode.UNKNOWN_ERROR, String(error));
     }
 
     // 更新错误状态
-    setErrorState(prev => ({
+    setErrorState((prev) => ({
       error: playError,
       hasError: true,
       errorCount: prev.errorCount + 1,
@@ -1483,7 +1597,7 @@ export const useErrorHandler = () => {
     // 控制台输出详细错误信息
     console.error(
       `[${playError.code}] ${playError.message}`,
-      playError.details
+      playError.details,
     );
 
     // 错误上报（可选）
@@ -1504,26 +1618,31 @@ export const useErrorHandler = () => {
   }, []);
 
   // 重试机制
-  const retry = useCallback(async <T,>(
-    fn: () => Promise<T>,
-    maxRetries: number = 3,
-    delay: number = 1000
-  ): Promise<T> => {
-    let lastError: unknown;
+  const retry = useCallback(
+    async <T>(
+      fn: () => Promise<T>,
+      maxRetries: number = 3,
+      delay: number = 1000,
+    ): Promise<T> => {
+      let lastError: unknown;
 
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error;
-        if (i < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await fn();
+        } catch (error) {
+          lastError = error;
+          if (i < maxRetries - 1) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, delay * (i + 1)),
+            );
+          }
         }
       }
-    }
 
-    throw lastError;
-  }, []);
+      throw lastError;
+    },
+    [],
+  );
 
   return {
     error: errorState.error,
@@ -1546,14 +1665,17 @@ function reportError(error: PlayError) {
 ```
 
 **验收标准**:
+
 - ✅ 统一错误处理接口
 - ✅ 支持重试机制
 - ✅ 错误上报可配置
 
 ##### 6.3 在播放器中集成错误处理 (30 分钟)
+
 **目标**: 在关键流程中使用统一错误处理
 
 **示例**:
+
 ```typescript
 const PlayPage = () => {
   const { error, handleError, clearError, retry } = useErrorHandler();
@@ -1625,6 +1747,7 @@ const PlayPage = () => {
 ```
 
 **验收标准**:
+
 - ✅ 所有异步操作都有错误处理
 - ✅ 错误消息统一友好
 - ✅ 支持错误恢复
@@ -1634,6 +1757,7 @@ const PlayPage = () => {
 ## 实施计划
 
 ### 第一阶段（高优先级）- 预计 5-6 小时
+
 1. ✅ 创建类型定义文件 (30 分钟)
 2. ✅ 实现统一状态管理 (2 小时)
 3. ✅ 提取弹幕管理逻辑 (1 小时)
@@ -1641,6 +1765,7 @@ const PlayPage = () => {
 5. ✅ 重构主页面 (1 小时)
 
 ### 第二阶段（中优先级）- 预计 3-4 小时
+
 6. ✅ 性能优化（useMemo/useCallback/节流）(2 小时)
 7. ✅ 增强类型安全 (1 小时)
 8. ✅ 统一错误处理 (1 小时)
@@ -1648,18 +1773,21 @@ const PlayPage = () => {
 ### 验收标准
 
 #### 代码质量
+
 - [ ] 单个文件不超过 500 行
 - [ ] 无 eslint 警告
 - [ ] 无 TypeScript any 类型
 - [ ] 测试覆盖率 > 70%
 
 #### 性能指标
+
 - [ ] 首屏加载时间 < 2s
 - [ ] 播放器初始化时间 < 1s
 - [ ] 换源响应时间 < 500ms
 - [ ] 页面渲染帧率 > 30fps
 
 #### 功能完整性
+
 - [ ] 所有原有功能正常工作
 - [ ] 无回归 bug
 - [ ] 错误处理完善

@@ -1,0 +1,7 @@
+# 项目 lint 范围与 lint:strict 保持一致（仅 src）；
+# scripts 为 CommonJS Node 脚本，格式由 prettier 统一约束
+/scripts
+/deploy
+/docs
+/public
+/*.js

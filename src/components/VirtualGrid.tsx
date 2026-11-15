@@ -45,7 +45,10 @@ export function VirtualGrid<T>({
   const effectiveWidth = containerWidth || 400;
   const columns =
     columnsProp ??
-    Math.max(1, Math.floor((effectiveWidth + gap) / ((minItemWidth ?? 64) + gap)));
+    Math.max(
+      1,
+      Math.floor((effectiveWidth + gap) / ((minItemWidth ?? 64) + gap)),
+    );
 
   const rowHeight = itemHeight + gap;
   const totalRows = Math.ceil(items.length / columns);
@@ -54,8 +57,9 @@ export function VirtualGrid<T>({
   const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
   const endRow = Math.min(
     totalRows,
-    Math.ceil((scrollTop + (containerRef.current?.clientHeight || 600)) / rowHeight) +
-      overscan,
+    Math.ceil(
+      (scrollTop + (containerRef.current?.clientHeight || 600)) / rowHeight,
+    ) + overscan,
   );
 
   const visibleItems = items.slice(startRow * columns, endRow * columns);
@@ -76,7 +80,7 @@ export function VirtualGrid<T>({
   return (
     <div
       ref={containerRef}
-      className="overflow-y-auto flex-1 min-h-0 content-start pb-4"
+      className='overflow-y-auto flex-1 min-h-0 content-start pb-4'
       style={{ containerType: 'inline-size' }}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
@@ -92,7 +96,7 @@ export function VirtualGrid<T>({
           }}
         >
           {visibleItems.map((item, index) =>
-            renderItem(item, startRow * columns + index)
+            renderItem(item, startRow * columns + index),
           )}
         </div>
       </div>

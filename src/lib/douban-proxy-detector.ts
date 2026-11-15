@@ -83,7 +83,9 @@ const IMAGE_PROXY_ENDPOINTS: Array<{
   },
 ];
 
-function pickBestImageProxy(types: DoubanImageProxyType[]): DoubanImageProxyType {
+function pickBestImageProxy(
+  types: DoubanImageProxyType[],
+): DoubanImageProxyType {
   // 图片优先走第三方 CDN，避免豆瓣官方图片域名被限流/拦截（418/403等）
   const priority: DoubanImageProxyType[] = [
     'cmliussss-cdn-ali',
@@ -103,7 +105,7 @@ function pickBestImageProxy(types: DoubanImageProxyType[]): DoubanImageProxyType
  */
 async function probeEndpoint(
   url: string,
-  timeout = 5000
+  timeout = 5000,
 ): Promise<{ latency: number; available: boolean }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -179,7 +181,7 @@ function setCachedProbeResult(cacheKey: string, results: ProbeResult[]): void {
   try {
     localStorage.setItem(
       cacheKey,
-      JSON.stringify({ results, timestamp: Date.now() })
+      JSON.stringify({ results, timestamp: Date.now() }),
     );
   } catch {
     // 忽略存储错误
@@ -252,7 +254,7 @@ export async function probeImageProxies(): Promise<{
     const available = cached.filter((r) => r.available);
     if (available.length > 0) {
       const bestType = pickBestImageProxy(
-        available.map((r) => r.type as DoubanImageProxyType)
+        available.map((r) => r.type as DoubanImageProxyType),
       );
       return {
         best: bestType,
@@ -285,7 +287,7 @@ export async function probeImageProxies(): Promise<{
   const available = results.filter((r) => r.available);
   if (available.length > 0) {
     const bestType = pickBestImageProxy(
-      available.map((r) => r.type as DoubanImageProxyType)
+      available.map((r) => r.type as DoubanImageProxyType),
     );
     return { best: bestType, results };
   }
@@ -349,7 +351,7 @@ export async function getBestImageProxy(): Promise<DoubanImageProxyType> {
     const available = cached.filter((r) => r.available);
     if (available.length > 0) {
       currentBestImageProxy = pickBestImageProxy(
-        available.map((r) => r.type as DoubanImageProxyType)
+        available.map((r) => r.type as DoubanImageProxyType),
       );
       return currentBestImageProxy;
     }
@@ -409,7 +411,7 @@ export function getBestImageProxySync(): DoubanImageProxyType {
     const available = cached.filter((r) => r.available);
     if (available.length > 0) {
       currentBestImageProxy = pickBestImageProxy(
-        available.map((r) => r.type as DoubanImageProxyType)
+        available.map((r) => r.type as DoubanImageProxyType),
       );
       return currentBestImageProxy;
     }
@@ -452,6 +454,6 @@ export async function initProxyDetection(): Promise<void> {
     ([dataResult, imageResult]) => {
       currentBestDataProxy = dataResult.best;
       currentBestImageProxy = imageResult.best;
-    }
+    },
   );
 }

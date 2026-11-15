@@ -12,7 +12,7 @@ function generateManifest() {
     const generateManifestScript = path.join(
       __dirname,
       'scripts',
-      'generate-manifest.js'
+      'generate-manifest.js',
     );
     require(generateManifestScript);
   } catch (error) {
@@ -46,9 +46,12 @@ const intervalId = setInterval(() => {
       }, 3000);
 
       // 然后设置每小时执行一次 cron 任务
-      setInterval(() => {
-        executeCronJob();
-      }, 60 * 60 * 1000); // 每小时执行一次
+      setInterval(
+        () => {
+          executeCronJob();
+        },
+        60 * 60 * 1000,
+      ); // 每小时执行一次
     }
   });
 

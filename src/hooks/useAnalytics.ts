@@ -1,6 +1,12 @@
-import { useCallback,useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
-import { analytics, BusinessEvent, SearchEvent, UserEvent, VideoEvent } from '@/lib/analytics';
+import {
+  analytics,
+  BusinessEvent,
+  SearchEvent,
+  UserEvent,
+  VideoEvent,
+} from '@/lib/analytics';
 
 /**
  * React Hook for Analytics
@@ -14,7 +20,11 @@ export function useAnalytics() {
 
     // 检查是否有用户信息
     const userId = localStorage.getItem('user_id');
-    const userType = localStorage.getItem('user_type') as 'guest' | 'registered' | 'premium' || 'guest';
+    const userType =
+      (localStorage.getItem('user_type') as
+        | 'guest'
+        | 'registered'
+        | 'premium') || 'guest';
 
     // 立即尝试初始化
     if (analytics.isReady()) {
@@ -66,9 +76,12 @@ export function useAnalytics() {
     analytics.trackVideoFavorite(event);
   }, []);
 
-  const trackVideoShare = useCallback((event: VideoEvent & { platform: string }) => {
-    analytics.trackVideoShare(event);
-  }, []);
+  const trackVideoShare = useCallback(
+    (event: VideoEvent & { platform: string }) => {
+      analytics.trackVideoShare(event);
+    },
+    [],
+  );
 
   const trackVideoDownload = useCallback((event: VideoEvent) => {
     analytics.trackVideoDownload(event);
@@ -76,13 +89,19 @@ export function useAnalytics() {
 
   // ==================== 用户行为埋点 ====================
 
-  const trackUserRegistration = useCallback((event: UserEvent & { method: string }) => {
-    analytics.trackUserRegistration(event);
-  }, []);
+  const trackUserRegistration = useCallback(
+    (event: UserEvent & { method: string }) => {
+      analytics.trackUserRegistration(event);
+    },
+    [],
+  );
 
-  const trackUserLogin = useCallback((event: UserEvent & { method: string }) => {
-    analytics.trackUserLogin(event);
-  }, []);
+  const trackUserLogin = useCallback(
+    (event: UserEvent & { method: string }) => {
+      analytics.trackUserLogin(event);
+    },
+    [],
+  );
 
   const trackUserLogout = useCallback((event: UserEvent) => {
     analytics.trackUserLogout(event);
@@ -92,13 +111,19 @@ export function useAnalytics() {
     analytics.trackSearch(event);
   }, []);
 
-  const trackPageView = useCallback((page: string, title?: string, metadata?: Record<string, unknown>) => {
-    analytics.trackPageView(page, title, metadata);
-  }, []);
+  const trackPageView = useCallback(
+    (page: string, title?: string, metadata?: Record<string, unknown>) => {
+      analytics.trackPageView(page, title, metadata);
+    },
+    [],
+  );
 
-  const trackCategoryView = useCallback((category: string, subcategory?: string) => {
-    analytics.trackCategoryView(category, subcategory);
-  }, []);
+  const trackCategoryView = useCallback(
+    (category: string, subcategory?: string) => {
+      analytics.trackCategoryView(category, subcategory);
+    },
+    [],
+  );
 
   // ==================== 性能监控埋点 ====================
 
@@ -106,17 +131,30 @@ export function useAnalytics() {
     analytics.trackPageLoadTime(loadTime, page);
   }, []);
 
-  const trackVideoLoadTime = useCallback((loadTime: number, videoId: string, quality?: string) => {
-    analytics.trackVideoLoadTime(loadTime, videoId, quality);
-  }, []);
+  const trackVideoLoadTime = useCallback(
+    (loadTime: number, videoId: string, quality?: string) => {
+      analytics.trackVideoLoadTime(loadTime, videoId, quality);
+    },
+    [],
+  );
 
-  const trackApiPerformance = useCallback((apiEndpoint: string, responseTime: number, statusCode: number) => {
-    analytics.trackApiPerformance(apiEndpoint, responseTime, statusCode);
-  }, []);
+  const trackApiPerformance = useCallback(
+    (apiEndpoint: string, responseTime: number, statusCode: number) => {
+      analytics.trackApiPerformance(apiEndpoint, responseTime, statusCode);
+    },
+    [],
+  );
 
-  const trackError = useCallback((errorType: string, errorMessage: string, context?: Record<string, unknown>) => {
-    analytics.trackError(errorType, errorMessage, context);
-  }, []);
+  const trackError = useCallback(
+    (
+      errorType: string,
+      errorMessage: string,
+      context?: Record<string, unknown>,
+    ) => {
+      analytics.trackError(errorType, errorMessage, context);
+    },
+    [],
+  );
 
   // ==================== 业务分析埋点 ====================
 
@@ -128,9 +166,12 @@ export function useAnalytics() {
     analytics.trackUserRetention(dayCount);
   }, []);
 
-  const trackFeatureUsage = useCallback((featureName: string, used = true, metadata?: Record<string, unknown>) => {
-    analytics.trackFeatureUsage(featureName, used, metadata);
-  }, []);
+  const trackFeatureUsage = useCallback(
+    (featureName: string, used = true, metadata?: Record<string, unknown>) => {
+      analytics.trackFeatureUsage(featureName, used, metadata);
+    },
+    [],
+  );
 
   // ==================== 用户管理 ====================
 
@@ -139,10 +180,13 @@ export function useAnalytics() {
     localStorage.setItem('user_id', userId);
   }, []);
 
-  const setUserType = useCallback((userType: 'guest' | 'registered' | 'premium') => {
-    analytics.setUserType(userType);
-    localStorage.setItem('user_type', userType);
-  }, []);
+  const setUserType = useCallback(
+    (userType: 'guest' | 'registered' | 'premium') => {
+      analytics.setUserType(userType);
+      localStorage.setItem('user_type', userType);
+    },
+    [],
+  );
 
   return {
     // 视频相关
@@ -177,7 +221,7 @@ export function useAnalytics() {
     setUserType,
 
     // 工具方法
-    isReady: () => analytics.isReady()
+    isReady: () => analytics.isReady(),
   };
 }
 
@@ -221,15 +265,19 @@ export function useErrorMonitoring() {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        stack: event.error?.stack
+        stack: event.error?.stack,
       });
     };
 
     // 监听 Promise 拒绝
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      analytics.trackError('unhandled_promise_rejection', String(event.reason), {
-        stack: event.reason?.stack
-      });
+      analytics.trackError(
+        'unhandled_promise_rejection',
+        String(event.reason),
+        {
+          stack: event.reason?.stack,
+        },
+      );
     };
 
     window.addEventListener('error', handleError);
@@ -237,7 +285,10 @@ export function useErrorMonitoring() {
 
     return () => {
       window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener(
+        'unhandledrejection',
+        handleUnhandledRejection,
+      );
     };
   }, []);
 }

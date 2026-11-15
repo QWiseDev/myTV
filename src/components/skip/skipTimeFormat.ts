@@ -21,7 +21,7 @@ export function secondsToTime(seconds: number): string {
   const decimal = seconds % 1;
   if (decimal > 0) {
     return `${mins}:${secs.toString().padStart(2, '0')}.${Math.floor(
-      decimal * 10
+      decimal * 10,
     )}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;

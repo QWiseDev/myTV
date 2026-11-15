@@ -1,11 +1,13 @@
 # 老虎机投注限制测试（考虑倍率）
 
 ## 更新说明
+
 **重要更新**：现在投注限制考虑倍率影响，总投注金额 = 基础投注 × 倍率，最大100,000金币。
 
 ## 测试用例
 
 ### 1. 正常投注（应该成功）
+
 ```bash
 # 1倍率，基础投注1000，总投注1000
 curl -X POST http://localhost:3000/api/slot/spin \
@@ -15,6 +17,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 ### 2. 倍率导致的超额投注（应该失败）
+
 ```bash
 # 5倍率，基础投注30000，总投注150000（超出限制）
 curl -X POST http://localhost:3000/api/slot/spin \
@@ -24,6 +27,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 预期响应：
+
 ```json
 {
   "error": "总投注金额（基础投注×倍率）超出限制，最大允许投注 100,000 金币",
@@ -36,6 +40,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 ### 3. 倍率格式错误（应该失败）
+
 ```bash
 curl -X POST http://localhost:3000/api/slot/spin \
   -H "Content-Type: application/json" \
@@ -44,6 +49,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 预期响应：
+
 ```json
 {
   "error": "倍率必须是1-5之间的整数",
@@ -52,6 +58,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 ### 4. 边界值测试（刚好100,000，应该成功）
+
 ```bash
 # 5倍率，基础投注20000，总投注100000
 curl -X POST http://localhost:3000/api/slot/spin \
@@ -61,6 +68,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 ### 5. 智能建议测试
+
 ```bash
 # 基础投注合理但倍率过高
 curl -X POST http://localhost:3000/api/slot/spin \
@@ -70,6 +78,7 @@ curl -X POST http://localhost:3000/api/slot/spin \
 ```
 
 预期响应：
+
 ```json
 {
   "error": "总投注金额（基础投注×倍率）超出限制，最大允许投注 100,000 金币",

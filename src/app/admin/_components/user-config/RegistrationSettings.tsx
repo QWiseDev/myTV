@@ -11,7 +11,10 @@ import { buttonStyles, showError } from '../adminShared';
 interface RegistrationSettingsProps {
   config: AdminConfig;
   refreshConfig: () => Promise<void>;
-  withLoading: (key: string, operation: () => Promise<unknown>) => Promise<unknown>;
+  withLoading: (
+    key: string,
+    operation: () => Promise<unknown>,
+  ) => Promise<unknown>;
   showAlert: (options: {
     type: 'success' | 'error' | 'warning';
     title: string;
@@ -31,7 +34,7 @@ export function RegistrationSettings({
     loadingKey: string,
     patch: Partial<AdminConfig['UserConfig']>,
     successMessage: string,
-    onError?: (err: unknown) => void
+    onError?: (err: unknown) => void,
   ) => {
     await withLoading(loadingKey, async () => {
       try {
@@ -99,7 +102,7 @@ export function RegistrationSettings({
                   { AllowRegister: !config.UserConfig.AllowRegister },
                   config.UserConfig.AllowRegister
                     ? '已禁止用户注册'
-                    : '已允许用户注册'
+                    : '已允许用户注册',
                 )
               }
             >
@@ -155,8 +158,9 @@ export function RegistrationSettings({
                       showAlert({
                         type: 'error',
                         title: '更新失败',
-                        message: err instanceof Error ? err.message : '未知错误',
-                      })
+                        message:
+                          err instanceof Error ? err.message : '未知错误',
+                      }),
                   )
                 }
               >
@@ -201,7 +205,7 @@ export function RegistrationSettings({
                       type: 'error',
                       title: '更新失败',
                       message: err instanceof Error ? err.message : '未知错误',
-                    })
+                    }),
                 );
               }}
               className='w-20 px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'

@@ -220,7 +220,6 @@ export function fixDanmakuProgressConflict(): Cleanup {
             panel.style.visibility = '';
           }
         });
-
       } catch (error) {
         console.warn('弹幕状态重置失败:', error);
       }
@@ -279,7 +278,6 @@ export function addMobileDanmakuToggle(
       panelElement.style.left = '';
       panelElement.style.right = '';
       panelElement.style.transform = '';
-
     } catch (error) {
       console.warn('弹幕面板位置调整失败:', error);
     }
@@ -343,7 +341,6 @@ export function addMobileDanmakuToggle(
       return;
     }
 
-
     // 桌面端：简化处理，依赖 CSS hover，移除复杂的 JavaScript 事件
     if (!isMobile) {
       return;
@@ -363,7 +360,6 @@ export function addMobileDanmakuToggle(
       window.addEventListener('orientationchange', handleOrientationChange);
       window.addEventListener('resize', handleOrientationChange);
       document.addEventListener('click', handleDocumentClick);
-
     }
   }, 2000); // 延迟2秒确保弹幕插件完全初始化
 
@@ -530,7 +526,6 @@ export function addResolutionDisplay(
           hideTimer = setTimeout(() => {
             resolutionEl.style.opacity = '0.3';
           }, 3000);
-
         }
       } catch (error) {
         console.warn('⚠️ 更新分辨率显示失败:', error);
@@ -565,7 +560,6 @@ export function addResolutionDisplay(
               setTimeout(() => {
                 resolutionEl.style.opacity = '0.3';
               }, 3000);
-
             }
           })
           .catch((error) => {
@@ -589,7 +583,6 @@ export function addResolutionDisplay(
 
     art.template?.$player.addEventListener('mouseenter', handleMouseEnter);
     art.template?.$player.addEventListener('mouseleave', handleMouseLeave);
-
 
     // 返回清理函数
     return () => {

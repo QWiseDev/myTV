@@ -13,15 +13,15 @@ function isSameSource(source: SourceIdentity, current: SourceIdentity) {
 
 export function markSourceFailedAndFindNext(
   sources: SearchResult[],
-  current: SourceIdentity
+  current: SourceIdentity,
 ): SourceFailoverResult {
   const updatedSources = sources.map((source) =>
-    isSameSource(source, current) ? { ...source, failed: true } : source
+    isSameSource(source, current) ? { ...source, failed: true } : source,
   );
 
   const nextSource =
     updatedSources.find(
-      (source) => !source.failed && !isSameSource(source, current)
+      (source) => !source.failed && !isSameSource(source, current),
     ) ?? null;
 
   return { sources: updatedSources, nextSource };

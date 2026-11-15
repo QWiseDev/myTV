@@ -29,7 +29,7 @@ async function deleteAllSources() {
     fs.writeFileSync(
       backupFile,
       JSON.stringify(sourcesBackup, null, 2),
-      'utf-8'
+      'utf-8',
     );
 
     console.log(`💾 已备份 ${sourcesBackup.length} 个视频源到: ${backupFile}`);
@@ -100,7 +100,7 @@ if (require.main === module) {
         console.log('❌ 操作已取消');
         process.exit(0);
       }
-    }
+    },
   );
 }
 

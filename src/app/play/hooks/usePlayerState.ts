@@ -149,7 +149,7 @@ const defaultInitialState: PlayPageState = {
 
 function playPageReducer(
   state: PlayPageState,
-  action: PlayPageAction
+  action: PlayPageAction,
 ): PlayPageState {
   switch (action.type) {
     // 视频信息
@@ -342,7 +342,7 @@ export interface UsePlayerStateReturn {
 }
 
 export const usePlayerState = (
-  initialState?: Partial<PlayPageState>
+  initialState?: Partial<PlayPageState>,
 ): UsePlayerStateReturn => {
   const [state, dispatch] = useReducer(playPageReducer, {
     ...defaultInitialState,
@@ -350,7 +350,8 @@ export const usePlayerState = (
   });
 
   // 提供便捷的 actions
-  const actions = useMemo(() => ({
+  const actions = useMemo(
+    () => ({
       // 视频相关
       setVideoInfo: (info: Partial<VideoInfo>) =>
         dispatch({ type: 'SET_VIDEO_INFO', payload: info }),
@@ -407,7 +408,9 @@ export const usePlayerState = (
 
       // 重置
       reset: () => dispatch({ type: 'RESET_STATE' }),
-    }), [dispatch]);
+    }),
+    [dispatch],
+  );
 
   return { state, dispatch, actions };
 };

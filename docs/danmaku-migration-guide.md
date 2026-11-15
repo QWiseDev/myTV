@@ -7,11 +7,13 @@
 ## 架构变化
 
 ### 旧架构
+
 ```
 useDanmakuManager → Artplayer Plugin → 直接操作 DOM
 ```
 
 ### 新架构
+
 ```
 useDanmakuManager → DanmakuManager → DanmakuEngine → DanmakuRenderer
                                    ↓
@@ -23,11 +25,13 @@ useDanmakuManager → DanmakuManager → DanmakuEngine → DanmakuRenderer
 ### 1. 更新导入
 
 **旧代码：**
+
 ```typescript
 import { useDanmakuManager } from './hooks/useDanmakuManager';
 ```
 
 **新代码：**
+
 ```typescript
 import { useDanmakuManagerV2 as useDanmakuManager } from './hooks/useDanmakuManager.v2';
 ```
@@ -118,27 +122,30 @@ manager.emit({
 
 ## 功能对比
 
-| 功能 | 旧版本 | 新版本 | 说明 |
-|------|--------|--------|------|
-| 弹幕加载 | ✅ | ✅ | 新版本支持更灵活的数据源 |
-| 弹幕发送 | ✅ | ✅ | 接口保持一致 |
-| 配置管理 | ✅ | ✅ | 新版本支持更多配置项 |
-| 缓存机制 | ✅ | ✅ | 新版本缓存更高效 |
-| 性能优化 | ⚠️ | ✅ | 新版本支持虚拟化和对象池 |
-| 独立使用 | ❌ | ✅ | 新版本可脱离 Artplayer |
-| 类型安全 | ⚠️ | ✅ | 新版本完整的 TypeScript 支持 |
+| 功能     | 旧版本 | 新版本 | 说明                         |
+| -------- | ------ | ------ | ---------------------------- |
+| 弹幕加载 | ✅     | ✅     | 新版本支持更灵活的数据源     |
+| 弹幕发送 | ✅     | ✅     | 接口保持一致                 |
+| 配置管理 | ✅     | ✅     | 新版本支持更多配置项         |
+| 缓存机制 | ✅     | ✅     | 新版本缓存更高效             |
+| 性能优化 | ⚠️     | ✅     | 新版本支持虚拟化和对象池     |
+| 独立使用 | ❌     | ✅     | 新版本可脱离 Artplayer       |
+| 类型安全 | ⚠️     | ✅     | 新版本完整的 TypeScript 支持 |
 
 ## 性能提升
 
 ### 渲染性能
+
 - **旧版本**: 直接操作 DOM，大量弹幕时性能下降
 - **新版本**: 对象池复用 + 虚拟化渲染，支持 2万+ 弹幕流畅播放
 
 ### 内存占用
+
 - **旧版本**: 约 80-100MB (2万弹幕)
 - **新版本**: 约 40-50MB (2万弹幕)
 
 ### 加载速度
+
 - **旧版本**: 约 1.5-2s (2万弹幕)
 - **新版本**: 约 0.5-1s (2万弹幕)
 
@@ -167,6 +174,7 @@ const useDanmakuManager = USE_NEW_DANMAKU
 ### 3. 浏览器兼容性
 
 新版本要求：
+
 - Chrome 90+
 - Firefox 88+
 - Safari 14+
@@ -188,6 +196,7 @@ const useDanmakuManager = USE_NEW_DANMAKU
 ## 技术支持
 
 如有问题，请查看：
+
 - [弹幕重构方案](./danmaku-refactor-plan.md)
 - [API 文档](./danmaku-api.md)
 - [常见问题](./danmaku-faq.md)

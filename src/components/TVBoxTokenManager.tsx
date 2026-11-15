@@ -109,7 +109,7 @@ export function TVBoxTokenModal({
         `/api/admin/user-tvbox-token?username=${encodeURIComponent(username)}`,
         {
           method: 'DELETE',
-        }
+        },
       );
 
       if (!response.ok) {
@@ -133,7 +133,7 @@ export function TVBoxTokenModal({
     setSelectedSources((prev) =>
       prev.includes(sourceKey)
         ? prev.filter((k) => k !== sourceKey)
-        : [...prev, sourceKey]
+        : [...prev, sourceKey],
     );
   };
 
@@ -141,7 +141,7 @@ export function TVBoxTokenModal({
     setSelectedSources(
       selectedSources.length === allSources.length
         ? []
-        : allSources.map((s) => s.key)
+        : allSources.map((s) => s.key),
     );
   };
 

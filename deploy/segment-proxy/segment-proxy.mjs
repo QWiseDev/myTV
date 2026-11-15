@@ -35,7 +35,12 @@ const DEFAULT_UA = 'AptvPlayer/1.4.10';
 
 function isForbiddenHost(hostname) {
   const h = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) {
+  if (
+    h === 'localhost' ||
+    h.endsWith('.localhost') ||
+    h.endsWith('.local') ||
+    h.endsWith('.internal')
+  ) {
     return true;
   }
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
@@ -144,7 +149,9 @@ async function handleRequest(req, res) {
         'Access-Control-Allow-Origin': '*',
       });
       res.end(
-        JSON.stringify({ error: `Upstream error: ${upstream.status} ${upstream.statusText}` })
+        JSON.stringify({
+          error: `Upstream error: ${upstream.status} ${upstream.statusText}`,
+        }),
       );
       return;
     }
@@ -155,7 +162,12 @@ async function handleRequest(req, res) {
       // 供主站代取播放列表：透传状态/头 + 最终地址（重定向后）
       headers['X-Final-Url'] = encodeURI(upstream.url);
       headers['Cache-Control'] = 'no-store';
-      for (const name of ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges']) {
+      for (const name of [
+        'Content-Type',
+        'Content-Length',
+        'Content-Range',
+        'Accept-Ranges',
+      ]) {
         const value = upstream.headers.get(name);
         if (value) headers[name] = value;
       }
@@ -169,7 +181,8 @@ async function handleRequest(req, res) {
     }
 
     // 分片透传：与 myTV 内置 /api/proxy/segment 响应头保持一致
-    headers['Content-Type'] = upstream.headers.get('Content-Type') || 'video/mp2t';
+    headers['Content-Type'] =
+      upstream.headers.get('Content-Type') || 'video/mp2t';
     headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, HEAD';
     headers['Access-Control-Allow-Headers'] =
       'Content-Type, Range, Origin, Accept, User-Agent';
@@ -177,7 +190,12 @@ async function handleRequest(req, res) {
     headers['Access-Control-Expose-Headers'] =
       'Content-Length, Content-Range, Content-Type, Accept-Ranges';
     headers['Cache-Control'] = 'public, max-age=300';
-    for (const name of ['Content-Length', 'Content-Range', 'Last-Modified', 'ETag']) {
+    for (const name of [
+      'Content-Length',
+      'Content-Range',
+      'Last-Modified',
+      'ETag',
+    ]) {
       const value = upstream.headers.get(name);
       if (value) headers[name] = value;
     }

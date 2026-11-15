@@ -20,7 +20,8 @@ function readFavoritesThroughCache(): Promise<Record<string, Favorite>> {
   return readThroughCache<Record<string, Favorite>>({
     readCache: () => cacheManager.getCachedFavorites(),
     writeCache: (data) => cacheManager.cacheFavorites(data),
-    fetchFromServer: () => fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
+    fetchFromServer: () =>
+      fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
     backgroundSyncKey: 'favorites-background-sync',
     initialFetchKey: 'favorites-initial-fetch',
     dispatchUpdated: (data) =>

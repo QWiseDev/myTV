@@ -7,13 +7,15 @@ const redis = new Redis({
 
 async function main() {
   const keys = await redis.keys('*');
-  
-  const userKeys = keys.filter(k => k.startsWith('u:'));
-  const skipKeys = userKeys.filter(k => k.includes(':skip:') || k.includes(':episodeskip:'));
-  const pwdKeys = userKeys.filter(k => k.endsWith(':pwd'));
-  const shKeys = userKeys.filter(k => k.endsWith(':sh'));
-  const prKeys = userKeys.filter(k => k.includes(':pr:'));
-  
+
+  const userKeys = keys.filter((k) => k.startsWith('u:'));
+  const skipKeys = userKeys.filter(
+    (k) => k.includes(':skip:') || k.includes(':episodeskip:'),
+  );
+  const pwdKeys = userKeys.filter((k) => k.endsWith(':pwd'));
+  const shKeys = userKeys.filter((k) => k.endsWith(':sh'));
+  const prKeys = userKeys.filter((k) => k.includes(':pr:'));
+
   console.log('=== 播放记录数据结构 ===');
   for (const key of prKeys.slice(0, 3)) {
     const value = await redis.get(key);
@@ -41,7 +43,12 @@ async function main() {
     console.log(JSON.stringify(list, null, 2));
   }
 
-  const alKeys = keys.filter(k => k.startsWith('al:') && !k.startsWith('al:action:') && !k.startsWith('al:index:'));
+  const alKeys = keys.filter(
+    (k) =>
+      k.startsWith('al:') &&
+      !k.startsWith('al:action:') &&
+      !k.startsWith('al:index:'),
+  );
   console.log('\n=== 访问日志数据结构 ===');
   for (const key of alKeys.slice(0, 3)) {
     const value = await redis.get(key);
@@ -49,7 +56,7 @@ async function main() {
     console.log(JSON.stringify(value, null, 2));
   }
 
-  const loginStatsKeys = keys.filter(k => k.startsWith('user_login_stats:'));
+  const loginStatsKeys = keys.filter((k) => k.startsWith('user_login_stats:'));
   console.log('\n=== 用户登录统计数据结构 ===');
   for (const key of loginStatsKeys.slice(0, 3)) {
     const value = await redis.get(key);
@@ -57,7 +64,7 @@ async function main() {
     console.log(JSON.stringify(value, null, 2));
   }
 
-  const actionKeys = keys.filter(k => k.startsWith('al:action:'));
+  const actionKeys = keys.filter((k) => k.startsWith('al:action:'));
   console.log('\n=== 活动统计数据结构 ===');
   for (const key of actionKeys) {
     const value = await redis.get(key);

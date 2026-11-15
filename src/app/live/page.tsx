@@ -25,7 +25,6 @@ import { ChannelSidebar } from './_components/ChannelSidebar';
 import type { LiveChannel, LiveSource } from './hooks/useLiveSources';
 import { useLiveSources } from './hooks/useLiveSources';
 
-
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
   interface HTMLVideoElement {
@@ -67,7 +66,7 @@ function LivePageClient() {
 
   // Tab 切换
   const [activeTab, setActiveTab] = useState<'channels' | 'sources'>(
-    'channels'
+    'channels',
   );
 
   // 频道列表收起状态
@@ -102,7 +101,7 @@ function LivePageClient() {
 
     // 使用 data 属性来查找频道元素
     const targetElement = channelListRef.current.querySelector(
-      `[data-channel-id="${channel.id}"]`
+      `[data-channel-id="${channel.id}"]`,
     ) as HTMLButtonElement;
 
     if (targetElement) {
@@ -141,7 +140,7 @@ function LivePageClient() {
 
     // 直接通过 data-group 属性查找目标按钮
     const targetButton = groupContainerRef.current.querySelector(
-      `[data-group="${group}"]`
+      `[data-group="${group}"]`,
     ) as HTMLButtonElement;
 
     if (targetButton) {
@@ -197,7 +196,6 @@ function LivePageClient() {
       autoRefreshTimerRef.current = setInterval(() => {
         refreshLiveSources();
       }, intervalMs);
-
     }
   };
 
@@ -257,7 +255,7 @@ function LivePageClient() {
       try {
         setIsEpgLoading(true); // 开始加载 EPG 数据
         const response = await fetch(
-          `/api/live/epg?source=${currentSource.key}&tvgId=${channel.tvgId}`
+          `/api/live/epg?source=${currentSource.key}&tvgId=${channel.tvgId}`,
         );
         if (response.ok) {
           const result = await response.json();
@@ -366,7 +364,7 @@ function LivePageClient() {
 
     setSelectedGroup(group);
     const filtered = currentChannels.filter(
-      (channel) => channel.group === group
+      (channel) => channel.group === group,
     );
     setFilteredChannels(filtered);
 
@@ -400,7 +398,7 @@ function LivePageClient() {
     const results = currentChannels.filter(
       (channel) =>
         channel.name.toLowerCase().includes(normalizedQuery) ||
-        channel.group.toLowerCase().includes(normalizedQuery)
+        channel.group.toLowerCase().includes(normalizedQuery),
     );
     setCurrentSourceSearchResults(results);
   };
@@ -438,19 +436,19 @@ function LivePageClient() {
               source_name: currentSourceRef.current.name,
               year: '',
               cover: `/api/proxy/logo?url=${encodeURIComponent(
-                currentChannelRef.current.logo
+                currentChannelRef.current.logo,
               )}&source=${currentSourceRef.current.key}`,
               total_episodes: 1,
               save_time: Date.now(),
               search_title: '',
               origin: 'live',
-            }
+            },
           );
         } else {
           // 如果已收藏，删除收藏
           await deleteFavorite(
             `live_${currentSourceRef.current.key}`,
-            `live_${currentChannelRef.current.id}`
+            `live_${currentChannelRef.current.id}`,
           );
         }
       } catch (err) {
@@ -471,7 +469,7 @@ function LivePageClient() {
       try {
         const fav = await checkIsFavorited(
           `live_${currentSource.key}`,
-          `live_${currentChannel.id}`
+          `live_${currentChannel.id}`,
         );
         setFavorited(fav);
         favoritedRef.current = fav;
@@ -490,12 +488,12 @@ function LivePageClient() {
       (favorites: Record<string, any>) => {
         const key = generateStorageKey(
           `live_${currentSource.key}`,
-          `live_${currentChannel.id}`
+          `live_${currentChannel.id}`,
         );
         const isFav = !!favorites[key];
         setFavorited(isFav);
         favoritedRef.current = isFav;
-      }
+      },
     );
 
     return unsubscribe;
@@ -519,7 +517,7 @@ function LivePageClient() {
     if (typeof window !== 'undefined') {
       localStorage.setItem(
         'live-auto-refresh-enabled',
-        JSON.stringify(autoRefreshEnabled)
+        JSON.stringify(autoRefreshEnabled),
       );
     }
   }, [autoRefreshEnabled]);
@@ -528,7 +526,7 @@ function LivePageClient() {
     if (typeof window !== 'undefined') {
       localStorage.setItem(
         'live-auto-refresh-interval',
-        autoRefreshInterval.toString()
+        autoRefreshInterval.toString(),
       );
     }
   }, [autoRefreshInterval]);
@@ -578,7 +576,6 @@ function LivePageClient() {
         return;
       }
 
-
       // 销毁之前的播放器实例并创建新的
       if (artPlayerRef.current) {
         cleanupPlayer();
@@ -591,7 +588,7 @@ function LivePageClient() {
       setUnsupportedType(null);
 
       const targetUrl = `/api/proxy/m3u8?url=${encodeURIComponent(
-        videoUrl
+        videoUrl,
       )}&moontv-source=${currentSourceRef.current?.key || ''}`;
 
       try {
@@ -670,7 +667,7 @@ function LivePageClient() {
         if (artPlayerRef.current?.video) {
           ensureVideoSource(
             artPlayerRef.current.video as HTMLVideoElement,
-            targetUrl
+            targetUrl,
           );
         }
       } catch (err) {
@@ -720,7 +717,7 @@ function LivePageClient() {
           artPlayerRef.current.volume =
             Math.round((artPlayerRef.current.volume + 0.1) * 10) / 10;
           artPlayerRef.current.notice.show = `音量: ${Math.round(
-            artPlayerRef.current.volume * 100
+            artPlayerRef.current.volume * 100,
           )}`;
           e.preventDefault();
         }
@@ -732,7 +729,7 @@ function LivePageClient() {
           artPlayerRef.current.volume =
             Math.round((artPlayerRef.current.volume - 0.1) * 10) / 10;
           artPlayerRef.current.notice.show = `音量: ${Math.round(
-            artPlayerRef.current.volume * 100
+            artPlayerRef.current.volume * 100,
           )}`;
           e.preventDefault();
         }
@@ -823,8 +820,8 @@ function LivePageClient() {
                       loadingStage === 'loading'
                         ? '33%'
                         : loadingStage === 'fetching'
-                        ? '66%'
-                        : '100%',
+                          ? '66%'
+                          : '100%',
                   }}
                 ></div>
               </div>
@@ -965,90 +962,90 @@ function LivePageClient() {
                 </button>
               </div>
 
-                {/* 不支持的直播类型提示 */}
-                {unsupportedType && (
-                  <div className='absolute inset-0 bg-black/90 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30 flex items-center justify-center z-[600] transition-all duration-300'>
-                    <div className='text-center max-w-md mx-auto px-6'>
-                      <div className='relative mb-8'>
-                        <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
-                          <div className='text-white text-4xl'>⚠️</div>
-                          <div className='absolute -inset-2 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl opacity-20 animate-pulse'></div>
-                        </div>
-                      </div>
-                      <div className='space-y-4'>
-                        <h3 className='text-xl font-semibold text-white'>
-                          {unsupportedType === 'channel-unavailable'
-                            ? '该频道暂时不可用'
-                            : '暂不支持的直播流类型'}
-                        </h3>
-                        <div className='bg-orange-500/20 border border-orange-500/30 rounded-lg p-4'>
-                          <p className='text-orange-300 font-medium'>
-                            {unsupportedType === 'channel-unavailable'
-                              ? '频道可能需要特殊访问权限或链接已过期'
-                              : `当前频道直播流类型：${unsupportedType.toUpperCase()}`}
-                          </p>
-                          <p className='text-sm text-orange-200 mt-2'>
-                            {unsupportedType === 'channel-unavailable'
-                              ? '请联系IPTV提供商或尝试其他频道'
-                              : '目前仅支持 M3U8 格式的直播流'}
-                          </p>
-                        </div>
-                        <p className='text-sm text-gray-300'>请尝试其他频道</p>
+              {/* 不支持的直播类型提示 */}
+              {unsupportedType && (
+                <div className='absolute inset-0 bg-black/90 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30 flex items-center justify-center z-[600] transition-all duration-300'>
+                  <div className='text-center max-w-md mx-auto px-6'>
+                    <div className='relative mb-8'>
+                      <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
+                        <div className='text-white text-4xl'>⚠️</div>
+                        <div className='absolute -inset-2 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl opacity-20 animate-pulse'></div>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* 视频加载蒙层 */}
-                {isVideoLoading && (
-                  <div className='absolute inset-0 bg-black/85 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30 flex items-center justify-center z-[500] transition-all duration-300'>
-                    <div className='text-center max-w-md mx-auto px-6'>
-                      <div className='relative mb-8'>
-                        <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
-                          <div className='text-white text-4xl'>📺</div>
-                          <div className='absolute -inset-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl opacity-20 animate-spin'></div>
-                        </div>
-                      </div>
-                      <div className='space-y-2'>
-                        <p className='text-xl font-semibold text-white animate-pulse'>
-                          🔄 IPTV 加载中...
+                    <div className='space-y-4'>
+                      <h3 className='text-xl font-semibold text-white'>
+                        {unsupportedType === 'channel-unavailable'
+                          ? '该频道暂时不可用'
+                          : '暂不支持的直播流类型'}
+                      </h3>
+                      <div className='bg-orange-500/20 border border-orange-500/30 rounded-lg p-4'>
+                        <p className='text-orange-300 font-medium'>
+                          {unsupportedType === 'channel-unavailable'
+                            ? '频道可能需要特殊访问权限或链接已过期'
+                            : `当前频道直播流类型：${unsupportedType.toUpperCase()}`}
+                        </p>
+                        <p className='text-sm text-orange-200 mt-2'>
+                          {unsupportedType === 'channel-unavailable'
+                            ? '请联系IPTV提供商或尝试其他频道'
+                            : '目前仅支持 M3U8 格式的直播流'}
                         </p>
                       </div>
+                      <p className='text-sm text-gray-300'>请尝试其他频道</p>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
 
-            {/* 频道列表 */}
-            <ChannelSidebar
-              isChannelListCollapsed={isChannelListCollapsed}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              searchQuery={searchQuery}
-              onSearchChange={handleSearchChange}
-              currentSource={currentSource}
-              currentChannel={currentChannel}
-              isSwitchingSource={isSwitchingSource}
-              groupedChannels={groupedChannels}
-              selectedGroup={selectedGroup}
-              onGroupChange={handleGroupChange}
-              groupContainerRef={groupContainerRef}
-              groupButtonRefs={groupButtonRefs}
-              filteredChannels={filteredChannels}
-              channelListRef={channelListRef}
-              onChannelChange={handleChannelChange}
-              currentSourceSearchResults={currentSourceSearchResults}
-              liveSources={liveSources}
-              isRefreshingSource={isRefreshingSource}
-              onRefresh={refreshLiveSources}
-              autoRefreshEnabled={autoRefreshEnabled}
-              onAutoRefreshEnabledChange={setAutoRefreshEnabled}
-              autoRefreshInterval={autoRefreshInterval}
-              onAutoRefreshIntervalChange={setAutoRefreshInterval}
-              onSourceChange={handleSourceChange}
-            />
+              {/* 视频加载蒙层 */}
+              {isVideoLoading && (
+                <div className='absolute inset-0 bg-black/85 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg border border-white/0 dark:border-white/30 flex items-center justify-center z-[500] transition-all duration-300'>
+                  <div className='text-center max-w-md mx-auto px-6'>
+                    <div className='relative mb-8'>
+                      <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
+                        <div className='text-white text-4xl'>📺</div>
+                        <div className='absolute -inset-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl opacity-20 animate-spin'></div>
+                      </div>
+                    </div>
+                    <div className='space-y-2'>
+                      <p className='text-xl font-semibold text-white animate-pulse'>
+                        🔄 IPTV 加载中...
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* 频道列表 */}
+          <ChannelSidebar
+            isChannelListCollapsed={isChannelListCollapsed}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            searchQuery={searchQuery}
+            onSearchChange={handleSearchChange}
+            currentSource={currentSource}
+            currentChannel={currentChannel}
+            isSwitchingSource={isSwitchingSource}
+            groupedChannels={groupedChannels}
+            selectedGroup={selectedGroup}
+            onGroupChange={handleGroupChange}
+            groupContainerRef={groupContainerRef}
+            groupButtonRefs={groupButtonRefs}
+            filteredChannels={filteredChannels}
+            channelListRef={channelListRef}
+            onChannelChange={handleChannelChange}
+            currentSourceSearchResults={currentSourceSearchResults}
+            liveSources={liveSources}
+            isRefreshingSource={isRefreshingSource}
+            onRefresh={refreshLiveSources}
+            autoRefreshEnabled={autoRefreshEnabled}
+            onAutoRefreshEnabledChange={setAutoRefreshEnabled}
+            autoRefreshInterval={autoRefreshInterval}
+            onAutoRefreshIntervalChange={setAutoRefreshInterval}
+            onSourceChange={handleSourceChange}
+          />
+        </div>
 
         {/* 当前频道信息 */}
         {currentChannel && (

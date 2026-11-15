@@ -27,7 +27,7 @@ async function testProductionBuild() {
 
     execSync('npm run build', {
       stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'production' }
+      env: { ...process.env, NODE_ENV: 'production' },
     });
 
     console.log('\n✅ 构建成功！');
@@ -40,12 +40,18 @@ async function testProductionBuild() {
     // 检查是否包含 ArtPlayer 相关代码
     console.log('📺 检查 ArtPlayer 模块...');
     const hasArtplayer = checkModuleInBuild(nextDir, 'artplayer');
-    console.log(hasArtplayer ? '  ✅ ArtPlayer 已包含在构建中' : '  ❌ ArtPlayer 未找到');
+    console.log(
+      hasArtplayer ? '  ✅ ArtPlayer 已包含在构建中' : '  ❌ ArtPlayer 未找到',
+    );
 
     // 检查是否包含 Clarity 相关代码
     console.log('📊 检查 Clarity 模块...');
     const hasClarity = checkModuleInBuild(nextDir, 'clarity');
-    console.log(hasClarity ? '  ✅ Clarity 已包含在构建中' : '  ⚠️  Clarity 可能被优化掉（这是正常的）');
+    console.log(
+      hasClarity
+        ? '  ✅ Clarity 已包含在构建中'
+        : '  ⚠️  Clarity 可能被优化掉（这是正常的）',
+    );
 
     // 4. 启动生产服务器进行简单测试
     console.log('\n🚀 启动生产服务器测试...');
@@ -55,21 +61,24 @@ async function testProductionBuild() {
     const serverProcess = execSync('npm start & echo $!', {
       encoding: 'utf8',
       stdio: ['inherit', 'pipe', 'inherit'],
-      env: { ...process.env, NODE_ENV: 'production' }
+      env: { ...process.env, NODE_ENV: 'production' },
     });
 
     const pid = parseInt(serverProcess.trim());
     console.log(`生产服务器已启动，PID: ${pid}`);
 
     // 等待服务器启动
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     try {
       // 简单的健康检查
-      const response = execSync('curl -s -o /dev/null -w "%{http_code}" http://localhost:3000', {
-        encoding: 'utf8',
-        timeout: 10000
-      });
+      const response = execSync(
+        'curl -s -o /dev/null -w "%{http_code}" http://localhost:3000',
+        {
+          encoding: 'utf8',
+          timeout: 10000,
+        },
+      );
 
       if (response === '200') {
         console.log('✅ 生产服务器响应正常 (HTTP 200)');
@@ -89,7 +98,6 @@ async function testProductionBuild() {
     }
 
     console.log('\n🎉 生产环境构建测试完成！');
-
   } catch (error) {
     console.error('\n❌ 构建测试失败:', error.message);
     process.exit(1);

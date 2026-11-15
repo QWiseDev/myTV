@@ -11,7 +11,7 @@ const Grid = dynamic(
     loading: () => (
       <div className='animate-pulse h-96 bg-gray-200 dark:bg-gray-800 rounded-lg' />
     ),
-  }
+  },
 );
 
 import { DoubanItem } from '@/lib/types';
@@ -73,8 +73,6 @@ export const VirtualDoubanGrid: React.FC<VirtualDoubanGridProps> = ({
     setVisibleItemCount(INITIAL_BATCH_SIZE);
     setIsVirtualLoadingMore(false);
   }, [doubanData, type, primarySelection]);
-
-
 
   // 检查是否还有更多项目可以加载（虚拟层面）
   const hasNextVirtualPage = displayItemCount < totalItemCount;
@@ -199,7 +197,7 @@ export const VirtualDoubanGrid: React.FC<VirtualDoubanGridProps> = ({
         </div>
       );
     },
-    []
+    [],
   );
 
   // 生成骨架屏数据

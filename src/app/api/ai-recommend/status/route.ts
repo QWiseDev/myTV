@@ -14,20 +14,23 @@ export async function GET(request: NextRequest) {
   const hasPermission = await hasSpecialFeaturePermission(
     authInfo.username,
     'ai-recommend',
-    config
+    config,
   );
   const aiConfig = config.AIRecommendConfig;
 
   return NextResponse.json(
     {
       enabled: Boolean(
-        hasPermission && aiConfig?.enabled && aiConfig.apiKey && aiConfig.apiUrl
+        hasPermission &&
+        aiConfig?.enabled &&
+        aiConfig.apiKey &&
+        aiConfig.apiUrl,
       ),
     },
     {
       headers: {
         'Cache-Control': 'private, max-age=300',
       },
-    }
+    },
   );
 }
