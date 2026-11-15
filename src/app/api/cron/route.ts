@@ -20,9 +20,6 @@ import {
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 // 添加全局锁避免并发执行
 let isRunning = false;
 

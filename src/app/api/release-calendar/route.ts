@@ -8,10 +8,7 @@ import { ReleaseCalendarResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // 🔄 缓存管理已迁移到数据库（CalendarCacheManager）
 // 移除内存缓存，使用数据库缓存实现全局共享
 
@@ -102,7 +99,6 @@ export async function GET(request: NextRequest) {
         });
       }
     }
-
 
     // 获取数据和过滤器
     const [calendarData, filters] = await Promise.all([

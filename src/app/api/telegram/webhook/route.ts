@@ -4,8 +4,6 @@ import { db } from '@/lib/db';
 import { getTelegramToken } from '@/lib/telegram-tokens';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 // Telegram Webhook 端点
 export async function POST(request: Request) {
   try {
@@ -26,7 +24,6 @@ export async function POST(request: Request) {
     if (update.message?.text?.startsWith('/start ')) {
       const chatId = update.message.chat.id;
       const token = update.message.text.split(' ')[1]; // 获取 token
-
 
       // 从数据库验证 token
       const tokenData = await getTelegramToken(token);

@@ -5,10 +5,7 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // 管理员列表（可以从环境变量或配置文件读取）
 const ADMIN_USERS = ['admin', 'qiuwei']; // 添加你的管理员用户名
 

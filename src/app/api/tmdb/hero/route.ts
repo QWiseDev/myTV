@@ -7,9 +7,6 @@ const MAX_TITLES = 8;
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 /**
  * 首页 Banner 增强信息批量查询：?title=xx&year=xx&title=yy...
  * 返回 { info: { [title]: TMDBHeroInfo | null } }（横图/简介/主演/导演/类型）

@@ -5,8 +5,6 @@ import { detectNetworkEnvironment } from '@/lib/networkDetection';
 import { getSpiderJar, getSpiderStatus } from '@/lib/spiderJar';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 /**
  * 智能TVBox健康检查API
  * 提供全面的诊断信息和优化建议，解决 spider unreachable 问题

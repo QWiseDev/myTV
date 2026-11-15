@@ -6,10 +6,7 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 export async function POST(request: NextRequest) {
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
   if (storageType === 'localstorage') {

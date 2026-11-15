@@ -204,7 +204,6 @@ export async function GET(request: NextRequest) {
         ...allSources.domestic.map((url) => ({ url, name: '国内CDN' })),
       ];
 
-
   // 并发测试所有源（但限制并发数）
   const concurrency = 5;
   const results: JarTestResult[] = [];

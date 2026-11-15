@@ -8,10 +8,7 @@ import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // 读取存储类型环境变量，默认 localstorage
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as

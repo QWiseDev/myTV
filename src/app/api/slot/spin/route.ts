@@ -10,10 +10,7 @@ import {
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // 速率限制配置（适中）
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分钟
 const MAX_REQUESTS_PER_WINDOW = 30; // 每分钟最多30次请求（每2秒一次）

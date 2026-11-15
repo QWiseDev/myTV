@@ -5,8 +5,6 @@ import { db } from '@/lib/db';
 import { setTelegramToken } from '@/lib/telegram-tokens';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 export async function POST(request: Request) {
   try {
     const { telegramUsername } = await request.json();
@@ -81,7 +79,6 @@ export async function POST(request: Request) {
     // 生成 Telegram 深度链接
     const botUsername = telegramConfig.botUsername;
     const deepLink = `https://t.me/${botUsername}?start=${token}`;
-
 
     // 返回深度链接给前端
     return NextResponse.json({

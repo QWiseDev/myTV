@@ -4,16 +4,12 @@ import { getSpiderJar } from '@/lib/spiderJar';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // Spider JAR 本地代理端点 - 使用统一的 jar 获取逻辑
 export async function GET(_req: NextRequest) {
   try {
     // 使用管理模块获取 jar（优先使用缓存）
     const jarInfo = await getSpiderJar(false);
-
 
     return new NextResponse(new Uint8Array(jarInfo.buffer), {
       headers: {

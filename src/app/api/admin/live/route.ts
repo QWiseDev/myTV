@@ -11,9 +11,6 @@ import { resolveSegmentProxy } from '@/lib/live-proxy';
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 /** 返回当前生效的分片代理配置（后台配置优先，环境变量回退），供面板预填 */
 export async function GET(request: NextRequest) {
   try {

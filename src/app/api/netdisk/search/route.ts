@@ -6,10 +6,7 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 export async function GET(request: NextRequest) {
   const authInfo = getAuthInfoFromCookie(request);
   if (!authInfo || !authInfo.username) {
@@ -45,7 +42,6 @@ export async function GET(request: NextRequest) {
     .join(',');
   // 缓存key包含功能状态，确保功能开启/关闭时缓存隔离
   const cacheKey = `netdisk-search-enabled-${query}-${enabledCloudTypesStr}`;
-
 
   // 服务端直接调用数据库（不用ClientCache，避免HTTP循环调用）
   try {

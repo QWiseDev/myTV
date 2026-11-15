@@ -4,7 +4,6 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'; // 强制动态渲染
 
 // 普通用户也可以访问的 TVBox 配置接口
 // 只返回 TVBox 安全配置，不返回完整的管理配置

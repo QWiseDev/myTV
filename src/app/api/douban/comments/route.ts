@@ -31,9 +31,6 @@ function randomDelay(min = 1000, max = 3000): Promise<void> {
 export const runtime = 'nodejs';
 
 // 强制动态渲染
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');

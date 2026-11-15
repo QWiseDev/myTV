@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
-
 export async function GET() {
   try {
     // 随机选择壁纸来源：70% Bing, 30% Lorem Picsum
@@ -12,10 +10,6 @@ export async function GET() {
       const randomIdx = Math.floor(Math.random() * 8);
       const response = await fetch(
         `https://www.bing.com/HPImageArchive.aspx?format=js&idx=${randomIdx}&n=1&mkt=zh-CN`,
-        {
-          // 不缓存，每次都随机
-          cache: 'no-store',
-        }
       );
 
       if (!response.ok) {

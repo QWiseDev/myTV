@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserRegion } from '@/lib/networkDetection';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 /**
  * JAR 源修复和验证 API
  * 专门用于诊断和修复 JAR 加载问题
@@ -212,7 +210,6 @@ export async function GET(request: NextRequest) {
     // 检测用户网络环境
     const userRegion = getUserRegion(request);
 
-
     // 根据用户区域排序测试源
     const sortedSources = VERIFIED_JAR_SOURCES.sort((a, b) => {
       if (userRegion === 'domestic') {
@@ -288,7 +285,6 @@ export async function GET(request: NextRequest) {
         needs_troubleshooting: testResults.filter((r) => r.success).length < 2,
       },
     };
-
 
     return NextResponse.json(response);
   } catch (error) {

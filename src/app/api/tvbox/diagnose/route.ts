@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GET as getTVBoxConfig } from '../route';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 function getBaseUrl(req: NextRequest): string {
   const envBase = (process.env.SITE_BASE || '').trim().replace(/\/$/, '');
   if (envBase) return envBase;
@@ -96,14 +94,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const token = searchParams.get('token');
 
-
     // 直接调用 tvbox API 函数，而不是通过 HTTP fetch
     // 构建模拟请求对象
     let configUrl = `${baseUrl}/api/tvbox?format=json`;
     if (token) {
       configUrl += `&token=${encodeURIComponent(token)}`;
     }
-
 
     // 创建模拟请求
     const mockRequest = new NextRequest(configUrl, {

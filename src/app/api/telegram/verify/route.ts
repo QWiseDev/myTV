@@ -9,8 +9,6 @@ import {
 } from '@/lib/telegram-tokens';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 // 生成随机密码
 function generatePassword(length = 8): string {
   const charset =
@@ -56,7 +54,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get('token');
     const confirm = searchParams.get('confirm'); // 新增：确认参数
-
 
     if (!token) {
       return new NextResponse(
@@ -177,7 +174,6 @@ export async function GET(request: Request) {
 
     const { telegramUsername } = tokenData;
 
-
     // 获取管理员配置
     const config = await db.getAdminConfig();
     const telegramConfig = config?.TelegramAuthConfig;
@@ -249,7 +245,6 @@ export async function GET(request: Request) {
       // 不影响登录流程
     }
 
-
     // Create HTML response that sets cookies and redirects
     // This ensures cookies are set before navigation happens
     const newUserData =
@@ -284,7 +279,6 @@ export async function GET(request: Request) {
       secure: isSecure,
       httpOnly: false,
     });
-
 
     // Set new user cookie if needed
     if (isNewUser && initialPassword) {

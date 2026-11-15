@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 import { headers } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { AccessLog } from '@/lib/access-log';
 import { getAuthInfoFromCookie } from '@/lib/auth';
@@ -9,10 +9,7 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 /**
  * 访问记录接口（POST）
  * 用于记录用户页面/菜单访问行为
@@ -64,14 +61,15 @@ export async function POST(request: NextRequest) {
       location: body.location || undefined
     };
 
-
-    // 保存访问日志到数据库
-    try {
-      await db.saveAccessLog(accessLog);
-    } catch (dbError) {
-      console.error('[AccessLog] 保存到数据库失败:', dbError);
-      // 数据库保存失败时，仍返回成功（异步记录，不暴露给用户）
-    }
+    // 响应先行，日志落库放到响应后执行（Next 15 after()）
+    after(async () => {
+      try {
+        await db.saveAccessLog(accessLog);
+      } catch (dbError) {
+        console.error('[AccessLog] 保存到数据库失败:', dbError);
+        // 数据库保存失败时，不影响已返回的响应
+      }
+    });
 
     return NextResponse.json({ success: true }, { status: 200 });
 
@@ -148,10 +146,8 @@ export async function GET(request: NextRequest) {
       action: action ? action.trim() : undefined,
     };
 
-
     // 从数据库获取访问日志
     const accessLogs = await db.getAccessLogs(filters, limit, offset);
-
 
     return NextResponse.json({ accessLogs }, { status: 200 });
 
@@ -200,7 +196,6 @@ export async function DELETE(request: NextRequest) {
     if (username && username !== authInfo.username) {
       targetUsername = username;
     }
-
 
     try {
       const deletedCount = await db.deleteAccessLogs(targetUsername);

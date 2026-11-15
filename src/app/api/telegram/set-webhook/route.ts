@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 // 设置 Telegram Webhook
 export async function POST(request: Request) {
   try {
@@ -27,7 +25,6 @@ export async function POST(request: Request) {
       (host.includes('localhost') ? 'http' : 'https');
     const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
 
-
     // 调用 Telegram API 设置 webhook
     const response = await fetch(
       `https://api.telegram.org/bot${telegramConfig.botToken}/setWebhook`,
@@ -42,7 +39,6 @@ export async function POST(request: Request) {
     );
 
     const result = await response.json();
-
 
     if (result.ok) {
       return NextResponse.json({

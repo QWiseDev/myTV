@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
   const episode = searchParams.get('episode'); // 新增集数参数
   const videoUrl = searchParams.get('video_url');
 
-
   if (!doubanId && !title) {
     return NextResponse.json(
       {
@@ -169,7 +168,6 @@ export async function GET(request: NextRequest) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
-
 
     return NextResponse.json({
       danmu: uniqueDanmu,

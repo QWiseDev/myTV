@@ -6,8 +6,6 @@ import { getConfig, setCachedConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 // GET: 管理员获取所有留言
 export async function GET(req: NextRequest) {
   try {

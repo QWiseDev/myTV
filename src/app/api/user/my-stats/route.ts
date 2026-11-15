@@ -33,7 +33,6 @@ function calculateRegistrationDays(startDate: number): number {
   return daysDiff + 1;
 }
 
-export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
@@ -84,7 +83,6 @@ export async function GET(request: NextRequest) {
       0;
     const loginDays =
       firstLoginTime > 0 ? calculateRegistrationDays(firstLoginTime) : 0;
-
 
     const enhancedStats = {
       ...userStats,

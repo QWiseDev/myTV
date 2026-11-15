@@ -4,9 +4,6 @@ import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export async function GET(request: NextRequest) {
   const authInfo = getAuthInfoFromCookie(request);
   if (!authInfo?.username) {

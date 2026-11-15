@@ -12,10 +12,7 @@ const TMDB_CACHE_TIME = 6 * 60 * 60; // 6小时
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
@@ -128,7 +125,6 @@ export async function GET(request: NextRequest) {
     const cacheParams = { actorName: actorName.trim(), type, ...filterOptions };
     const cacheKey = `tmdb-actor_works-${JSON.stringify(cacheParams)}`;
 
-
     // 检查缓存
     try {
       const cachedResult = await db.getCache(cacheKey);
@@ -139,14 +135,12 @@ export async function GET(request: NextRequest) {
       console.warn('TMDB缓存检查失败:', cacheError);
     }
 
-
     // 调用TMDB演员搜索函数（不使用内部缓存）
     const result = await searchTMDBActorWorks(
       actorName.trim(),
       type as 'movie' | 'tv',
       filterOptions
     );
-
 
     // 缓存结果
     try {

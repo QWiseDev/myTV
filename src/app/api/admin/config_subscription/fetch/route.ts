@@ -11,8 +11,6 @@ import {
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 export async function POST(request: NextRequest) {
   try {
     // 权限检查：仅站长可以拉取配置订阅

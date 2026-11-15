@@ -17,9 +17,6 @@ import { invalidateWatchingUpdatesForUser } from '@/lib/watching-updates-cache';
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 const PLAY_RECORDS_NO_CACHE_HEADERS = {
   'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
   Pragma: 'no-cache',

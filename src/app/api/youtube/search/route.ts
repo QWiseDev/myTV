@@ -6,10 +6,7 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-
 // 强制动态渲染，避免在构建时预生成
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 // YouTube Data API v3 配置
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
@@ -205,7 +202,6 @@ export async function GET(request: NextRequest) {
     }-${maxResults}-${encodeURIComponent(
       query
     )}-${contentType}-${order}-${enabledRegionsStr}-${enabledCategoriesStr}`;
-
 
     // 服务端直接调用数据库（不用ClientCache，避免HTTP循环调用）
     try {
