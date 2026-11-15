@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 async function loadInitialHomeData() {
   try {
-    const headerList = headers();
+    const headerList = await headers();
     if (!headerList.get('cookie')) {
       return EMPTY_HOME_DATA;
     }

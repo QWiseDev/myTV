@@ -20,7 +20,7 @@ export const revalidate = 0;
 export async function POST(request: NextRequest) {
   try {
     // 获取真实的客户端IP地址（支持CloudFlare CDN和多种代理情况）
-    const headersList = headers();
+    const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');
     const realIp = headersList.get('x-real-ip');
     const cfConnectingIp = headersList.get('cf-connecting-ip');
@@ -29,13 +29,13 @@ export async function POST(request: NextRequest) {
     const xClientIp = headersList.get('x-client-ip');
 
     // 优先级：CloudFlare > Vercel > X-Original-For > X-Client-IP > X-Forwarded-For > X-Real-IP
+    // （Next 15 移除了 request.ip，回退到 X-Forwarded-For/X-Real-IP 头）
     const remoteAddr = cfConnectingIp ||
                       xVercelForwardedFor ||
                       xOriginalFor ||
                       xClientIp ||
                       forwardedFor?.split(',')[0]?.trim() ||
                       realIp ||
-                      request.ip ||
                       '';
 
     // 从 cookie 获取用户信息
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
   // 专门处理IP地址查询端点
   if (searchParams.get('ip') === 'true') {
     try {
-      const headersList = headers();
+      const headersList = await headers();
       const forwardedFor = headersList.get('x-forwarded-for');
       const realIp = headersList.get('x-real-ip');
       const ip = forwardedFor?.split(',')[0]?.trim() || realIp || '';

@@ -1,10 +1,14 @@
 /** @type {import('next').NextConfig} */
 /* eslint-disable @typescript-eslint/no-var-requires */
 
+const path = require('path');
+
 const isProd = process.env.NODE_ENV === 'production';
 
 const nextConfig = {
   output: 'standalone',
+  // 锁定 workspace root，避免多 lockfile 时 Next 推断错误
+  outputFileTracingRoot: path.join(__dirname),
   eslint: {
     // Warning: This allows production builds to successfully complete even if ESLint warnings exist
     ignoreDuringBuilds: true,
@@ -12,11 +16,6 @@ const nextConfig = {
   },
 
   reactStrictMode: true,
-  swcMinify: true,
-
-  experimental: {
-    instrumentationHook: isProd,
-  },
 
   // 🔥 全局强制动态渲染，避免构建时数据库访问问题
   generateBuildId: async () => {
@@ -45,10 +44,6 @@ const nextConfig = {
         },
       }
     : {},
-
-  experimental: {
-    instrumentationHook: isProd,
-  },
 
   // 静态资源缓存配置
   async headers() {
