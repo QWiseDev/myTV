@@ -1,9 +1,9 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import {
   lazy,
   Suspense,
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -20,7 +20,6 @@ import { usePlayRecordActions } from '@/hooks/usePlayRecordActions';
 
 import AIRecommendButton from '@/components/AIRecommendButton';
 import AnnouncementModal from '@/components/AnnouncementModal';
-import CapsuleSwitch from '@/components/CapsuleSwitch';
 import HomeTabContent, {
   type HomeContinueWatchingState,
 } from '@/components/HomeTabContent';
@@ -43,19 +42,13 @@ const TelegramWelcomeModal = lazy(() =>
   })),
 );
 
-const HOME_TABS = [
-  { label: '首页', value: 'home' },
-  { label: '收藏夹', value: 'favorites' },
-] as const;
-
-type HomeTab = (typeof HOME_TABS)[number]['value'];
-
-function isHomeTab(value: string): value is HomeTab {
-  return HOME_TABS.some((tab) => tab.value === value);
-}
+type HomeTab = 'home' | 'favorites';
 
 function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
-  const [activeTab, setActiveTab] = useState<HomeTab>('home');
+  // Tab 状态由 URL ?tab= 派生（顶栏收藏夹入口跳转 /?tab=favorites）
+  const searchParams = useSearchParams();
+  const activeTab: HomeTab =
+    searchParams.get('tab') === 'favorites' ? 'favorites' : 'home';
   const [showAIRecommendModal, setShowAIRecommendModal] = useState(false);
 
   const {
@@ -133,16 +126,10 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
   useEffect(() => {
     const authInfo = getAuthInfoFromBrowserCookie();
     logAccess('homepage', {
-      tab: 'home',
+      tab: activeTab,
       username: authInfo?.username || 'anonymous',
     });
-  }, []);
-
-  const handleTabChange = useCallback((value: string) => {
-    if (isHomeTab(value)) {
-      setActiveTab(value);
-    }
-  }, []);
+  }, [activeTab]);
 
   return (
     <PageLayout>
@@ -152,17 +139,11 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
       {/* 布局容器交给 PageLayout，避免多层 padding 叠加 */}
       <div className='overflow-visible'>
-        <div className='mb-4 flex flex-col sm:flex-row items-center justify-center gap-4'>
-          <CapsuleSwitch
-            options={HOME_TABS}
-            active={activeTab}
-            onChange={handleTabChange}
-          />
-
-          {aiEnabled && (
+        {aiEnabled && (
+          <div className='mb-4 flex justify-end'>
             <AIRecommendButton onClick={() => setShowAIRecommendModal(true)} />
-          )}
-        </div>
+          </div>
+        )}
 
         {activeTab === 'favorites' ? (
           <Suspense fallback={null}>

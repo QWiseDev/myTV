@@ -7,6 +7,7 @@ import {
   Clover,
   Film,
   Globe,
+  Heart,
   Home,
   Menu as MenuIcon,
   Radio,
@@ -21,7 +22,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useSite } from './SiteProvider';
-import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
 interface HeaderProps {
@@ -336,10 +336,16 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
 
           {/* 右侧功能区 */}
           <div className='flex items-center gap-1.5 lg:gap-2 ml-2 lg:ml-4 xl:ml-6 flex-shrink-0'>
-            {/* 桌面端显示主题切换和用户菜单 */}
+            {/* 桌面端显示收藏夹入口和用户菜单 */}
             <div className='hidden md:flex items-center gap-1.5 lg:gap-2'>
               <div className='p-1 rounded-md bg-[#f2f2f2]/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm border border-[#e8e8e8] dark:border-[#3a3a3a]'>
-                <ThemeToggle />
+                <Link
+                  href='/?tab=favorites'
+                  title='收藏夹'
+                  className='w-8 h-8 flex items-center justify-center rounded text-[#5f5f5f] hover:text-[#00a304] dark:text-[#a8a8a8] dark:hover:text-[#1acd50] transition-colors'
+                >
+                  <Heart className='w-4 h-4' />
+                </Link>
               </div>
               <div className='p-1 rounded-md bg-[#f2f2f2]/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm border border-[#e8e8e8] dark:border-[#3a3a3a]'>
                 <UserMenu />
@@ -371,6 +377,13 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
           }}
         >
           <nav className='px-4 py-2 space-y-1'>
+            {/* 收藏夹入口（移动端） */}
+            <Link
+              href='/?tab=favorites'
+              className='flex items-center gap-2.5 px-2 py-2.5 rounded-lg text-sm font-medium text-[#5f5f5f] hover:bg-[#f2f2f2] hover:text-[#00a304] dark:text-[#a8a8a8] dark:hover:bg-[#2a2a2a] dark:hover:text-[#1acd50] transition-colors'
+            >
+              <Heart className='w-4 h-4' /> 收藏夹
+            </Link>
             {allMenuItems.map((item) => {
               // 检查当前路径是否匹配这个菜单项
               const typeMatch = item.href.match(/type=([^&]+)/)?.[1];
@@ -454,9 +467,8 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
               );
             })}
 
-            {/* 移动端主题切换和用户菜单 */}
+            {/* 移动端用户菜单 */}
             <div className='flex items-center gap-2 pt-2 border-t border-[#e8e8e8] dark:border-[#3a3a3a]'>
-              <ThemeToggle />
               <UserMenu />
             </div>
           </nav>
