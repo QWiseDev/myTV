@@ -74,7 +74,7 @@ export default function RecommendationsSection({
       <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-4'>
         喜欢这部{isEpisodic ? '剧' : '电影'}的人也喜欢
       </h3>
-      <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3'>
+      <div className='grid grid-cols-2 @min-[400px]:grid-cols-3 @min-[560px]:grid-cols-4 gap-3'>
         {recommendations.map((item) => (
           <div
             key={item.id}

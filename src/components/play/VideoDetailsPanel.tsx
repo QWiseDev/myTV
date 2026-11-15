@@ -126,7 +126,7 @@ export default function VideoDetailsPanel({
       : detail?.type_name || detail?.class || '';
 
   return (
-    <div className='pb-6'>
+    <div className='pb-6 @container'>
       {/* 头部：海报 + 标题/评分/操作 — 爱奇艺式布局 */}
       <div className='flex gap-4'>
         <div className='relative w-[104px] sm:w-[124px] aspect-[2/3] shrink-0 rounded-lg overflow-hidden bg-gray-200 dark:bg-[#2a2a2a]'>

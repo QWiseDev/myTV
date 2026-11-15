@@ -77,6 +77,7 @@ export function VirtualGrid<T>({
     <div
       ref={containerRef}
       className="overflow-y-auto flex-1 min-h-0 content-start pb-4"
+      style={{ containerType: 'inline-size' }}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div

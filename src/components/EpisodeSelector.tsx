@@ -870,7 +870,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 <button
                   key={episodeNumber}
                   onClick={() => handleEpisodeClick(episodeNumber - 1)}
-                  className={`group h-[72px] w-full flex items-center justify-center px-2 text-xl font-bold rounded-xl transition-colors duration-200 border-2 overflow-hidden
+                  style={{ fontSize: 'clamp(12px, 11cqw - 11px, 20px)' }}
+                  className={`group h-[72px] w-full flex items-center justify-center px-1 font-bold rounded-xl transition-colors duration-200 border-2 overflow-hidden
                     ${
                       isActive
                         ? 'border-green-400 text-green-600 bg-transparent dark:text-green-400'
