@@ -12,7 +12,6 @@ import {
   Tv,
 } from 'lucide-react';
 
-import { CURRENT_VERSION } from '@/lib/version';
 
 type UserRole = 'owner' | 'admin' | 'user';
 
@@ -27,7 +26,6 @@ interface UserMenuDropdownPanelProps {
   onContinueWatching: () => void;
   onFavorites: () => void;
   onLogout: () => void;
-  onOpenVersionPanel: () => void;
   onPlayStats: () => void;
   onReleaseCalendar: () => void;
   onSettings: () => void;
@@ -78,7 +76,6 @@ export function UserMenuDropdownPanel({
   onContinueWatching,
   onFavorites,
   onLogout,
-  onOpenVersionPanel,
   onPlayStats,
   onReleaseCalendar,
   onSettings,
@@ -254,16 +251,6 @@ export function UserMenuDropdownPanel({
           </button>
 
           <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
-
-          <button
-            onClick={onOpenVersionPanel}
-            className='w-full px-3 py-2 text-center flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-xs'
-          >
-            <div className='flex items-center gap-1'>
-              <span className='font-mono'>v{CURRENT_VERSION}</span>
-              <div className='w-2 h-2 rounded-full -translate-y-2 bg-green-400'></div>
-            </div>
-          </button>
         </div>
       </div>
     </>

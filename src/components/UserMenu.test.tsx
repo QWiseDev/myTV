@@ -43,22 +43,6 @@ jest.mock('@/lib/watching-updates', () => ({
   subscribeToWatchingUpdatesEvent: mockSubscribeToWatchingUpdatesEvent,
 }));
 
-jest.mock('./VersionPanel', () => ({
-  VersionPanel: ({
-    isOpen,
-    onClose,
-  }: {
-    isOpen: boolean;
-    onClose: () => void;
-  }) =>
-    isOpen ? (
-      <div role='dialog'>
-        <span>版本面板</span>
-        <button onClick={onClose}>关闭版本面板</button>
-      </div>
-    ) : null,
-}));
-
 jest.mock('./VideoCard', () => ({
   __esModule: true,
   default: ({ title }: { title: string }) => <div>{title}</div>,
@@ -251,20 +235,11 @@ describe('UserMenu', () => {
     expect(screen.getByText('当前用户')).toBeInTheDocument();
   });
 
-  it('opens and closes the version panel from the menu footer', async () => {
+  it('no longer shows a version entry in the menu footer', async () => {
     await renderMenu();
     await openMenu();
 
-    const versionLabel = screen.getByText(/^v/);
-    const versionButton = versionLabel.closest('button');
-    if (!versionButton) throw new Error('找不到版本入口');
-    fireEvent.click(versionButton);
-
-    expect(screen.getByRole('dialog')).toHaveTextContent('版本面板');
-    expect(screen.queryByText('当前用户')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '关闭版本面板' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^v\d/)).not.toBeInTheDocument();
   });
 
   it('locks page scrolling while settings are open and restores original styles', async () => {

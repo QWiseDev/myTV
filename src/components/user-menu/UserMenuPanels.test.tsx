@@ -102,7 +102,6 @@ describe('UserMenu presentation panels', () => {
 
   it('renders dropdown permissions, counts and action callbacks from props', () => {
     const onSettings = jest.fn();
-    const onOpenVersionPanel = jest.fn();
 
     render(
       <UserMenuDropdownPanel
@@ -116,7 +115,6 @@ describe('UserMenu presentation panels', () => {
         onContinueWatching={jest.fn()}
         onFavorites={jest.fn()}
         onLogout={jest.fn()}
-        onOpenVersionPanel={onOpenVersionPanel}
         onPlayStats={jest.fn()}
         onReleaseCalendar={jest.fn()}
         onSettings={onSettings}
@@ -148,13 +146,10 @@ describe('UserMenu presentation panels', () => {
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    const versionButton = screen.getByText(/^v/).closest('button');
-    if (!versionButton) throw new Error('找不到版本入口');
-    expect(versionButton.querySelector('.bg-green-400')).toBeInTheDocument();
-    fireEvent.click(versionButton);
 
     expect(onSettings).toHaveBeenCalledTimes(1);
-    expect(onOpenVersionPanel).toHaveBeenCalledTimes(1);
+    // 版本入口已随版本面板功能移除
+    expect(screen.queryByText(/^v\d/)).not.toBeInTheDocument();
   });
 
   it('keeps settings conditional fields and explicit callbacks', () => {

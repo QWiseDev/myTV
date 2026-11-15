@@ -22,7 +22,6 @@ import { useUserMenuContinueWatching } from './user-menu/useUserMenuContinueWatc
 import { useUserMenuFavorites } from './user-menu/useUserMenuFavorites';
 import { useUserMenuSettingsController } from './user-menu/useUserMenuSettingsController';
 import { useUserMenuWatchingUpdates } from './user-menu/useUserMenuWatchingUpdates';
-import { VersionPanel } from './VersionPanel';
 
 interface AuthInfo {
   username?: string;
@@ -63,7 +62,6 @@ export const UserMenu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [isVersionPanelOpen, setIsVersionPanelOpen] = useState(false);
   const [isWatchingUpdatesOpen, setIsWatchingUpdatesOpen] = useState(false);
   const [isContinueWatchingOpen, setIsContinueWatchingOpen] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
@@ -203,11 +201,6 @@ export const UserMenu: React.FC = () => {
 
   const handleCloseMenu = () => {
     setIsOpen(false);
-  };
-
-  const handleOpenVersionPanel = () => {
-    setIsVersionPanelOpen(true);
-    handleCloseMenu();
   };
 
   const handleLogout = async () => {
@@ -402,7 +395,6 @@ export const UserMenu: React.FC = () => {
             onContinueWatching={handleContinueWatching}
             onFavorites={handleFavorites}
             onLogout={handleLogout}
-            onOpenVersionPanel={handleOpenVersionPanel}
             onPlayStats={handlePlayStats}
             onReleaseCalendar={handleReleaseCalendar}
             onSettings={handleSettings}
@@ -511,12 +503,6 @@ export const UserMenu: React.FC = () => {
           />,
           document.body,
         )}
-
-      {/* 版本面板 */}
-      <VersionPanel
-        isOpen={isVersionPanelOpen}
-        onClose={() => setIsVersionPanelOpen(false)}
-      />
     </>
   );
 };
