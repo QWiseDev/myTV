@@ -8,6 +8,7 @@ const TMDB_CACHE_EXPIRE = {
   tv_credits: 12 * 60 * 60, // 演员电视剧作品12小时（较稳定）
   movie_details: 24 * 60 * 60, // 电影详情24小时（基本不变）
   tv_details: 24 * 60 * 60, // 电视剧详情24小时（基本不变）
+  backdrop_search: 24 * 60 * 60, // 首页横图搜索24小时（backdrop 基本不变）
   trending: 2 * 60 * 60, // 热门内容2小时（更新频繁）
   discover: 4 * 60 * 60, // 发现内容4小时
 };

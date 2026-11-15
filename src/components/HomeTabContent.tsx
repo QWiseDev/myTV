@@ -1,7 +1,7 @@
 'use client';
 
 import { Film, Sparkles, Tv } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 
 import { HOME_VIDEO_CARD_SIZES } from '@/lib/constants/home';
 import type {
@@ -10,11 +10,14 @@ import type {
   HomeSectionKey,
 } from '@/lib/home-data-client';
 import type { HomeData } from '@/lib/home-data-types';
+import { parseStorageKey } from '@/lib/storage-key';
 import type { DoubanItem, PlayRecord } from '@/lib/types';
+import { buildPlayUrl } from '@/lib/video-card-utils';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
 
 import BangumiSection from './BangumiSection';
+import HeroCarousel, { type HeroContinueItem } from './HeroCarousel';
 import LazyVideoSection from './LazyVideoSection';
 import SectionSkeleton from './SectionSkeleton';
 import VideoCard from './VideoCard';
@@ -82,8 +85,54 @@ export default function HomeTabContent({
   const { criticalLoading, tertiaryLoading, tvLoading, varietyLoading } =
     loading;
 
+  // 爱奇艺式首屏轮播：最近一条继续追记录作为第一帧
+  const heroContinueItem = useMemo<HeroContinueItem | null>(() => {
+    const records = continueWatching.playRecords;
+    let latestKey: string | null = null;
+    let latestTime = 0;
+    for (const [key, record] of Object.entries(records)) {
+      if (record.save_time > latestTime) {
+        latestTime = record.save_time;
+        latestKey = key;
+      }
+    }
+    if (!latestKey) return null;
+
+    const record = records[latestKey];
+    const parsed = parseStorageKey(latestKey);
+    if (!parsed?.source || !parsed.id) return null;
+
+    const href = buildPlayUrl({
+      from: 'playrecord',
+      source: parsed.source,
+      id: parsed.id,
+      title: record.title,
+      year: record.year,
+    });
+    if (!href) return null;
+
+    return {
+      key: latestKey,
+      title: record.title,
+      poster: record.cover,
+      year: record.year,
+      episodeLabel:
+        record.total_episodes > 1
+          ? `看到第 ${record.index} 集 / 共 ${record.total_episodes} 集`
+          : undefined,
+      href,
+    };
+  }, [continueWatching.playRecords]);
+
   return (
     <>
+      {/* 爱奇艺式首屏大轮播 */}
+      <HeroCarousel
+        continueItem={heroContinueItem}
+        movies={hotMovies}
+        loading={criticalLoading || continueWatching.loading}
+      />
+
       {/* 继续观看 */}
       <Suspense fallback={<SectionSkeleton title='继续观看' />}>
         <ContinueWatching

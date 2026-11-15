@@ -11,6 +11,7 @@ import {
 // TMDB API 配置
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+const TMDB_BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280';
 
 // TMDB API 响应类型
 interface TMDBPerson {
@@ -147,8 +148,14 @@ async function fetchTMDB<T>(
     throw new Error('TMDB API Key 未配置');
   }
 
+  const apiKey = config.SiteConfig.TMDBApiKey;
+  // v4 Read Access Token（JWT，eyJ 开头）走 Bearer 头；v3 key 走 api_key 参数
+  const useBearer = apiKey.startsWith('eyJ');
+
   const url = new URL(`${TMDB_BASE_URL}${endpoint}`);
-  url.searchParams.append('api_key', config.SiteConfig.TMDBApiKey);
+  if (!useBearer) {
+    url.searchParams.append('api_key', apiKey);
+  }
   url.searchParams.append(
     'language',
     config.SiteConfig.TMDBLanguage || 'zh-CN'
@@ -165,6 +172,7 @@ async function fetchTMDB<T>(
       Accept: 'application/json',
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      ...(useBearer ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
   });
 
@@ -492,4 +500,152 @@ export async function searchTMDBActorWorks(
       source: 'tmdb',
     } as TMDBResult;
   }
+}
+
+interface TMDBMultiSearchResult {
+  id: number;
+  media_type: 'movie' | 'tv' | 'person';
+  title?: string;
+  name?: string;
+  backdrop_path: string | null;
+  poster_path: string | null;
+  overview?: string;
+  release_date?: string;
+  first_air_date?: string;
+  popularity?: number;
+}
+
+interface TMDBMultiSearchResponse {
+  page: number;
+  results: TMDBMultiSearchResult[];
+  total_results: number;
+}
+
+interface TMDBGenre {
+  id: number;
+  name: string;
+}
+
+interface TMDBCreditsPerson {
+  name: string;
+  job?: string;
+  profile_path?: string | null;
+}
+
+interface TMDBDetailsResponse {
+  overview?: string;
+  tagline?: string;
+  genres?: TMDBGenre[];
+  created_by?: TMDBCreditsPerson[];
+  credits?: {
+    cast?: TMDBCreditsPerson[];
+    crew?: TMDBCreditsPerson[];
+  };
+}
+
+/** Banner 增强信息（中文，来自 TMDB） */
+export interface TMDBHeroInfo {
+  /** w1280 横图 URL */
+  backdrop: string;
+  /** 剧情简介 */
+  overview: string;
+  /** 宣传语 */
+  tagline?: string;
+  /** 类型名称（本地化） */
+  genres: string[];
+  /** 主演（前 5 位） */
+  cast: string[];
+  /** 导演（电影）或主创（剧集） */
+  director?: string;
+}
+
+/** 查不到横图时写入缓存的哨兵值，避免每次首屏都重复打上游 */
+const HERO_INFO_MISS_SENTINEL = '';
+
+/**
+ * 按标题搜索 TMDB，返回首页 Banner 所需的横图与增强信息。
+ * 未命中返回 null（miss 会缓存，避免重复打上游）。
+ */
+export async function getTMDBHeroInfoByTitle(
+  title: string,
+  year?: string
+): Promise<TMDBHeroInfo | null> {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+
+  const cacheKey = getCacheKey('hero_info', {
+    title: trimmed,
+    year: year || undefined,
+  });
+  const cached = await getCache<TMDBHeroInfo | null>(cacheKey);
+  if (cached !== null) {
+    return cached === (HERO_INFO_MISS_SENTINEL as unknown as TMDBHeroInfo)
+      ? null
+      : cached;
+  }
+
+  const data = await fetchTMDB<TMDBMultiSearchResponse>('/search/multi', {
+    query: trimmed,
+    include_adult: 'false',
+    page: '1',
+  });
+
+  const candidates = data.results.filter(
+    (item) => item.media_type !== 'person' && item.backdrop_path
+  );
+
+  // 优先取标题与年份都匹配的结果，其次标题匹配，最后取人气最高的
+  const matched =
+    candidates.find((item) => {
+      const itemTitle = item.title || item.name || '';
+      if (itemTitle !== trimmed) return false;
+      if (!year) return true;
+      const releaseYear = (
+        item.release_date ||
+        item.first_air_date ||
+        ''
+      ).slice(0, 4);
+      return releaseYear === year;
+    }) ??
+    candidates.find((item) => (item.title || item.name) === trimmed) ??
+    candidates.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+
+  if (!matched) {
+    await setCache(
+      cacheKey,
+      HERO_INFO_MISS_SENTINEL as unknown as TMDBHeroInfo,
+      TMDB_CACHE_EXPIRE.backdrop_search
+    );
+    return null;
+  }
+
+  // 详情 + 主演/导演合并为一次请求（overview/genres 也取本地化版本）
+  const details = await fetchTMDB<TMDBDetailsResponse>(
+    `/${matched.media_type}/${matched.id}`,
+    { append_to_response: 'credits' },
+  );
+
+  const directors = (details.credits?.crew || [])
+    .filter((person) => person.job === 'Director')
+    .map((person) => person.name);
+  const creators = (details.created_by || []).map((person) => person.name);
+  const director = Array.from(new Set(directors.concat(creators)))
+    .slice(0, 2)
+    .join(' / ');
+
+  const info: TMDBHeroInfo = {
+    backdrop: `${TMDB_BACKDROP_BASE_URL}${matched.backdrop_path}`,
+    overview: details.overview || matched.overview || '',
+    tagline: details.tagline || undefined,
+    genres: (details.genres || []).slice(0, 3).map((genre) => genre.name),
+    cast: (details.credits?.cast || [])
+      .slice(0, 5)
+      .map((person) => person.name)
+      .filter(Boolean),
+    director: director || undefined,
+  };
+
+  await setCache(cacheKey, info, TMDB_CACHE_EXPIRE.backdrop_search);
+
+  return info;
 }
