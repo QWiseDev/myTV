@@ -2,7 +2,7 @@
 
 'use client';
 
-import { ChevronDown, ChevronUp, ExternalLink, Layers, Search, Server, Tv } from 'lucide-react';
+import { Search, Server, Tv } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -55,9 +55,8 @@ export default function SourceBrowserPage() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [activeSourceKey, setActiveSourceKey] = useState('');
   
-  // 源列表筛选与折叠
+  // 源列表筛选
   const [sourceFilter, setSourceFilter] = useState('');
-  const [isSourceExpanded, setIsSourceExpanded] = useState(false);
   const filteredSources = useMemo(() => {
     if (!sourceFilter.trim()) return sources;
     const lower = sourceFilter.trim().toLowerCase();
@@ -607,360 +606,313 @@ export default function SourceBrowserPage() {
 
   return (
     <PageLayout activePath='/source-browser'>
-      <div className='max-w-7xl mx-auto p-4 md:p-6 space-y-6'>
-        {/* Header - 美化版 */}
-        <div className='relative'>
-          <div className='absolute inset-0 bg-gradient-to-r from-emerald-400/10 via-green-400/10 to-teal-400/10 rounded-2xl blur-3xl'></div>
-          <div className='relative flex items-center gap-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/50 shadow-xl'>
-            <div className='relative w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 flex items-center justify-center shadow-lg group hover:scale-110 transition-transform duration-300'>
-              <div className='absolute inset-0 bg-emerald-400 rounded-2xl blur-xl opacity-50 group-hover:opacity-75 transition-opacity'></div>
-              <Layers className='relative w-8 h-8 text-white drop-shadow-lg' />
-            </div>
-            <div className='flex-1'>
-              <h1 className='text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 dark:from-emerald-400 dark:via-green-400 dark:to-teal-400 bg-clip-text text-transparent'>
-                源浏览器
-              </h1>
-              <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
-                按来源站与分类浏览内容，探索海量影视资源
-              </p>
-            </div>
-            {sources.length > 0 && (
-              <div className='hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'>
-                <Server className='w-4 h-4 text-emerald-600 dark:text-emerald-400' />
-                <span className='text-sm font-medium text-emerald-700 dark:text-emerald-300'>
-                  {sources.length} 个源可用
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sources - 美化版 */}
-        <div className='bg-gradient-to-br from-white via-emerald-50/30 to-white dark:from-gray-800 dark:via-emerald-900/10 dark:to-gray-800 rounded-2xl shadow-lg border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm'>
-          <div className='px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all'>
-            <div className='flex items-center gap-2.5 font-semibold text-gray-900 dark:text-white'>
-              <div className='w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0'>
-                <Server className='w-4 h-4 text-emerald-600 dark:text-emerald-400' />
-              </div>
-              <span className='whitespace-nowrap'>选择来源站</span>
+      <div className='max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-5 space-y-5'>
+        {/* 来源站选择条：横向滚动 + 过滤 */}
+        <section>
+          <div className='flex items-center justify-between gap-3 mb-2.5'>
+            <div className='flex items-center gap-2 text-sm font-semibold text-[#111111] dark:text-[#f5f5f5]'>
+              <Server className='w-4 h-4 text-[#00a304] dark:text-[#1acd50]' />
+              选择来源站
               {!loadingSources && sources.length > 0 && (
-                <span className='text-xs px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium whitespace-nowrap'>
-                  {sources.length} 个
+                <span className='text-xs px-2 py-0.5 rounded-full bg-[#00be06]/10 dark:bg-[#00be06]/15 text-[#00a304] dark:text-[#1acd50] font-medium'>
+                  {sources.length}
                 </span>
               )}
             </div>
-            {/* 源搜索框 */}
             {!loadingSources && sources.length > 10 && (
-              <div className='relative w-full sm:w-64 group'>
+              <div className='relative w-44 sm:w-56 shrink-0'>
                 <input
                   type='text'
                   value={sourceFilter}
                   onChange={(e) => setSourceFilter(e.target.value)}
-                  placeholder='搜索来源站...'
-                  className='w-full pl-9 pr-4 py-1.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-900/50 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all'
+                  placeholder='筛选来源站...'
+                  className='w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-[#111111] dark:text-[#f5f5f5] placeholder:text-[#8f8f8f] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 outline-none transition-colors'
                 />
-                <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-emerald-500 transition-colors' />
+                <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8f8f8f] pointer-events-none' />
               </div>
             )}
           </div>
-          <div className='p-5'>
-            {loadingSources ? (
-              <div className='flex items-center gap-2 text-sm text-gray-500'>
-                <div className='w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin'></div>
-                加载中...
+
+          {loadingSources ? (
+            <div className='flex items-center gap-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-3'>
+              <div className='w-4 h-4 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
+              加载中...
+            </div>
+          ) : sourceError ? (
+            <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
+              {sourceError}
+            </div>
+          ) : sources.length === 0 ? (
+            <div className='text-center py-8'>
+              <div className='w-14 h-14 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
+                <Server className='w-6 h-6 text-[#8f8f8f]' />
               </div>
-            ) : sourceError ? (
-              <div className='flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'>
-                <span className='text-sm text-red-600 dark:text-red-400'>
-                  {sourceError}
-                </span>
+              <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                暂无可用来源
+              </p>
+            </div>
+          ) : (
+            <div className='relative'>
+              <div className='flex gap-2 overflow-x-auto scrollbar-hide pb-1.5'>
+                {filteredSources.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => {
+                      // 📊 分析埋点：源切换
+                      trackAnalyticsSafely(() =>
+                        analytics.handleSourceClick(
+                          {
+                            id: s.key,
+                            name: s.name,
+                            url: s.api,
+                            type: 'api',
+                            status: 'active',
+                            lastChecked: new Date(),
+                            itemCount: 0,
+                            category: 'unknown',
+                            language: 'unknown',
+                          },
+                          filteredSources.findIndex((x) => x.key === s.key),
+                          'all',
+                        ),
+                      );
+                      setActiveSourceKey(s.key);
+                    }}
+                    className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
+                      activeSourceKey === s.key
+                        ? 'bg-[#00be06] border-[#00be06] text-white'
+                        : 'bg-transparent border-[#d9d9d9] dark:border-[#3a3a3a] text-[#5f5f5f] dark:text-[#a8a8a8] hover:border-[#00be06] hover:text-[#00a304] dark:hover:text-[#1acd50]'
+                    }`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+                {filteredSources.length === 0 && sourceFilter && (
+                  <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1.5 px-1'>
+                    未找到匹配 &quot;{sourceFilter}&quot; 的来源
+                  </div>
+                )}
               </div>
-            ) : sources.length === 0 ? (
-              <div className='text-center py-8'>
-                <div className='w-16 h-16 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center'>
-                  <Server className='w-8 h-8 text-gray-400' />
+            </div>
+          )}
+        </section>
+
+        {/* 工具栏：搜索 + 排序/筛选 */}
+        {activeSource && (
+          <section className='flex flex-col sm:flex-row gap-2.5'>
+            <div className='relative flex-1 min-w-0'>
+              <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8f8f8f] pointer-events-none' />
+              <input
+                value={query}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuery(val);
+                  if (debounceId) clearTimeout(debounceId);
+                  const id = setTimeout(() => {
+                    setMode(val.trim() ? 'search' : 'category');
+                    if (val.trim()) {
+                      fetchSearch(activeSourceKey, val.trim(), 1);
+                    } else if (activeCategory) {
+                      fetchItems(activeSourceKey, activeCategory, 1);
+                    }
+                  }, 500);
+                  setDebounceId(id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setMode(query.trim() ? 'search' : 'category');
+                  }
+                }}
+                placeholder='输入关键词搜索当前源；清空回车恢复分类浏览'
+                className='w-full pl-9 pr-9 py-2 rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-sm text-[#111111] dark:text-[#f5f5f5] placeholder:text-[#8f8f8f] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 outline-none transition-colors'
+              />
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery('');
+                    setMode('category');
+                    if (activeCategory)
+                      fetchItems(activeSourceKey, activeCategory, 1);
+                  }}
+                  className='absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-[#8f8f8f] hover:text-[#111111] dark:hover:text-[#f5f5f5] hover:bg-[#e8e8e8] dark:hover:bg-[#3a3a3a] transition-colors'
+                  title='清除搜索'
+                  aria-label='清除搜索'
+                >
+                  <svg
+                    className='w-3.5 h-3.5'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M6 18L18 6M6 6l12 12'
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className='grid grid-cols-3 sm:flex gap-2 shrink-0'>
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value as
+                      | 'default'
+                      | 'title-asc'
+                      | 'title-desc'
+                      | 'year-asc'
+                      | 'year-desc',
+                  )
+                }
+                className='px-2.5 py-2 rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-xs sm:text-sm text-[#111111] dark:text-[#f5f5f5] focus:border-[#00be06] outline-none transition-colors'
+                title='排序'
+              >
+                <option value='default'>默认排序</option>
+                <option value='title-asc'>标题 A→Z</option>
+                <option value='title-desc'>标题 Z→A</option>
+                <option value='year-asc'>年份 ↑</option>
+                <option value='year-desc'>年份 ↓</option>
+              </select>
+              <select
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value)}
+                className='px-2.5 py-2 rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-xs sm:text-sm text-[#111111] dark:text-[#f5f5f5] focus:border-[#00be06] outline-none transition-colors'
+                title='年份'
+              >
+                <option value=''>全部年份</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={filterKeyword}
+                onChange={(e) => {
+                  setFilterKeyword(e.target.value);
+                  // 📊 分析埋点：关键词筛选
+                  if (e.target.value.trim()) {
+                    trackAnalyticsSafely(() =>
+                      analytics.handleSearch(e.target.value.trim(), 0, 0),
+                    );
+                  }
+                }}
+                placeholder='地区/关键词'
+                className='px-2.5 py-2 rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-xs sm:text-sm text-[#111111] dark:text-[#f5f5f5] placeholder:text-[#8f8f8f] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 outline-none transition-colors min-w-0'
+              />
+            </div>
+          </section>
+        )}
+
+        {/* 内容区：分类行 + 海报网格 */}
+        {activeSource && (
+          <section>
+            {/* 分类 chips */}
+            {mode === 'category' && (
+              <div className='flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-4'>
+                {loadingCategories ? (
+                  <div className='flex items-center gap-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1'>
+                    <div className='w-4 h-4 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
+                    加载分类...
+                  </div>
+                ) : categoryError ? (
+                  <div className='px-4 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
+                    {categoryError}
+                  </div>
+                ) : categories.length === 0 ? (
+                  <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1'>
+                    暂无分类
+                  </p>
+                ) : (
+                  categories.map((c) => (
+                    <button
+                      key={String(c.type_id)}
+                      onClick={() => {
+                        // 📊 分析埋点：分类切换
+                        trackAnalyticsSafely(() =>
+                          analytics.handleFilterChange(
+                            'category',
+                            c.type_name || String(c.type_id),
+                          ),
+                        );
+                        setActiveCategory(c.type_id);
+                      }}
+                      className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
+                        activeCategory === c.type_id
+                          ? 'bg-[#00be06] border-[#00be06] text-white'
+                          : 'bg-transparent border-[#d9d9d9] dark:border-[#3a3a3a] text-[#5f5f5f] dark:text-[#a8a8a8] hover:border-[#00be06] hover:text-[#00a304] dark:hover:text-[#1acd50]'
+                      }`}
+                    >
+                      {c.type_name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* 内容网格 */}
+            {loadingItems ? (
+              <div className='grid gap-x-3 gap-y-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6'>
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i}>
+                    <div className='aspect-[2/3] rounded-lg bg-[#e8e8e8] dark:bg-[#2a2a2a] animate-pulse' />
+                    <div className='mt-2 h-3.5 rounded bg-[#e8e8e8] dark:bg-[#2a2a2a] animate-pulse' />
+                  </div>
+                ))}
+              </div>
+            ) : itemsError ? (
+              <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
+                {itemsError}
+              </div>
+            ) : items.length === 0 ? (
+              <div className='text-center py-12'>
+                <div className='w-16 h-16 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
+                  <Tv className='w-7 h-7 text-[#8f8f8f]' />
                 </div>
-                <p className='text-sm text-gray-500'>暂无可用来源</p>
+                <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                  暂无内容
+                </p>
               </div>
             ) : (
-              <div className='space-y-4'>
-                <div className='flex flex-wrap gap-2.5 transition-all'>
-                  {(isSourceExpanded || sourceFilter.trim()
-                    ? filteredSources
-                    : filteredSources.slice(0, 20)
-                  ).map((s, index) => (
-                    <button
-                      key={s.key}
+              <>
+                <div className='grid gap-x-3 gap-y-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6'>
+                  {filteredAndSorted.map((item) => (
+                    <div
+                      key={item.id}
+                      className='group cursor-pointer'
                       onClick={() => {
-                        // 📊 分析埋点：源切换
+                        // 📊 分析埋点：内容点击
                         trackAnalyticsSafely(() =>
                           analytics.handleSourceClick(
                             {
-                              id: s.key,
-                              name: s.name,
-                              url: s.api,
+                              id: item.id,
+                              name: item.title,
+                              url: '',
                               type: 'api',
                               status: 'active',
                               lastChecked: new Date(),
                               itemCount: 0,
-                              category: 'unknown',
+                              category: activeSourceKey,
                               language: 'unknown',
                             },
-                            index,
-                            'all'
-                          )
+                            filteredAndSorted.findIndex(
+                              (x) => x.id === item.id,
+                            ),
+                            'category',
+                          ),
                         );
-                        setActiveSourceKey(s.key);
+                        openPreview(item);
                       }}
-                      className={`group relative px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium border-2 transition-all duration-300 transform hover:scale-105 active:scale-95 ${
-                        activeSourceKey === s.key
-                          ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white border-transparent shadow-lg shadow-emerald-500/30'
-                          : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-green-50 dark:hover:from-emerald-900/20 dark:hover:to-green-900/20 hover:border-emerald-300 dark:hover:border-emerald-700'
-                      }`}
-                      style={{
-                        animation: `fadeInUp 0.3s ease-out ${
-                          index * 0.02
-                        }s both`,
-                      }}
-                    >
-                      {activeSourceKey === s.key && (
-                        <div className='absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400 to-green-400 blur-lg opacity-50 -z-10'></div>
-                      )}
-                      <span className='line-clamp-1 max-w-[12em]'>{s.name}</span>
-                    </button>
-                  ))}
-                  {filteredSources.length === 0 && sourceFilter && (
-                    <div className='text-sm text-gray-500 py-2'>
-                      未找到匹配 "{sourceFilter}" 的来源
-                    </div>
-                  )}
-                </div>
-
-                {/* 展开/收起按钮 - 仅在未过滤且源数量超过限制时显示 */}
-                {!sourceFilter.trim() && sources.length > 20 && (
-                  <div className='flex justify-center'>
-                    <button
-                      onClick={() => setIsSourceExpanded(!isSourceExpanded)}
-                      className='flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium'
-                    >
-                      {isSourceExpanded ? (
-                        <>
-                          <ChevronUp className='w-3.5 h-3.5' />
-                          收起
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className='w-3.5 h-3.5' />
-                          展开全部 ({sources.length - 20})
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Query & Sort */}
-        {activeSource && (
-          <div className='bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700'>
-            <div className='px-4 py-3 border-b border-gray-200 dark:border-gray-700 space-y-3'>
-              {/* 第一行：搜索框 + 清除按钮 + 模式显示 */}
-              <div className='flex items-center gap-2'>
-                <input
-                  value={query}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setQuery(val);
-                    if (debounceId) clearTimeout(debounceId);
-                    const id = setTimeout(() => {
-                      setMode(val.trim() ? 'search' : 'category');
-                      if (val.trim()) {
-                        fetchSearch(activeSourceKey, val.trim(), 1);
-                      } else if (activeCategory) {
-                        fetchItems(activeSourceKey, activeCategory, 1);
-                      }
-                    }, 500);
-                    setDebounceId(id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setMode(query.trim() ? 'search' : 'category');
-                    }
-                  }}
-                  placeholder='输入关键词并回车进行搜索；清空回车恢复分类'
-                  className='flex-1 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm'
-                />
-                {query && (
-                  <button
-                    onClick={() => {
-                      setQuery('');
-                      setMode('category');
-                      if (activeCategory)
-                        fetchItems(activeSourceKey, activeCategory, 1);
-                    }}
-                    className='px-3 py-2 text-xs border rounded-md whitespace-nowrap hover:bg-gray-100 dark:hover:bg-gray-700'
-                    title='清除'
-                  >
-                    清除
-                  </button>
-                )}
-                <div className='hidden sm:block text-xs text-gray-500 whitespace-nowrap'>
-                  {mode === 'search' ? '搜索' : '分类'}
-                </div>
-              </div>
-
-              {/* 第二行：筛选控件（移动端优化布局） */}
-              <div className='grid grid-cols-2 sm:flex sm:flex-wrap gap-2'>
-                <select
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(
-                      e.target.value as
-                        | 'default'
-                        | 'title-asc'
-                        | 'title-desc'
-                        | 'year-asc'
-                        | 'year-desc'
-                    )
-                  }
-                  className='sm:flex-1 sm:min-w-[120px] px-2 sm:px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs sm:text-sm'
-                  title='排序'
-                >
-                  <option value='default'>默认</option>
-                  <option value='title-asc'>标题 A→Z</option>
-                  <option value='title-desc'>标题 Z→A</option>
-                  <option value='year-asc'>年份↑</option>
-                  <option value='year-desc'>年份↓</option>
-                </select>
-                <select
-                  value={filterYear}
-                  onChange={(e) => setFilterYear(e.target.value)}
-                  className='sm:flex-1 sm:min-w-[100px] px-2 sm:px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs sm:text-sm'
-                  title='年份'
-                >
-                  <option value=''>全部年份</option>
-                  {availableYears.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={filterKeyword}
-                  onChange={(e) => {
-                    setFilterKeyword(e.target.value);
-                    // 📊 分析埋点：关键词筛选
-                    if (e.target.value.trim()) {
-                      trackAnalyticsSafely(() =>
-                        analytics.handleSearch(e.target.value.trim(), 0, 0)
-                      );
-                    }
-                  }}
-                  placeholder='地区/关键词'
-                  className='col-span-2 sm:flex-1 sm:min-w-[140px] px-2 sm:px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs sm:text-sm'
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Categories and Items */}
-        {activeSource && (
-          <div className='bg-gradient-to-br from-white via-blue-50/20 to-white dark:from-gray-800 dark:via-blue-900/5 dark:to-gray-800 rounded-2xl shadow-lg border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm'>
-            <div className='px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between'>
-              <div className='flex items-center gap-2.5 font-semibold text-gray-900 dark:text-white'>
-                <div className='w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center'>
-                  <Tv className='w-4 h-4 text-blue-600 dark:text-blue-400' />
-                </div>
-                <span>{activeSource.name} 分类</span>
-              </div>
-              {categories.length > 0 && (
-                <span className='text-xs px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'>
-                  {categories.length} 个分类
-                </span>
-              )}
-            </div>
-            <div className='p-5 space-y-5'>
-              {mode === 'category' && (
-                <div className='flex flex-wrap gap-2.5'>
-                  {loadingCategories ? (
-                    <div className='flex items-center gap-2 text-sm text-gray-500'>
-                      <div className='w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
-                      加载分类...
-                    </div>
-                  ) : categoryError ? (
-                    <div className='flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
-                      {categoryError}
-                    </div>
-                  ) : categories.length === 0 ? (
-                    <div className='text-center w-full py-6'>
-                      <div className='w-16 h-16 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center'>
-                        <Tv className='w-8 h-8 text-gray-400' />
-                      </div>
-                      <p className='text-sm text-gray-500'>暂无分类</p>
-                    </div>
-                  ) : (
-                    categories.map((c, index) => (
-                      <button
-                        key={String(c.type_id)}
-                        onClick={() => {
-                          // 📊 分析埋点：分类切换
+                      role='button'
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
                           trackAnalyticsSafely(() =>
-                            analytics.handleFilterChange('category', c.type_name || String(c.type_id))
-                          );
-                          setActiveCategory(c.type_id);
-                        }}
-                        className={`group relative px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all duration-300 transform hover:scale-105 ${
-                          activeCategory === c.type_id
-                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-transparent shadow-lg shadow-blue-500/30'
-                            : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 dark:hover:from-blue-900/20 dark:hover:to-indigo-900/20 hover:border-blue-300 dark:hover:border-blue-700'
-                        }`}
-                        style={{
-                          animation: `fadeInUp 0.3s ease-out ${
-                            index * 0.03
-                          }s both`,
-                        }}
-                      >
-                        {activeCategory === c.type_id && (
-                          <div className='absolute inset-0 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-400 blur-lg opacity-50 -z-10'></div>
-                        )}
-                        {c.type_name}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-
-              <div>
-                {loadingItems ? (
-                  <div className='flex items-center gap-2 text-sm text-gray-500'>
-                    <div className='w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
-                    加载内容...
-                  </div>
-                ) : itemsError ? (
-                  <div className='flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
-                    {itemsError}
-                  </div>
-                ) : items.length === 0 ? (
-                  <div className='text-center py-12'>
-                    <div className='w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center'>
-                      <Tv className='w-10 h-10 text-gray-400' />
-                    </div>
-                    <p className='text-sm text-gray-500'>暂无内容</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className='grid gap-3 grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'>
-                      {filteredAndSorted.map((item, index) => (
-                        <div
-                          key={item.id}
-                          className='group relative rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-300 bg-white dark:bg-gray-800 cursor-pointer hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-1'
-                          onClick={() => {
-                            // 📊 分析埋点：内容点击
-                            trackAnalyticsSafely(() =>
-                              analytics.handleSourceClick({
+                            analytics.handleSourceClick(
+                              {
                                 id: item.id,
                                 name: item.title,
                                 url: '',
@@ -969,137 +921,94 @@ export default function SourceBrowserPage() {
                                 lastChecked: new Date(),
                                 itemCount: 0,
                                 category: activeSourceKey,
-                                language: 'unknown'
-                              }, index, 'category')
-                            );
-                            openPreview(item);
-                          }}
-                          role='button'
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              trackAnalyticsSafely(() =>
-                                analytics.handleSourceClick({
-                                  id: item.id,
-                                  name: item.title,
-                                  url: '',
-                                  type: 'api',
-                                  status: 'active',
-                                  lastChecked: new Date(),
-                                  itemCount: 0,
-                                  category: activeSourceKey,
-                                  language: 'unknown'
-                                }, index, 'category')
-                              );
-                              openPreview(item);
-                            }
-                          }}
-                          style={{
-                            animation: `fadeInUp 0.4s ease-out ${
-                              index * 0.02
-                            }s both`,
-                          }}
-                        >
-                          {/* 发光效果 */}
-                          <div className='absolute inset-0 bg-gradient-to-t from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:via-blue-500/5 group-hover:to-transparent transition-all duration-300 pointer-events-none z-10'></div>
-
-                          <div className='aspect-[2/3] bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-gray-700 dark:via-gray-800 dark:to-gray-700 overflow-hidden relative'>
-                            {item.poster ? (
-                              <img
-                                src={item.poster}
-                                alt={item.title}
-                                className='w-full h-full object-cover group-hover:scale-110 transition-transform duration-500'
-                                loading='lazy'
-                              />
-                            ) : (
-                              <div className='w-full h-full flex items-center justify-center text-gray-400 text-xs sm:text-sm'>
-                                <div className='text-center'>
-                                  <Tv className='w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-1 sm:mb-2 opacity-50' />
-                                  <div className='text-[10px] sm:text-sm'>
-                                    无封面
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {/* 渐变遮罩 */}
-                            <div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300'></div>
-
-                            {/* 年份标签 */}
-                            {item.year && (
-                              <div className='absolute top-1 right-1 sm:top-2 sm:right-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-black/70 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium'>
-                                {item.year}
-                              </div>
-                            )}
-
-                            {/* 分类标签 */}
-                            {item.type_name && (
-                              <div className='absolute bottom-1 left-1 sm:bottom-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md sm:rounded-lg bg-blue-500/90 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium'>
-                                {item.type_name}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className='p-1.5 sm:p-3 space-y-1 sm:space-y-1.5 relative z-20'>
-                            <div className='font-medium text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-snug min-h-[2rem] sm:min-h-[2.5rem]'>
-                              {item.title}
-                            </div>
-                            {item.remarks && (
-                              <div className='text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-clamp-1'>
-                                {item.remarks}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Infinite loader sentinel */}
-                    <div
-                      ref={loadMoreRef}
-                      className='mt-4 flex items-center justify-center py-4'
+                                language: 'unknown',
+                              },
+                              filteredAndSorted.findIndex(
+                                (x) => x.id === item.id,
+                              ),
+                              'category',
+                            ),
+                          );
+                          openPreview(item);
+                        }
+                      }}
                     >
-                      {loadingMore ? (
-                        <div className='text-sm text-gray-500'>加载更多...</div>
-                      ) : hasMore ? (
-                        <div className='text-xs text-gray-400'>
-                          下拉加载更多
-                        </div>
-                      ) : (
-                        <div className='text-xs text-gray-400'>没有更多了</div>
-                      )}
+                      <div className='relative aspect-[2/3] rounded-lg overflow-hidden bg-[#e8e8e8] dark:bg-[#2a2a2a] transition-transform duration-300 group-hover:scale-[1.02]'>
+                        {item.poster ? (
+                          <img
+                            src={item.poster}
+                            alt={item.title}
+                            className='w-full h-full object-cover'
+                            loading='lazy'
+                          />
+                        ) : (
+                          <div className='w-full h-full flex flex-col items-center justify-center text-[#8f8f8f]'>
+                            <Tv className='w-8 h-8 opacity-50 mb-1' />
+                            <span className='text-xs'>无封面</span>
+                          </div>
+                        )}
+                        {/* 备注角标（集数/状态） */}
+                        {item.remarks && (
+                          <span className='absolute top-1.5 left-1.5 max-w-[85%] px-1.5 py-0.5 rounded bg-[#00be06] text-white text-[10px] font-medium truncate'>
+                            {item.remarks}
+                          </span>
+                        )}
+                        {/* 年份角标 */}
+                        {item.year && (
+                          <span className='absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-[10px]'>
+                            {item.year}
+                          </span>
+                        )}
+                      </div>
+                      <p className='mt-1.5 text-sm font-medium text-[#111111] dark:text-[#f5f5f5] line-clamp-1 group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] transition-colors'>
+                        {item.title}
+                      </p>
+                      <p className='text-xs text-[#8f8f8f] truncate mt-0.5'>
+                        {item.type_name || ' '}
+                      </p>
                     </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+                  ))}
+                </div>
+                {/* 无限滚动哨兵 */}
+                <div
+                  ref={loadMoreRef}
+                  className='mt-6 flex items-center justify-center py-3'
+                >
+                  {loadingMore ? (
+                    <div className='w-5 h-5 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
+                  ) : hasMore ? (
+                    <div className='text-xs text-[#8f8f8f]'>下拉加载更多</div>
+                  ) : (
+                    <div className='text-xs text-[#8f8f8f]'>没有更多了</div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
         )}
 
-        {/* 预览弹层 */}
+        {/* 详情预览弹层 */}
         {previewOpen && (
           <div
-            className='fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm px-3 py-6 sm:p-4 pb-20 md:pb-4 animate-fadeIn'
+            className='fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm px-3 py-6 sm:p-4 pb-20 md:pb-4 animate-fadeIn'
             role='dialog'
             aria-modal='true'
             onClick={() => setPreviewOpen(false)}
           >
             <div
-              className='w-full max-w-5xl bg-gradient-to-br from-white via-blue-50/20 to-white dark:from-gray-800 dark:via-blue-900/10 dark:to-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] md:max-h-[90vh] border-2 border-gray-200/50 dark:border-gray-700/50 animate-scaleIn'
+              className='w-full max-w-4xl bg-white dark:bg-[#141414] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] md:max-h-[88vh] border border-[#e8e8e8] dark:border-[#3a3a3a] animate-scaleIn'
               onClick={(e) => e.stopPropagation()}
             >
-              {/* 头部 */}
-              <div className='relative flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm'>
-                <div className='flex items-center gap-3 flex-1 min-w-0'>
-                  <div className='w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg'>
-                    <Tv className='w-5 h-5 text-white' />
-                  </div>
-                  <div className='font-bold text-lg sm:text-xl text-gray-900 dark:text-white truncate'>
-                    {previewItem?.title || '详情预览'}
-                  </div>
-                </div>
+              {/* 头部：标题 + 关闭 */}
+              <div className='flex items-center justify-between px-5 sm:px-6 py-3.5 border-b border-[#e8e8e8] dark:border-[#3a3a3a] shrink-0'>
+                <h3 className='text-lg font-bold text-[#111111] dark:text-[#f5f5f5] truncate'>
+                  详情预览
+                </h3>
                 <button
-                  className='ml-3 flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+                  className='w-8 h-8 flex items-center justify-center rounded-lg text-[#8f8f8f] hover:text-[#111111] dark:hover:text-[#f5f5f5] hover:bg-[#e8e8e8] dark:hover:bg-[#2a2a2a] transition-colors'
                   onClick={() => setPreviewOpen(false)}
                   title='关闭'
+                  aria-label='关闭'
                 >
                   <svg
                     className='w-5 h-5'
@@ -1116,133 +1025,96 @@ export default function SourceBrowserPage() {
                   </svg>
                 </button>
               </div>
+
               {/* 内容区 */}
               <div className='p-5 sm:p-6 overflow-auto flex-1'>
                 {previewLoading ? (
                   <div className='flex flex-col items-center justify-center py-12'>
-                    <div className='w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4'></div>
-                    <div className='text-sm text-gray-500'>加载详情...</div>
+                    <div className='w-10 h-10 border-[3px] border-[#00be06] border-t-transparent rounded-full animate-spin mb-3'></div>
+                    <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                      加载详情...
+                    </div>
                   </div>
                 ) : previewError ? (
-                  <div className='flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
-                    <svg
-                      className='w-5 h-5 flex-shrink-0'
-                      fill='currentColor'
-                      viewBox='0 0 20 20'
-                    >
-                      <path
-                        fillRule='evenodd'
-                        d='M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z'
-                        clipRule='evenodd'
-                      />
-                    </svg>
+                  <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
                     {previewError}
                   </div>
                 ) : !previewData ? (
                   <div className='text-center py-12'>
-                    <div className='w-20 h-20 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center'>
-                      <Tv className='w-10 h-10 text-gray-400' />
+                    <div className='w-16 h-16 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
+                      <Tv className='w-7 h-7 text-[#8f8f8f]' />
                     </div>
-                    <div className='text-sm text-gray-500'>暂无详情</div>
+                    <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                      暂无详情
+                    </div>
                   </div>
                 ) : (
-                  <div className='grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 md:gap-6'>
-                    {/* 左侧封面 - 移动端紧凑显示 */}
-                    <div className='md:col-span-1'>
-                      <div className='md:sticky md:top-0'>
-                        {previewItem?.poster ? (
-                          <div className='relative rounded-xl md:rounded-2xl overflow-hidden shadow-lg md:shadow-2xl border border-gray-200 dark:border-gray-700 md:border-2 group max-w-[200px] mx-auto md:max-w-none'>
-                            <img
-                              src={previewItem.poster}
-                              alt={previewItem.title}
-                              className='w-full group-hover:scale-105 transition-transform duration-300'
-                            />
-                            <div className='absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity'></div>
-                          </div>
-                        ) : (
-                          <div className='w-full max-w-[200px] mx-auto md:max-w-none aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-xl md:rounded-2xl flex items-center justify-center border border-gray-200 dark:border-gray-700 md:border-2'>
-                            <div className='text-center text-gray-400'>
-                              <Tv className='w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 opacity-50' />
-                              <div className='text-xs md:text-sm'>暂无封面</div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className='md:col-span-2 space-y-2'>
-                      <div className='flex items-center gap-2 sm:gap-3 flex-wrap'>
-                        <div className='text-base sm:text-lg font-semibold text-gray-900 dark:text-white'>
-                          {previewData.title || previewItem?.title}
+                  <div className='flex flex-col md:flex-row gap-5'>
+                    {/* 左侧海报 */}
+                    <div className='shrink-0 md:w-[200px]'>
+                      {previewItem?.poster ? (
+                        <div className='relative w-[132px] md:w-full aspect-[2/3] rounded-lg overflow-hidden bg-[#e8e8e8] dark:bg-[#2a2a2a]'>
+                          <img
+                            src={previewItem.poster}
+                            alt={previewItem.title}
+                            className='w-full h-full object-cover'
+                          />
                         </div>
-                        {/* 评分徽章 */}
-                        {(() => {
-                          const d = previewDouban;
-                          if (d?.rate) {
-                            return (
-                              <span className='px-2 py-0.5 rounded-md text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'>
-                                豆瓣 {d.rate}
-                              </span>
-                            );
-                          }
-                          if (previewBangumi?.rating?.score) {
-                            return (
-                              <span className='px-2 py-0.5 rounded-md text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'>
-                                Bangumi {previewBangumi.rating.score}
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {/* 外链按钮 */}
-                        {(() => {
-                          const d = previewDouban;
-                          if (d?.id) {
-                            return (
-                              <a
-                                href={`https://movie.douban.com/subject/${d.id}/`}
-                                target='_blank'
-                                rel='noopener noreferrer'
-                                className='inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline'
-                                title='打开豆瓣页面'
-                              >
-                                <ExternalLink className='w-3.5 h-3.5' /> 豆瓣
-                              </a>
-                            );
-                          }
-                          if (previewBangumi && previewDoubanId) {
-                            return (
-                              <a
-                                href={`https://bgm.tv/subject/${previewDoubanId}`}
-                                target='_blank'
-                                rel='noopener noreferrer'
-                                className='inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-300 hover:underline'
-                                title='打开 Bangumi 页面'
-                              >
-                                <ExternalLink className='w-3.5 h-3.5' /> Bangumi
-                              </a>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                      <div className='text-xs sm:text-sm text-gray-600 dark:text-gray-300'>
-                        年份：{previewData.year || previewItem?.year || '—'}
-                      </div>
-                      <div className='text-xs sm:text-sm text-gray-600 dark:text-gray-300'>
-                        来源：{activeSource?.name}
-                      </div>
-                      <div className='flex flex-wrap gap-2 text-xs'>
-                        {previewItem?.type_name && (
-                          <span className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'>
-                            {previewItem.type_name}
+                      ) : (
+                        <div className='w-[132px] md:w-full aspect-[2/3] bg-[#e8e8e8] dark:bg-[#2a2a2a] rounded-lg flex flex-col items-center justify-center text-[#8f8f8f]'>
+                          <Tv className='w-10 h-10 opacity-50 mb-1.5' />
+                          <span className='text-xs'>暂无封面</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 右侧信息 */}
+                    <div className='flex-1 min-w-0'>
+                      <div className='flex items-center gap-2.5 flex-wrap'>
+                        <span className='text-lg font-bold text-[#111111] dark:text-[#f5f5f5]'>
+                          {previewData.title || previewItem?.title}
+                        </span>
+                        {previewDouban?.rate && (
+                          <span className='px-2 py-0.5 rounded bg-[#00be06] text-white text-xs font-bold'>
+                            豆瓣 {previewDouban.rate}
                           </span>
                         )}
-                        {previewData?.class && (
-                          <span className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'>
-                            {previewData.class}
+                        {!previewDouban?.rate && previewBangumi?.rating?.score && (
+                          <span className='px-2 py-0.5 rounded bg-[#00be06] text-white text-xs font-bold'>
+                            Bangumi {previewBangumi.rating.score}
                           </span>
                         )}
                       </div>
+
+                      {/* 元信息行 */}
+                      <div className='mt-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] space-y-1'>
+                        <div>
+                          <span className='text-[#8f8f8f]'>年份 </span>
+                          {previewData.year || previewItem?.year || '—'}
+                        </div>
+                        <div>
+                          <span className='text-[#8f8f8f]'>来源 </span>
+                          {activeSource?.name}
+                        </div>
+                      </div>
+
+                      {/* 分类标签 */}
+                      {(previewItem?.type_name || previewData?.class) && (
+                        <div className='mt-2.5 flex flex-wrap gap-2'>
+                          {previewItem?.type_name && (
+                            <span className='px-2 py-0.5 rounded border border-[#d9d9d9] dark:border-[#3a3a3a] text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                              {previewItem.type_name}
+                            </span>
+                          )}
+                          {previewData?.class && (
+                            <span className='px-2 py-0.5 rounded border border-[#d9d9d9] dark:border-[#3a3a3a] text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                              {previewData.class}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 简介 */}
                       {(() => {
                         const desc =
                           (previewData?.desc && previewData.desc.trim()) ||
@@ -1250,17 +1122,16 @@ export default function SourceBrowserPage() {
                             String(previewSearchPick.desc).trim()) ||
                           (previewItem?.remarks && previewItem.remarks.trim());
                         return desc ? (
-                          <div className='mt-1 border rounded-md p-2 sm:p-3 bg-gray-50 dark:bg-gray-900 text-xs sm:text-sm text-gray-700 dark:text-gray-300 max-h-32 sm:max-h-40 overflow-auto whitespace-pre-line'>
+                          <p className='mt-3.5 text-sm leading-6 text-[#5f5f5f] dark:text-[#a8a8a8] max-h-36 overflow-auto whitespace-pre-line'>
                             {desc}
-                          </div>
+                          </p>
                         ) : null;
                       })()}
-                      {/* 按需：应你的要求，预览不再展示集数选择列表，保持布局紧凑 */}
-                      {/* Douban/Bangumi 扩展信息 */}
-                      <div className='pt-2 space-y-2'>
-                        {/* Douban */}
+
+                      {/* 豆瓣 / Bangumi 扩展信息 */}
+                      <div className='mt-4 space-y-3'>
                         {previewDoubanLoading && !previewBangumiLoading && (
-                          <div className='text-sm text-gray-500'>
+                          <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
                             加载豆瓣信息...
                           </div>
                         )}
@@ -1268,144 +1139,82 @@ export default function SourceBrowserPage() {
                           (() => {
                             const d = previewDouban;
                             return (
-                              <div className='text-sm text-gray-700 dark:text-gray-300 space-y-1'>
-                                <div className='font-semibold'>豆瓣信息</div>
-                                {d.title && (
-                                  <div>
-                                    标题：{d.title}
-                                    {d.rate ? (
-                                      <span>（评分 {d.rate}）</span>
-                                    ) : null}
-                                  </div>
-                                )}
+                              <div className='text-sm space-y-1'>
                                 {d.directors && d.directors.length > 0 && (
-                                  <div>导演：{d.directors.join('、')}</div>
-                                )}
-                                {d.screenwriters &&
-                                  d.screenwriters.length > 0 && (
-                                    <div>
-                                      编剧：{d.screenwriters.join('、')}
-                                    </div>
-                                  )}
-                                {d.cast && d.cast.length > 0 && (
-                                  <div>
-                                    主演：{d.cast.slice(0, 8).join('、')}
-                                    {d.cast.length > 8 ? '…' : ''}
+                                  <div className='flex'>
+                                    <span className='w-11 shrink-0 text-[#8f8f8f]'>
+                                      导演
+                                    </span>
+                                    <span className='flex-1 min-w-0 text-[#5f5f5f] dark:text-[#a8a8a8] line-clamp-1'>
+                                      {d.directors.join(' / ')}
+                                    </span>
                                   </div>
                                 )}
-                                <div className='flex flex-wrap gap-2 text-xs'>
-                                  {d.genres &&
-                                    d.genres.map((g: string) => (
+                                {d.cast && d.cast.length > 0 && (
+                                  <div className='flex'>
+                                    <span className='w-11 shrink-0 text-[#8f8f8f]'>
+                                      主演
+                                    </span>
+                                    <span className='flex-1 min-w-0 text-[#5f5f5f] dark:text-[#a8a8a8] line-clamp-2'>
+                                      {d.cast.slice(0, 8).join(' / ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {d.genres && d.genres.length > 0 && (
+                                  <div className='flex flex-wrap gap-2 pt-0.5'>
+                                    {d.genres.map((g: string) => (
                                       <span
                                         key={g}
-                                        className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'
+                                        className='px-2 py-0.5 rounded border border-[#d9d9d9] dark:border-[#3a3a3a] text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'
                                       >
                                         {g}
                                       </span>
                                     ))}
-                                  {d.countries &&
-                                    d.countries.map((c: string) => (
-                                      <span
-                                        key={c}
-                                        className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'
-                                      >
-                                        {c}
-                                      </span>
-                                    ))}
-                                  {d.languages &&
-                                    d.languages.map((l: string) => (
-                                      <span
-                                        key={l}
-                                        className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'
-                                      >
-                                        {l}
-                                      </span>
-                                    ))}
-                                </div>
-                                {d.first_aired && (
-                                  <div>首播/上映：{d.first_aired}</div>
-                                )}
-                                {(d.episodes ||
-                                  d.episode_length ||
-                                  d.movie_duration) && (
-                                  <div className='text-xs text-gray-600 dark:text-gray-400'>
-                                    {d.episodes ? `集数：${d.episodes} ` : ''}
-                                    {d.episode_length
-                                      ? `单集：${d.episode_length} 分钟 `
-                                      : ''}
-                                    {d.movie_duration
-                                      ? `片长：${d.movie_duration} 分钟`
-                                      : ''}
                                   </div>
                                 )}
                                 {d.plot_summary && (
-                                  <div className='text-xs text-gray-600 dark:text-gray-400 leading-relaxed'>
+                                  <p className='text-xs leading-6 text-[#5f5f5f] dark:text-[#a8a8a8] pt-1'>
                                     {d.plot_summary}
-                                  </div>
+                                  </p>
                                 )}
                               </div>
                             );
                           })()}
 
-                        {/* Bangumi */}
                         {previewBangumiLoading && (
-                          <div className='text-sm text-gray-500'>
+                          <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
                             加载 Bangumi 信息...
                           </div>
                         )}
                         {previewBangumi && (
-                          <div className='text-sm text-gray-700 dark:text-gray-300 space-y-1'>
-                            <div className='font-semibold'>Bangumi 信息</div>
-                            <div>
-                              标题：
-                              {previewBangumi.name_cn || previewBangumi.name}
-                              {previewBangumi.rating?.score ? (
-                                <span>
-                                  （评分 {previewBangumi.rating.score}）
-                                </span>
-                              ) : null}
-                            </div>
+                          <div className='text-sm space-y-1'>
                             {previewBangumi.date && (
-                              <div>首播：{previewBangumi.date}</div>
+                              <div className='flex'>
+                                <span className='w-11 shrink-0 text-[#8f8f8f]'>
+                                  首播
+                                </span>
+                                <span className='flex-1 min-w-0 text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                                  {previewBangumi.date}
+                                </span>
+                              </div>
                             )}
                             {Array.isArray(previewBangumi.tags) &&
                               previewBangumi.tags.length > 0 && (
-                                <div className='flex flex-wrap gap-2 text-xs'>
+                                <div className='flex flex-wrap gap-2 pt-0.5'>
                                   {previewBangumi.tags.slice(0, 10).map((t) => (
                                     <span
                                       key={t.name}
-                                      className='px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700'
+                                      className='px-2 py-0.5 rounded border border-[#d9d9d9] dark:border-[#3a3a3a] text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'
                                     >
                                       {t.name}
                                     </span>
                                   ))}
                                 </div>
                               )}
-                            {Array.isArray(previewBangumi.infobox) &&
-                              previewBangumi.infobox.length > 0 && (
-                                <div className='text-xs space-y-0.5'>
-                                  {previewBangumi.infobox
-                                    .slice(0, 10)
-                                    .map((info, idx: number) => (
-                                      <div key={idx}>
-                                        {info.key}：
-                                        {Array.isArray(info.value)
-                                          ? info.value
-                                              .map((v) =>
-                                                typeof v === 'string' ? v : v.v
-                                              )
-                                              .join('、')
-                                          : typeof info.value === 'string'
-                                          ? info.value
-                                          : info.value.v}
-                                      </div>
-                                    ))}
-                                </div>
-                              )}
                             {previewBangumi.summary && (
-                              <div className='text-xs text-gray-600 dark:text-gray-400 leading-relaxed'>
+                              <p className='text-xs leading-6 text-[#5f5f5f] dark:text-[#a8a8a8] pt-1'>
                                 {previewBangumi.summary}
-                              </div>
+                              </p>
                             )}
                           </div>
                         )}
@@ -1414,20 +1223,16 @@ export default function SourceBrowserPage() {
                   </div>
                 )}
               </div>
+
               {/* 底部操作栏 */}
-              <div className='px-5 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-white/90 via-blue-50/50 to-white/90 dark:from-gray-800/90 dark:via-blue-900/10 dark:to-gray-800/90 backdrop-blur-md flex items-center justify-between gap-3'>
-                <div className='text-xs sm:text-sm text-gray-500 dark:text-gray-400'>
-                  {previewData?.class && (
-                    <span className='inline-flex items-center gap-1.5'>
-                      <span className='w-1.5 h-1.5 rounded-full bg-blue-500'></span>
-                      {previewData.class}
-                    </span>
-                  )}
+              <div className='px-5 sm:px-6 py-3.5 border-t border-[#e8e8e8] dark:border-[#3a3a3a] flex items-center justify-between gap-3 shrink-0'>
+                <div className='text-xs sm:text-sm text-[#5f5f5f] dark:text-[#a8a8a8] truncate'>
+                  {previewData?.class || previewItem?.type_name}
                 </div>
-                <div className='flex items-center gap-2 sm:gap-3'>
+                <div className='flex items-center gap-2.5 shrink-0'>
                   <button
                     onClick={() => setPreviewOpen(false)}
-                    className='px-3 sm:px-4 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors'
+                    className='px-4 py-2 rounded-lg border border-[#d9d9d9] dark:border-[#3a3a3a] text-[#5f5f5f] dark:text-[#a8a8a8] hover:bg-[#e8e8e8] dark:hover:bg-[#2a2a2a] text-sm font-medium transition-colors'
                   >
                     取消
                   </button>
@@ -1435,9 +1240,8 @@ export default function SourceBrowserPage() {
                     onClick={() => {
                       if (previewItem) goPlay(previewItem);
                     }}
-                    className='group relative inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:scale-105'
+                    className='inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-[#00be06] hover:bg-[#00a304] text-white text-sm font-semibold transition-colors'
                   >
-                    <div className='absolute inset-0 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-400 blur-lg opacity-0 group-hover:opacity-50 transition-opacity -z-10'></div>
                     <svg
                       className='w-4 h-4'
                       fill='currentColor'
