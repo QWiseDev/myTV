@@ -12,6 +12,7 @@ jest.mock('@/lib/api-cache.client', () => ({
 }));
 
 jest.mock('../utils/sourcePreference', () => ({
+  ...jest.requireActual('../utils/sourcePreference'),
   preferBestSource: jest.fn(async (sources) => sources[0]),
 }));
 

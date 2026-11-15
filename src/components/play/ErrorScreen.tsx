@@ -6,8 +6,8 @@ interface ErrorScreenProps {
 
 export default function ErrorScreen({ error }: ErrorScreenProps) {
   return (
-    <PageLayout activePath='/play'>
-      <div className='flex items-center justify-center min-h-screen bg-transparent'>
+    <PageLayout activePath='/play' theater>
+      <div className='flex min-h-screen items-center justify-center bg-transparent md:h-full md:min-h-0'>
         <div className='text-center max-w-md mx-auto px-6'>
           {/* 错误图标 */}
           <div className='relative mb-8'>

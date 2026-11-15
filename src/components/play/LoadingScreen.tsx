@@ -17,8 +17,8 @@ export default function LoadingScreen({
   speedTestProgress,
 }: LoadingScreenProps) {
   return (
-    <PageLayout activePath='/play'>
-      <div className='flex items-center justify-center min-h-screen bg-transparent'>
+    <PageLayout activePath='/play' theater>
+      <div className='flex min-h-screen items-center justify-center bg-transparent md:h-full md:min-h-0'>
         <div className='text-center max-w-md mx-auto px-6'>
           {/* 动画影院图标 */}
           <div className='relative mb-8'>
@@ -55,8 +55,8 @@ export default function LoadingScreen({
                   loadingStage === 'searching' || loadingStage === 'fetching'
                     ? 'bg-green-500 scale-125'
                     : loadingStage === 'preferring' || loadingStage === 'ready'
-                    ? 'bg-green-500'
-                    : 'bg-gray-300'
+                      ? 'bg-green-500'
+                      : 'bg-gray-300'
                 }`}
               ></div>
               <div
@@ -64,13 +64,15 @@ export default function LoadingScreen({
                   loadingStage === 'preferring'
                     ? 'bg-green-500 scale-125'
                     : loadingStage === 'ready'
-                    ? 'bg-green-500'
-                    : 'bg-gray-300'
+                      ? 'bg-green-500'
+                      : 'bg-gray-300'
                 }`}
               ></div>
               <div
                 className={`w-3 h-3 rounded-full transition-all duration-500 ${
-                  loadingStage === 'ready' ? 'bg-green-500 scale-125' : 'bg-gray-300'
+                  loadingStage === 'ready'
+                    ? 'bg-green-500 scale-125'
+                    : 'bg-gray-300'
                 }`}
               ></div>
             </div>
@@ -84,8 +86,8 @@ export default function LoadingScreen({
                     loadingStage === 'searching' || loadingStage === 'fetching'
                       ? '33%'
                       : loadingStage === 'preferring'
-                      ? '66%'
-                      : '100%',
+                        ? '66%'
+                        : '100%',
                 }}
               ></div>
             </div>

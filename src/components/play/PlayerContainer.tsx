@@ -134,41 +134,6 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
                 showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              {/* 选集和换源面板控制按钮 */}
-              {onToggleEpisodePanel && (
-                <button
-                  onClick={onToggleEpisodePanel}
-                  className='group relative flex items-center justify-center w-8 h-8 rounded-lg text-white shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 bg-gradient-to-r from-blue-500/80 to-cyan-500/80 hover:from-blue-600/85 hover:to-cyan-600/85 backdrop-blur-sm border border-white/20'
-                  title={
-                    isEpisodeSelectorCollapsed
-                      ? '显示选集和换源面板'
-                      : '隐藏选集和换源面板'
-                  }
-                  style={{
-                    backdropFilter: 'blur(16px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                  }}
-                >
-                  <svg
-                    className={`w-3.5 h-3.5 transition-all duration-300 ${isEpisodeSelectorCollapsed ? 'rotate-0' : 'rotate-180'}`}
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2.5}
-                      d='M15 19l-7-7 7-7'
-                    />
-                  </svg>
-                  {/* 悬停时显示文字提示 */}
-                  <div className='absolute right-full mr-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-gray-900/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none'>
-                    {isEpisodeSelectorCollapsed ? '显示面板' : '隐藏面板'}
-                  </div>
-                </button>
-              )}
-
               {/* 跳过设置按钮 */}
               <button
                 onClick={() => onSkipSettingChange(true)}
@@ -198,6 +163,47 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
                 </div>
               </button>
             </div>
+          )}
+
+          {/* 选集面板收起把手（爱奇艺式）：贴播放器右边框垂直居中，
+              半透明毛玻璃，跟随播放器悬停显隐（与底部进度条一致） */}
+          {onToggleEpisodePanel && (
+            <button
+              onClick={onToggleEpisodePanel}
+              title={
+                isEpisodeSelectorCollapsed
+                  ? '显示选集和换源面板'
+                  : '收起选集和换源面板'
+              }
+              aria-label={
+                isEpisodeSelectorCollapsed
+                  ? '显示选集和换源面板'
+                  : '收起选集和换源面板'
+              }
+              className={`group absolute right-0 top-1/2 z-20 flex h-[110px] w-10 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-white/10 bg-[#262626]/60 text-white/85 shadow-lg shadow-black/30 backdrop-blur-md transition-all duration-300 hover:bg-[#262626]/85 hover:text-white active:scale-95 ${
+                showOverlay ? 'opacity-100' : 'pointer-events-none opacity-0'
+              }`}
+            >
+              <svg
+                className={`h-5 w-5 transition-transform duration-300 ${
+                  isEpisodeSelectorCollapsed ? 'rotate-180' : 'rotate-0'
+                }`}
+                fill='none'
+                stroke='currentColor'
+                strokeWidth={2.5}
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  d='M9 18l6-6-6-6'
+                />
+              </svg>
+              {/* 悬停时显示文字提示 */}
+              <div className='pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded bg-gray-900/90 px-2 py-1 text-xs text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100'>
+                {isEpisodeSelectorCollapsed ? '显示面板' : '收起面板'}
+              </div>
+            </button>
           )}
 
           {/* SkipController 组件 */}

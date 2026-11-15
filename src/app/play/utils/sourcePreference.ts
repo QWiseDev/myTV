@@ -53,6 +53,43 @@ function createTimeoutSignal(timeoutMs: number): {
 }
 
 /**
+ * 优先源站点 key（置顶展示 + 优选测速时优先探测）。
+ * 电影天堂（dyttzyapi.com）实测响应与下载速度最优。
+ * 站点订阅同步按 key 合并、key 通常取域名保持稳定，故此列表不受同步影响；
+ * 另按名称兜底匹配，防上游订阅变更 key 后失效。
+ */
+export const PREFERRED_SOURCE_KEYS: string[] = ['dyttzyapi.com'];
+
+/** 优先源名称兜底（key 变化时仍能按名称命中） */
+export const PREFERRED_SOURCE_NAMES: string[] = ['电影天堂'];
+
+/**
+ * 聚合搜源结果按优先源置顶排序（稳定排序，其余保持原相对顺序）。
+ * 优选测速只探测列表前几个源，优先源排前可大幅提高其命中率。
+ */
+export function sortSourcesByPriority<
+  T extends { source: string; source_name?: string },
+>(sources: T[]): T[] {
+  if (sources.length <= 1) return sources;
+  const rankOf = (item: T): number => {
+    const byKey = PREFERRED_SOURCE_KEYS.indexOf(item.source);
+    if (byKey !== -1) return byKey;
+    const name = (item.source_name || '').toLowerCase();
+    const byName = PREFERRED_SOURCE_NAMES.findIndex((n) =>
+      name.includes(n.toLowerCase()),
+    );
+    return byName === -1
+      ? Number.MAX_SAFE_INTEGER
+      : PREFERRED_SOURCE_KEYS.length + byName;
+  };
+
+  return sources
+    .map((item, index) => ({ item, index, rank: rankOf(item) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
+/**
  * 播放源优选函数（针对旧iPad做极端保守优化）
  */
 export async function preferBestSource(
@@ -92,7 +129,6 @@ export async function lightweightPreference(
   // 🚀 优化：进一步减少测试数量以加速加载
   const maxTestCount = 5; // 从8减少到5，只测试最快的5个源
   const sourcesToTest = sources.slice(0, maxTestCount);
-
 
   const results = await Promise.all(
     sourcesToTest.map(async (source, index) => {
@@ -167,7 +203,6 @@ export async function lightweightPreference(
     return sources[0];
   }
 
-
   // 清除测速进度状态
   setSpeedTestProgress(null);
 
@@ -191,7 +226,6 @@ async function progressiveSpeedTest(
 ): Promise<SearchResult> {
   const maxTestCount = 8; // 增加测试数量，因为使用增量策略
   const sourcesToTest = sources.slice(0, maxTestCount);
-
 
   // 第一阶段：快速测试前3个最可靠的源
   const firstBatchSources = sourcesToTest.slice(0, 3);
@@ -218,7 +252,6 @@ async function progressiveSpeedTest(
   });
 
   if (hasGoodSource && firstBatchResults.length > 0) {
-
     // 计算评分并返回最佳源
     const successfulResults = firstBatchResults.filter(Boolean) as Array<{
       source: SearchResult;
@@ -418,7 +451,6 @@ async function iPadLightweightPreference(
   const maxTestCount = 6; // 测试前6个源，平衡速度和可靠性
   const sourcesToTest = sources.slice(0, maxTestCount);
 
-
   const results = await Promise.allSettled(
     sourcesToTest.map(async (source, index) => {
       try {
@@ -528,7 +560,6 @@ async function iPadLightweightPreference(
 
   // 按评分排序，选择最佳源
   validResults.sort((a, b) => b.score - a.score);
-
 
   // 清除测速进度状态
   setSpeedTestProgress(null);

@@ -14,7 +14,10 @@ import {
   replaceSourceDetail,
   resolveDoubanId,
 } from '../utils/sourceDetails';
-import { preferBestSource } from '../utils/sourcePreference';
+import {
+  preferBestSource,
+  sortSourcesByPriority,
+} from '../utils/sourcePreference';
 import {
   fuzzyMatchSources,
   matchesSourceLoosely,
@@ -158,7 +161,8 @@ export function useSourceInitialization({
           if (query && query.trim()) {
             const { bestResults } = await searchSourcesByTitle({
               query,
-              matchResult: (result) => matchesSourceLoosely(result.title, query),
+              matchResult: (result) =>
+                matchesSourceLoosely(result.title, query),
               onVariantError: (variant, error) =>
                 console.warn(`搜索变体 "${variant}" 失败:`, error),
             });
@@ -246,7 +250,11 @@ export function useSourceInitialization({
       const searchedSources = await fetchSourcesData(query, { silent: true });
       if (!isActive() || searchedSources.length === 0) return;
 
-      const mergedSources = dedupeSources([currentDetail, ...searchedSources]);
+      // 优先源紧跟当前源之后置顶，保持换源面板的排序一致性
+      const mergedSources = dedupeSources([
+        currentDetail,
+        ...sortSourcesByPriority(searchedSources),
+      ]);
       setAvailableSources(mergedSources);
     };
 
@@ -318,6 +326,8 @@ export function useSourceInitialization({
           if (query.trim()) {
             setSourceSearchLoading(true);
             sourcesInfo = await fetchSourcesData(query);
+            // 优先源置顶：测速优选只探测前列源，置顶可提高优质源命中率
+            sourcesInfo = sortSourcesByPriority(sourcesInfo);
           }
           if (!isActive()) return;
 
@@ -413,7 +423,6 @@ export function useSourceInitialization({
           sourcesInfo = replaceSourceDetail(sourcesInfo, detailData);
           setAvailableSources(sourcesInfo);
         }
-
 
         setNeedPrefer(false);
         setCurrentSource(detailData.source);
