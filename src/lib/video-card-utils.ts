@@ -232,40 +232,40 @@ export function getRatingBadgeStyle(rateStr: string): RatingBadgeStyle {
 
   if (rateNum >= 8.5) {
     return {
-      bgColor: 'bg-[#141413]/90 dark:bg-[#f8f6f0]/90',
+      bgColor: 'bg-[#111111]/90 dark:bg-[#f5f5f5]/90',
       ringColor: 'ring-1 ring-white/25',
       shadowColor: 'shadow-sm',
       textColor: 'text-white',
-      glowClass: 'dark:text-[#141413]',
+      glowClass: 'dark:text-[#111111]',
     };
   }
 
   if (rateNum >= 7.0) {
     return {
-      bgColor: 'bg-[#d97757]/92',
+      bgColor: 'bg-[#00be06]/92',
       ringColor: 'ring-1 ring-white/25',
       shadowColor: 'shadow-sm',
       textColor: 'text-white',
-      glowClass: 'dark:bg-[#e09a7a]/92 dark:text-[#141413]',
+      glowClass: 'dark:bg-[#1acd50]/92 dark:text-[#111111]',
     };
   }
 
   if (rateNum >= 6.0) {
     return {
-      bgColor: 'bg-[#8f4329]/92',
+      bgColor: 'bg-[#008602]/92',
       ringColor: 'ring-1 ring-white/25',
       shadowColor: 'shadow-sm',
       textColor: 'text-white',
-      glowClass: 'dark:bg-[#c87858]/92 dark:text-[#141413]',
+      glowClass: 'dark:bg-[#c87858]/92 dark:text-[#111111]',
     };
   }
 
   return {
-    bgColor: 'bg-[#5e5d59]/92 dark:bg-[#d9d3c9]/92',
+    bgColor: 'bg-[#5f5f5f]/92 dark:bg-[#d9d9d9]/92',
     ringColor: 'ring-1 ring-white/25',
     shadowColor: 'shadow-sm',
     textColor: 'text-white',
-    glowClass: 'dark:text-[#141413]',
+    glowClass: 'dark:text-[#111111]',
   };
 }
 

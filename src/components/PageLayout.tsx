@@ -23,16 +23,16 @@ const PageLayout = ({
     <div className='w-full min-h-screen'>
       <Suspense
         fallback={
-          <header className='fixed top-0 left-0 right-0 z-50 bg-[#faf9f5]/92 backdrop-blur-xl border-b border-[#e8e6dc] dark:bg-[#191817]/92 dark:border-[#3d3934]'>
+          <header className='fixed top-0 left-0 right-0 z-50 bg-[#ffffff]/92 backdrop-blur-xl border-b border-[#e8e8e8] dark:bg-[#0d0d0d]/92 dark:border-[#3a3a3a]'>
             <div className='relative h-16 px-3 lg:px-4 xl:px-6'>
               <div className='flex items-center justify-between h-full max-w-full xl:max-w-7xl mx-auto'>
                 <div className='flex items-center gap-2'>
-                  <div className='h-2.5 w-2.5 rounded-full bg-[#e8e6dc] dark:bg-[#3d3934] animate-pulse' />
-                  <div className='h-6 w-24 bg-[#e8e6dc] dark:bg-[#3d3934] rounded animate-pulse' />
+                  <div className='h-2.5 w-2.5 rounded-full bg-[#e8e8e8] dark:bg-[#3a3a3a] animate-pulse' />
+                  <div className='h-6 w-24 bg-[#e8e8e8] dark:bg-[#3a3a3a] rounded animate-pulse' />
                 </div>
                 <div className='flex items-center gap-2'>
-                  <div className='h-8 w-20 bg-[#e8e6dc] dark:bg-[#3d3934] rounded-md animate-pulse' />
-                  <div className='h-8 w-8 bg-[#e8e6dc] dark:bg-[#3d3934] rounded-md animate-pulse' />
+                  <div className='h-8 w-20 bg-[#e8e8e8] dark:bg-[#3a3a3a] rounded-md animate-pulse' />
+                  <div className='h-8 w-8 bg-[#e8e8e8] dark:bg-[#3a3a3a] rounded-md animate-pulse' />
                 </div>
               </div>
             </div>

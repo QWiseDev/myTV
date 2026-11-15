@@ -74,8 +74,8 @@ const Logo = () => {
       onClick={handleLogoClick}
     >
       <div className='relative flex items-center gap-2'>
-        <span className='h-2.5 w-2.5 rounded-full bg-[#d97757] transition-transform duration-200 group-hover:scale-125 dark:bg-[#e09a7a]' />
-        <span className='relative text-2xl font-semibold tracking-normal text-[#141413] transition-colors duration-200 group-hover:text-[#b85c38] dark:text-[#f8f6f0] dark:group-hover:text-[#f0b195] font-display'>
+        <span className='h-2.5 w-2.5 rounded-full bg-[#00be06] transition-transform duration-200 group-hover:scale-125 dark:bg-[#1acd50]' />
+        <span className='relative text-2xl font-semibold tracking-normal text-[#111111] transition-colors duration-200 group-hover:text-[#00a304] dark:text-[#f5f5f5] dark:group-hover:text-[#57e07a] font-display'>
           {siteName}
         </span>
       </div>
@@ -195,7 +195,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
 
   return (
     <header
-      className='fixed top-0 left-0 right-0 z-50 bg-[#faf9f5]/92 backdrop-blur-xl border-b border-[#e8e6dc] shadow-none dark:bg-[#191817]/92 dark:border-[#3d3934] transition-all duration-300'
+      className='fixed top-0 left-0 right-0 z-50 bg-[#ffffff]/92 backdrop-blur-xl border-b border-[#e8e8e8] shadow-none dark:bg-[#0d0d0d]/92 dark:border-[#3a3a3a] transition-all duration-300'
       style={{
         backdropFilter: 'blur(18px) saturate(130%)',
         WebkitBackdropFilter: 'blur(18px) saturate(130%)',
@@ -233,19 +233,19 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
                 const Icon = item.icon;
 
                 const theme = {
-                  hover: 'hover:bg-[#f0eee6] dark:hover:bg-[#302d29]',
+                  hover: 'hover:bg-[#f2f2f2] dark:hover:bg-[#2a2a2a]',
                   active:
-                    'data-[active=true]:bg-[#ead8cf] dark:data-[active=true]:bg-[#4a332a]',
-                  text: 'text-[#30302e] dark:text-[#d9d3c9]',
-                  hoverText: 'hover:text-[#141413] dark:hover:text-[#f8f6f0]',
+                    'data-[active=true]:bg-[#e3f8e3] dark:data-[active=true]:bg-[#123a18]',
+                  text: 'text-[#2c2c2c] dark:text-[#d9d9d9]',
+                  hoverText: 'hover:text-[#111111] dark:hover:text-[#f5f5f5]',
                   activeText:
-                    'data-[active=true]:text-[#8f4329] dark:data-[active=true]:text-[#f0b195]',
-                  icon: 'text-[#5e5d59] dark:text-[#b7b1a8]',
+                    'data-[active=true]:text-[#008602] dark:data-[active=true]:text-[#57e07a]',
+                  icon: 'text-[#5f5f5f] dark:text-[#a8a8a8]',
                   hoverIcon:
-                    'group-hover:text-[#b85c38] dark:group-hover:text-[#f0b195]',
+                    'group-hover:text-[#00a304] dark:group-hover:text-[#57e07a]',
                   activeIcon:
-                    'data-[active=true]:text-[#b85c38] dark:data-[active=true]:text-[#f0b195]',
-                  indicator: 'bg-[#b85c38] dark:bg-[#e09a7a]',
+                    'data-[active=true]:text-[#00a304] dark:data-[active=true]:text-[#57e07a]',
+                  indicator: 'bg-[#00a304] dark:bg-[#1acd50]',
                 };
 
                 return (
@@ -312,7 +312,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
 
                     {/* 图标容器：圆角描边感，hover 暖色淡底高亮，呼应首页板块图标风格 */}
                     <div
-                      className={`relative flex items-center justify-center w-4 h-4 rounded-md transition-colors duration-200 group-hover:bg-[#ead8cf]/60 dark:group-hover:bg-[#4a332a]/60 ${theme.icon} ${theme.hoverIcon} ${theme.activeIcon}`}
+                      className={`relative flex items-center justify-center w-4 h-4 rounded-md transition-colors duration-200 group-hover:bg-[#e3f8e3]/60 dark:group-hover:bg-[#123a18]/60 ${theme.icon} ${theme.hoverIcon} ${theme.activeIcon}`}
                     >
                       <Icon className='w-3.5 h-3.5 lg:w-4 lg:h-4 transition-transform duration-200 group-hover:scale-110 group-active:scale-95' />
                     </div>
@@ -338,10 +338,10 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
           <div className='flex items-center gap-1.5 lg:gap-2 ml-2 lg:ml-4 xl:ml-6 flex-shrink-0'>
             {/* 桌面端显示主题切换和用户菜单 */}
             <div className='hidden md:flex items-center gap-1.5 lg:gap-2'>
-              <div className='p-1 rounded-md bg-[#f0eee6]/70 dark:bg-[#302d29]/70 backdrop-blur-sm border border-[#e8e6dc] dark:border-[#3d3934]'>
+              <div className='p-1 rounded-md bg-[#f2f2f2]/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm border border-[#e8e8e8] dark:border-[#3a3a3a]'>
                 <ThemeToggle />
               </div>
-              <div className='p-1 rounded-md bg-[#f0eee6]/70 dark:bg-[#302d29]/70 backdrop-blur-sm border border-[#e8e6dc] dark:border-[#3d3934]'>
+              <div className='p-1 rounded-md bg-[#f2f2f2]/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm border border-[#e8e8e8] dark:border-[#3a3a3a]'>
                 <UserMenu />
               </div>
             </div>
@@ -349,7 +349,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
             {/* 移动端汉堡菜单 - 增强设计 */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className='md:hidden p-2 rounded-md text-[#5e5d59] hover:text-[#141413] hover:bg-[#f0eee6] dark:text-[#b7b1a8] dark:hover:text-[#f8f6f0] dark:hover:bg-[#302d29] transition-all duration-300 backdrop-blur-sm border border-[#e8e6dc] dark:border-[#3d3934]'
+              className='md:hidden p-2 rounded-md text-[#5f5f5f] hover:text-[#111111] hover:bg-[#f2f2f2] dark:text-[#a8a8a8] dark:hover:text-[#f5f5f5] dark:hover:bg-[#2a2a2a] transition-all duration-300 backdrop-blur-sm border border-[#e8e8e8] dark:border-[#3a3a3a]'
             >
               {isMobileMenuOpen ? (
                 <X className='h-4 w-4 transition-transform duration-300 rotate-90' />
@@ -364,7 +364,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
       {/* 移动端菜单下拉 */}
       {isMobileMenuOpen && (
         <div
-          className='lg:hidden absolute top-full left-0 right-0 bg-[#faf9f5]/96 backdrop-blur-xl border-b border-[#e8e6dc] shadow-sm dark:bg-[#191817]/96 dark:border-[#3d3934]'
+          className='lg:hidden absolute top-full left-0 right-0 bg-[#ffffff]/96 backdrop-blur-xl border-b border-[#e8e8e8] shadow-sm dark:bg-[#0d0d0d]/96 dark:border-[#3a3a3a]'
           style={{
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
@@ -446,16 +446,16 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
                     setIsMobileMenuOpen(false);
                   }}
                   data-active={isActive}
-                  className='group flex items-center rounded-md px-3 py-2 text-sm text-[#30302e] hover:bg-[#f0eee6] data-[active=true]:bg-[#ead8cf] data-[active=true]:text-[#8f4329] transition-all duration-200 dark:text-[#d9d3c9] dark:hover:bg-[#302d29] dark:data-[active=true]:bg-[#4a332a] dark:data-[active=true]:text-[#f0b195] gap-3'
+                  className='group flex items-center rounded-md px-3 py-2 text-sm text-[#2c2c2c] hover:bg-[#f2f2f2] data-[active=true]:bg-[#e3f8e3] data-[active=true]:text-[#008602] transition-all duration-200 dark:text-[#d9d9d9] dark:hover:bg-[#2a2a2a] dark:data-[active=true]:bg-[#123a18] dark:data-[active=true]:text-[#57e07a] gap-3'
                 >
-                  <Icon className='h-4 w-4 text-[#5e5d59] group-hover:text-[#b85c38] data-[active=true]:text-[#b85c38] dark:text-[#b7b1a8] dark:group-hover:text-[#f0b195] dark:data-[active=true]:text-[#f0b195]' />
+                  <Icon className='h-4 w-4 text-[#5f5f5f] group-hover:text-[#00a304] data-[active=true]:text-[#00a304] dark:text-[#a8a8a8] dark:group-hover:text-[#57e07a] dark:data-[active=true]:text-[#57e07a]' />
                   <span>{item.label}</span>
                 </Link>
               );
             })}
 
             {/* 移动端主题切换和用户菜单 */}
-            <div className='flex items-center gap-2 pt-2 border-t border-[#e8e6dc] dark:border-[#3d3934]'>
+            <div className='flex items-center gap-2 pt-2 border-t border-[#e8e8e8] dark:border-[#3a3a3a]'>
               <ThemeToggle />
               <UserMenu />
             </div>

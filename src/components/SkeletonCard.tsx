@@ -5,7 +5,7 @@ export default function SkeletonCard() {
   return (
     <div className='w-full'>
       {/* 海报骨架 */}
-      <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-[#e8e6dc] bg-[#f0eee6] dark:border-[#3d3934] dark:bg-[#302d29]'>
+      <div className='relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-[#e8e8e8] bg-[#f2f2f2] dark:border-[#3a3a3a] dark:bg-[#2a2a2a]'>
         {/* Shimmer 效果 */}
         <div
           className='absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent'
@@ -14,12 +14,12 @@ export default function SkeletonCard() {
             animationIterationCount: 'infinite',
           }}
         />
-        <div className='absolute inset-0 bg-[#e8e6dc] dark:bg-[#3d3934]'></div>
+        <div className='absolute inset-0 bg-[#e8e8e8] dark:bg-[#3a3a3a]'></div>
       </div>
 
       {/* 标题骨架 */}
       <div className='mt-2 space-y-2'>
-        <div className='h-4 bg-[#e8e6dc] dark:bg-[#3d3934] rounded overflow-hidden relative'>
+        <div className='h-4 bg-[#e8e8e8] dark:bg-[#3a3a3a] rounded overflow-hidden relative'>
           <div
             className='absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent'
             style={{
@@ -29,7 +29,7 @@ export default function SkeletonCard() {
             }}
           />
         </div>
-        <div className='h-3 w-3/4 bg-[#e8e6dc] dark:bg-[#3d3934] rounded overflow-hidden relative'>
+        <div className='h-3 w-3/4 bg-[#e8e8e8] dark:bg-[#3a3a3a] rounded overflow-hidden relative'>
           <div
             className='absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent'
             style={{

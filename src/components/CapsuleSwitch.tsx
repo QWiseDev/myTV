@@ -55,14 +55,14 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative inline-flex rounded-md border border-[#e8e6dc] bg-[#f0eee6]/80 p-1 shadow-none dark:border-[#3d3934] dark:bg-[#302d29]/80 ${
+      className={`relative inline-flex rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/80 p-1 shadow-none dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/80 ${
         className || ''
       }`}
     >
       {/* 滑动的暖色指示器 */}
       {indicatorStyle.width > 0 && (
         <div
-          className='absolute top-1 bottom-1 rounded bg-[#141413] shadow-sm transition-all duration-300 ease-out dark:bg-[#f8f6f0]'
+          className='absolute top-1 bottom-1 rounded bg-[#111111] shadow-sm transition-all duration-300 ease-out dark:bg-[#f5f5f5]'
           style={{
             left: `${indicatorStyle.left}px`,
             width: `${indicatorStyle.width}px`,
@@ -81,8 +81,8 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
             onClick={() => onChange(opt.value)}
             className={`relative z-10 w-16 rounded px-3 py-1 text-xs sm:w-20 sm:py-2 sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
               isActive
-                ? 'text-[#faf9f5] dark:text-[#141413]'
-                : 'text-[#5e5d59] hover:text-[#141413] dark:text-[#b7b1a8] dark:hover:text-[#f8f6f0]'
+                ? 'text-[#ffffff] dark:text-[#111111]'
+                : 'text-[#5f5f5f] hover:text-[#111111] dark:text-[#a8a8a8] dark:hover:text-[#f5f5f5]'
             }`}
           >
             {opt.label}

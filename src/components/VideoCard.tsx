@@ -690,6 +690,19 @@ const VideoCard = memo(function VideoCard(
     });
 
     const config = useMemo(() => getVideoCardConfig(from, rate), [from, rate]);
+    // 爱奇艺式副标题类型标签
+    const typeLabel =
+      type === 'movie'
+        ? '电影'
+        : type === 'tv'
+          ? '剧集'
+          : type === 'show'
+            ? '综艺'
+            : '';
+    const subtitleParts = [
+      ...(actualYear && !config.showYear ? [actualYear] : []),
+      ...(typeLabel ? [typeLabel] : []),
+    ];
     const isLiveCard = origin === 'live';
     const actionSheetSources = useMemo(
       () =>
@@ -729,7 +742,7 @@ const VideoCard = memo(function VideoCard(
             <a
               href={playUrl}
               aria-label={`播放 ${actualTitle}`}
-              className='absolute inset-0 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d97757] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#1f1d1a]'
+              className='absolute inset-0 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00be06] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#141414]'
               onClick={handlePrimaryLinkClick}
               onDragStart={preventDragStart}
               {...longPressProps}
@@ -740,9 +753,9 @@ const VideoCard = memo(function VideoCard(
           <div
             className={`relative aspect-[2/3] overflow-hidden rounded-lg ${
               isLiveCard
-                ? 'ring-1 ring-[#d8d3c7] dark:ring-[#4a463f]'
+                ? 'ring-1 ring-[#d9d9d9] dark:ring-[#464646]'
                 : ''
-            } border border-[#e8e6dc] bg-[#f0eee6] shadow-sm transition-all duration-300 group-hover:border-[#d8c0b4] group-hover:shadow-[0_18px_45px_rgba(48,48,46,0.16)] dark:border-[#3d3934] dark:bg-[#302d29] dark:group-hover:border-[#6a5044] dark:group-hover:shadow-[0_18px_45px_rgba(0,0,0,0.34)]`}
+            } border border-[#e8e8e8] bg-[#f2f2f2] shadow-sm transition-all duration-300 group-hover:border-[#c4ecc8] group-hover:shadow-[0_18px_45px_rgba(48,48,46,0.16)] dark:border-[#3a3a3a] dark:bg-[#2a2a2a] dark:group-hover:border-[#1f4a26] dark:group-hover:shadow-[0_18px_45px_rgba(0,0,0,0.34)]`}
             style={noSelectStyle}
             onContextMenu={preventContextMenu}
           >
@@ -799,7 +812,7 @@ const VideoCard = memo(function VideoCard(
                 <PlayCircleIcon
                   size={50}
                   strokeWidth={0.8}
-                  className='text-white fill-transparent transition-all duration-300 ease-out hover:fill-[#d97757] hover:scale-[1.1]'
+                  className='text-white fill-transparent transition-all duration-300 ease-out hover:fill-[#00be06] hover:scale-[1.1]'
                   style={noSelectStyle}
                   onContextMenu={preventContextMenu}
                 />
@@ -819,7 +832,7 @@ const VideoCard = memo(function VideoCard(
                     data-button='true'
                     aria-label={`删除 ${actualTitle} 的播放记录`}
                     onClick={handleDeleteRecord}
-                    className='inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-300 ease-out hover:text-[#d97757] hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
+                    className='inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-300 ease-out hover:text-[#00be06] hover:scale-[1.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
                     style={noSelectStyle}
                     onContextMenu={preventContextMenu}
                   >
@@ -881,7 +894,7 @@ const VideoCard = memo(function VideoCard(
                 onContextMenu={preventContextMenu}
               >
                 <div
-                  className='bg-[#d97757] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#b85c38] hover:scale-[1.1] transition-all duration-300 ease-out'
+                  className='bg-[#00be06] text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:bg-[#00a304] hover:scale-[1.1] transition-all duration-300 ease-out'
                   style={noSelectStyle}
                   onContextMenu={preventContextMenu}
                 >
@@ -906,30 +919,30 @@ const VideoCard = memo(function VideoCard(
           {/* 进度条 */}
           {config.showProgress && progress !== undefined && (
             <div
-              className='mt-1 h-1 w-full bg-[#e8e6dc] rounded-full overflow-hidden dark:bg-[#3d3934]'
+              className='mt-1 h-1 w-full bg-[#e8e8e8] rounded-full overflow-hidden dark:bg-[#3a3a3a]'
               style={noSelectStyle}
               onContextMenu={preventContextMenu}
             >
               <div
-                className='h-full bg-[#d97757] transition-all duration-500 ease-out dark:bg-[#e09a7a]'
+                className='h-full bg-[#00be06] transition-all duration-500 ease-out dark:bg-[#1acd50]'
                 style={{ ...noSelectStyle, width: `${progress}%` }}
                 onContextMenu={preventContextMenu}
               />
             </div>
           )}
 
-          {/* 标题与来源 */}
+          {/* 标题与来源 — 爱奇艺式左对齐 */}
           <div
-            className='mt-2 text-center'
+            className='mt-1.5 text-left'
             style={noSelectStyle}
             onContextMenu={preventContextMenu}
           >
             <div className='relative px-1' style={noSelectStyle}>
               {/* 背景高亮效果 */}
-              <div className='absolute inset-0 bg-gradient-to-r from-transparent via-[#ead8cf]/0 to-transparent group-hover:via-[#ead8cf]/45 dark:via-[#4a332a]/0 dark:group-hover:via-[#4a332a]/45 transition-all duration-300 rounded-md'></div>
+              <div className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/45 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/45 transition-all duration-300 rounded-md'></div>
 
               <span
-                className='block text-sm font-semibold line-clamp-2 text-[#141413] dark:text-[#f8f6f0] transition-all duration-300 ease-in-out group-hover:text-[#b85c38] dark:group-hover:text-[#f0b195] peer relative z-10'
+                className='block text-sm font-semibold line-clamp-2 text-[#111111] dark:text-[#f5f5f5] transition-all duration-300 ease-in-out group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] peer relative z-10'
                 style={{
                   ...noSelectStyle,
                   display: '-webkit-box',
@@ -965,34 +978,44 @@ const VideoCard = memo(function VideoCard(
                 />
               </div>
             </div>
+            {/* 副标题：年份 · 类型 */}
+            {subtitleParts.length > 0 && (
+              <div
+                className='mt-1 px-1 text-xs text-[#5f5f5f] dark:text-[#a8a8a8] line-clamp-1'
+                style={noSelectStyle}
+                onContextMenu={preventContextMenu}
+              >
+                {subtitleParts.join(' · ')}
+              </div>
+            )}
             {config.showSourceName && source_name && (
               <div
-                className='flex items-center justify-center mt-2'
+                className='flex items-center justify-start mt-2'
                 style={noSelectStyle}
                 onContextMenu={preventContextMenu}
               >
                 <span
-                  className='relative inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border border-[#d8d3c7] dark:border-[#4a463f] text-[#5e5d59] dark:text-[#b7b1a8] transition-all duration-300 ease-out overflow-hidden group-hover:border-[#d97757]/80 group-hover:text-[#b85c38] dark:group-hover:text-[#f0b195] group-hover:shadow-sm group-hover:scale-105'
+                  className='relative inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border border-[#d9d9d9] dark:border-[#464646] text-[#5f5f5f] dark:text-[#a8a8a8] transition-all duration-300 ease-out overflow-hidden group-hover:border-[#00be06]/80 group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] group-hover:shadow-sm group-hover:scale-105'
                   style={noSelectStyle}
                   onContextMenu={preventContextMenu}
                 >
                   {/* 背景渐变效果 */}
-                  <span className='absolute inset-0 bg-gradient-to-r from-transparent via-[#ead8cf]/0 to-transparent group-hover:via-[#ead8cf]/60 dark:via-[#4a332a]/0 dark:group-hover:via-[#4a332a]/50 transition-all duration-300'></span>
+                  <span className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/60 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/50 transition-all duration-300'></span>
 
                   {/* 左侧装饰点 */}
-                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#a7a199] dark:bg-[#6f685f] group-hover:bg-[#d97757] dark:group-hover:bg-[#e09a7a] transition-all duration-300'></span>
+                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
 
                   {isLiveCard && (
                     <Radio
                       size={12}
-                      className='relative inline-block transition-all duration-300 group-hover:text-[#d97757] dark:group-hover:text-[#e09a7a]'
+                      className='relative inline-block transition-all duration-300 group-hover:text-[#00be06] dark:group-hover:text-[#1acd50]'
                     />
                   )}
 
                   <span className='relative font-semibold'>{source_name}</span>
 
                   {/* 右侧装饰点 */}
-                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#a7a199] dark:bg-[#6f685f] group-hover:bg-[#d97757] dark:group-hover:bg-[#e09a7a] transition-all duration-300'></span>
+                  <span className='relative w-1.5 h-1.5 rounded-full bg-[#8f8f8f] dark:bg-[#6e6e6e] group-hover:bg-[#00be06] dark:group-hover:bg-[#1acd50] transition-all duration-300'></span>
                 </span>
               </div>
             )}

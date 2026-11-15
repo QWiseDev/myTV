@@ -145,7 +145,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
 
   return (
     <nav
-      className='md:hidden fixed left-0 right-0 z-[600] bg-[#faf9f5]/92 backdrop-blur-xl border-t border-[#e8e6dc] overflow-hidden dark:bg-[#191817]/92 dark:border-[#3d3934]'
+      className='md:hidden fixed left-0 right-0 z-[600] bg-[#ffffff]/92 backdrop-blur-xl border-t border-[#e8e8e8] overflow-hidden dark:bg-[#0d0d0d]/92 dark:border-[#3a3a3a]'
       style={{
         /* 紧贴视口底部，同时在内部留出安全区高度 */
         bottom: 0,
@@ -174,23 +174,23 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
                 <div
                   className={`relative flex items-center justify-center h-7 w-7 rounded-lg transition-all duration-200 ${
                     active
-                      ? 'bg-[#ead8cf] dark:bg-[#b85c38]/15 scale-105'
-                      : 'group-hover:bg-[#f0eee6] dark:group-hover:bg-[#302d29]/60 group-hover:scale-105'
+                      ? 'bg-[#e3f8e3] dark:bg-[#00a304]/15 scale-105'
+                      : 'group-hover:bg-[#f2f2f2] dark:group-hover:bg-[#2a2a2a]/60 group-hover:scale-105'
                   }`}
                 >
                   <item.icon
                     className={`h-5 w-5 transition-colors duration-200 ${
                       active
-                        ? 'text-[#b85c38] dark:text-[#f0b195]'
-                        : 'text-[#5e5d59] dark:text-[#b7b1a8] group-hover:text-[#b85c38] dark:group-hover:text-[#f0b195]'
+                        ? 'text-[#00a304] dark:text-[#57e07a]'
+                        : 'text-[#5f5f5f] dark:text-[#a8a8a8] group-hover:text-[#00a304] dark:group-hover:text-[#57e07a]'
                     }`}
                   />
                 </div>
                 <span
                   className={
                     active
-                      ? 'text-[#8f4329] dark:text-[#f0b195] font-medium'
-                      : 'text-[#5e5d59] dark:text-[#d9d3c9]'
+                      ? 'text-[#008602] dark:text-[#57e07a] font-medium'
+                      : 'text-[#5f5f5f] dark:text-[#d9d9d9]'
                   }
                 >
                   {item.label}

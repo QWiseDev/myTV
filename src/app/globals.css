@@ -56,8 +56,8 @@
 }
 
 :root {
-  --foreground-rgb: 20, 20, 19;
-  --claude-bg: #faf9f5;
+  --foreground-rgb: 17, 17, 17;
+  --claude-bg: #ffffff;
 }
 
 html,
@@ -78,25 +78,25 @@ body {
 html:not(.dark) body {
   background: radial-gradient(
       circle at 14% 0%,
-      rgba(217, 119, 87, 0.12),
+      rgba(0, 190, 6, 0.10),
       transparent 24rem
     ),
-    linear-gradient(180deg, #faf9f5 0%, #f5f3eb 52%, #ebe7dd 100%);
+    linear-gradient(180deg, #ffffff 0%, #f7f7f7 52%, #efefef 100%);
   background-attachment: fixed;
 }
 
 html.dark {
-  --foreground-rgb: 248, 246, 240;
-  --claude-bg: #191817;
+  --foreground-rgb: 245, 245, 245;
+  --claude-bg: #0d0d0d;
 }
 
 html.dark body {
   background: radial-gradient(
       circle at 12% 0%,
-      rgba(224, 154, 122, 0.14),
+      rgba(26, 205, 80, 0.12),
       transparent 24rem
     ),
-    linear-gradient(180deg, #191817 0%, #201f1d 56%, #171615 100%);
+    linear-gradient(180deg, #0d0d0d 0%, #161616 56%, #101010 100%);
   background-attachment: fixed;
 }
 
@@ -107,16 +107,16 @@ html.dark body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(94, 93, 89, 0.12);
+  background: rgba(95, 95, 95, 0.12);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(184, 92, 56, 0.34);
+  background: rgba(0, 163, 4, 0.4);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(184, 92, 56, 0.55);
+  background: rgba(0, 163, 4, 0.6);
 }
 
 /* 视频卡片悬停效果 */

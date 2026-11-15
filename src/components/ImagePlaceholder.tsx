@@ -17,21 +17,21 @@ const ImagePlaceholder = ({ aspectRatio }: { aspectRatio: string }) => (
       
       /* 亮色模式变量 */
       :root {
-        --skeleton-color: #f0eee6;
-        --skeleton-highlight: #e8e6dc;
+        --skeleton-color: #f2f2f2;
+        --skeleton-highlight: #e8e8e8;
       }
       
       /* 暗色模式变量 */
       @media (prefers-color-scheme: dark) {
         :root {
-          --skeleton-color: #302d29;
-          --skeleton-highlight: #3d3934;
+          --skeleton-color: #2a2a2a;
+          --skeleton-highlight: #3a3a3a;
         }
       }
       
       .dark {
-        --skeleton-color: #302d29;
-        --skeleton-highlight: #3d3934;
+        --skeleton-color: #2a2a2a;
+        --skeleton-highlight: #3a3a3a;
       }
     `}</style>
   </div>

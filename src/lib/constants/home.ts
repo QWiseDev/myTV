@@ -36,7 +36,7 @@ export const HOME_VIDEO_CARD_SIZES =
 
 /** 区块操作按钮/链接的中性文字色（清空等） */
 export const HOME_SECTION_ACTION_CLASS =
-  'text-sm text-[#5e5d59] hover:text-[#b85c38] dark:text-[#b7b1a8] dark:hover:text-[#f0b195] transition-colors';
+  'text-sm text-[#5f5f5f] hover:text-[#00a304] dark:text-[#a8a8a8] dark:hover:text-[#57e07a] transition-colors';
 
 /** 「查看更多」链接样式 */
 export const HOME_SECTION_LINK_CLASS = `flex items-center ${HOME_SECTION_ACTION_CLASS}`;

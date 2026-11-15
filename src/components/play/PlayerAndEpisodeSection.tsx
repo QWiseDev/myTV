@@ -88,7 +88,7 @@ export default function PlayerAndEpisodeSection({
         </div>
 
         {!isCollapsed && (
-          <div className='md:col-span-1 flex flex-col h-full min-h-0 overflow-hidden relative bg-gray-50 dark:bg-[#1c1b19]'>
+          <div className='md:col-span-1 flex flex-col h-full min-h-0 overflow-hidden relative bg-gray-50 dark:bg-[#111111]'>
             {/* 常态：片名 + 信息行 + 选集 */}
             <div className='flex-1 min-h-0 flex flex-col'>
               {/* 片名 + 详情入口 */}
@@ -121,7 +121,7 @@ export default function PlayerAndEpisodeSection({
 
             {/* 详情覆盖面板（点击「详情 >」展开，× 关闭） */}
             <div
-              className={`absolute inset-0 z-30 bg-gray-900 dark:bg-[#191817] transition-transform duration-300 ease-out ${
+              className={`absolute inset-0 z-30 bg-gray-900 dark:bg-[#0d0d0d] transition-transform duration-300 ease-out ${
                 showInfoOverlay ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
