@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getCacheTime } from '@/lib/config';
-import { db } from '@/lib/db';
 import { getTMDBHeroInfoByTitle, isTMDBEnabled } from '@/lib/tmdb.client';
 
-const HERO_BACKDROP_CACHE_TIME = 6 * 60 * 60; // 6小时
 const MAX_TITLES = 8;
 
 export const runtime = 'nodejs';
@@ -41,17 +38,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const cacheKey = `tmdb-hero_info-v2-${JSON.stringify(titles)}`;
-
-    try {
-      const cachedResult = await db.getCache(cacheKey);
-      if (cachedResult) {
-        return NextResponse.json(cachedResult);
-      }
-    } catch (cacheError) {
-      console.warn('TMDB横图缓存检查失败:', cacheError);
-    }
-
+    // 不做路由层批量缓存：瞬时失败一旦入库会毒化数小时。
+    // 真实缓存由 getTMDBHeroInfoByTitle 内部按标题管理（成功/真实无横图缓存 24h，
+    // 瞬时失败不落缓存，下次请求自动重试）。
     const entries = await Promise.all(
       titles.map(async (title, index) => {
         try {
@@ -79,16 +68,10 @@ export async function GET(request: NextRequest) {
       >,
     };
 
-    try {
-      await db.setCache(cacheKey, result, HERO_BACKDROP_CACHE_TIME);
-    } catch (cacheError) {
-      console.warn('TMDB横图缓存保存失败:', cacheError);
-    }
-
-    const cacheTime = await getCacheTime();
+    // 浏览器缓存只保留 5 分钟，避免瞬时失败的长尾
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
+        'Cache-Control': 'public, max-age=300, s-maxage=300',
       },
     });
   } catch (error) {

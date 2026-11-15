@@ -136,7 +136,8 @@ export default function HeroCarousel({
       if (year) params.append('year', year);
     });
 
-    fetch(`/api/tmdb/hero?${params.toString()}`, {
+    // v2：接口响应结构升级后强制绕过浏览器旧缓存
+    fetch(`/api/tmdb/hero?v=2&${params.toString()}`, {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : null))

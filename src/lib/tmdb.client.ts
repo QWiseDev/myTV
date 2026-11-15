@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { getConfig } from '@/lib/config';
+import { db } from '@/lib/db';
 import {
   getCache,
   getCacheKey,
@@ -561,10 +562,12 @@ export interface TMDBHeroInfo {
 
 /** 查不到横图时写入缓存的哨兵值，避免每次首屏都重复打上游 */
 const HERO_INFO_MISS_SENTINEL = '';
+const HERO_INFO_CACHE_TTL = 24 * 60 * 60; // 24 小时
 
 /**
  * 按标题搜索 TMDB，返回首页 Banner 所需的横图与增强信息。
- * 未命中返回 null（miss 会缓存，避免重复打上游）。
+ * 缓存走 db（redis/存储层，服务端可用）：成功结果与「真实无横图」缓存 24h，
+ * 瞬时失败（网络/上游异常）不落缓存，下次请求自动重试。
  */
 export async function getTMDBHeroInfoByTitle(
   title: string,
@@ -573,15 +576,16 @@ export async function getTMDBHeroInfoByTitle(
   const trimmed = title.trim();
   if (!trimmed) return null;
 
-  const cacheKey = getCacheKey('hero_info', {
-    title: trimmed,
-    year: year || undefined,
-  });
-  const cached = await getCache<TMDBHeroInfo | null>(cacheKey);
-  if (cached !== null) {
-    return cached === (HERO_INFO_MISS_SENTINEL as unknown as TMDBHeroInfo)
-      ? null
-      : cached;
+  // db 存储层会自动追加 cache: 前缀，这里不要再手写
+  const cacheKey = `tmdb-hero_info:${trimmed}${year ? `|${year}` : ''}`;
+
+  try {
+    const cached = await db.getCache(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return cached === HERO_INFO_MISS_SENTINEL ? null : cached;
+    }
+  } catch (cacheError) {
+    console.warn('[TMDB横图] 缓存读取失败:', cacheError);
   }
 
   const data = await fetchTMDB<TMDBMultiSearchResponse>('/search/multi', {
@@ -611,11 +615,11 @@ export async function getTMDBHeroInfoByTitle(
     candidates.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
 
   if (!matched) {
-    await setCache(
-      cacheKey,
-      HERO_INFO_MISS_SENTINEL as unknown as TMDBHeroInfo,
-      TMDB_CACHE_EXPIRE.backdrop_search
-    );
+    try {
+      await db.setCache(cacheKey, HERO_INFO_MISS_SENTINEL, HERO_INFO_CACHE_TTL);
+    } catch (cacheError) {
+      console.warn('[TMDB横图] miss 缓存写入失败:', cacheError);
+    }
     return null;
   }
 
@@ -645,7 +649,11 @@ export async function getTMDBHeroInfoByTitle(
     director: director || undefined,
   };
 
-  await setCache(cacheKey, info, TMDB_CACHE_EXPIRE.backdrop_search);
+  try {
+    await db.setCache(cacheKey, info, HERO_INFO_CACHE_TTL);
+  } catch (cacheError) {
+    console.warn('[TMDB横图] 缓存写入失败:', cacheError);
+  }
 
   return info;
 }
