@@ -371,10 +371,22 @@ async function fetchDanmuFromKlmEpisode(
       candidates.push(candidate);
     }
   };
+  // 指定集数时复核候选集标题，拦截 match 按标题相似度错配的集（如「第2集」错配「第1期」）
+  const matchesTargetEpisode = (candidate: KlmResolvedEpisode | null) => {
+    const episodeNum = Number.parseInt(episode || '', 10);
+    if (!Number.isFinite(episodeNum) || episodeNum <= 0) return true;
+    return extractEpisodeNumber(candidate?.episodeTitle || '') === episodeNum;
+  };
 
-  pushCandidate(
-    await matchKlmEpisodeByFileName(apiBaseUrl, title, year, episode),
+  const matchCandidate = await matchKlmEpisodeByFileName(
+    apiBaseUrl,
+    title,
+    year,
+    episode,
   );
+  if (matchesTargetEpisode(matchCandidate)) {
+    pushCandidate(matchCandidate);
+  }
   pushCandidate(await searchKlmEpisode(apiBaseUrl, title, year, episode));
   for (const candidate of await resolveEpisodeViaAnimeSearch(
     apiBaseUrl,

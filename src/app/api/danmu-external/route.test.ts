@@ -658,6 +658,87 @@ describe('GET /api/danmu-external', () => {
     expect(commentUrls[0]).toContain('12714');
   });
 
+  it('match 错配集数时复核拦截并降级到 search/episodes 正确选集', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (method === 'POST' && url.includes('/api/v2/match')) {
+          // danmu_api 按标题相似度把「第2集」错配到第1期
+          return jsonResponse({
+            success: true,
+            isMatched: true,
+            matches: [
+              {
+                episodeId: 12714,
+                animeTitle: '后会友期(2026)【综艺】from 360',
+                episodeTitle: '【imgo】 第1期：再见朋友！出发前采 2026-10-22期',
+              },
+            ],
+          });
+        }
+        if (url.includes('/api/v2/search/episodes')) {
+          return jsonResponse({
+            success: true,
+            animes: [
+              {
+                animeTitle: '后会友期(2026)【综艺】from 360',
+                episodes: [
+                  {
+                    episodeId: 12715,
+                    episodeTitle: '【imgo】 第2期：朋友再见！尴尬',
+                  },
+                ],
+              },
+            ],
+          });
+        }
+        if (url.includes('/api/v2/comment/')) {
+          return jsonResponse({
+            success: true,
+            comments: [{ p: '21.3,1,16777215,16777215', m: '第二期弹幕' }],
+          });
+        }
+        return { ok: false } as Response;
+      },
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=2`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [{ text: '第二期弹幕', time: 21.3, color: '#FFFFFF', mode: 0 }],
+      platforms: [
+        {
+          platform: 'logvar_episode',
+          episodeId: '12715',
+          title: '后会友期(2026)【综艺】from 360',
+          episodeTitle: '【imgo】 第2期：朋友再见！尴尬',
+          count: 1,
+        },
+      ],
+      total: 1,
+    });
+    // 错配的第1期未被消费
+    const commentUrls = fetchMock.mock.calls
+      .map(([calledUrl]) => String(calledUrl))
+      .filter((url) => url.includes('/api/v2/comment/'));
+    expect(commentUrls).toHaveLength(1);
+    expect(commentUrls[0]).toContain('12715');
+  });
+
   it('豆瓣与 caiji 均无结果时返回空数据与提示', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
     mockFetchDoubanWithVerification.mockResolvedValue({
