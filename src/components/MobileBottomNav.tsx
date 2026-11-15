@@ -79,7 +79,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
     { icon: Home, label: '首页', href: '/' },
     {
       icon: Globe,
-      label: '源浏览',
+      label: '片源库',
       href: '/source-browser',
     },
     {

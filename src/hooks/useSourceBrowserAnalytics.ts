@@ -44,7 +44,7 @@ export function useSourceBrowserAnalytics(options: SourceBrowserAnalyticsOptions
 
   // 页面访问埋点
   useEffect(() => {
-    trackPageView('source_browser_page', '源浏览器', {
+    trackPageView('source_browser_page', '片源库', {
       browser_session_id: browserSessionIdRef.current,
       user_id: options.userId,
       user_type: options.userType,

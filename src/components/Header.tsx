@@ -120,7 +120,7 @@ const Header = ({ activePath = '/' }: HeaderProps) => {
   >([
     {
       icon: Globe,
-      label: '源浏览器',
+      label: '片源库',
       href: '/source-browser',
     },
     {
