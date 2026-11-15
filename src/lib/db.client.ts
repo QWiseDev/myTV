@@ -39,11 +39,18 @@ export {
 } from './db.client/cache-manager';
 
 // ---- 播放记录 ----
+export type {
+  PlayRecordsAuthoritativeSnapshot,
+  PlayRecordsReconciliationResult,
+} from './db.client/play-records';
 export {
   clearAllPlayRecords,
   deletePlayRecord,
   getAllPlayRecords,
   getPlayRecordsPage,
+  getPlayRecordsRevision,
+  PlayRecordsMutationError,
+  reconcilePlayRecordsAuthoritative,
   savePlayRecord,
 } from './db.client/play-records';
 

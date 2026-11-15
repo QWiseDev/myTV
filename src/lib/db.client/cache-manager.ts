@@ -8,10 +8,20 @@ import {
   STORAGE_TYPE,
   triggerGlobalError,
 } from './core';
+import { dispatchPlayRecordsUpdated } from './play-records/events';
+import {
+  commitExternalPlayRecordsRead,
+  dropPlayRecordsSnapshot,
+  getPlayRecordsStoreRevision,
+  hasValidPlayRecordsSnapshot,
+  invalidatePlayRecordsSnapshot,
+} from './play-records/store';
 import { getAuthInfoFromBrowserCookie } from '../auth';
 import type { EpisodeSkipConfig, PlayRecord } from '../types';
 
 // ---- 缓存数据结构 ----
+// 播放记录缓存已迁移至 ./play-records/store（完整快照 + revision 门禁 + 写队列），
+// 本文件继续维护 favorites / search-history / skip-configs / user-stats 的混合缓存。
 interface CacheData<T> {
   data: T;
   timestamp: number;
@@ -19,7 +29,6 @@ interface CacheData<T> {
 }
 
 interface UserCacheStore {
-  playRecords?: CacheData<Record<string, PlayRecord>>;
   favorites?: CacheData<Record<string, Favorite>>;
   searchHistory?: CacheData<string[]>;
   skipConfigs?: CacheData<Record<string, EpisodeSkipConfig>>;
@@ -31,15 +40,11 @@ interface UserCacheStore {
 const CACHE_PREFIX = 'moontv_cache_';
 const CACHE_VERSION = '1.0.0';
 const CACHE_EXPIRE_TIME = 60 * 60 * 1000; // 一小时缓存过期
-const PLAY_RECORDS_CACHE_EXPIRE_TIME = 5 * 60 * 1000; // 播放记录5分钟缓存过期，与新集数更新检查保持一致
 
 // 注意：豆瓣缓存配置已迁移到 douban.client.ts
 
 // ---- 内存缓存（用于 Kvrocks/Upstash 模式）----
 const memoryCache: Map<string, UserCacheStore> = new Map();
-const playRecordsCacheRevisions = new Map<string, number>();
-const pendingPlayRecordsMutations = new Map<string, number>();
-const playRecordsMutationQueues = new Map<string, Promise<void>>();
 
 // ---- 缓存管理器 ----
 class HybridCacheManager {
@@ -152,16 +157,11 @@ class HybridCacheManager {
   }
 
   /**
-   * 清理过期缓存数据
+   * 清理过期缓存
    */
   private cleanOldCache(cache: UserCacheStore): void {
     const now = Date.now();
     const maxAge = 60 * 24 * 60 * 60 * 1000; // 两个月
-
-    // 清理过期的播放记录缓存
-    if (cache.playRecords && now - cache.playRecords.timestamp > maxAge) {
-      delete cache.playRecords;
-    }
 
     // 清理过期的收藏缓存
     if (cache.favorites && now - cache.favorites.timestamp > maxAge) {
@@ -186,17 +186,11 @@ class HybridCacheManager {
   /**
    * 检查缓存是否有效
    */
-  private isCacheValid<T>(
-    cache: CacheData<T>,
-    cacheType?: 'playRecords',
-  ): boolean {
+  private isCacheValid<T>(cache: CacheData<T>): boolean {
     const now = Date.now();
-    const expireTime =
-      cacheType === 'playRecords'
-        ? PLAY_RECORDS_CACHE_EXPIRE_TIME
-        : CACHE_EXPIRE_TIME;
     return (
-      cache.version === CACHE_VERSION && now - cache.timestamp < expireTime
+      cache.version === CACHE_VERSION &&
+      now - cache.timestamp < CACHE_EXPIRE_TIME
     );
   }
 
@@ -209,38 +203,6 @@ class HybridCacheManager {
       timestamp: Date.now(),
       version: CACHE_VERSION,
     };
-  }
-
-  /**
-   * 获取缓存的播放记录
-   */
-  getCachedPlayRecords(
-    username: string | null = this.getCurrentUsername(),
-  ): Record<string, PlayRecord> | null {
-    if (!username) return null;
-
-    const userCache = this.getUserCache(username);
-    const cached = userCache.playRecords;
-
-    if (cached && this.isCacheValid(cached, 'playRecords')) {
-      return cached.data;
-    }
-
-    return null;
-  }
-
-  /**
-   * 缓存播放记录
-   */
-  cachePlayRecords(
-    data: Record<string, PlayRecord>,
-    username: string | null = this.getCurrentUsername(),
-  ): void {
-    if (!username) return;
-
-    const userCache = this.getUserCache(username);
-    userCache.playRecords = this.createCacheData(data);
-    this.saveUserCache(username, userCache);
   }
 
   /**
@@ -361,33 +323,19 @@ class HybridCacheManager {
 
   /**
    * 清除指定用户的所有缓存
+   * 播放记录部分同步失效新 store，避免旧用户数据残留
    */
   clearUserCache(username?: string): void {
     const targetUsername = username || this.getCurrentUsername();
     if (!targetUsername) return;
+
+    dropPlayRecordsSnapshot(targetUsername);
 
     try {
       const cacheKey = this.getUserCacheKey(targetUsername);
       localStorage.removeItem(cacheKey);
     } catch (error) {
       console.warn('清除用户缓存失败:', error);
-    }
-  }
-
-  /**
-   * 强制刷新播放记录缓存
-   * 用于新集数检测时确保数据同步
-   */
-  forceRefreshPlayRecordsCache(
-    username: string | null = this.getCurrentUsername(),
-  ): void {
-    if (!username) return;
-
-    const userCache = this.getUserCache(username);
-    if (userCache.playRecords) {
-      // 将播放记录缓存时间戳设置为过期
-      userCache.playRecords.timestamp = 0;
-      this.saveUserCache(username, userCache);
     }
   }
 
@@ -428,7 +376,6 @@ class HybridCacheManager {
       console.warn('清除过期缓存失败:', error);
     }
   }
-
 }
 
 // 获取缓存管理器实例
@@ -437,141 +384,6 @@ export const cacheManager = HybridCacheManager.getInstance();
 // 页面加载时清理过期缓存
 if (typeof window !== 'undefined') {
   setTimeout(() => cacheManager.clearExpiredCaches(), 1000);
-}
-
-// ---- 播放记录并发控制 ----
-const ANONYMOUS_PLAY_RECORDS_USER = '__anonymous__';
-
-export function getPlayRecordsUserKey(username: string | null): string {
-  return username || ANONYMOUS_PLAY_RECORDS_USER;
-}
-
-function getPlayRecordsCacheRevision(username: string | null): number {
-  return playRecordsCacheRevisions.get(getPlayRecordsUserKey(username)) || 0;
-}
-
-function invalidatePlayRecordsCacheReads(username: string | null): number {
-  const userKey = getPlayRecordsUserKey(username);
-  const revision = getPlayRecordsCacheRevision(username) + 1;
-  playRecordsCacheRevisions.set(userKey, revision);
-  return revision;
-}
-
-export function beginPlayRecordsCacheMutation(username: string | null): void {
-  const userKey = getPlayRecordsUserKey(username);
-  pendingPlayRecordsMutations.set(
-    userKey,
-    (pendingPlayRecordsMutations.get(userKey) || 0) + 1,
-  );
-  invalidatePlayRecordsCacheReads(username);
-}
-
-export function finishPlayRecordsCacheMutation(username: string | null): void {
-  const userKey = getPlayRecordsUserKey(username);
-  const pendingCount = Math.max(
-    0,
-    (pendingPlayRecordsMutations.get(userKey) || 0) - 1,
-  );
-  if (pendingCount === 0) {
-    pendingPlayRecordsMutations.delete(userKey);
-  } else {
-    pendingPlayRecordsMutations.set(userKey, pendingCount);
-  }
-  invalidatePlayRecordsCacheReads(username);
-}
-
-export function canCommitPlayRecordsSnapshot(
-  username: string | null,
-  revision: number,
-): boolean {
-  const userKey = getPlayRecordsUserKey(username);
-  return (
-    !pendingPlayRecordsMutations.has(userKey) &&
-    revision === getPlayRecordsCacheRevision(username)
-  );
-}
-
-export function dispatchPlayRecordsUpdated(
-  data: Record<string, PlayRecord>,
-  username: string | null,
-): void {
-  if (cacheManager.getCurrentUsername() !== username) return;
-
-  window.dispatchEvent(
-    new CustomEvent('playRecordsUpdated', {
-      detail: data,
-    }),
-  );
-}
-
-export function serializePlayRecordsMutation(
-  username: string | null,
-  mutation: () => Promise<void>,
-): Promise<void> {
-  const userKey = getPlayRecordsUserKey(username);
-  const previousMutation =
-    playRecordsMutationQueues.get(userKey) || Promise.resolve();
-  const currentMutation = previousMutation
-    .catch(() => undefined)
-    .then(mutation);
-  const trackedMutation = currentMutation.finally(() => {
-    if (playRecordsMutationQueues.get(userKey) === trackedMutation) {
-      playRecordsMutationQueues.delete(userKey);
-    }
-  });
-  playRecordsMutationQueues.set(userKey, trackedMutation);
-  return trackedMutation;
-}
-
-export async function fetchPlayRecordsSnapshot(username: string | null): Promise<{
-  data: Record<string, PlayRecord>;
-  revision: number;
-  username: string | null;
-}> {
-  const revision = getPlayRecordsCacheRevision(username);
-  const data =
-    await fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`);
-  return { data, revision, username };
-}
-
-export async function reconcilePlayRecordsCache(
-  username: string | null,
-): Promise<boolean> {
-  if (cacheManager.getCurrentUsername() !== username) {
-    cacheManager.forceRefreshPlayRecordsCache(username);
-    return false;
-  }
-
-  const refreshRevision = invalidatePlayRecordsCacheReads(username);
-  try {
-    const refreshedPlayRecords =
-      await fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`);
-    if (refreshRevision !== getPlayRecordsCacheRevision(username)) {
-      return false;
-    }
-
-    cacheManager.cachePlayRecords(refreshedPlayRecords, username);
-    dispatchPlayRecordsUpdated(refreshedPlayRecords, username);
-    return true;
-  } catch (error) {
-    cacheManager.forceRefreshPlayRecordsCache(username);
-    throw error;
-  }
-}
-
-export function updateCachedPlayRecords(
-  username: string | null,
-  update: (records: Record<string, PlayRecord>) => void,
-): Record<string, PlayRecord> | null {
-  const cachedRecords = cacheManager.getCachedPlayRecords(username);
-  if (!cachedRecords) return null;
-
-  const previousRecords = { ...cachedRecords };
-  const nextRecords = { ...cachedRecords };
-  update(nextRecords);
-  cacheManager.cachePlayRecords(nextRecords, username);
-  dispatchPlayRecordsUpdated(nextRecords, username);
-  return previousRecords;
 }
 
 // ---------------- 混合缓存辅助函数 ----------------
@@ -588,10 +400,10 @@ export function clearUserCache(): void {
 
 /**
  * 强制刷新播放记录缓存
- * 用于新集数检测时确保数据同步
+ * 用于新集数检测时确保数据同步；播放记录快照已迁移至独立 store
  */
 export function forceRefreshPlayRecordsCache(): void {
-  cacheManager.forceRefreshPlayRecordsCache();
+  invalidatePlayRecordsSnapshot(cacheManager.getCurrentUsername());
 }
 
 /**
@@ -603,10 +415,13 @@ export async function refreshAllCache(): Promise<void> {
 
   try {
     const username = cacheManager.getCurrentUsername();
+    const playRecordsRevision = getPlayRecordsStoreRevision(username);
     // 并行刷新所有数据
     const [playRecords, favorites, searchHistory, skipConfigs] =
       await Promise.allSettled([
-        fetchPlayRecordsSnapshot(username),
+        fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`).then(
+          (data) => ({ data, revision: playRecordsRevision }),
+        ),
         fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
         fetchFromApi<string[]>(`/api/searchhistory`),
         fetchFromApi<Record<string, EpisodeSkipConfig>>(`/api/skipconfigs`),
@@ -614,8 +429,8 @@ export async function refreshAllCache(): Promise<void> {
 
     if (playRecords.status === 'fulfilled') {
       const { data, revision } = playRecords.value;
-      if (canCommitPlayRecordsSnapshot(username, revision)) {
-        cacheManager.cachePlayRecords(data, username);
+      const result = commitExternalPlayRecordsRead(username, revision, data);
+      if (result === 'committed') {
         dispatchPlayRecordsUpdated(data, username);
       }
     }
@@ -677,7 +492,7 @@ export function getCacheStatus(): {
 
   const authInfo = getAuthInfoFromBrowserCookie();
   return {
-    hasPlayRecords: !!cacheManager.getCachedPlayRecords(),
+    hasPlayRecords: hasValidPlayRecordsSnapshot(authInfo?.username || null),
     hasFavorites: !!cacheManager.getCachedFavorites(),
     hasSearchHistory: !!cacheManager.getCachedSearchHistory(),
     hasSkipConfigs: !!cacheManager.getCachedSkipConfigs(),

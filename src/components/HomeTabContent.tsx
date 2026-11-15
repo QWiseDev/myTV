@@ -14,7 +14,7 @@ import { parseStorageKey } from '@/lib/storage-key';
 import type { DoubanItem, PlayRecord } from '@/lib/types';
 import { buildPlayUrl } from '@/lib/video-card-utils';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
-import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
+import type { PlayRecordsLoadError } from '@/hooks/useContinueWatchingData';
 
 import BangumiSection from './BangumiSection';
 import HeroCarousel, { type HeroContinueItem } from './HeroCarousel';

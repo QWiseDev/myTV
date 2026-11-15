@@ -1,35 +1,27 @@
 'use client';
 
-import {
-  createContext,
-  Dispatch,
-  ReactNode,
-  SetStateAction,
-  useContext,
-  useMemo,
-} from 'react';
+import { createContext, ReactNode, useContext, useMemo } from 'react';
 
 import { generateStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
-import { type WatchingUpdate } from '@/lib/watching-updates';
+import type { WatchingUpdate } from '@/lib/watching-updates';
 import {
   type PlayRecordsLoadError,
-  usePlaybackRecords,
-} from '@/hooks/usePlaybackRecords';
+  useContinueWatchingData,
+} from '@/hooks/useContinueWatchingData';
 import { useWatchingUpdatesSnapshot } from '@/hooks/useWatchingUpdatesSnapshot';
 
 interface PlaybackDataContextType {
   // 播放记录数据
   playRecords: Record<string, PlayRecord> | null;
-  setPlayRecords: Dispatch<SetStateAction<Record<string, PlayRecord> | null>>;
   loadingPlayRecords: boolean;
   loadingMorePlayRecords: boolean;
   hasMorePlayRecords: boolean;
   playRecordsLoadError: PlayRecordsLoadError;
   loadMorePlayRecords: () => Promise<void>;
   retryPlayRecords: () => Promise<void>;
-  markPlayRecordDeleted: (key: string) => void;
-  markAllPlayRecordsDeleted: () => void;
+  deleteRecord: (key: string) => void;
+  clearAll: () => void;
 
   // 观看更新数据
   watchingUpdates: WatchingUpdate | null;
@@ -87,27 +79,25 @@ export function PlaybackDataProvider({
     loadingMorePlayRecords,
     hasMorePlayRecords,
     loadMorePlayRecords,
-    markPlayRecordDeleted,
-    markAllPlayRecordsDeleted,
     playRecords,
     playRecordsLoadError,
     retryPlayRecords,
-    setPlayRecords,
-  } = usePlaybackRecords(firstPagePlayRecordKeys);
+    deleteRecord,
+    clearAll,
+  } = useContinueWatchingData(firstPagePlayRecordKeys);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(
     () => ({
       playRecords,
-      setPlayRecords,
       loadingPlayRecords,
       loadingMorePlayRecords,
       hasMorePlayRecords,
       playRecordsLoadError,
       loadMorePlayRecords,
       retryPlayRecords,
-      markPlayRecordDeleted,
-      markAllPlayRecordsDeleted,
+      deleteRecord,
+      clearAll,
 
       watchingUpdates,
       setWatchingUpdates,
@@ -123,9 +113,8 @@ export function PlaybackDataProvider({
       playRecordsLoadError,
       loadMorePlayRecords,
       retryPlayRecords,
-      markPlayRecordDeleted,
-      markAllPlayRecordsDeleted,
-      setPlayRecords,
+      deleteRecord,
+      clearAll,
       watchingUpdates,
       loadingWatchingUpdates,
       setWatchingUpdates,

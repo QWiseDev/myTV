@@ -3,10 +3,11 @@ import { render } from '@testing-library/react';
 import { PlaybackDataProvider } from './PlayPageContext';
 
 const mockRefreshWatchingUpdates = jest.fn().mockResolvedValue(undefined);
-const mockUsePlaybackRecords = jest.fn();
+const mockUseContinueWatchingData = jest.fn();
 
-jest.mock('@/hooks/usePlaybackRecords', () => ({
-  usePlaybackRecords: (...args: unknown[]) => mockUsePlaybackRecords(...args),
+jest.mock('@/hooks/useContinueWatchingData', () => ({
+  useContinueWatchingData: (...args: unknown[]) =>
+    mockUseContinueWatchingData(...args),
 }));
 
 jest.mock('@/hooks/useWatchingUpdatesSnapshot', () => ({
@@ -28,18 +29,17 @@ jest.mock('@/hooks/useWatchingUpdatesSnapshot', () => ({
 
 describe('PlaybackDataProvider', () => {
   beforeEach(() => {
-    mockUsePlaybackRecords.mockReset();
-    mockUsePlaybackRecords.mockReturnValue({
+    mockUseContinueWatchingData.mockReset();
+    mockUseContinueWatchingData.mockReturnValue({
       hasMorePlayRecords: false,
       loadingMorePlayRecords: false,
       loadingPlayRecords: false,
       loadMorePlayRecords: jest.fn(),
-      markAllPlayRecordsDeleted: jest.fn(),
-      markPlayRecordDeleted: jest.fn(),
+      clearAll: jest.fn(),
+      deleteRecord: jest.fn(),
       playRecords: {},
       playRecordsLoadError: null,
       retryPlayRecords: jest.fn(),
-      setPlayRecords: jest.fn(),
     });
   });
 
@@ -50,7 +50,7 @@ describe('PlaybackDataProvider', () => {
       </PlaybackDataProvider>,
     );
 
-    expect(mockUsePlaybackRecords).toHaveBeenCalledWith([
+    expect(mockUseContinueWatchingData).toHaveBeenCalledWith([
       'route-source+route-id',
       'update-source+update-id',
     ]);

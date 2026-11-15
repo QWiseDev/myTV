@@ -295,7 +295,8 @@ describe('play record cache races', () => {
     } as Response);
     await savePromise;
     window.removeEventListener('playRecordsUpdated', handleUpdate);
-    expect(getRequestCount).toBeGreaterThanOrEqual(2);
+    // 新预算：pending 写期间不再触发后台刷新 GET，事件监听器的读取命中乐观完整缓存
+    expect(getRequestCount).toBe(1);
   });
 
   it('keeps an optimistic clear while its event-triggered refresh races the write', async () => {
@@ -337,7 +338,8 @@ describe('play record cache races', () => {
     clearRequest.resolve({ ok: true, status: 200 } as Response);
     await clearPromise;
     window.removeEventListener('playRecordsUpdated', handleUpdate);
-    expect(getRequestCount).toBeGreaterThanOrEqual(2);
+    // 新预算：pending 写期间不再触发后台刷新 GET，事件监听器的读取命中乐观完整缓存
+    expect(getRequestCount).toBe(1);
   });
 
   it('keeps pending reads and caches isolated when the signed-in user changes', async () => {
@@ -698,6 +700,306 @@ describe('play record cache races', () => {
       'source+id': initialRecord,
       'source+next': nextRecord,
     });
+  });
+
+  it('D7: clear 失败的权威补偿建立真实快照；补偿失败则缓存失效', async () => {
+    const initialRecord = createRecord();
+    const otherRecord = createRecord({ title: '幸存记录' });
+    let getRequestCount = 0;
+    let clearShouldFail = true;
+    let failNextGet = false;
+    global.fetch = jest.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          if (clearShouldFail) {
+            return { ok: false, status: 500 } as Response;
+          }
+          return { ok: true, status: 200 } as Response;
+        }
+
+        getRequestCount += 1;
+        if (getRequestCount === 1) {
+          return {
+            json: async () => ({ 'src+init': initialRecord }),
+            ok: true,
+            status: 200,
+          } as Response;
+        }
+        if (failNextGet) {
+          failNextGet = false;
+          throw new Error('reconcile failed');
+        }
+        return {
+          json: async () => ({ 'src+other': otherRecord }),
+          ok: true,
+          status: 200,
+        } as Response;
+      },
+    );
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { clearAllPlayRecords, getAllPlayRecords } =
+      await import('./db.client');
+    await getAllPlayRecords();
+
+    // 失败 + 补偿成功：快照变为权威数据（区别于乐观 {}）
+    await expect(clearAllPlayRecords()).rejects.toThrow();
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+other': otherRecord,
+    });
+
+    // 再次失败 + 补偿也失败：缓存失效，重新全量读取
+    clearShouldFail = true;
+    failNextGet = true;
+    await expect(clearAllPlayRecords()).rejects.toThrow();
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+other': otherRecord,
+    });
+  });
+
+  it('D10: forceRefresh 使快照过期并触发下一次全量读取', async () => {
+    let getRequestCount = 0;
+    global.fetch = jest.fn(async () => {
+      getRequestCount += 1;
+      return {
+        json: async () => ({
+          'src+fresh': createRecord({ title: `第${getRequestCount}次` }),
+        }),
+        ok: true,
+        status: 200,
+      } as Response;
+    });
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    const { forceRefreshPlayRecordsCache, getAllPlayRecords } =
+      await import('./db.client');
+    await getAllPlayRecords();
+
+    // 快照有效：命中缓存，仅触发一次去重的后台同步
+    await getAllPlayRecords();
+    expect(getRequestCount).toBe(2);
+
+    forceRefreshPlayRecordsCache();
+    // 过期快照等价 cold：发起新全量读取；在飞旧后台同步被 revision 门禁丢弃
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+fresh': createRecord({ title: '第3次' }),
+    });
+    expect(getRequestCount).toBe(3);
+  });
+
+  it('D10: refreshAllCache 经新 store 提交门禁刷新播放记录', async () => {
+    let getRequestCount = 0;
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = input as string;
+      if (url.includes('/api/playrecords')) {
+        getRequestCount += 1;
+        return {
+          json: async () => ({
+            'src+refreshed': createRecord({ title: '刷新后' }),
+          }),
+          ok: true,
+          status: 200,
+        } as Response;
+      }
+      return { json: async () => ({}), ok: true, status: 200 } as Response;
+    });
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    const { getAllPlayRecords, refreshAllCache } = await import('./db.client');
+
+    await refreshAllCache();
+    // 快照已由 refreshAll 建立：命中缓存，仅触发一次后台同步
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+refreshed': createRecord({ title: '刷新后' }),
+    });
+    expect(getRequestCount).toBe(2);
+  });
+
+  it('D10: clearUserCache 丢弃播放记录快照并使 getCacheStatus 失效', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = input as string;
+      if (url.includes('/api/playrecords')) {
+        return {
+          json: async () => ({ 'src+cached': createRecord() }),
+          ok: true,
+          status: 200,
+        } as Response;
+      }
+      return { json: async () => ({}), ok: true, status: 200 } as Response;
+    });
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    const { clearUserCache, getAllPlayRecords, getCacheStatus } =
+      await import('./db.client');
+    await getAllPlayRecords();
+    expect(getCacheStatus().hasPlayRecords).toBe(true);
+
+    clearUserCache();
+    expect(getCacheStatus().hasPlayRecords).toBe(false);
+    // 快照被丢弃：下一次读取发起新的全量 GET
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+cached': createRecord(),
+    });
+    expect(
+      (global.fetch as jest.Mock).mock.calls.filter(([input]) =>
+        (input as string).includes('/api/playrecords'),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it('D11: localStorage 模式并发写经队列串行不丢记录', async () => {
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
+    localStorage.setItem(
+      'moontv_play_records',
+      JSON.stringify({
+        'src+a': createRecord({ title: 'A' }),
+        'src+b': createRecord({ title: 'B' }),
+      }),
+    );
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    const { deletePlayRecord, getAllPlayRecords, savePlayRecord } =
+      await import('./db.client');
+
+    await Promise.all([
+      deletePlayRecord('src', 'a'),
+      savePlayRecord('src', 'c', createRecord({ title: 'C' })),
+    ]);
+
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+b': createRecord({ title: 'B' }),
+      'src+c': createRecord({ title: 'C', original_episodes: 12 }),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('D11: localStorage 读取失败返回空且不发服务端请求', async () => {
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
+    localStorage.setItem('moontv_play_records', '{corrupt');
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    const globalErrorListener = jest.fn();
+    window.addEventListener('globalError', globalErrorListener, { once: true });
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { getAllPlayRecords } = await import('./db.client');
+
+    await expect(getAllPlayRecords()).resolves.toEqual({});
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(globalErrorListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('D13: 冷读取等待已排队写完成后再发全量 GET', async () => {
+    const deleteRequest = createDeferred<Response>();
+    const requestOrder: string[] = [];
+    global.fetch = jest.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          requestOrder.push('DELETE');
+          return deleteRequest.promise;
+        }
+        requestOrder.push('GET');
+        return {
+          json: async () => ({ 'src+b': createRecord({ title: '写入后' }) }),
+          ok: true,
+          status: 200,
+        } as Response;
+      },
+    );
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    const { deletePlayRecord, getAllPlayRecords } = await import('./db.client');
+
+    const deletePromise = deletePlayRecord('src', 'a');
+    const readPromise = getAllPlayRecords();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requestOrder).toEqual(['DELETE']); // 冷读取等待队列，未提前发 GET
+
+    deleteRequest.resolve({ ok: true, status: 200 } as Response);
+    await Promise.all([deletePromise, readPromise]);
+    expect(requestOrder).toEqual(['DELETE', 'GET']);
+    await expect(getAllPlayRecords()).resolves.toEqual({
+      'src+b': createRecord({ title: '写入后' }),
+    });
+  });
+
+  it('D13: 内部预读失败释放队列，后续写照常执行', async () => {
+    let requestCount = 0;
+    const requestOrder: string[] = [];
+    global.fetch = jest.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'DELETE') {
+          requestOrder.push('DELETE');
+          return { ok: true, status: 200 } as Response;
+        }
+
+        requestCount += 1;
+        requestOrder.push('GET');
+        if (requestCount === 1) {
+          throw new Error('preflight failed');
+        }
+        return {
+          json: async () => ({ 'src+b': createRecord() }),
+          ok: true,
+          status: 200,
+        } as Response;
+      },
+    );
+    (
+      window as typeof window & {
+        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
+      }
+    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'redis' };
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'test-user' }),
+    )}; path=/`;
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { clearAllPlayRecords, savePlayRecord } = await import('./db.client');
+
+    const savePromise = savePlayRecord('src', 'a', createRecord());
+    const clearPromise = clearAllPlayRecords();
+    await expect(savePromise).rejects.toThrow('preflight failed');
+    await clearPromise; // 队列未被预读失败卡死
+
+    expect(requestOrder).toEqual(['GET', 'GET', 'DELETE']);
   });
 
   it('keeps the cache invalid when reconciliation and the next optimistic write lack a full snapshot', async () => {

@@ -14,7 +14,7 @@ import {
 } from '@/lib/continue-watching-display';
 import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
-import type { PlayRecordsLoadError } from '@/hooks/usePlaybackRecords';
+import type { PlayRecordsLoadError } from '@/hooks/useContinueWatchingData';
 
 import HomeCardShell, {
   HOME_CARD_WIDTH_CLASS,

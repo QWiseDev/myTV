@@ -1,7 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-function */
 'use client';
 
-import { cacheManager, reconcilePlayRecordsCache } from './cache-manager';
+import { cacheManager } from './cache-manager';
 import type { UserPlayStat } from '../types';
 
 // 全局错误触发函数
@@ -100,16 +100,30 @@ export async function handleDatabaseOperationFailure(
 
     switch (dataType) {
       case 'playRecords': {
+        // 播放记录补偿已迁移至 play-records/api；动态 import 避免顶层循环依赖。
+        // CRUD 自身的失败补偿在写队列内完成，不会重复进入此分支。
         const targetUsername =
           username === undefined ? cacheManager.getCurrentUsername() : username;
-        const reconciled = await reconcilePlayRecordsCache(targetUsername);
-        if (
-          reconciled &&
-          cacheManager.getCurrentUsername() === targetUsername
-        ) {
-          await invalidateWatchingUpdatesClientCache();
+        const {
+          invalidatePlayRecordsStore,
+          reconcilePlayRecordsForExternalCaller,
+        } = await import('./play-records/api');
+        try {
+          const reconciled =
+            await reconcilePlayRecordsForExternalCaller(targetUsername);
+          if (
+            reconciled &&
+            cacheManager.getCurrentUsername() === targetUsername
+          ) {
+            await invalidateWatchingUpdatesClientCache();
+          }
+          return;
+        } catch (refreshErr) {
+          invalidatePlayRecordsStore(targetUsername);
+          console.error('刷新playRecords缓存失败:', refreshErr);
+          triggerGlobalError('刷新playRecords缓存失败');
+          return;
         }
-        return;
       }
       case 'favorites':
         freshData =
@@ -131,9 +145,6 @@ export async function handleDatabaseOperationFailure(
       }),
     );
   } catch (refreshErr) {
-    if (dataType === 'playRecords' && username !== undefined) {
-      cacheManager.forceRefreshPlayRecordsCache(username);
-    }
     console.error(`刷新${dataType}缓存失败:`, refreshErr);
     triggerGlobalError(`刷新${dataType}缓存失败`);
   }

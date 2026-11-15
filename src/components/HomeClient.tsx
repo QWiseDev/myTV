@@ -1,13 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
@@ -16,7 +10,6 @@ import { useAiRecommendStatus } from '@/hooks/useAiRecommendStatus';
 import { useAnnouncementVisibility } from '@/hooks/useAnnouncementVisibility';
 import { useFavoriteItems } from '@/hooks/useFavoriteItems';
 import { useHomeData } from '@/hooks/useHomeData';
-import { usePlayRecordActions } from '@/hooks/usePlayRecordActions';
 
 import AIRecommendButton from '@/components/AIRecommendButton';
 import AnnouncementModal from '@/components/AnnouncementModal';
@@ -53,15 +46,13 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
   const {
     playRecords,
-    setPlayRecords,
     watchingUpdates,
     hasMorePlayRecords,
     loadingMorePlayRecords,
     loadingPlayRecords,
-    loadingWatchingUpdates,
     loadMorePlayRecords,
-    markAllPlayRecordsDeleted,
-    markPlayRecordDeleted,
+    deleteRecord,
+    clearAll,
     playRecordsLoadError,
     refreshWatchingUpdates,
     retryPlayRecords,
@@ -89,22 +80,18 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
   const { showAnnouncement, closeAnnouncement } =
     useAnnouncementVisibility(announcement);
   const aiEnabled = useAiRecommendStatus();
-  const { deletePlayRecord, clearAllPlayRecords } = usePlayRecordActions({
-    markAllPlayRecordsDeleted,
-    markPlayRecordDeleted,
-    setPlayRecords,
-  });
 
+  // 继续观看与 Hero 的骨架 loading 仅由播放首屏加载决定，追更补齐不重新置 true（方案 5.1）
   const continueWatching = useMemo<HomeContinueWatchingState>(
     () => ({
       playRecords: playRecords ?? {},
       watchingUpdates: watchingUpdates ?? null,
-      loading: loadingPlayRecords || loadingWatchingUpdates,
+      loading: loadingPlayRecords,
       loadingMore: loadingMorePlayRecords,
       hasMore: hasMorePlayRecords,
       loadError: playRecordsLoadError,
-      onDeleteRecord: deletePlayRecord,
-      onClearAll: clearAllPlayRecords,
+      onDeleteRecord: deleteRecord,
+      onClearAll: clearAll,
       onLoadMore: loadMorePlayRecords,
       onRetry: retryPlayRecords,
     }),
@@ -112,12 +99,11 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
       playRecords,
       watchingUpdates,
       loadingPlayRecords,
-      loadingWatchingUpdates,
       loadingMorePlayRecords,
       hasMorePlayRecords,
       playRecordsLoadError,
-      deletePlayRecord,
-      clearAllPlayRecords,
+      deleteRecord,
+      clearAll,
       loadMorePlayRecords,
       retryPlayRecords,
     ],
