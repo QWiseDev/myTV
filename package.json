@@ -3,7 +3,7 @@
   "version": "5.7.0-beta",
   "private": true,
   "scripts": {
-    "dev": "pnpm gen:manifest && next dev -H 0.0.0.0",
+    "dev": "pnpm gen:manifest && next dev -H 0.0.0.0 --turbo",
     "build": "pnpm gen:manifest && next build",
     "start": "next start",
     "lint": "next lint",

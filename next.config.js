@@ -17,6 +17,14 @@ const nextConfig = {
 
   reactStrictMode: true,
 
+  experimental: {
+    // 客户端路由缓存：从播放页返回首页等动态页导航时，30s 内复用缓存不再整页重拉
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
+
   // 🔥 全局强制动态渲染，避免构建时数据库访问问题
   generateBuildId: async () => {
     return 'build'

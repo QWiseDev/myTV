@@ -15,6 +15,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 
@@ -472,12 +473,12 @@ export default function ShortVideoPage() {
       <div className='fixed top-0 left-0 right-0 z-50 bg-white/30 backdrop-blur-2xl border-b border-gray-200/40 shadow-xl dark:bg-gray-900/60 dark:border-gray-700/40 transition-all duration-300'>
         <div className='container mx-auto px-4 h-16 flex items-center justify-between'>
           <div className='flex items-center gap-2'>
-            <a href="/" className='text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-purple-400 hover:opacity-80 transition-opacity'>
+            <Link href="/" className='text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-purple-400 hover:opacity-80 transition-opacity'>
               卡拉米影视
-            </a>
+            </Link>
           </div>
           <nav className='hidden md:flex items-center gap-4'>
-            <a href='/' className='text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400 transition-colors'>首页</a>
+            <Link href='/' className='text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400 transition-colors'>首页</Link>
             <a href='/shortvideo' className='text-sm text-blue-600 dark:text-blue-400 font-medium'>短视频</a>
             <a href='/movie' className='text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400 transition-colors'>电影</a>
             <a href='/tv' className='text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400 transition-colors'>剧集</a>

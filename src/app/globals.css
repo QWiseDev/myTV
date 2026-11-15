@@ -157,7 +157,7 @@ html.dark body {
   scrollbar-width: none; /* Firefox */
 }
 
-*:not(.artplayer):not(.artplayer *)::webkit-scrollbar {
+*:not(.artplayer):not(.artplayer *)::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 
