@@ -12,6 +12,7 @@ import { getDanmuCacheItem, setDanmuCacheItem } from './danmuCache';
 
 jest.mock('./danmuCache', () => ({
   DANMU_CACHE_DURATION_SECONDS: 1800,
+  DANMU_EMPTY_CACHE_DURATION_SECONDS: 120,
   getDanmuCacheItem: jest.fn(),
   setDanmuCacheItem: jest.fn(),
 }));
@@ -73,6 +74,50 @@ describe('danmakuRuntime', () => {
 
     expect(danmaku).toEqual([{ text: 'cached', time: 1 }]);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('returns cached empty danmaku within the short empty TTL without fetching', async () => {
+    (getDanmuCacheItem as jest.Mock).mockResolvedValue({
+      data: [],
+      timestamp: 10000 - 119 * 1000, // 距今 119 秒，仍在 2 分钟空结果 TTL 内
+    });
+
+    const manager = new DanmakuLoadManager(() => 10000);
+    const danmaku = await manager.load({
+      enabled: true,
+      videoTitle: '测试剧',
+      videoYear: '2024',
+      videoDoubanId: 123,
+      episodeIndex: 0,
+      episodeOffset: 0,
+    });
+
+    expect(danmaku).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('refetches when cached empty danmaku exceeds the short empty TTL', async () => {
+    (getDanmuCacheItem as jest.Mock).mockResolvedValue({
+      data: [],
+      timestamp: 10000 - 121 * 1000, // 距今 121 秒，已超过 2 分钟空结果 TTL
+    });
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ danmu: [{ text: 'fresh', time: 2 }] }),
+    });
+
+    const manager = new DanmakuLoadManager(() => 10000);
+    const danmaku = await manager.load({
+      enabled: true,
+      videoTitle: '测试剧',
+      videoYear: '2024',
+      videoDoubanId: 123,
+      episodeIndex: 0,
+      episodeOffset: 0,
+    });
+
+    expect(danmaku).toEqual([{ text: 'fresh', time: 2 }]);
+    expect(global.fetch).toHaveBeenCalled();
   });
 
   test('dedupes repeated loads for the same active request', async () => {

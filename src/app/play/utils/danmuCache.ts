@@ -1,6 +1,8 @@
 import { ClientCache } from '@/lib/client-cache';
 
 export const DANMU_CACHE_DURATION_SECONDS = 30 * 60; // 30 分钟
+// 空结果仅缓存 2 分钟：服务端弹幕源修复/收录后，短时间内即可重新拉取
+export const DANMU_EMPTY_CACHE_DURATION_SECONDS = 2 * 60;
 const DANMU_CACHE_KEY_PREFIX = 'danmu-cache';
 const LOCAL_DANMU_CACHE_KEY = 'lunatv_danmu_cache';
 

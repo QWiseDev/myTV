@@ -35,6 +35,7 @@ export default function DanmakuPanel({
   onToggle,
 }: Props) {
   const [keyword, setKeyword] = useState(title);
+  const [expanded, setExpanded] = useState(true);
   const [animes, setAnimes] = useState<DanmakuAnime[]>([]);
   const [anime, setAnime] = useState<DanmakuAnime | null>(null);
   const [episodes, setEpisodes] = useState<DanmakuEpisode[]>([]);
@@ -107,7 +108,13 @@ export default function DanmakuPanel({
   }
 
   return (
-    <details className='border-b border-gray-200 px-4 py-3 text-sm dark:border-gray-700'>
+    <details
+      open={expanded}
+      onToggle={(event) =>
+        setExpanded((event.target as HTMLDetailsElement).open)
+      }
+      className='border-b border-gray-200 px-4 py-3 text-sm @container dark:border-gray-700'
+    >
       <summary className='cursor-pointer select-none font-medium'>
         <span className='ml-1 inline-flex max-w-full items-center gap-2 align-middle'>
           <MessageSquare size={16} className='shrink-0' />
@@ -117,7 +124,7 @@ export default function DanmakuPanel({
           </span>
         </span>
       </summary>
-      <div className='mt-4 grid min-w-0 gap-6 md:grid-cols-2'>
+      <div className='mt-4 grid min-w-0 gap-6 @[420px]:grid-cols-2'>
         <section className='min-w-0'>
           <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
             <label className='flex items-center gap-2'>

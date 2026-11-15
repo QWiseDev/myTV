@@ -4,6 +4,7 @@ import { matchesDanmakuFilters, readDanmakuFilters } from '@/lib/danmaku';
 
 import {
   DANMU_CACHE_DURATION_SECONDS,
+  DANMU_EMPTY_CACHE_DURATION_SECONDS,
   getDanmuCacheItem,
   setDanmuCacheItem,
 } from './danmuCache';
@@ -108,7 +109,8 @@ export function createDanmakuRequest(
 
   const episode = input.episodeIndex + 1 + input.episodeOffset;
   const params = new URLSearchParams();
-  if (input.manualEpisodeId) params.set('manual_episode_id', input.manualEpisodeId);
+  if (input.manualEpisodeId)
+    params.set('manual_episode_id', input.manualEpisodeId);
 
   if (input.videoDoubanId && input.videoDoubanId > 0) {
     params.set('douban_id', String(input.videoDoubanId));
@@ -232,10 +234,13 @@ export class DanmakuLoadManager {
     throwIfDanmakuLoadAborted(signal);
     const now = this.now();
 
-    if (
-      cached &&
-      now - cached.timestamp < DANMU_CACHE_DURATION_SECONDS * 1000
-    ) {
+    // 空结果使用短 TTL，避免上游弹幕源修复后长时间读到缓存的空数据
+    const cacheTtl =
+      cached && cached.data.length > 0
+        ? DANMU_CACHE_DURATION_SECONDS
+        : DANMU_EMPTY_CACHE_DURATION_SECONDS;
+
+    if (cached && now - cached.timestamp < cacheTtl * 1000) {
       return cached.data;
     }
 
@@ -290,7 +295,9 @@ export function renderDanmakuList(
 
   const wasHidden = Boolean(plugin.isHide);
   const filters = readDanmakuFilters();
-  const visibleDanmaku = danmaku.filter((item) => matchesDanmakuFilters(item, filters));
+  const visibleDanmaku = danmaku.filter((item) =>
+    matchesDanmakuFilters(item, filters),
+  );
   plugin.reset?.();
   plugin.load?.(visibleDanmaku.length > 0 ? visibleDanmaku : undefined);
 

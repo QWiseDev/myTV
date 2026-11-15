@@ -510,6 +510,154 @@ describe('GET /api/danmu-external', () => {
     });
   });
 
+  it('回退 danmu_api 搜索缺集时不错绑其他集弹幕', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (method === 'POST' && url.includes('/api/v2/match')) {
+          return jsonResponse({ success: true, isMatched: false });
+        }
+        // danmu_api 收录了该剧但缺失第 1 集（如芒果SVIP抢先看集）
+        if (url.includes('/api/v2/search/episodes')) {
+          return jsonResponse({
+            success: true,
+            animes: [
+              {
+                animeTitle: '后会友期 2026',
+                episodes: [{ episodeId: 'E2', episodeTitle: '第2集' }],
+              },
+            ],
+          });
+        }
+        return { ok: false } as Response;
+      },
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=1`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [],
+      platforms: [],
+      total: 0,
+      message: '未找到"后会友期"的视频平台链接，无法获取弹幕数据',
+    });
+  });
+
+  it('match 与 search/episodes 失败时经 search/anime + bangumi 命中综艺第N期', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (method === 'POST' && url.includes('/api/v2/match')) {
+          return jsonResponse({ success: true, isMatched: false });
+        }
+        // search/episodes 接口不可用（自建 danmu_api 未实现或格式不符）
+        if (url.includes('/api/v2/search/episodes')) {
+          return { ok: false } as Response;
+        }
+        // search/anime 返回真实搜索结果：正片在前，衍生版在后
+        if (url.includes('/api/v2/search/anime')) {
+          return jsonResponse({
+            success: true,
+            animes: [
+              {
+                animeId: 295201,
+                animeTitle: '后会友期(2026)【综艺】from 360',
+              },
+              {
+                animeId: 295202,
+                animeTitle: '后会友期 沉浸版(2026)【综艺】from 360',
+              },
+            ],
+          });
+        }
+        // bangumi 集列表：综艺标题为「第N期」格式
+        if (url.includes('/api/v2/bangumi/295201')) {
+          return jsonResponse({
+            bangumi: {
+              episodes: [
+                {
+                  episodeId: 12714,
+                  episodeTitle:
+                    '【imgo】 第1期：再见朋友！出发前采 2026-10-22期',
+                },
+                {
+                  episodeId: 12715,
+                  episodeTitle: '【imgo】 第2期：朋友再见！尴尬 2026-10-22期',
+                },
+              ],
+            },
+          });
+        }
+        if (url.includes('/api/v2/bangumi/295202')) {
+          return jsonResponse({
+            bangumi: {
+              episodes: [
+                { episodeId: 12800, episodeTitle: '【imgo】 第1期：沉浸版' },
+              ],
+            },
+          });
+        }
+        if (url.includes('/api/v2/comment/12714')) {
+          return jsonResponse({
+            success: true,
+            comments: [{ p: '9.9,1,16777215,16777215', m: '第一期弹幕' }],
+          });
+        }
+        return { ok: false } as Response;
+      },
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=1`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [{ text: '第一期弹幕', time: 9.9, color: '#FFFFFF', mode: 0 }],
+      platforms: [
+        {
+          platform: 'logvar_episode',
+          episodeId: '12714',
+          title: '后会友期(2026)【综艺】from 360',
+          episodeTitle: '【imgo】 第1期：再见朋友！出发前采 2026-10-22期',
+          count: 1,
+        },
+      ],
+      total: 1,
+    });
+    // 正片（非衍生版）的 comment 被尝试，沉浸版未被消费
+    const commentUrls = fetchMock.mock.calls
+      .map(([calledUrl]) => String(calledUrl))
+      .filter((url) => url.includes('/api/v2/comment/'));
+    expect(commentUrls).toHaveLength(1);
+    expect(commentUrls[0]).toContain('12714');
+  });
+
   it('豆瓣与 caiji 均无结果时返回空数据与提示', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
     mockFetchDoubanWithVerification.mockResolvedValue({

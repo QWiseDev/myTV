@@ -1,5 +1,6 @@
 'use client';
 
+import { MessageSquare, X } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ComponentProps, RefObject, useState } from 'react';
 
@@ -70,6 +71,7 @@ export default function PlayerAndEpisodeSection({
 }: PlayerAndEpisodeSectionProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showInfoOverlay, setShowInfoOverlay] = useState(false);
+  const [showDanmuModal, setShowDanmuModal] = useState(false);
 
   return (
     <div className='space-y-4 h-full flex flex-col'>
@@ -97,16 +99,28 @@ export default function PlayerAndEpisodeSection({
                   <h2 className='text-xl font-bold text-gray-900 dark:text-gray-100 truncate'>
                     {infoProps.videoTitle}
                   </h2>
-                  <button
-                    onClick={() => setShowInfoOverlay(true)}
-                    className='flex-shrink-0 text-xs text-gray-400 hover:text-white transition-colors whitespace-nowrap'
-                  >
-                    详情 &gt;
-                  </button>
+                  <div className='flex flex-shrink-0 items-center gap-3 whitespace-nowrap'>
+                    <button
+                      onClick={() => setShowDanmuModal(true)}
+                      className='flex items-center gap-1 text-xs text-gray-400 transition-colors hover:text-green-500'
+                      aria-label='打开弹幕管理'
+                    >
+                      <MessageSquare size={14} />
+                      弹幕
+                    </button>
+                    <button
+                      onClick={() => setShowInfoOverlay(true)}
+                      className='text-xs text-gray-400 transition-colors hover:text-white'
+                    >
+                      详情 &gt;
+                    </button>
+                  </div>
                 </div>
                 <div className='mt-1 text-xs text-gray-500 dark:text-gray-400 truncate'>
                   {infoProps.videoYear}
-                  {infoProps.detail?.class ? ` | ${infoProps.detail.class}` : ''}
+                  {infoProps.detail?.class
+                    ? ` | ${infoProps.detail.class}`
+                    : ''}
                 </div>
               </div>
 
@@ -151,12 +165,31 @@ export default function PlayerAndEpisodeSection({
               </div>
               <div className='absolute inset-0 top-[52px] overflow-y-auto p-3'>
                 <VideoDetailsPanelDynamic {...infoProps} />
-                <div className='px-1 mt-2'>
-                  <DanmakuPanel
-                    key={`${danmakuProps.title}-${danmakuProps.episodeIndex}`}
-                    {...danmakuProps}
-                  />
-                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 弹幕管理弹窗 */}
+        {showDanmuModal && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center'>
+            <div
+              className='absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm'
+              onClick={() => setShowDanmuModal(false)}
+            />
+            <div className='relative w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto rounded-xl bg-white shadow-2xl dark:bg-[#111111]'>
+              <button
+                onClick={() => setShowDanmuModal(false)}
+                className='absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200'
+                aria-label='关闭弹幕管理'
+              >
+                <X size={16} />
+              </button>
+              <div className='p-3 pt-2'>
+                <DanmakuPanel
+                  key={`${danmakuProps.title}-${danmakuProps.episodeIndex}`}
+                  {...danmakuProps}
+                />
               </div>
             </div>
           </div>
