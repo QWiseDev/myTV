@@ -373,6 +373,143 @@ describe('GET /api/danmu-external', () => {
     });
   });
 
+  it('豆瓣 mgtv play_link 按集数提取并命中 KLM 弹幕', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const mgtvHtml =
+      'play_link: "https%3A%2F%2Fw.mgtv.com%2Fb%2F744227%2F22880001.html%3Fptag%3Ddouban" ' +
+      'play_link: "https%3A%2F%2Fw.mgtv.com%2Fb%2F744227%2F22880002.html%3Fptag%3Ddouban"';
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/37100984/',
+      text: async () => mgtvHtml,
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/comment?url=')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '7.7,1,16777215,16777215', m: '芒果弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/danmu-external?douban_id=37100984&episode=2',
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [{ text: '芒果弹幕', time: 7.7, color: '#FFFFFF', mode: 0 }],
+      platforms: [
+        {
+          platform: 'mgtv',
+          url: 'https://w.mgtv.com/b/744227/22880002.html',
+          count: 1,
+        },
+      ],
+      total: 1,
+    });
+  });
+
+  it('豆瓣 m.mgtv.com 移动版链接转换为 PC 版', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const mgtvMobileHtml =
+      'play_link: "https%3A%2F%2Fm.mgtv.com%2Fb%2F744227%2F22880003.html%3Fptag%3Ddouban"';
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/37100984/',
+      text: async () => mgtvMobileHtml,
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/comment?url=')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '4.4,1,16777215,16777215', m: '移动版转换弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/danmu-external?douban_id=37100984'),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [{ text: '移动版转换弹幕', time: 4.4, color: '#FFFFFF', mode: 0 }],
+      platforms: [
+        {
+          platform: 'mgtv',
+          url: 'https://www.mgtv.com/b/744227/22880003.html',
+          count: 1,
+        },
+      ],
+      total: 1,
+    });
+  });
+
+  it('豆瓣与 caiji 均无结果时回退 danmu_api 标题匹配', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (method === 'POST' && url.includes('/api/v2/match')) {
+          return jsonResponse({
+            success: true,
+            isMatched: true,
+            matches: [
+              {
+                episodeId: 9012,
+                animeTitle: '后会友期 2026',
+                episodeTitle: '第1集',
+              },
+            ],
+          });
+        }
+        if (url.includes('/api/v2/comment/9012')) {
+          return jsonResponse({
+            success: true,
+            comments: [{ p: '15.5,1,16777215,16777215', m: '标题匹配弹幕' }],
+          });
+        }
+        return { ok: false } as Response;
+      },
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=1`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      danmu: [{ text: '标题匹配弹幕', time: 15.5, color: '#FFFFFF', mode: 0 }],
+      platforms: [
+        {
+          platform: 'logvar_episode',
+          episodeId: '9012',
+          title: '后会友期 2026',
+          episodeTitle: '第1集',
+          count: 1,
+        },
+      ],
+      total: 1,
+    });
+  });
+
   it('豆瓣与 caiji 均无结果时返回空数据与提示', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
     mockFetchDoubanWithVerification.mockResolvedValue({

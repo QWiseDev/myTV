@@ -68,7 +68,7 @@ async function extractPlatformUrls(
 
     const response = await withAbortableTimeout(
       (signal) => fetchDoubanWithVerification(target, { signal, headers }),
-      10000
+      10000,
     );
 
     if (!response.ok) {
@@ -95,7 +95,6 @@ async function extractPlatformUrls(
       /play_link:\s*"[^"]*v\.qq\.com[^"]*"/g,
     );
     if (doubanLinkMatches && doubanLinkMatches.length > 0) {
-
       // 如果指定了集数，尝试找到对应集数的链接
       let selectedMatch = doubanLinkMatches[0]; // 默认使用第一个
       if (episode && doubanLinkMatches.length > 1) {
@@ -115,7 +114,6 @@ async function extractPlatformUrls(
     // 爱奇艺
     const iqiyiMatches = html.match(/play_link:\s*"[^"]*iqiyi\.com[^"]*"/g);
     if (iqiyiMatches && iqiyiMatches.length > 0) {
-
       // 如果指定了集数，尝试找到对应集数的链接
       let selectedMatch = iqiyiMatches[0]; // 默认使用第一个
       if (episode && iqiyiMatches.length > 1) {
@@ -137,7 +135,6 @@ async function extractPlatformUrls(
     // 优酷
     const youkuMatches = html.match(/play_link:\s*"[^"]*youku\.com[^"]*"/g);
     if (youkuMatches && youkuMatches.length > 0) {
-
       // 如果指定了集数，尝试找到对应集数的链接
       let selectedMatch = youkuMatches[0]; // 默认使用第一个
       if (episode && youkuMatches.length > 1) {
@@ -181,7 +178,6 @@ async function extractPlatformUrls(
       /play_link:\s*"[^"]*bilibili\.com[^"]*"/g,
     );
     if (biliDoubanMatches && biliDoubanMatches.length > 0) {
-
       // 如果指定了集数，尝试找到对应集数的链接
       let selectedMatch = biliDoubanMatches[0]; // 默认使用第一个
       if (episode && biliDoubanMatches.length > 1) {
@@ -198,6 +194,38 @@ async function extractPlatformUrls(
         const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
         urls.push({ platform: 'bilibili_douban', url: decodedUrl });
       }
+    }
+
+    // 芒果TV（豆瓣独播综艺的 play_link 与直链）
+    const mgtvMatches = html.match(/play_link:\s*"[^"]*mgtv\.com[^"]*"/g);
+    if (mgtvMatches && mgtvMatches.length > 0) {
+      // 如果指定了集数，尝试找到对应集数的链接
+      let selectedMatch = mgtvMatches[0]; // 默认使用第一个
+      if (episode && mgtvMatches.length > 1) {
+        const episodeNum = parseInt(episode);
+        if (episodeNum > 0 && episodeNum <= mgtvMatches.length) {
+          selectedMatch = mgtvMatches[episodeNum - 1];
+        }
+      }
+
+      const urlMatch = selectedMatch.match(
+        /https?%3A%2F%2F[^"&]*mgtv\.com[^"&]*/,
+      );
+      if (urlMatch) {
+        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
+        urls.push({ platform: 'mgtv', url: decodedUrl });
+      }
+    }
+
+    // 芒果TV链接提取（直接链接）
+    const mgtvDirectMatches = html.match(
+      /https:\/\/(?:www|w)\.mgtv\.com\/b\/[^"'\s]+/g,
+    );
+    if (mgtvDirectMatches && mgtvDirectMatches.length > 0) {
+      urls.push({
+        platform: 'mgtv_direct',
+        url: mgtvDirectMatches[0].split('?')[0],
+      });
     }
 
     // 转换移动版链接为PC版链接（弹幕库API需要PC版）
@@ -230,6 +258,11 @@ async function extractPlatformUrls(
         );
         // 移除豆瓣来源参数
         convertedUrl = convertedUrl.split('?')[0];
+      }
+
+      // 芒果TV移动版转PC版
+      if (convertedUrl.includes('m.mgtv.com/')) {
+        convertedUrl = convertedUrl.replace('m.mgtv.com', 'www.mgtv.com');
       }
 
       return { ...urlObj, url: convertedUrl };

@@ -10,7 +10,31 @@ import {
   isSupportedDanmuPlatformUrl,
 } from '@/lib/danmu/klm';
 import { fetchDanmuFromAPI, fetchDanmuFromXMLAPI } from '@/lib/danmu/sources';
-import type { DanmuItem, PlatformUrl } from '@/lib/danmu/types';
+import type {
+  DanmuItem,
+  KlmResolvedEpisode,
+  PlatformUrl,
+} from '@/lib/danmu/types';
+
+// danmu_api 按「标题+年份+集数」匹配到剧集时的统一响应结构
+function klmEpisodeResponse(result: {
+  danmu: DanmuItem[];
+  resolvedEpisode: KlmResolvedEpisode | null;
+}) {
+  return NextResponse.json({
+    danmu: result.danmu,
+    platforms: [
+      {
+        platform: 'logvar_episode',
+        episodeId: result.resolvedEpisode?.episodeId,
+        title: result.resolvedEpisode?.animeTitle,
+        episodeTitle: result.resolvedEpisode?.episodeTitle,
+        count: result.danmu.length,
+      },
+    ],
+    total: result.danmu.length,
+  });
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -55,19 +79,7 @@ export async function GET(request: NextRequest) {
       );
 
       if (directKlmResult.danmu.length > 0) {
-        return NextResponse.json({
-          danmu: directKlmResult.danmu,
-          platforms: [
-            {
-              platform: 'logvar_episode',
-              episodeId: directKlmResult.resolvedEpisode?.episodeId,
-              title: directKlmResult.resolvedEpisode?.animeTitle,
-              episodeTitle: directKlmResult.resolvedEpisode?.episodeTitle,
-              count: directKlmResult.danmu.length,
-            },
-          ],
-          total: directKlmResult.danmu.length,
-        });
+        return klmEpisodeResponse(directKlmResult);
       }
     }
 
@@ -90,6 +102,18 @@ export async function GET(request: NextRequest) {
     // （删除了不合适的fallback测试链接逻辑）
 
     if (platformUrls.length === 0) {
+      // 豆瓣与 caiji 均未命中平台链接时（如芒果TV独播综艺），
+      // 回退到 danmu_api 按「标题+年份+集数」匹配剧集
+      if (title) {
+        const fallbackKlmResult = await fetchDanmuFromKlmEpisode(
+          title,
+          year,
+          episode,
+        );
+        if (fallbackKlmResult.danmu.length > 0) {
+          return klmEpisodeResponse(fallbackKlmResult);
+        }
+      }
 
       return NextResponse.json({
         danmu: [],
@@ -101,7 +125,6 @@ export async function GET(request: NextRequest) {
 
     // 并发获取多个平台的弹幕（自建 danmu_api 优先，旧外部源备用）
     const danmuPromises = platformUrls.map(async ({ platform, url }) => {
-
       let danmu = await fetchDanmuFromKlmAPI(url);
 
       if (danmu.length === 0) {
@@ -123,8 +146,11 @@ export async function GET(request: NextRequest) {
 
     // 合并所有成功的弹幕数据
     let allDanmu: DanmuItem[] = [];
-    const platformInfo: Array<{ platform: string; url: string; count: number }> =
-      [];
+    const platformInfo: Array<{
+      platform: string;
+      url: string;
+      count: number;
+    }> = [];
 
     results.forEach((result) => {
       if (result.status === 'fulfilled' && result.value.danmu.length > 0) {
