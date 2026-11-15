@@ -1,21 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 'use client';
 
-import {
-  Cat,
-  Clover,
-  Film,
-  Globe,
-  Home,
-  Radio,
-  Star,
-  Tv,
-  Video,
-} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+
+import { isPlayPagePath, saveProgressAndNavigate } from '@/lib/play-navigation';
+import { isNavActive, useNavMenuItems } from '@/hooks/useNavMenus';
 
 interface MobileBottomNavProps {
   /**
@@ -30,122 +20,26 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
   // 当前激活路径：优先使用传入的 activePath，否则回退到浏览器地址
   const currentActive = activePath ?? pathname;
 
+  // 全站共享菜单：底部导航仅保留首页 + 内容频道
+  const navItems = useNavMenuItems().filter(
+    (item) => item.label === '首页' || item.group === 'channel',
+  );
+
   // 处理导航点击，特别是在播放页面时的特殊处理
   const handleNavClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-      // 检查是否在播放页面
-      if (window.location.pathname.includes('/play')) {
+      if (isPlayPagePath()) {
         e.preventDefault();
         e.stopPropagation();
-
-        // 手动触发播放进度保存，然后导航
-        const saveProgress = () => {
-          try {
-            // 触发播放进度保存事件
-            const progressEvent = new CustomEvent('savePlayProgress', {
-              detail: {
-                action: 'manualNavigation',
-                targetUrl: href,
-              },
-            });
-            window.dispatchEvent(progressEvent);
-          } catch (error) {
-            console.warn('保存播放进度失败:', error);
-          }
-        };
-
-        // 保存进度后导航
-        saveProgress();
-
-        // 临时移除beforeunload监听器以允许导航
-        const beforeUnloadHandler = window.onbeforeunload;
-        window.onbeforeunload = null;
-
-        // 强制导航，使用setTimeout确保事件处理完成
-        setTimeout(() => {
-          window.location.href = href;
-          // 恢复beforeunload监听器（如果需要）
-          if (beforeUnloadHandler) {
-            window.onbeforeunload = beforeUnloadHandler;
-          }
-        }, 100);
-        return;
+        saveProgressAndNavigate(href);
       }
     },
     [],
   );
 
-  const [navItems, setNavItems] = useState([
-    { icon: Home, label: '首页', href: '/' },
-    {
-      icon: Globe,
-      label: '片源库',
-      href: '/source-browser',
-    },
-    {
-      icon: Film,
-      label: '电影',
-      href: '/douban?type=movie',
-    },
-    {
-      icon: Tv,
-      label: '剧集',
-      href: '/douban?type=tv',
-    },
-    {
-      icon: Video,
-      label: '短视频',
-      href: '/shortvideo',
-    },
-    {
-      icon: Cat,
-      label: '动漫',
-      href: '/douban?type=anime',
-    },
-    {
-      icon: Clover,
-      label: '综艺',
-      href: '/douban?type=show',
-    },
-    {
-      icon: Radio,
-      label: '直播',
-      href: '/live',
-    },
-  ]);
-
-  useEffect(() => {
-    const runtimeConfig = (window as any).RUNTIME_CONFIG;
-    if (runtimeConfig?.CUSTOM_CATEGORIES?.length > 0) {
-      setNavItems((prevItems) => [
-        ...prevItems,
-        {
-          icon: Star,
-          label: '自定义',
-          href: '/douban?type=custom',
-        },
-      ]);
-    }
-  }, []);
-
-  const isActive = (href: string) => {
-    const typeMatch = href.match(/type=([^&]+)/)?.[1];
-
-    // 解码URL以进行正确的比较
-    const decodedActive = decodeURIComponent(currentActive);
-    const decodedItemHref = decodeURIComponent(href);
-
-    return (
-      decodedActive === decodedItemHref ||
-      (decodedActive.startsWith('/douban') &&
-        decodedActive.includes(`type=${typeMatch}`)) ||
-      (href === '/shortvideo' && decodedActive.startsWith('/shortvideo'))
-    );
-  };
-
   return (
     <nav
-      className='md:hidden fixed left-0 right-0 z-[600] bg-[#ffffff]/92 backdrop-blur-xl border-t border-[#e8e8e8] overflow-hidden dark:bg-[#0d0d0d]/92 dark:border-[#3a3a3a]'
+      className='fixed bottom-0 left-0 right-0 z-[600] border-t border-[#e8e8e8] bg-[#ffffff]/92 backdrop-blur-xl dark:border-[#3a3a3a] dark:bg-[#0d0d0d]/92 md:hidden'
       style={{
         /* 紧贴视口底部，同时在内部留出安全区高度 */
         bottom: 0,
@@ -155,7 +49,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
     >
       <ul className='flex items-center overflow-x-auto scrollbar-hide'>
         {navItems.map((item) => {
-          const active = isActive(item.href);
+          const active = isNavActive(currentActive, item.href);
           return (
             <li
               key={item.href}
