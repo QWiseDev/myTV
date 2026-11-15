@@ -57,8 +57,9 @@ export class AccessLogService {
    * 检查是否启用日志记录
    */
   private checkEnabled(): boolean {
-    // 默认禁用访问日志记录
-    return false;
+    // 默认启用访问日志记录（此前硬编码 return false 导致访问日志页面始终为空）。
+    // 如需关闭上报，设置环境变量 NEXT_PUBLIC_ACCESS_LOG_ENABLED=false
+    return process.env.NEXT_PUBLIC_ACCESS_LOG_ENABLED !== 'false';
   }
 
   /**
