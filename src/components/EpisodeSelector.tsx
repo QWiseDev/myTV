@@ -65,6 +65,13 @@ interface EpisodeSelectorProps {
   precomputedVideoInfo?: Map<string, VideoInfo>;
 }
 
+/** 估算文本显示宽度：全角字符按 1，半角字符按 0.6 */
+const estimateTextWidth = (text: string): number =>
+  Array.from(text).reduce(
+    (width, char) => width + (char.charCodeAt(0) > 255 ? 1 : 0.6),
+    0,
+  );
+
 /**
  * 选集组件，支持分页、自动滚动聚焦当前分页标签，以及换源功能。
  */
@@ -171,14 +178,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
           'checkedAt' | 'sourceKey' | 'episodeIndex'
         >,
       ) => {
-        setProbeResults(
-          (prev) =>
-            new Map(prev).set(cacheKey, {
-              sourceKey,
-              episodeIndex,
-              ...patch,
-              checkedAt: Date.now(),
-            }),
+        setProbeResults((prev) =>
+          new Map(prev).set(cacheKey, {
+            sourceKey,
+            episodeIndex,
+            ...patch,
+            checkedAt: Date.now(),
+          }),
         );
       };
       const skip = (message: string) =>
@@ -314,10 +320,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       const concurrency = Math.max(1, getOptimalProbeConcurrency());
       let cursor = 0;
       const worker = async () => {
-        while (
-          cursor < pendingSources.length &&
-          !controller.signal.aborted
-        ) {
+        while (cursor < pendingSources.length && !controller.signal.aborted) {
           const source = pendingSources[cursor];
           cursor += 1;
           await runAutoProbe(source, controller.signal);
@@ -451,7 +454,10 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       episodeCheckAbortRef.current = controller;
 
       const isFinal = (s: EpisodeSourceCheckResult['status']) =>
-        s === 'success' || s === 'error' || s === 'skipped' || s === 'cancelled';
+        s === 'success' ||
+        s === 'error' ||
+        s === 'skipped' ||
+        s === 'cancelled';
 
       // 结果与自动测速共用一份 store，不能以"store 里是否已有终态"判断进度
       // （缓存命中的条目本来就是终态），改用本次 run 的已计数集合去重
@@ -597,6 +603,36 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       setActiveTab('sources');
     }
   }, [activeTab, totalEpisodes]);
+
+  // 全部集数的显示文本（优先提取「第N集/话」中的数字，否则展示完整标题）
+  const displayTexts = useMemo(
+    () =>
+      Array.from({ length: totalEpisodes }, (_, i) => {
+        const title = episodes_titles?.[i];
+        if (!title) {
+          return String(i + 1);
+        }
+        const match = title.match(/(?:第)?(\d+)(?:集|话)/);
+        if (match) {
+          return match[1];
+        }
+        return title;
+      }),
+    [episodes_titles, totalEpisodes],
+  );
+
+  // 标题过长时减少每行列数：稍长 4 列；超长标题一行一集，避免文字被截断看不全
+  const gridColumns = useMemo(() => {
+    const maxWidth = displayTexts.reduce(
+      (max, text) => Math.max(max, estimateTextWidth(text)),
+      0,
+    );
+    if (maxWidth <= 3.5) return 5;
+    if (maxWidth <= 6) return 4;
+    return 1;
+  }, [displayTexts]);
+  const isLongTitle = gridColumns < 5;
+  const rowHeight = gridColumns === 1 ? 56 : 72;
 
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -853,7 +889,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             </button>
           </div>
 
-          {/* 集数网格 - 虚拟化 */}
+          {/* 集数网格 - 虚拟化（超长标题一行一集，悬停浮出全文） */}
           <VirtualGrid
             items={(() => {
               const len = currentEnd - currentStart + 1;
@@ -861,37 +897,44 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 descending ? currentEnd - i : currentStart + i,
               );
             })()}
-            itemHeight={72}
+            itemHeight={rowHeight}
             gap={10}
-            columns={5}
+            columns={gridColumns}
             renderItem={(episodeNumber) => {
               const isActive = episodeNumber === value;
+              const display =
+                displayTexts[episodeNumber - 1] ?? String(episodeNumber);
               return (
-                <button
+                <div
                   key={episodeNumber}
-                  onClick={() => handleEpisodeClick(episodeNumber - 1)}
-                  style={{ fontSize: 'clamp(12px, 11cqw - 11px, 20px)' }}
-                  className={`group h-[72px] w-full flex items-center justify-center px-1 font-bold rounded-xl transition-colors duration-200 border-2 overflow-hidden
-                    ${
-                      isActive
-                        ? 'border-green-400 text-green-600 bg-transparent dark:text-green-400'
-                        : 'border-transparent bg-gray-200/70 text-gray-700 hover:bg-gray-300/70 dark:bg-[#2a2a2a] dark:text-gray-100 dark:hover:bg-[#333]'
-                    }`.trim()}
+                  className='group relative'
+                  style={{ height: rowHeight }}
                 >
-                  <span className='relative z-10 max-w-full truncate'>
-                    {(() => {
-                      const title = episodes_titles?.[episodeNumber - 1];
-                      if (!title) {
-                        return episodeNumber;
-                      }
-                      const match = title.match(/(?:第)?(\d+)(?:集|话)/);
-                      if (match) {
-                        return match[1];
-                      }
-                      return title;
-                    })()}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => handleEpisodeClick(episodeNumber - 1)}
+                    style={{
+                      fontSize: isLongTitle
+                        ? 'clamp(12px, 4cqw, 15px)'
+                        : 'clamp(12px, 11cqw - 11px, 20px)',
+                    }}
+                    className={`h-full w-full flex items-center justify-center px-1 font-bold rounded-xl transition-colors duration-200 border-2 overflow-hidden
+                      ${
+                        isActive
+                          ? 'border-green-400 text-green-600 bg-transparent dark:text-green-400'
+                          : 'border-transparent bg-gray-200/70 text-gray-700 hover:bg-gray-300/70 dark:bg-[#2a2a2a] dark:text-gray-100 dark:hover:bg-[#333]'
+                      }`.trim()}
+                  >
+                    <span className='relative z-10 max-w-full truncate group-hover:opacity-0'>
+                      {display}
+                    </span>
+                  </button>
+                  {/* 悬停浮层：在按钮内展示完整标题 */}
+                  {display.length > 4 && (
+                    <div className='pointer-events-none absolute inset-x-1 top-1/2 z-20 hidden -translate-y-1/2 items-center justify-center rounded-lg bg-gray-800/95 px-2 py-1 text-center text-xs font-normal leading-snug text-white shadow-lg group-hover:flex'>
+                      {display}
+                    </div>
+                  )}
+                </div>
               );
             }}
           />
@@ -987,192 +1030,190 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 {/* 固定高度的滚动详情列表 */}
                 <div className='flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-2'>
                   {orderedSources.map((source, index) => {
-                      const isCurrentSource =
-                        source.source?.toString() ===
-                          currentSource?.toString() &&
-                        source.id?.toString() === currentId?.toString();
-                      return (
-                        <div
-                          key={`${source.source}-${source.id}`}
-                          onClick={() =>
-                            !isCurrentSource && handleSourceClick(source)
-                          }
-                          className={`group flex items-start gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-3 rounded-lg sm:rounded-xl transition-all select-none duration-300 relative overflow-hidden
+                    const isCurrentSource =
+                      source.source?.toString() === currentSource?.toString() &&
+                      source.id?.toString() === currentId?.toString();
+                    return (
+                      <div
+                        key={`${source.source}-${source.id}`}
+                        onClick={() =>
+                          !isCurrentSource && handleSourceClick(source)
+                        }
+                        className={`group flex items-start gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-3 rounded-lg sm:rounded-xl transition-all select-none duration-300 relative overflow-hidden
                       ${
                         isCurrentSource
                           ? 'bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/30 dark:via-emerald-900/30 dark:to-teal-900/30 border-2 border-green-500/50 dark:border-green-400/50 shadow-lg shadow-green-500/10'
                           : 'bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
                       }`.trim()}
-                        >
-                          {/* 当前源标记 */}
-                          {isCurrentSource && (
-                            <div className='absolute top-1 sm:top-2 right-1 sm:right-2 z-10'>
-                              <div className='relative'>
-                                <div className='absolute inset-0 bg-green-500 rounded-full blur opacity-60 animate-pulse'></div>
-                                <div className='relative bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-lg'>
-                                  当前源
-                                </div>
+                      >
+                        {/* 当前源标记 */}
+                        {isCurrentSource && (
+                          <div className='absolute top-1 sm:top-2 right-1 sm:right-2 z-10'>
+                            <div className='relative'>
+                              <div className='absolute inset-0 bg-green-500 rounded-full blur opacity-60 animate-pulse'></div>
+                              <div className='relative bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-lg'>
+                                当前源
                               </div>
                             </div>
-                          )}
+                          </div>
+                        )}
 
-                          {/* 悬浮光效 */}
-                          {!isCurrentSource && (
-                            <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
-                          )}
+                        {/* 悬浮光效 */}
+                        {!isCurrentSource && (
+                          <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
+                        )}
 
-                          {/* 封面 */}
-                          <div className='flex-shrink-0 w-10 h-14 sm:w-12 sm:h-20 bg-gradient-to-br from-gray-300 to-gray-200 dark:from-gray-600 dark:to-gray-700 rounded-md sm:rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow duration-300'>
-                            {source.episodes && source.episodes.length > 0 && (
-                              <img
-                                src={processImageUrl(source.poster)}
-                                alt={source.title}
-                                className='w-full h-full object-cover'
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                }}
-                              />
+                        {/* 封面 */}
+                        <div className='flex-shrink-0 w-10 h-14 sm:w-12 sm:h-20 bg-gradient-to-br from-gray-300 to-gray-200 dark:from-gray-600 dark:to-gray-700 rounded-md sm:rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow duration-300'>
+                          {source.episodes && source.episodes.length > 0 && (
+                            <img
+                              src={processImageUrl(source.poster)}
+                              alt={source.title}
+                              className='w-full h-full object-cover'
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* 信息区域 */}
+                        <div className='flex-1 min-w-0 flex flex-col justify-between h-14 sm:h-20'>
+                          {/* 标题和分辨率 - 顶部 */}
+                          <div className='flex items-start justify-between gap-1 sm:gap-3 h-5 sm:h-6'>
+                            <div className='flex-1 min-w-0 relative group/title'>
+                              <h3 className='font-medium text-xs sm:text-sm truncate text-gray-900 dark:text-gray-100 leading-none'>
+                                {source.title}
+                              </h3>
+                              {/* 标题级别的 tooltip - 第一个元素不显示 */}
+                              {index !== 0 && (
+                                <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 sm:px-3 py-1 bg-gray-800 text-white text-[10px] sm:text-xs rounded-md shadow-lg opacity-0 invisible group-hover/title:opacity-100 group-hover/title:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap z-[500] pointer-events-none'>
+                                  {source.title}
+                                  <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800'></div>
+                                </div>
+                              )}
+                            </div>
+                            {(() => {
+                              const check = probeResults.get(
+                                buildEpisodeProbeCacheKey(
+                                  buildEpisodeSourceKey(source),
+                                  selectedEpisodeIndex,
+                                ),
+                              );
+                              if (!check) return null;
+
+                              const status = check.status;
+                              const label =
+                                status === 'checking'
+                                  ? '检查中'
+                                  : status === 'success'
+                                    ? check.quality && check.quality !== '未知'
+                                      ? `可播 ${check.quality}`
+                                      : '可播放'
+                                    : status === 'skipped'
+                                      ? check.message || '跳过'
+                                      : status === 'cancelled'
+                                        ? '已取消'
+                                        : '异常';
+
+                              const className =
+                                status === 'checking'
+                                  ? 'bg-blue-500/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
+                                  : status === 'success'
+                                    ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
+                                    : status === 'skipped' ||
+                                        status === 'cancelled'
+                                      ? 'bg-gray-500/10 dark:bg-gray-400/20 text-gray-600 dark:text-gray-300'
+                                      : 'bg-red-500/10 dark:bg-red-400/20 text-red-600 dark:text-red-400';
+
+                              return (
+                                <div
+                                  title={check.details || check.message}
+                                  className={`${className} px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[70px] sm:min-w-[80px] text-center`}
+                                >
+                                  {label}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* 源名称和集数信息 - 垂直居中 */}
+                          <div className='flex items-center justify-between'>
+                            <span className='text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300'>
+                              {source.source_name}
+                            </span>
+                            {source.episodes.length > 1 && (
+                              <span className='text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium'>
+                                {source.episodes.length} 集
+                              </span>
                             )}
                           </div>
 
-                          {/* 信息区域 */}
-                          <div className='flex-1 min-w-0 flex flex-col justify-between h-14 sm:h-20'>
-                            {/* 标题和分辨率 - 顶部 */}
-                            <div className='flex items-start justify-between gap-1 sm:gap-3 h-5 sm:h-6'>
-                              <div className='flex-1 min-w-0 relative group/title'>
-                                <h3 className='font-medium text-xs sm:text-sm truncate text-gray-900 dark:text-gray-100 leading-none'>
-                                  {source.title}
-                                </h3>
-                                {/* 标题级别的 tooltip - 第一个元素不显示 */}
-                                {index !== 0 && (
-                                  <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 sm:px-3 py-1 bg-gray-800 text-white text-[10px] sm:text-xs rounded-md shadow-lg opacity-0 invisible group-hover/title:opacity-100 group-hover/title:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap z-[500] pointer-events-none'>
-                                    {source.title}
-                                    <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800'></div>
-                                  </div>
-                                )}
-                              </div>
-                              {(() => {
-                                const check = probeResults.get(
-                                  buildEpisodeProbeCacheKey(
-                                    buildEpisodeSourceKey(source),
-                                    selectedEpisodeIndex,
-                                  ),
-                                );
-                                if (!check) return null;
+                          {/* 网络信息 - 底部 */}
+                          <div className='flex items-end h-5 sm:h-6'>
+                            {(() => {
+                              const check = probeResults.get(
+                                buildEpisodeProbeCacheKey(
+                                  buildEpisodeSourceKey(source),
+                                  selectedEpisodeIndex,
+                                ),
+                              );
+                              if (!check) return null;
 
-                                const status = check.status;
-                                const label =
-                                  status === 'checking'
-                                    ? '检查中'
-                                    : status === 'success'
-                                      ? check.quality &&
-                                        check.quality !== '未知'
-                                        ? `可播 ${check.quality}`
-                                        : '可播放'
-                                      : status === 'skipped'
-                                        ? check.message || '跳过'
-                                        : status === 'cancelled'
-                                          ? '已取消'
-                                          : '异常';
-
-                                const className =
-                                  status === 'checking'
-                                    ? 'bg-blue-500/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
-                                    : status === 'success'
-                                      ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
-                                      : status === 'skipped' ||
-                                          status === 'cancelled'
-                                        ? 'bg-gray-500/10 dark:bg-gray-400/20 text-gray-600 dark:text-gray-300'
-                                        : 'bg-red-500/10 dark:bg-red-400/20 text-red-600 dark:text-red-400';
-
+                              if (check.status === 'success') {
                                 return (
-                                  <div
-                                    title={check.details || check.message}
-                                    className={`${className} px-1 sm:px-1.5 py-0 rounded text-[10px] sm:text-xs flex-shrink-0 min-w-[70px] sm:min-w-[80px] text-center`}
-                                  >
-                                    {label}
+                                  <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
+                                    <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
+                                      {check.loadSpeed || '未知'}
+                                    </div>
+                                    <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>
+                                      {(check.pingTimeMs ?? 0) > 0
+                                        ? `${check.pingTimeMs}ms`
+                                        : '未知'}
+                                    </div>
                                   </div>
                                 );
-                              })()}
-                            </div>
+                              }
 
-                            {/* 源名称和集数信息 - 垂直居中 */}
-                            <div className='flex items-center justify-between'>
-                              <span className='text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300'>
-                                {source.source_name}
-                              </span>
-                              {source.episodes.length > 1 && (
-                                <span className='text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium'>
-                                  {source.episodes.length} 集
-                                </span>
-                              )}
-                            </div>
-
-                            {/* 网络信息 - 底部 */}
-                            <div className='flex items-end h-5 sm:h-6'>
-                              {(() => {
-                                const check = probeResults.get(
-                                  buildEpisodeProbeCacheKey(
-                                    buildEpisodeSourceKey(source),
-                                    selectedEpisodeIndex,
-                                  ),
-                                );
-                                if (!check) return null;
-
-                                if (check.status === 'success') {
-                                  return (
-                                    <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
-                                      <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
-                                        {check.loadSpeed || '未知'}
-                                      </div>
-                                      <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>
-                                        {(check.pingTimeMs ?? 0) > 0
-                                          ? `${check.pingTimeMs}ms`
-                                          : '未知'}
-                                      </div>
-                                    </div>
-                                  );
-                                }
-
-                                if (check.status === 'checking') {
-                                  return (
-                                    <div className='text-blue-600 dark:text-blue-400 font-medium text-[10px] sm:text-xs'>
-                                      检查中...
-                                    </div>
-                                  );
-                                }
-
-                                if (check.status === 'skipped') {
-                                  return (
-                                    <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
-                                      {check.message || '已跳过'}
-                                    </div>
-                                  );
-                                }
-
-                                if (check.status === 'cancelled') {
-                                  return (
-                                    <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
-                                      已取消
-                                    </div>
-                                  );
-                                }
-
+                              if (check.status === 'checking') {
                                 return (
-                                  <div
-                                    title={check.details}
-                                    className='text-red-500/90 dark:text-red-400 font-medium text-[10px] sm:text-xs truncate max-w-[160px]'
-                                  >
-                                    {check.message || '异常'}
+                                  <div className='text-blue-600 dark:text-blue-400 font-medium text-[10px] sm:text-xs'>
+                                    检查中...
                                   </div>
                                 );
-                              })()}
-                            </div>
+                              }
+
+                              if (check.status === 'skipped') {
+                                return (
+                                  <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
+                                    {check.message || '已跳过'}
+                                  </div>
+                                );
+                              }
+
+                              if (check.status === 'cancelled') {
+                                return (
+                                  <div className='text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs'>
+                                    已取消
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  title={check.details}
+                                  className='text-red-500/90 dark:text-red-400 font-medium text-[10px] sm:text-xs truncate max-w-[160px]'
+                                >
+                                  {check.message || '异常'}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* 搜索提示按钮 */}
