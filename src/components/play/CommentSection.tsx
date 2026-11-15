@@ -3,7 +3,6 @@
 import {
   ChevronDown,
   ExternalLink,
-  MessageSquare,
   RotateCcw,
 } from 'lucide-react';
 import { memo } from 'react';
@@ -29,10 +28,9 @@ const CommentSection = memo(function CommentSection({
   if (!videoDoubanId || String(videoDoubanId) === '0') return null;
 
   return (
-    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
-      <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-        <MessageSquare size={18} aria-hidden />
-        <span>豆瓣短评</span>
+    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-5'>
+      <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-4'>
+        豆瓣短评
       </h3>
       <div className='space-y-4'>
         {comments.map((comment) => (

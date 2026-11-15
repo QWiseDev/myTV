@@ -70,10 +70,9 @@ export default function RecommendationsSection({
   };
 
   return (
-    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
-      <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-        <span>💡</span>
-        <span>喜欢这部{isEpisodic ? '剧' : '电影'}的人也喜欢</span>
+    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-5'>
+      <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-4'>
+        喜欢这部{isEpisodic ? '剧' : '电影'}的人也喜欢
       </h3>
       <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3'>
         {recommendations.map((item) => (

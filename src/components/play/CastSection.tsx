@@ -70,30 +70,32 @@ const CastSection = memo(function CastSection({
   }
 
   return (
-    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-6'>
-      <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2'>
-        <span>🎭</span>
-        <span>演员阵容</span>
+    <div className='mt-6 border-t border-gray-200 dark:border-gray-700 pt-5'>
+      <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-4'>
+        演职员
       </h3>
-      <div className='flex gap-4 overflow-x-auto pb-4 scrollbar-hide'>
+      <div className='flex gap-3 overflow-x-auto pb-4 scrollbar-hide'>
         {celebrities.slice(0, 15).map((celebrity) => (
           <div
             key={celebrity.id}
             onClick={() => handleClick(celebrity.name)}
-            className='shrink-0 text-center group cursor-pointer'
+            className='w-[96px] shrink-0 group cursor-pointer'
           >
-            <div className='w-20 h-20 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2 ring-2 ring-transparent group-hover:ring-blue-500 transition-all duration-300 group-hover:scale-110 shadow-md group-hover:shadow-xl'>
+            {/* 爱奇艺式照片卡：圆角竖版照片 + 底部姓名渐变叠字 */}
+            <div className='relative w-[96px] h-[128px] rounded-lg overflow-hidden bg-gray-200 dark:bg-[#2a2a2a] transition-transform duration-300 group-hover:scale-[1.03]'>
               <CastAvatar avatar={celebrity.avatar} name={celebrity.name} />
+              <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pt-5 pb-1.5'>
+                <p
+                  className='text-xs font-medium text-white truncate'
+                  title={celebrity.name}
+                >
+                  {celebrity.name}
+                </p>
+              </div>
             </div>
-            <p
-              className='text-xs font-medium text-gray-700 dark:text-gray-300 w-20 truncate group-hover:text-blue-500 transition-colors'
-              title={celebrity.name}
-            >
-              {celebrity.name}
-            </p>
             {celebrity.role && (
               <p
-                className='text-[10px] text-gray-500 dark:text-gray-500 w-20 truncate mt-0.5'
+                className='mt-1.5 text-[11px] leading-4 text-gray-500 dark:text-gray-500 truncate'
                 title={celebrity.role}
               >
                 {celebrity.role}
