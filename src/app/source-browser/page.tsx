@@ -47,14 +47,14 @@ export default function SourceBrowserPage() {
   // 📊 源浏览器分析埋点
   const analytics = useSourceBrowserAnalytics({
     userId: '', // 可以根据实际用户系统传入
-    userType: 'guest' // 可以根据实际用户系统传入
+    userType: 'guest', // 可以根据实际用户系统传入
   });
 
   const [sources, setSources] = useState<Source[]>([]);
   const [loadingSources, setLoadingSources] = useState(true);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [activeSourceKey, setActiveSourceKey] = useState('');
-  
+
   // 源列表筛选
   const [sourceFilter, setSourceFilter] = useState('');
   const filteredSources = useMemo(() => {
@@ -62,13 +62,14 @@ export default function SourceBrowserPage() {
     const lower = sourceFilter.trim().toLowerCase();
     return sources.filter(
       (s) =>
-        s.name.toLowerCase().includes(lower) || s.key.toLowerCase().includes(lower)
+        s.name.toLowerCase().includes(lower) ||
+        s.key.toLowerCase().includes(lower),
     );
   }, [sources, sourceFilter]);
 
   const activeSource = useMemo(
     () => sources.find((s) => s.key === activeSourceKey),
-    [sources, activeSourceKey]
+    [sources, activeSourceKey],
   );
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -105,7 +106,7 @@ export default function SourceBrowserPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<GlobalSearchResult | null>(
-    null
+    null,
   );
   const [previewItem, setPreviewItem] = useState<Item | null>(null);
   const [previewDouban, setPreviewDouban] = useState<DoubanItem | null>(null);
@@ -127,7 +128,7 @@ export default function SourceBrowserPage() {
     summary?: string;
   };
   const [previewBangumi, setPreviewBangumi] = useState<BangumiSubject | null>(
-    null
+    null,
   );
   const [previewBangumiLoading, setPreviewBangumiLoading] = useState(false);
   const [previewSearchPick, setPreviewSearchPick] =
@@ -154,7 +155,11 @@ export default function SourceBrowserPage() {
 
       // 📊 分析埋点：源列表加载
       trackAnalyticsSafely(() =>
-        analytics.handleSourceListLoad(list.length, Date.now() - startTime, list.map(s => s.name))
+        analytics.handleSourceListLoad(
+          list.length,
+          Date.now() - startTime,
+          list.map((s) => s.name),
+        ),
       );
 
       if (list.length > 0) {
@@ -165,7 +170,9 @@ export default function SourceBrowserPage() {
       setSourceError(errorMessage);
 
       // 📊 分析埋点：源列表加载错误
-      trackAnalyticsSafely(() => analytics.handleSourceError('network', errorMessage, ''));
+      trackAnalyticsSafely(() =>
+        analytics.handleSourceError('network', errorMessage, ''),
+      );
     } finally {
       setLoadingSources(false);
     }
@@ -178,7 +185,7 @@ export default function SourceBrowserPage() {
     setCategoryError(null);
     try {
       const res = await fetch(
-        `/api/source-browser/categories?source=${encodeURIComponent(sourceKey)}`
+        `/api/source-browser/categories?source=${encodeURIComponent(sourceKey)}`,
       );
       if (!res.ok) throw new Error('获取分类失败');
       const data = await res.json();
@@ -203,7 +210,7 @@ export default function SourceBrowserPage() {
       sourceKey: string,
       typeId: string | number,
       p = 1,
-      append = false
+      append = false,
     ) => {
       if (!sourceKey || !typeId) return;
       if (append) setLoadingMore(true);
@@ -212,8 +219,8 @@ export default function SourceBrowserPage() {
       try {
         const res = await fetch(
           `/api/source-browser/list?source=${encodeURIComponent(
-            sourceKey
-          )}&type_id=${encodeURIComponent(String(typeId))}&page=${p}`
+            sourceKey,
+          )}&type_id=${encodeURIComponent(String(typeId))}&page=${p}`,
         );
         if (!res.ok) throw new Error('获取列表失败');
         const data = (await res.json()) as {
@@ -226,7 +233,7 @@ export default function SourceBrowserPage() {
         setPageCount(Number(data.meta?.pagecount || 1));
         // 更新可选年份
         const years = Array.from(
-          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean))
+          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean)),
         );
         years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
         setAvailableYears(years);
@@ -241,7 +248,7 @@ export default function SourceBrowserPage() {
         else setLoadingItems(false);
       }
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -269,8 +276,8 @@ export default function SourceBrowserPage() {
       try {
         const res = await fetch(
           `/api/source-browser/search?source=${encodeURIComponent(
-            sourceKey
-          )}&q=${encodeURIComponent(q)}&page=${p}`
+            sourceKey,
+          )}&q=${encodeURIComponent(q)}&page=${p}`,
         );
         if (!res.ok) throw new Error('搜索失败');
         const data = (await res.json()) as {
@@ -282,7 +289,7 @@ export default function SourceBrowserPage() {
         setPage(Number(data.meta?.page || p));
         setPageCount(Number(data.meta?.pagecount || 1));
         const years = Array.from(
-          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean))
+          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean)),
         );
         years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
         setAvailableYears(years);
@@ -297,7 +304,7 @@ export default function SourceBrowserPage() {
         else setLoadingItems(false);
       }
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -337,7 +344,7 @@ export default function SourceBrowserPage() {
           }
         }
       },
-      { root: null, rootMargin: '200px', threshold: 0 }
+      { root: null, rootMargin: '200px', threshold: 0 },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -419,7 +426,7 @@ export default function SourceBrowserPage() {
       arr = arr.filter(
         (i) =>
           (i.title || '').toLowerCase().includes(kw) ||
-          (i.remarks || '').toLowerCase().includes(kw)
+          (i.remarks || '').toLowerCase().includes(kw),
       );
     }
     // 年份筛选（精确匹配）
@@ -433,11 +440,11 @@ export default function SourceBrowserPage() {
         return arr.sort((a, b) => b.title.localeCompare(a.title));
       case 'year-asc':
         return arr.sort(
-          (a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0)
+          (a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0),
         );
       case 'year-desc':
         return arr.sort(
-          (a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)
+          (a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0),
         );
       default:
         return arr; // 保持上游顺序
@@ -458,7 +465,7 @@ export default function SourceBrowserPage() {
 
       // 2) 缓存未命中，回源请求 /api/douban/details
       const fallback = await fetch(
-        `/api/douban/details?id=${encodeURIComponent(String(doubanId))}`
+        `/api/douban/details?id=${encodeURIComponent(String(doubanId))}`,
       );
       if (fallback.ok) {
         const dbData = (await fallback.json()) as
@@ -523,8 +530,8 @@ export default function SourceBrowserPage() {
     try {
       const res = await fetch(
         `/api/detail?source=${encodeURIComponent(
-          activeSourceKey
-        )}&id=${encodeURIComponent(item.id)}`
+          activeSourceKey,
+        )}&id=${encodeURIComponent(item.id)}`,
       );
       if (!res.ok) throw new Error('获取详情失败');
       const data = (await res.json()) as GlobalSearchResult;
@@ -536,15 +543,15 @@ export default function SourceBrowserPage() {
         const normalize = (s: string) =>
           (s || '').replace(/\s+/g, '').toLowerCase();
         const variants = Array.from(
-          new Set([item.title, (item.title || '').replace(/\s+/g, '')])
+          new Set([item.title, (item.title || '').replace(/\s+/g, '')]),
         ).filter(Boolean) as string[];
 
         for (const v of variants) {
           try {
             const res = await fetch(
               `/api/search/one?resourceId=${encodeURIComponent(
-                activeSourceKey
-              )}&q=${encodeURIComponent(v)}`
+                activeSourceKey,
+              )}&q=${encodeURIComponent(v)}`,
             );
             if (!res.ok) continue;
             const payload = (await res.json()) as {
@@ -560,10 +567,10 @@ export default function SourceBrowserPage() {
                   (r.year &&
                     String(r.year).toLowerCase() ===
                       String(item.year).toLowerCase())) &&
-                r.douban_id
+                r.douban_id,
             );
             const matchTitleOnly = list.find(
-              (r) => normalize(r.title) === tNorm && r.douban_id
+              (r) => normalize(r.title) === tNorm && r.douban_id,
             );
             const pick = matchStrict || matchTitleOnly || null;
             if (pick && pick.douban_id) {
@@ -653,7 +660,7 @@ export default function SourceBrowserPage() {
             </div>
           ) : (
             <div className='relative'>
-              <div className='flex gap-2 overflow-x-auto scrollbar-hide pb-1.5'>
+              <div className='flex flex-wrap gap-2 pb-1.5'>
                 {filteredSources.map((s) => (
                   <button
                     key={s.key}
@@ -812,7 +819,7 @@ export default function SourceBrowserPage() {
           <section>
             {/* 分类 chips */}
             {mode === 'category' && (
-              <div className='flex gap-2 overflow-x-auto scrollbar-hide pb-1 mb-4'>
+              <div className='flex flex-wrap gap-2 pb-1 mb-4'>
                 {loadingCategories ? (
                   <div className='flex items-center gap-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1'>
                     <div className='w-4 h-4 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
@@ -1079,11 +1086,12 @@ export default function SourceBrowserPage() {
                             豆瓣 {previewDouban.rate}
                           </span>
                         )}
-                        {!previewDouban?.rate && previewBangumi?.rating?.score && (
-                          <span className='px-2 py-0.5 rounded bg-[#00be06] text-white text-xs font-bold'>
-                            Bangumi {previewBangumi.rating.score}
-                          </span>
-                        )}
+                        {!previewDouban?.rate &&
+                          previewBangumi?.rating?.score && (
+                            <span className='px-2 py-0.5 rounded bg-[#00be06] text-white text-xs font-bold'>
+                              Bangumi {previewBangumi.rating.score}
+                            </span>
+                          )}
                       </div>
 
                       {/* 元信息行 */}
