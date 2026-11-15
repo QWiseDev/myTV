@@ -18,7 +18,6 @@ import { Suspense, useEffect, useState } from 'react';
 import { CURRENT_VERSION } from '@/lib/version';
 
 import { useSite } from '@/components/SiteProvider';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 // 版本显示组件
 function VersionDisplay() {
@@ -195,9 +194,6 @@ function LoginPageClient() {
     <div className='relative min-h-screen flex items-center justify-center px-4 overflow-hidden bg-[#ffffff] text-[#111111] dark:bg-[#0d0d0d] dark:text-[#f5f5f5]'>
       <div className='absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(0,190,6,0.14),transparent_28rem),linear-gradient(180deg,#ffffff_0%,#f7f7f7_55%,#efefef_100%)] dark:bg-[radial-gradient(circle_at_18%_12%,rgba(26,205,80,0.12),transparent_28rem),linear-gradient(180deg,#0d0d0d_0%,#161616_55%,#101010_100%)]' />
 
-      <div className='absolute top-4 right-4 z-20'>
-        <ThemeToggle />
-      </div>
       <div className='relative z-10 w-full max-w-md rounded-lg border border-[#e8e8e8] bg-white/86 p-8 shadow-[0_24px_70px_rgba(48,48,46,0.12)] backdrop-blur-xl animate-fade-in dark:border-[#3a3a3a] dark:bg-[#1e1e1e]/88 dark:shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:p-10'>
         {/* 标题区域 */}
         <div className='text-center mb-8'>

@@ -8,8 +8,8 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   return (
     <NextThemesProvider
       attribute='class'
-      defaultTheme='system'
-      enableSystem
+      // 全站写死暗色系：忽略系统偏好与 localStorage 中的历史选择
+      forcedTheme='dark'
       {...props}
     >
       {children}
