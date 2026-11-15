@@ -719,7 +719,7 @@ const VideoCard = memo(function VideoCard({
   return (
     <>
       <div
-        className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-[500]'
+        className='group relative w-full rounded-md bg-transparent cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:z-20'
         onClick={handleClick}
         style={cardContainerStyle}
         onContextMenu={handleContextMenu}

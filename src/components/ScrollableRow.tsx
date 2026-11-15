@@ -45,7 +45,7 @@ function ScrollNavButton({
 
   return (
     <div
-      className={`hidden sm:flex absolute ${isLeft ? 'left-0' : 'right-0'} top-0 bottom-0 w-16 items-center justify-center z-[600] transition-opacity duration-200 focus-within:opacity-100 ${
+      className={`hidden sm:flex absolute ${isLeft ? 'left-0' : 'right-0'} top-0 bottom-0 w-16 items-center justify-center z-40 transition-opacity duration-200 focus-within:opacity-100 ${
         isHovered ? 'opacity-100' : 'opacity-0'
       }`}
       style={{

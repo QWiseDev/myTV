@@ -79,7 +79,7 @@ function CornerBadge({
 }) {
   return (
     <div
-      className={`pointer-events-none absolute -top-2 -right-2 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-[502] font-semibold ${CORNER_BADGE_STYLES[tone]}`}
+      className={`pointer-events-none absolute -top-2 -right-2 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-30 font-semibold ${CORNER_BADGE_STYLES[tone]}`}
     >
       {children}
     </div>
@@ -100,7 +100,7 @@ function ContinueWatchingCard({
 
   return (
     <HomeCardShell className='relative group/card'>
-      <div className='relative group-hover/card:z-[500] transition-all duration-300'>
+      <div className='relative group-hover/card:z-20 transition-all duration-300'>
         <VideoCard
           id={item.id}
           title={record.title || record.search_title}
@@ -123,7 +123,7 @@ function ContinueWatchingCard({
 
         {item.showContinueWatchingBadge && (
           <div
-            className={`absolute inset-0 rounded-lg animate-pulse pointer-events-none z-[501] transition-transform duration-300 ease-in-out group-hover/card:scale-[1.05] ${RING_STYLES[badgeTone]}`}
+            className={`absolute inset-0 rounded-lg animate-pulse pointer-events-none z-[25] transition-transform duration-300 ease-in-out group-hover/card:scale-[1.05] ${RING_STYLES[badgeTone]}`}
           ></div>
         )}
       </div>
