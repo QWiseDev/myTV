@@ -1046,18 +1046,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           : 'bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
                       }`.trim()}
                       >
-                        {/* 当前源标记 */}
-                        {isCurrentSource && (
-                          <div className='absolute top-1 sm:top-2 right-1 sm:right-2 z-10'>
-                            <div className='relative'>
-                              <div className='absolute inset-0 bg-green-500 rounded-full blur opacity-60 animate-pulse'></div>
-                              <div className='relative bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-lg'>
-                                当前源
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
                         {/* 悬浮光效 */}
                         {!isCurrentSource && (
                           <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
@@ -1139,12 +1127,20 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           </div>
 
                           {/* 源名称和集数信息 - 垂直居中 */}
-                          <div className='flex items-center justify-between'>
-                            <span className='text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300'>
-                              {source.source_name}
-                            </span>
+                          <div className='flex items-center justify-between gap-1 sm:gap-2 min-w-0'>
+                            <div className='flex items-center gap-1 sm:gap-1.5 min-w-0'>
+                              <span className='text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300 truncate'>
+                                {source.source_name}
+                              </span>
+                              {/* 当前源标记：行内展示，避免遮挡右上角分辨率 */}
+                              {isCurrentSource && (
+                                <span className='flex-shrink-0 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-sm whitespace-nowrap'>
+                                  当前源
+                                </span>
+                              )}
+                            </div>
                             {source.episodes.length > 1 && (
-                              <span className='text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium'>
+                              <span className='flex-shrink-0 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium'>
                                 {source.episodes.length} 集
                               </span>
                             )}
