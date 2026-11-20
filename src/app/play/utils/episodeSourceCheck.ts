@@ -206,6 +206,118 @@ export async function measurePingTimeMs(
   return Math.round(performance.now() - start);
 }
 
+/**
+ * 从 m3u8 文本中取首个可用的媒体分片相对地址（忽略注释、EXT-X-KEY 等标签）。
+ * 返回绝对 URL；找不到返回 null。
+ */
+export function pickFirstMediaSegment(
+  manifestText: string,
+  baseUrl: string,
+): string | null {
+  if (!manifestText) return null;
+  for (const rawLine of manifestText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    try {
+      return new URL(line, baseUrl).toString();
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * 从 m3u8 文本中读取声明的最大分辨率高度。
+ * 支持两种写法：
+ * - 主播放列表的 EXT-X-STREAM-INF 属性 `RESOLUTION=1920x1080`
+ * - 媒体列表的 EXT-X-... 中单独的 `#EXT-X-RESOLUTION` 变体（少数源站自定义）
+ * 多个候选时取最大高度；没有任何声明返回 0。
+ */
+export function pickDeclaredResolutionHeight(manifestText: string): number {
+  if (!manifestText) return 0;
+
+  let maxHeight = 0;
+  const patterns = [
+    /RESOLUTION\s*=\s*(\d{2,5})\s*[xX]\s*(\d{2,5})/g,
+    /#EXT-X-RESOLUTION\s*[:=]\s*(\d{2,5})\s*[xX]\s*(\d{2,5})/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(manifestText)) !== null) {
+      const height = Number.parseInt(match[2], 10);
+      if (Number.isFinite(height) && height > maxHeight) {
+        maxHeight = height;
+      }
+    }
+  }
+
+  return maxHeight;
+}
+
+/**
+ * 以独立请求精确测量首个分片下载速度。
+ *
+ * 为什么不复用 hls.js 的 stats：hls.js 会并发预加载多个分片，且其
+ * loading.start 在跨域/自定义 loader 下不保证等于本次请求发出的时刻，
+ * 实测会得出上百 MB/s 的假速度。这里用自建请求自己圈定窗口，
+ * 只统计真正读到的字节，结论可重复。失败返回 '未知' 而非编造数值。
+ */
+export async function measureSegmentLoadSpeed(
+  segmentUrl: string,
+  options: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    /** 读够该字节数即可停止，避免为测速白下载整个分片 */
+    maxBytes?: number;
+  } = {},
+): Promise<string> {
+  const timeoutMs =
+    typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
+  const maxBytes =
+    typeof options.maxBytes === 'number' ? options.maxBytes : 512 * 1024;
+
+  if (options.signal?.aborted) return '未知';
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+
+  let bytes = 0;
+  try {
+    const response = await fetch(segmentUrl, {
+      signal: controller.signal,
+      // 命中浏览器缓存时读到的是本地数据，测出来会是假高速，因此显式绕过缓存
+      cache: 'no-store',
+    });
+    if (!response.ok || !response.body) return '未知';
+
+    const reader = response.body.getReader();
+    // 从请求发出即开始计时：第一个 chunk 可能在合并缓冲后一次性到达极大块，
+    // 若从「首块之后」才开始计时，会得出远超链路能力的速度。
+    const startedAt = performance.now();
+
+    while (bytes < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) bytes += value.byteLength;
+    }
+    const duration = performance.now() - startedAt;
+    void reader.cancel().catch(() => undefined);
+
+    // 至少读到 64KB 且耗时足够长，结果才有统计意义；否则视为样本不足
+    if (bytes < 64 * 1024 || duration < 60) return '未知';
+    return formatSpeed(bytes, duration);
+  } catch {
+    return '未知';
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 export class EpisodeSourceProbeError extends Error {
   details?: string;
 
@@ -293,7 +405,10 @@ export async function probePlayableMediaUrl(
   let done = false;
   let hasMetadata = false;
   let hasFirstFrag = false;
-  let fragStart = 0;
+  // 独立测速任务的 Promise：结算时短等一次，避免「可播但速度未知」的闪空
+  let speedProbe: Promise<void> | null = null;
+  // 等待分辨率而延后结算的一次性定时器
+  let pendingResolveTimer: ReturnType<typeof setTimeout> | null = null;
 
   let quality = '未知';
   let loadSpeed = '未知';
@@ -304,6 +419,10 @@ export async function probePlayableMediaUrl(
   let hlsInstance: { destroy: () => void } | null = null;
 
   const cleanup = (opts: { clearSrc?: boolean } = {}) => {
+    if (pendingResolveTimer) {
+      clearTimeout(pendingResolveTimer);
+      pendingResolveTimer = null;
+    }
     try {
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -345,8 +464,33 @@ export async function probePlayableMediaUrl(
         video.removeEventListener('loadedmetadata', onLoadedMetadata);
         video.removeEventListener('playing', onPlaying);
         video.removeEventListener('error', onVideoError);
+
+        // 必须在 cleanup() 之前读分辨率：cleanup 会 removeAttribute('src') +
+        // load()，使 videoWidth/videoHeight 归零。
+        if (quality === '未知' && video.videoHeight > 0) {
+          quality = qualityFromHeight(video.videoHeight);
+        }
         cleanup();
-        resolve({ quality, loadSpeed, pingTimeMs });
+
+        const finish = () => resolve({ quality, loadSpeed, pingTimeMs });
+        if (!speedProbe) {
+          finish();
+          return;
+        }
+        // 测速通常几秒内完成；短暂等待可避免结果先出、速度后到的闪空。
+        // 超时不阻塞判定，速度保持「未知」。
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          finish();
+        }, 1200);
+        void speedProbe.finally(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          finish();
+        });
       };
 
       const safeReject = (message: string, details?: string) => {
@@ -369,6 +513,17 @@ export async function probePlayableMediaUrl(
           return;
         }
         if (hasMetadata && (hasFirstFrag || !isLikelyHlsUrl(url))) {
+          // HLS 源若尚未确认分辨率，短暂等待解码/多码率声明：
+          // videoHeight 与 levels 声明都要等这一步，提前结算会永远拿不到分辨率。
+          if (isLikelyHlsUrl(url) && quality === '未知') {
+            if (!pendingResolveTimer) {
+              pendingResolveTimer = setTimeout(() => {
+                pendingResolveTimer = null;
+                if (!done) void safeResolve();
+              }, 1500);
+            }
+            return;
+          }
           void safeResolve();
         }
       };
@@ -383,6 +538,8 @@ export async function probePlayableMediaUrl(
 
       const onLoadedMetadata = () => {
         hasMetadata = true;
+        // 直链直接读真实分辨率；HLS 先等 MANIFEST_PARSED 的 levels 声明，
+        // 未拿到时再由下方 FRAG_LOADED 用 videoHeight 兜底（单码率 m3u8 无 height 声明）
         if (!isLikelyHlsUrl(url)) {
           quality = qualityFromHeight(video.videoHeight);
         }
@@ -427,6 +584,65 @@ export async function probePlayableMediaUrl(
         } else if (isLikelyHlsUrl(url)) {
           const mod = await import('hls.js');
           const HlsCtor = mod.default;
+
+          // 独立测速（与 hls.js 并行）：拉 manifest 取首分片自行计时。
+          // hls.js 内部 stats 在并发预加载下不可靠，这里不依赖它。
+          speedProbe = (async () => {
+            try {
+              const manifestResponse = await fetch(url, {
+                signal: options.signal,
+                cache: 'no-store',
+              });
+              if (!manifestResponse.ok) return;
+              const manifestText = await manifestResponse.text();
+
+              // 分辨率声明可能在外层主列表，也可能需要再下一层：
+              // 外层无声明且首项是子 m3u8（多码率主列表）时，递归一层读取。
+              let declaredHeight = pickDeclaredResolutionHeight(manifestText);
+              let segmentUrl = pickFirstMediaSegment(manifestText, url);
+
+              if (
+                declaredHeight === 0 &&
+                segmentUrl &&
+                isLikelyHlsUrl(segmentUrl)
+              ) {
+                try {
+                  const childResponse = await fetch(segmentUrl, {
+                    signal: options.signal,
+                    cache: 'no-store',
+                  });
+                  if (childResponse.ok) {
+                    const childText = await childResponse.text();
+                    const childHeight = pickDeclaredResolutionHeight(childText);
+                    if (childHeight > 0) {
+                      declaredHeight = childHeight;
+                    }
+                    const childSegment = pickFirstMediaSegment(
+                      childText,
+                      segmentUrl,
+                    );
+                    if (childSegment) segmentUrl = childSegment;
+                  }
+                } catch {
+                  // 子列表读取失败时保留外层信息
+                }
+              }
+
+              if (declaredHeight > 0 && quality === '未知') {
+                quality = qualityFromHeight(declaredHeight);
+              }
+              if (!segmentUrl) return;
+              const speed = await measureSegmentLoadSpeed(segmentUrl, {
+                signal: options.signal,
+                timeoutMs: 6000,
+              });
+              if (speed !== '未知') {
+                loadSpeed = speed;
+              }
+            } catch {
+              // 测速失败不影响可播判定
+            }
+          })();
 
           // 读取本地去广告开关（与 Play 页一致，默认开启）
           const blockAdEnabled = (() => {
@@ -554,23 +770,19 @@ export async function probePlayableMediaUrl(
             },
           );
 
-          instance.on(HlsCtor.Events.FRAG_LOADING, () => {
-            if (!hasFirstFrag) {
-              fragStart = performance.now();
-            }
-          });
-
           instance.on(
             HlsCtor.Events.FRAG_LOADED,
             (_evt: unknown, data: unknown) => {
               if (hasFirstFrag) return;
-              if (!data || typeof data !== 'object' || !('payload' in data))
-                return;
-              const payload = (data as { payload?: unknown }).payload;
-              if (!(payload instanceof ArrayBuffer)) return;
+              if (!data || typeof data !== 'object') return;
+              // 分片到达即可判定可播；速度由独立测速任务提供
+              // （hls.js 并发预加载下其内部计时不可靠，见 measureSegmentLoadSpeed 注释）
               hasFirstFrag = true;
-              const duration = performance.now() - fragStart;
-              loadSpeed = formatSpeed(payload.byteLength, duration);
+              // 分辨率兜底：单码率 m3u8 的 levels[].height 常为 0，
+              // 此时读离屏 video 解码出的真实高度（最可靠）
+              if (quality === '未知' && video.videoHeight > 0) {
+                quality = qualityFromHeight(video.videoHeight);
+              }
               maybeResolve();
             },
           );

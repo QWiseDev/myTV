@@ -4,9 +4,12 @@ import {
   buildEpisodeProbeCacheKey,
   EPISODE_PROBE_CACHE_TTL_MS,
   EpisodeSourceCheckResult,
+  formatSpeed,
   getOptimalProbeConcurrency,
   isEpisodeProbeResultFresh,
   isLikelyHlsUrl,
+  pickDeclaredResolutionHeight,
+  pickFirstMediaSegment,
   planEpisodeSourceChecks,
   runEpisodeSourceChecks,
 } from '@/app/play/utils/episodeSourceCheck';
@@ -26,6 +29,59 @@ function createSource(overrides: Partial<SearchResult>): SearchResult {
 }
 
 describe('episodeSourceCheck', () => {
+  test('formatSpeed: 按字节/秒换算，1MB 用 1 秒即 1.00 MB/s', () => {
+    const oneMB = 1024 * 1024;
+    expect(formatSpeed(oneMB, 1000)).toBe('1.00 MB/s');
+    expect(formatSpeed(oneMB * 4, 1000)).toBe('4.00 MB/s');
+    // 小流量走 KB/s 分支
+    expect(formatSpeed(512 * 1024, 1000)).toBe('512.00 KB/s');
+    // 异常输入不产生虚假速度
+    expect(formatSpeed(0, 1000)).toBe('未知');
+    expect(formatSpeed(oneMB, 0)).toBe('未知');
+  });
+
+  test('pickFirstMediaSegment: 跳过标签与注释，返回首个分片绝对地址', () => {
+    const manifest = [
+      '#EXTM3U',
+      '#EXT-X-VERSION:3',
+      '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"',
+      'seg0.ts',
+      'seg1.ts',
+    ].join('\n');
+    expect(pickFirstMediaSegment(manifest, 'https://cdn.test/a/b.m3u8')).toBe(
+      'https://cdn.test/a/seg0.ts',
+    );
+    // 绝对地址保持原样
+    expect(
+      pickFirstMediaSegment(
+        '#EXTM3U\nhttps://other.test/x.ts',
+        'https://cdn.test/b.m3u8',
+      ),
+    ).toBe('https://other.test/x.ts');
+    // 无可播放分片
+    expect(
+      pickFirstMediaSegment('#EXTM3U\n#EXT-X-ENDLIST', 'https://c/x.m3u8'),
+    ).toBe(null);
+    expect(pickFirstMediaSegment('', 'https://c/x.m3u8')).toBe(null);
+  });
+
+  test('pickDeclaredResolutionHeight: 取主列表声明的最大高度', () => {
+    const master = [
+      '#EXTM3U',
+      '#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=1280x720',
+      'low/index.m3u8',
+      '#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1920x1080',
+      'high/index.m3u8',
+    ].join('\n');
+    expect(pickDeclaredResolutionHeight(master)).toBe(1080);
+
+    // 单码率媒体列表通常没有 RESOLUTION 声明
+    expect(pickDeclaredResolutionHeight('#EXTM3U\n#EXTINF:6,\nseg0.ts')).toBe(
+      0,
+    );
+    expect(pickDeclaredResolutionHeight('')).toBe(0);
+  });
+
   test('buildEpisodeProbeCacheKey: different episodes use different cache entries', () => {
     expect(buildEpisodeProbeCacheKey('s1-a', 0)).toBe('s1-a::episode-0');
     expect(buildEpisodeProbeCacheKey('s1-a', 1)).toBe('s1-a::episode-1');
