@@ -45,10 +45,8 @@ import {
   MEDIA_LOADING_TIMEOUT_MS,
 } from '../utils/playerTimings';
 import type { PlayArtplayer } from '../utils/playerTypes';
-import {
-  addResolutionDisplay,
-  applyAllUiEnhancements,
-} from '../utils/playerUiEnhancements';
+import { applyAllUiEnhancements } from '../utils/playerUiEnhancements';
+import { addQualityControl, addSpeedControl } from '../utils/qualitySelector';
 import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
 import { installSuperResolution } from '../utils/superResolution';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
@@ -635,29 +633,91 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           clearMediaLoadingTimeout();
           setError(null);
 
-          // ✅ 添加分辨率显示
+          // ✅ 控制栏「画质」「倍速」按钮（参考爱奇艺：文字按钮 + 上浮选择面板）
+          // 单码率源也显示画质按钮（展示实际分辨率），多码率源额外提供切换项。
+          // 换集/换源会复用播放器实例并再次触发 ready：用实例标记避免重复注入与重复包装 destroy。
           try {
-            const video = artPlayer.video as HTMLVideoElement;
-            const hlsInstance = (video as HlsMediaVideo).hls;
+            type HlsLive = HlsRuntimeInstance & {
+              on: (event: string, listener: () => void) => void;
+              off: (event: string, listener: () => void) => void;
+            };
+            const readLiveHls = () =>
+              (artPlayer.video as HTMLVideoElement as HlsMediaVideo).hls as
+                | HlsLive
+                | undefined;
 
-            if (hlsInstance || videoUrl) {
-              const cleanupResolution = addResolutionDisplay(
-                artPlayer,
-                hlsInstance,
-                videoUrl,
+            const installed = Boolean(
+              (artPlayer as PlayArtplayer & { __controlsInstalled?: boolean })
+                .__controlsInstalled,
+            );
+
+            if (!installed) {
+              (
+                artPlayer as PlayArtplayer & { __controlsInstalled?: boolean }
+              ).__controlsInstalled = true;
+
+              const initialHls = readLiveHls();
+              let cleanupQuality: (() => void) | undefined;
+              let qualityInstalled = false;
+
+              // 档位信息要等 manifest 解析；单码率靠 videoHeight，可能更晚
+              const installQualityControl = () => {
+                if (qualityInstalled) return;
+                if (artPlayerRef.current !== artPlayer) return;
+                const liveHls = readLiveHls();
+                // 既没有 hls 也没有可读分辨率时留待下一轮事件
+                const hasResolution =
+                  (liveHls?.levels ?? []).some((l) => (l.height ?? 0) > 0) ||
+                  ((artPlayer.video as HTMLVideoElement | undefined)
+                    ?.videoHeight ?? 0) > 0;
+                if (!hasResolution) return;
+                qualityInstalled = true;
+                cleanupQuality = addQualityControl(artPlayer, liveHls);
+              };
+
+              if (initialHls) {
+                initialHls.on('hlsManifestParsed', installQualityControl);
+              }
+              // 单码率源 manifest 后仍无 height，等元数据/首帧再试
+              const videoEl = artPlayer.video as HTMLVideoElement | undefined;
+              videoEl?.addEventListener(
+                'loadedmetadata',
+                installQualityControl,
               );
+              videoEl?.addEventListener('loadeddata', installQualityControl);
+              installQualityControl();
 
-              // 保存清理函数
-              if (cleanupResolution) {
-                const originalDestroy = artPlayer.destroy;
-                artPlayer.destroy = function (removeHtml?: boolean) {
-                  cleanupResolution();
-                  return originalDestroy.call(this, removeHtml);
+              const cleanupSpeed = addSpeedControl(artPlayer);
+
+              const originalDestroy = artPlayer.destroy;
+              artPlayer.destroy = function (removeHtml?: boolean) {
+                initialHls?.off('hlsManifestParsed', installQualityControl);
+                videoEl?.removeEventListener(
+                  'loadedmetadata',
+                  installQualityControl,
+                );
+                videoEl?.removeEventListener(
+                  'loadeddata',
+                  installQualityControl,
+                );
+                cleanupQuality?.();
+                cleanupSpeed?.();
+                return originalDestroy.call(this, removeHtml);
+              };
+            } else {
+              // 实例复用（换集/换源）：按新的 HLS 实例重建画质按钮
+              const liveHls = readLiveHls();
+              const rebuilt = addQualityControl(artPlayer, liveHls);
+              if (!rebuilt && liveHls) {
+                const onManifest = () => {
+                  addQualityControl(artPlayer, liveHls);
+                  liveHls.off('hlsManifestParsed', onManifest);
                 };
+                liveHls.on('hlsManifestParsed', onManifest);
               }
             }
           } catch (error) {
-            console.warn('⚠️ 初始化分辨率显示失败:', error);
+            console.warn('⚠️ 初始化控制栏画质/倍速按钮失败:', error);
           }
 
           if (isIOS || isSafari) {

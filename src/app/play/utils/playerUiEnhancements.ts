@@ -6,7 +6,6 @@
 import type { MutableRefObject } from 'react';
 
 import type { ArtPlayerLike } from './danmakuRuntime';
-import type { HlsInstanceLike } from './hlsStreamInfo';
 
 type Cleanup = () => void;
 const noop: Cleanup = () => undefined;
@@ -26,6 +25,42 @@ interface WebkitPresentationVideo extends HTMLVideoElement {
 function getArtPlayer(refOrArt: ArtPlayerRefLike): ArtPlayerLike | null {
   if (!refOrArt) return null;
   return 'current' in refOrArt ? refOrArt.current : refOrArt;
+}
+
+/**
+ * 修复控制栏选择面板（画质/倍速）无法点选的问题。
+ *
+ * 根因：面板从 .art-bottom 内部向上溢出，而 .art-bottom 有 overflow:hidden，
+ * 导致面板虽可见但命中测试被裁剪——鼠标移进面板等于离开控件，
+ * hover 失效后面板立即关闭，选项点不到。
+ */
+export function fixControlSelectorInteraction(): Cleanup {
+  const styleId = 'art-selector-interaction-fix';
+  if (document.getElementById(styleId)) return noop;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    /* 1) 面板从 .art-bottom 内部向上溢出，而它有 overflow:hidden，
+       会让面板可见却无法命中——解除裁剪，同时不改变底部栏布局。 */
+    .art-video-player .art-bottom {
+      overflow: visible !important;
+    }
+
+    /* 2) 层叠：进度条 .art-progress 自带 z-index:1000，
+       且 .art-controls(z-index:10) 形成层叠上下文封顶了子元素。
+       面板必须盖过进度条，否则鼠标上移到进度条区域时被抢走 hover，面板立即关闭。 */
+    .art-video-player .art-controls,
+    .art-video-player .art-control-selector,
+    .art-video-player .art-selector-list {
+      z-index: 1001 !important;
+    }
+  `;
+  document.head.appendChild(style);
+
+  return () => {
+    style.remove();
+  };
 }
 
 /**
@@ -449,164 +484,6 @@ export function enablePictureInPictureControl(
 }
 
 /**
- * 添加播放器实时分辨率显示
- * 在播放器右下角显示当前播放的分辨率和码率
- * @param art ArtPlayer 实例
- * @param hlsInstance HLS.js 实例
- * @param m3u8Url M3U8 URL（用于从缓存读取）
- * @returns 清理函数
- */
-export function addResolutionDisplay(
-  art: ArtPlayerLike | null | undefined,
-  hlsInstance: HlsInstanceLike | null | undefined,
-  m3u8Url?: string,
-): (() => void) | undefined {
-  if (!art) return;
-
-  try {
-    // 创建显示元素
-    const resolutionEl = document.createElement('div');
-    resolutionEl.className = 'art-resolution-display';
-    resolutionEl.style.cssText = `
-      position: absolute;
-      bottom: 50px;
-      right: 50px;
-      background: rgba(0, 0, 0, 0.75);
-      color: white;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 600;
-      pointer-events: none;
-      z-index: 20;
-      transition: opacity 0.3s ease;
-      opacity: 0;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    `;
-
-    const playerElement = art.template?.$player;
-    if (!playerElement) return undefined;
-    playerElement.appendChild(resolutionEl);
-
-    let hideTimer: NodeJS.Timeout | null = null;
-    let lastUpdate = 0;
-    const updateThrottle = 2000; // ✅ 限制更新频率为 2 秒
-
-    // 更新分辨率显示
-    const updateDisplay = () => {
-      try {
-        // ✅ 节流：避免频繁更新
-        const now = Date.now();
-        if (now - lastUpdate < updateThrottle) {
-          return;
-        }
-        lastUpdate = now;
-
-        const currentLevel = hlsInstance?.currentLevel ?? -1;
-        if (!hlsInstance?.levels || currentLevel < 0) {
-          return;
-        }
-
-        const level = hlsInstance.levels[currentLevel];
-        if (level && level.height > 0) {
-          const resolution = `${level.height}p`;
-          const bitrate =
-            level.bitrate > 0 ? (level.bitrate / 1000000).toFixed(1) : '?';
-
-          resolutionEl.textContent = `${resolution} · ${bitrate}Mbps`;
-          resolutionEl.style.opacity = '1';
-
-          // 清除之前的定时器
-          if (hideTimer) {
-            clearTimeout(hideTimer);
-          }
-
-          // 3秒后淡出
-          hideTimer = setTimeout(() => {
-            resolutionEl.style.opacity = '0.3';
-          }, 3000);
-        }
-      } catch (error) {
-        console.warn('⚠️ 更新分辨率显示失败:', error);
-      }
-    };
-
-    // 如果有 HLS 实例，监听事件
-    if (hlsInstance) {
-      hlsInstance.on('hlsLevelSwitched', updateDisplay);
-      hlsInstance.on('hlsManifestParsed', updateDisplay);
-
-      // 延迟初始显示，等待播放器稳定
-      setTimeout(updateDisplay, 1000);
-    } else {
-      // 没有 HLS 实例，尝试从缓存读取
-      if (m3u8Url) {
-        import('./smartCache')
-          .then(({ smartCache }) => {
-            const cached = smartCache.get(m3u8Url);
-
-            if (cached?.levels && cached.levels.length > 0) {
-              const bestLevel = cached.levels[0];
-              const resolution = `${bestLevel.height}p`;
-              const bitrate =
-                bestLevel.bitrate > 0
-                  ? (bestLevel.bitrate / 1000000).toFixed(1)
-                  : '?';
-
-              resolutionEl.textContent = `${resolution} · ${bitrate}Mbps`;
-              resolutionEl.style.opacity = '1';
-
-              setTimeout(() => {
-                resolutionEl.style.opacity = '0.3';
-              }, 3000);
-            }
-          })
-          .catch((error) => {
-            console.warn('⚠️ 从缓存读取分辨率失败:', error);
-          });
-      }
-    }
-
-    // 鼠标移入播放器时显示，移出时淡化
-    const handleMouseEnter = () => {
-      if (resolutionEl.textContent) {
-        resolutionEl.style.opacity = '1';
-      }
-    };
-
-    const handleMouseLeave = () => {
-      if (resolutionEl.textContent) {
-        resolutionEl.style.opacity = '0.3';
-      }
-    };
-
-    art.template?.$player.addEventListener('mouseenter', handleMouseEnter);
-    art.template?.$player.addEventListener('mouseleave', handleMouseLeave);
-
-    // 返回清理函数
-    return () => {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-      }
-
-      if (hlsInstance) {
-        hlsInstance.off('hlsLevelSwitched', updateDisplay);
-        hlsInstance.off('hlsManifestParsed', updateDisplay);
-      }
-
-      art.template?.$player.removeEventListener('mouseenter', handleMouseEnter);
-      art.template?.$player.removeEventListener('mouseleave', handleMouseLeave);
-
-      resolutionEl.remove();
-    };
-  } catch (error) {
-    console.error('❌ 添加分辨率显示失败:', error);
-    return undefined;
-  }
-}
-
-/**
  * 一次性应用所有 UI 增强功能
  */
 export function applyAllUiEnhancements(
@@ -616,6 +493,7 @@ export function applyAllUiEnhancements(
   art?.__uiEnhancementsCleanup?.();
 
   const cleanups = [
+    fixControlSelectorInteraction(),
     optimizeDanmukuControlsCSS(),
     fixDanmakuProgressConflict(),
     addMobileDanmakuToggle(artPlayerRef),

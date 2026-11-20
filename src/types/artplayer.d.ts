@@ -130,6 +130,7 @@ declare module 'artplayer' {
     setting: {
       add(option: Setting): void;
       update(option: Setting): void;
+      remove(name: string): void;
     };
 
     // 播放状态
