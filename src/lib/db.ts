@@ -27,11 +27,9 @@ const STORAGE_TYPE =
     | 'redis'
     | 'upstash'
     | 'kvrocks'
-    | 'supabase'
     | undefined) || 'localstorage';
 
 let storageInstance: IStorage | null = null;
-let storagePromise: Promise<IStorage> | null = null;
 let useLocalStorage = false;
 
 async function createStorage(): Promise<IStorage> {
@@ -42,10 +40,6 @@ async function createStorage(): Promise<IStorage> {
       return new UpstashRedisStorage();
     case 'kvrocks':
       return new KvrocksStorage();
-    case 'supabase': {
-      const { SupabaseStorage } = await import('./supabase/storage');
-      return new SupabaseStorage();
-    }
     case 'localstorage':
     default:
       useLocalStorage = true;
@@ -56,13 +50,6 @@ async function createStorage(): Promise<IStorage> {
 async function getStorage(): Promise<IStorage> {
   if (useLocalStorage) {
     return null as unknown as IStorage;
-  }
-
-  if (STORAGE_TYPE === 'supabase') {
-    if (!storagePromise) {
-      storagePromise = createStorage();
-    }
-    return storagePromise;
   }
 
   if (!storageInstance) {
