@@ -301,77 +301,6 @@ let currentBestDataProxy: DoubanDataProxyType | null = null;
 let currentBestImageProxy: DoubanImageProxyType | null = null;
 let probeInProgress = false;
 
-/**
- * 获取当前最优数据代理（带懒加载探测）
- */
-export async function getBestDataProxy(): Promise<DoubanDataProxyType> {
-  // 如果已有结果，直接返回
-  if (currentBestDataProxy) {
-    return currentBestDataProxy;
-  }
-
-  // 检查缓存
-  const cached = getCachedProbeResult(CACHE_KEY_DATA);
-  if (cached && cached.length > 0) {
-    const available = cached.filter((r) => r.available);
-    if (available.length > 0) {
-      available.sort((a, b) => a.latency - b.latency);
-      currentBestDataProxy = available[0].type as DoubanDataProxyType;
-      return currentBestDataProxy;
-    }
-  }
-
-  // 默认使用阿里云CDN，同时后台探测
-  if (!probeInProgress) {
-    probeInProgress = true;
-    probeDataProxies()
-      .then(({ best }) => {
-        currentBestDataProxy = best;
-      })
-      .finally(() => {
-        probeInProgress = false;
-      });
-  }
-
-  // 返回默认值（阿里云CDN优先）
-  return 'cmliussss-cdn-ali';
-}
-
-/**
- * 获取当前最优图片代理（带懒加载探测）
- */
-export async function getBestImageProxy(): Promise<DoubanImageProxyType> {
-  if (currentBestImageProxy) {
-    return currentBestImageProxy;
-  }
-
-  // 检查缓存
-  const cached = getCachedProbeResult(CACHE_KEY_IMAGE);
-  if (cached && cached.length > 0) {
-    const available = cached.filter((r) => r.available);
-    if (available.length > 0) {
-      currentBestImageProxy = pickBestImageProxy(
-        available.map((r) => r.type as DoubanImageProxyType),
-      );
-      return currentBestImageProxy;
-    }
-  }
-
-  // 默认使用阿里云CDN，同时后台探测
-  if (!probeInProgress) {
-    probeInProgress = true;
-    probeImageProxies()
-      .then(({ best }) => {
-        currentBestImageProxy = best;
-      })
-      .finally(() => {
-        probeInProgress = false;
-      });
-  }
-
-  return 'cmliussss-cdn-ali';
-}
-
 export function getBestDataProxySync(): DoubanDataProxyType {
   if (currentBestDataProxy) {
     return currentBestDataProxy;
@@ -429,31 +358,4 @@ export function getBestImageProxySync(): DoubanImageProxyType {
   }
 
   return 'cmliussss-cdn-ali';
-}
-
-/**
- * 清除探测缓存（用于手动刷新）
- */
-export function clearProbeCache(): void {
-  if (typeof localStorage === 'undefined') return;
-
-  localStorage.removeItem(CACHE_KEY_DATA);
-  localStorage.removeItem(CACHE_KEY_IMAGE);
-  currentBestDataProxy = null;
-  currentBestImageProxy = null;
-}
-
-/**
- * 初始化探测（应用启动时调用）
- */
-export async function initProxyDetection(): Promise<void> {
-  if (typeof window === 'undefined') return;
-
-  // 后台并行探测
-  Promise.all([probeDataProxies(), probeImageProxies()]).then(
-    ([dataResult, imageResult]) => {
-      currentBestDataProxy = dataResult.best;
-      currentBestImageProxy = imageResult.best;
-    },
-  );
 }

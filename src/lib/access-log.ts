@@ -1,7 +1,5 @@
 /* eslint-disable no-console */
 
-import { useEffect } from 'react';
-
 import { getAuthInfoFromBrowserCookie } from './auth';
 
 /**
@@ -129,35 +127,6 @@ export class AccessLogService {
   }
 
   /**
-   * 获取地理位置信息（可选）
-   */
-  private async getLocation(): Promise<GeolocationAccessLog> {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve({});
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            city: '', // 需要额外服务来解析城市名
-            region: '',
-            country: '',
-          });
-        },
-        (error) => {
-          console.warn('[AccessLog] 获取地理位置失败:', error);
-          resolve({});
-        },
-        { timeout: 5000 },
-      );
-    });
-  }
-
-  /**
    * 异步发送日志到服务器
    */
   private async sendLogToServer(accessLog: AccessLog): Promise<void> {
@@ -215,29 +184,6 @@ export class AccessLogService {
       console.error('[AccessLog] 更新本地存储失败:', error);
     }
   }
-
-  /**
-   * 批量发送积压的日志（用于需要大量日志记录的场景）
-   */
-  public async batchSendLogsToServer(logs: AccessLog[]): Promise<void> {
-    if (!this.isEnabled || logs.length === 0) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/access-log/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logs }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`批量发送失败: HTTP ${response.status}`);
-      }
-    } catch (error) {
-      console.error('[AccessLog] 批量发送日志失败:', error);
-    }
-  }
 }
 
 /**
@@ -254,22 +200,4 @@ export function logAccess(
     .catch((error) => {
       console.warn(`[AccessLog] 快捷记录失败(${action}):`, error);
     });
-}
-
-/**
- * React Hook: 记录页面/组件加载和访问
- * @param action 动作名称（如组件名）
- * @param extraData 额外数据
- */
-export function useAccessLog(
-  action: string,
-  extraData?: Record<string, unknown>,
-): void {
-  useEffect(() => {
-    logAccess(action, {
-      ...extraData,
-      loadTime: Date.now(),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅在组件挂载时记录一次访问日志，响应 action/extraData 变化会重复上报
-  }, []); // 只在组件挂载时记录一次
 }

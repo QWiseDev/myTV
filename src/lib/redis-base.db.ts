@@ -5,6 +5,22 @@ import { createClient, RedisClientType } from 'redis';
 import { AdminConfig } from './admin.types';
 import { parseStorageKey } from './storage-key';
 import {
+  decodeHashObject,
+  encodeHashObject,
+  ensureString,
+  ensureStringArray,
+  getSlotRankScore,
+  LoginStats,
+  normalizeLoginStats,
+  parseRankMembers,
+  SEARCH_HISTORY_LIMIT,
+  SLOT_RANK_TYPES,
+  slotRankKey,
+  SlotUserData,
+  slotUserKey,
+  slotUsersKey,
+} from './storage-shared';
+import {
   AccessLog,
   ContentStat,
   EpisodeSkipConfig,
@@ -14,27 +30,6 @@ import {
   PlayStatsResult,
   UserPlayStat,
 } from './types';
-
-// 搜索历史最大条数
-const SEARCH_HISTORY_LIMIT = 20;
-
-// 数据类型转换辅助函数
-function ensureString(value: any): string {
-  return String(value);
-}
-
-function ensureStringArray(value: any[]): string[] {
-  return value.map((item) => String(item));
-}
-
-interface LoginStats {
-  loginCount: number;
-  firstLoginTime: number;
-  lastLoginTime: number;
-  lastLoginDate: number;
-}
-
-type SlotUserData = Record<string, any>;
 
 // 连接配置接口
 export interface RedisConnectionConfig {
@@ -206,40 +201,6 @@ export abstract class BaseRedisStorage implements IStorage {
     } while (cursor !== '0');
 
     return keys;
-  }
-
-  private encodeHashValue(value: any): string {
-    return JSON.stringify(value);
-  }
-
-  private decodeHashValue(value: string | undefined): any {
-    if (value === undefined) {
-      return undefined;
-    }
-
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-
-  private encodeHashObject(data: Record<string, any>): Record<string, string> {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        this.encodeHashValue(value),
-      ]),
-    );
-  }
-
-  private decodeHashObject(data: Record<string, string>): Record<string, any> {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        this.decodeHashValue(value),
-      ]),
-    );
   }
 
   async getPlayRecord(
@@ -754,73 +715,29 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   // ---------- Redis 业务结构化能力 ----------
-  private slotUserKey(userName: string) {
-    return `slot:user:${userName}`;
-  }
-
-  private slotUsersKey() {
-    return 'slot:users';
-  }
-
-  private slotRankKey(type: string) {
-    return `slot:rank:${type}`;
-  }
-
-  private getSlotRankTypes() {
-    return ['coins', 'biggestWin', 'totalWins'];
-  }
-
-  private getSlotRankScore(data: SlotUserData, type: string): number {
-    return Number(data[type] || 0);
-  }
 
   private async updateSlotRanks(
     userName: string,
     data: SlotUserData,
   ): Promise<void> {
-    for (const type of this.getSlotRankTypes()) {
+    for (const type of SLOT_RANK_TYPES) {
       await this.withRetry(() =>
         this.client.sendCommand([
           'ZADD',
-          this.slotRankKey(type),
-          String(this.getSlotRankScore(data, type)),
+          slotRankKey(type),
+          String(getSlotRankScore(data, type)),
           userName,
         ]),
       );
     }
   }
 
-  private parseRankMembers(raw: unknown): string[] {
-    if (!Array.isArray(raw)) {
-      return [];
-    }
-
-    if (raw.length > 0 && Array.isArray(raw[0])) {
-      return raw.map((item) => String(item[0]));
-    }
-
-    if (raw.length > 0 && typeof raw[0] === 'object' && raw[0] !== null) {
-      return raw
-        .map((item: any) => item.member ?? item.value ?? item[0])
-        .filter((member) => member !== undefined)
-        .map(String);
-    }
-
-    const members: string[] = [];
-    for (let i = 0; i < raw.length; i += 2) {
-      members.push(String(raw[i]));
-    }
-    return members;
-  }
-
   async getSlotUserData(userName: string): Promise<SlotUserData | null> {
     const hashData = await this.withRetry(() =>
-      this.client.hGetAll(this.slotUserKey(userName)),
+      this.client.hGetAll(slotUserKey(userName)),
     );
 
-    return Object.keys(hashData).length > 0
-      ? this.decodeHashObject(hashData)
-      : null;
+    return Object.keys(hashData).length > 0 ? decodeHashObject(hashData) : null;
   }
 
   async setSlotUserData(
@@ -828,56 +745,63 @@ export abstract class BaseRedisStorage implements IStorage {
     data: SlotUserData,
     expireSeconds = 86400 * 30,
   ): Promise<void> {
-    const key = this.slotUserKey(userName);
-    await this.withRetry(() =>
-      this.client.hSet(key, this.encodeHashObject(data)),
-    );
+    const key = slotUserKey(userName);
+    await this.withRetry(() => this.client.hSet(key, encodeHashObject(data)));
     await this.withRetry(() => this.client.expire(key, expireSeconds));
     await this.withRetry(() =>
-      this.client.sendCommand(['SADD', this.slotUsersKey(), userName]),
+      this.client.sendCommand(['SADD', slotUsersKey(), userName]),
     );
     await this.updateSlotRanks(userName, data);
   }
 
-  async listSlotUsers(): Promise<Array<SlotUserData & { username: string }>> {
-    const users = (await this.withRetry(() =>
-      this.client.sendCommand(['SMEMBERS', this.slotUsersKey()]),
-    )) as string[];
-
+  // 分批并行拉取成员数据（数量可能较大，分批避免瞬时并发过高）
+  private async getSlotUsersBatched(
+    userNames: string[],
+  ): Promise<Array<SlotUserData & { username: string }>> {
+    const BATCH_SIZE = 16;
     const result: Array<SlotUserData & { username: string }> = [];
-    for (const userName of users) {
-      const data = await this.getSlotUserData(userName);
-      if (data) {
-        result.push({ username: userName, ...data });
+    for (let i = 0; i < userNames.length; i += BATCH_SIZE) {
+      const batch = userNames.slice(i, i + BATCH_SIZE);
+      const rows = await Promise.all(
+        batch.map(async (userName) => ({
+          userName,
+          data: await this.getSlotUserData(userName),
+        })),
+      );
+      for (const { userName, data } of rows) {
+        if (data) {
+          result.push({ username: userName, ...data });
+        }
       }
     }
     return result;
+  }
+
+  async listSlotUsers(): Promise<Array<SlotUserData & { username: string }>> {
+    const users = (await this.withRetry(() =>
+      this.client.sendCommand(['SMEMBERS', slotUsersKey()]),
+    )) as string[];
+
+    return this.getSlotUsersBatched(users);
   }
 
   async getSlotLeaderboard(
     type = 'coins',
     limit = 10,
   ): Promise<Array<SlotUserData & { username: string }>> {
-    const rankType = this.getSlotRankTypes().includes(type) ? type : 'coins';
+    const rankType = SLOT_RANK_TYPES.includes(type) ? type : 'coins';
 
     const raw = await this.withRetry(() =>
       this.client.sendCommand([
         'ZREVRANGE',
-        this.slotRankKey(rankType),
+        slotRankKey(rankType),
         '0',
         String(Math.max(0, limit - 1)),
         'WITHSCORES',
       ]),
     );
 
-    const result: Array<SlotUserData & { username: string }> = [];
-    for (const userName of this.parseRankMembers(raw)) {
-      const data = await this.getSlotUserData(userName);
-      if (data) {
-        result.push({ username: userName, ...data });
-      }
-    }
-    return result;
+    return this.getSlotUsersBatched(parseRankMembers(raw));
   }
 
   async incrementRateLimit(
@@ -912,19 +836,10 @@ export abstract class BaseRedisStorage implements IStorage {
     return `content:stats:${source}+${id}`;
   }
 
-  private normalizeLoginStats(raw?: Partial<LoginStats> | null): LoginStats {
-    return {
-      loginCount: Number(raw?.loginCount || 0),
-      firstLoginTime: Number(raw?.firstLoginTime || 0),
-      lastLoginTime: Number(raw?.lastLoginTime || 0),
-      lastLoginDate: Number(raw?.lastLoginDate || raw?.lastLoginTime || 0),
-    };
-  }
-
   private async getLoginStats(userName: string): Promise<LoginStats> {
     const key = this.loginStatsKey(userName);
     const stored = await this.withRetry(() => this.client.hGetAll(key));
-    return this.normalizeLoginStats(stored);
+    return normalizeLoginStats(stored);
   }
 
   // 获取全站播放统计
@@ -962,10 +877,18 @@ export abstract class BaseRedisStorage implements IStorage {
       const registrationData: Record<string, number> = {};
       const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-      // 收集所有用户统计
-      for (const username of allUsers) {
-        const userStat = await this.getUserPlayStat(username);
+      // 分批并行收集所有用户统计（串行逐用户 RTT 在隧道环境下代价高）
+      const USER_STATS_BATCH_SIZE = 8;
+      const allUserStats: UserPlayStat[] = [];
+      for (let i = 0; i < allUsers.length; i += USER_STATS_BATCH_SIZE) {
+        const batch = allUsers.slice(i, i + USER_STATS_BATCH_SIZE);
+        const batchStats = await Promise.all(
+          batch.map((username) => this.getUserPlayStat(username)),
+        );
+        allUserStats.push(...batchStats);
+      }
 
+      for (const userStat of allUserStats) {
         // 设置项目开始时间，2025年9月14日
         const PROJECT_START_DATE = new Date('2025-09-14').getTime();
         // 模拟用户创建时间（Redis模式下通常没有这个信息，使用首次播放时间或项目开始时间）
@@ -1261,10 +1184,23 @@ export abstract class BaseRedisStorage implements IStorage {
         }
       >();
 
-      // 收集所有播放记录
-      for (const username of allUsers) {
-        const playRecords = await this.getAllPlayRecords(username);
+      // 分批并行收集所有播放记录（串行逐用户 RTT 在隧道环境下代价高）
+      const PLAY_RECORDS_BATCH_SIZE = 8;
+      const recordsByUsername: Array<[string, Record<string, PlayRecord>]> = [];
+      for (let i = 0; i < allUsers.length; i += PLAY_RECORDS_BATCH_SIZE) {
+        const batch = allUsers.slice(i, i + PLAY_RECORDS_BATCH_SIZE);
+        const batchRecords = await Promise.all(
+          batch.map(
+            async (username): Promise<[string, Record<string, PlayRecord>]> => [
+              username,
+              await this.getAllPlayRecords(username),
+            ],
+          ),
+        );
+        recordsByUsername.push(...batchRecords);
+      }
 
+      for (const [username, playRecords] of recordsByUsername) {
         Object.entries(playRecords).forEach(([key, record]) => {
           const contentKey = key; // source+id
 

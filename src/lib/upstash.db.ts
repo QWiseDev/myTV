@@ -4,6 +4,22 @@ import { Redis } from '@upstash/redis';
 
 import { AdminConfig } from './admin.types';
 import {
+  decodeHashObject,
+  encodeHashObject,
+  ensureString,
+  ensureStringArray,
+  getSlotRankScore,
+  LoginStats,
+  normalizeLoginStats,
+  parseRankMembers,
+  SEARCH_HISTORY_LIMIT,
+  SLOT_RANK_TYPES,
+  slotRankKey,
+  SlotUserData,
+  slotUserKey,
+  slotUsersKey,
+} from './storage-shared';
+import {
   AccessLog,
   ContentStat,
   EpisodeSkipConfig,
@@ -13,27 +29,6 @@ import {
   PlayStatsResult,
   UserPlayStat,
 } from './types';
-
-// 搜索历史最大条数
-const SEARCH_HISTORY_LIMIT = 20;
-
-// 数据类型转换辅助函数
-function ensureString(value: any): string {
-  return String(value);
-}
-
-function ensureStringArray(value: any[]): string[] {
-  return value.map((item) => String(item));
-}
-
-interface LoginStats {
-  loginCount: number;
-  firstLoginTime: number;
-  lastLoginTime: number;
-  lastLoginDate: number;
-}
-
-type SlotUserData = Record<string, any>;
 
 // 添加Upstash Redis操作重试包装器
 async function withRetry<T>(
@@ -95,15 +90,6 @@ export class UpstashRedisStorage implements IStorage {
     return keys;
   }
 
-  private normalizeLoginStats(raw?: Partial<LoginStats> | null): LoginStats {
-    return {
-      loginCount: Number(raw?.loginCount || 0),
-      firstLoginTime: Number(raw?.firstLoginTime || 0),
-      lastLoginTime: Number(raw?.lastLoginTime || 0),
-      lastLoginDate: Number(raw?.lastLoginDate || raw?.lastLoginTime || 0),
-    };
-  }
-
   private parseStoredObject<T>(value: unknown): T | null {
     if (!value) {
       return null;
@@ -122,44 +108,7 @@ export class UpstashRedisStorage implements IStorage {
     const stored = await withRetry(() =>
       this.client.hgetall<Partial<LoginStats>>(this.loginStatsKey(userName)),
     );
-    return this.normalizeLoginStats(stored);
-  }
-
-  private encodeHashValue(value: any): string {
-    return JSON.stringify(value);
-  }
-
-  private decodeHashValue(value: unknown): any {
-    if (value === undefined) {
-      return undefined;
-    }
-    if (typeof value !== 'string') {
-      return value;
-    }
-
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-
-  private encodeHashObject(data: Record<string, any>): Record<string, string> {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        this.encodeHashValue(value),
-      ]),
-    );
-  }
-
-  private decodeHashObject(data: Record<string, unknown>): Record<string, any> {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [
-        key,
-        this.decodeHashValue(value),
-      ]),
-    );
+    return normalizeLoginStats(stored);
   }
 
   // ---------- 播放记录 ----------
@@ -565,70 +514,28 @@ export class UpstashRedisStorage implements IStorage {
   }
 
   // ---------- Redis 业务结构化能力 ----------
-  private slotUserKey(userName: string) {
-    return `slot:user:${userName}`;
-  }
-
-  private slotUsersKey() {
-    return 'slot:users';
-  }
-
-  private slotRankKey(type: string) {
-    return `slot:rank:${type}`;
-  }
-
-  private getSlotRankTypes() {
-    return ['coins', 'biggestWin', 'totalWins'];
-  }
-
-  private getSlotRankScore(data: SlotUserData, type: string): number {
-    return Number(data[type] || 0);
-  }
 
   private async updateSlotRanks(
     userName: string,
     data: SlotUserData,
   ): Promise<void> {
-    for (const type of this.getSlotRankTypes()) {
+    for (const type of SLOT_RANK_TYPES) {
       await withRetry(() =>
-        this.client.zadd(this.slotRankKey(type), {
-          score: this.getSlotRankScore(data, type),
+        this.client.zadd(slotRankKey(type), {
+          score: getSlotRankScore(data, type),
           member: userName,
         }),
       );
     }
   }
 
-  private parseRankMembers(raw: unknown): string[] {
-    if (!Array.isArray(raw)) {
-      return [];
-    }
-
-    if (raw.length > 0 && Array.isArray(raw[0])) {
-      return raw.map((item) => String(item[0]));
-    }
-
-    if (raw.length > 0 && typeof raw[0] === 'object' && raw[0] !== null) {
-      return raw
-        .map((item: any) => item.member ?? item.value ?? item[0])
-        .filter((member) => member !== undefined)
-        .map(String);
-    }
-
-    const members: string[] = [];
-    for (let i = 0; i < raw.length; i += 2) {
-      members.push(String(raw[i]));
-    }
-    return members;
-  }
-
   async getSlotUserData(userName: string): Promise<SlotUserData | null> {
     const hashData = await withRetry(() =>
-      this.client.hgetall<Record<string, unknown>>(this.slotUserKey(userName)),
+      this.client.hgetall<Record<string, unknown>>(slotUserKey(userName)),
     );
 
     return hashData && Object.keys(hashData).length > 0
-      ? this.decodeHashObject(hashData)
+      ? decodeHashObject(hashData)
       : null;
   }
 
@@ -637,54 +544,58 @@ export class UpstashRedisStorage implements IStorage {
     data: SlotUserData,
     expireSeconds = 86400 * 30,
   ): Promise<void> {
-    const key = this.slotUserKey(userName);
-    await withRetry(() => this.client.hset(key, this.encodeHashObject(data)));
+    const key = slotUserKey(userName);
+    await withRetry(() => this.client.hset(key, encodeHashObject(data)));
     await withRetry(() => this.client.expire(key, expireSeconds));
-    await withRetry(() => this.client.sadd(this.slotUsersKey(), userName));
+    await withRetry(() => this.client.sadd(slotUsersKey(), userName));
     await this.updateSlotRanks(userName, data);
+  }
+
+  // 分批并行拉取成员数据（数量可能较大，分批避免瞬时并发过高）
+  private async getSlotUsersBatched(
+    userNames: string[],
+  ): Promise<Array<SlotUserData & { username: string }>> {
+    const BATCH_SIZE = 16;
+    const result: Array<SlotUserData & { username: string }> = [];
+    for (let i = 0; i < userNames.length; i += BATCH_SIZE) {
+      const batch = userNames.slice(i, i + BATCH_SIZE);
+      const rows = await Promise.all(
+        batch.map(async (userName) => ({
+          userName,
+          data: await this.getSlotUserData(userName),
+        })),
+      );
+      for (const { userName, data } of rows) {
+        if (data) {
+          result.push({ username: userName, ...data });
+        }
+      }
+    }
+    return result;
   }
 
   async listSlotUsers(): Promise<Array<SlotUserData & { username: string }>> {
     const users = await withRetry(() =>
-      this.client.smembers<string[]>(this.slotUsersKey()),
+      this.client.smembers<string[]>(slotUsersKey()),
     );
 
-    const result: Array<SlotUserData & { username: string }> = [];
-    for (const userName of users ?? []) {
-      const data = await this.getSlotUserData(userName);
-      if (data) {
-        result.push({ username: userName, ...data });
-      }
-    }
-    return result;
+    return this.getSlotUsersBatched(users ?? []);
   }
 
   async getSlotLeaderboard(
     type = 'coins',
     limit = 10,
   ): Promise<Array<SlotUserData & { username: string }>> {
-    const rankType = this.getSlotRankTypes().includes(type) ? type : 'coins';
+    const rankType = SLOT_RANK_TYPES.includes(type) ? type : 'coins';
 
     const raw = await withRetry(() =>
-      this.client.zrange(
-        this.slotRankKey(rankType),
-        0,
-        Math.max(0, limit - 1),
-        {
-          rev: true,
-          withScores: true,
-        },
-      ),
+      this.client.zrange(slotRankKey(rankType), 0, Math.max(0, limit - 1), {
+        rev: true,
+        withScores: true,
+      }),
     );
 
-    const result: Array<SlotUserData & { username: string }> = [];
-    for (const userName of this.parseRankMembers(raw)) {
-      const data = await this.getSlotUserData(userName);
-      if (data) {
-        result.push({ username: userName, ...data });
-      }
-    }
-    return result;
+    return this.getSlotUsersBatched(parseRankMembers(raw));
   }
 
   async incrementRateLimit(
@@ -734,8 +645,24 @@ export class UpstashRedisStorage implements IStorage {
       const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
       const PROJECT_START_DATE = new Date('2025-09-14').getTime();
 
-      for (const username of allUsers) {
-        const records = await this.getAllPlayRecords(username);
+      // 分批并行收集所有用户播放记录（串行逐用户 RTT 在隧道环境下代价高）
+      const PLAY_RECORDS_BATCH_SIZE = 8;
+      const recordsByUsername: Array<{
+        username: string;
+        records: Record<string, PlayRecord>;
+      }> = [];
+      for (let i = 0; i < allUsers.length; i += PLAY_RECORDS_BATCH_SIZE) {
+        const batch = allUsers.slice(i, i + PLAY_RECORDS_BATCH_SIZE);
+        const rows = await Promise.all(
+          batch.map(async (username) => ({
+            username,
+            records: await this.getAllPlayRecords(username),
+          })),
+        );
+        recordsByUsername.push(...rows);
+      }
+
+      for (const { username, records } of recordsByUsername) {
         const playRecords = Object.values(records);
 
         let userTotalWatchTime = 0;
@@ -1090,8 +1017,24 @@ export class UpstashRedisStorage implements IStorage {
         }
       > = {};
 
-      for (const username of allUsers) {
-        const records = await this.getAllPlayRecords(username);
+      // 分批并行收集所有用户播放记录（串行逐用户 RTT 在隧道环境下代价高）
+      const CONTENT_RECORDS_BATCH_SIZE = 8;
+      const recordsByUsername: Array<{
+        username: string;
+        records: Record<string, PlayRecord>;
+      }> = [];
+      for (let i = 0; i < allUsers.length; i += CONTENT_RECORDS_BATCH_SIZE) {
+        const batch = allUsers.slice(i, i + CONTENT_RECORDS_BATCH_SIZE);
+        const rows = await Promise.all(
+          batch.map(async (username) => ({
+            username,
+            records: await this.getAllPlayRecords(username),
+          })),
+        );
+        recordsByUsername.push(...rows);
+      }
+
+      for (const { username, records } of recordsByUsername) {
         Object.entries(records).forEach(([key, record]) => {
           if (!contentStats[key]) {
             // 从key中解析source和id

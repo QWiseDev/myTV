@@ -7,9 +7,15 @@ import {
   mapDoubanRecentHotItems,
 } from '@/lib/douban-shared';
 
-import { ClientCache } from './client-cache';
+import { createPrefixedCache } from './prefixed-cache';
 import { withAbortableTimeout } from './promise-timeout';
 import { DoubanCommentsResult, DoubanItem, DoubanResult } from './types';
+
+// 与 TMDB 客户端共用同一套双写缓存实现，仅命名空间不同
+const { getCacheKey, getCache, setCache } = createPrefixedCache(
+  'douban',
+  '豆瓣',
+);
 
 // 豆瓣数据缓存配置（秒）
 const DOUBAN_CACHE_EXPIRE = {
@@ -22,156 +28,6 @@ const DOUBAN_CACHE_EXPIRE = {
 
 // 空短评的负缓存时间（秒）：避免反复拉取刷屏，同时允许较快回填
 const DOUBAN_EMPTY_COMMENTS_EXPIRE = 10 * 60; // 10分钟
-
-// 缓存工具函数
-function getCacheKey(prefix: string, params: Record<string, any>): string {
-  const sortedParams = Object.keys(params)
-    .sort()
-    .map((key) => `${key}=${params[key]}`)
-    .join('&');
-  return `douban-${prefix}-${sortedParams}`;
-}
-
-// 统一缓存获取方法
-async function getCache(key: string): Promise<any | null> {
-  try {
-    // 优先从统一存储获取
-    const cached = await ClientCache.get(key);
-    if (cached) return cached;
-
-    // 兜底：从localStorage获取（兼容性）
-    if (typeof localStorage !== 'undefined') {
-      const localCached = localStorage.getItem(key);
-      if (localCached) {
-        const { data, expire } = JSON.parse(localCached);
-        if (Date.now() <= expire) {
-          return data;
-        }
-        localStorage.removeItem(key);
-      }
-    }
-
-    return null;
-  } catch (e) {
-    console.warn('获取豆瓣缓存失败:', e);
-    return null;
-  }
-}
-
-// 统一缓存设置方法
-async function setCache(
-  key: string,
-  data: any,
-  expireSeconds: number,
-): Promise<void> {
-  try {
-    // 主要存储：统一存储
-    await ClientCache.set(key, data, expireSeconds);
-
-    // 兜底存储：localStorage（兼容性，短期缓存）
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const cacheData = {
-          data,
-          expire: Date.now() + expireSeconds * 1000,
-          created: Date.now(),
-        };
-        localStorage.setItem(key, JSON.stringify(cacheData));
-      } catch (e) {
-        // localStorage可能满了，忽略错误
-      }
-    }
-  } catch (e) {
-    console.warn('设置豆瓣缓存失败:', e);
-  }
-}
-
-// 清理过期缓存（包括bangumi缓存）
-async function cleanExpiredCache(): Promise<void> {
-  try {
-    // 清理统一存储中的过期缓存
-    await ClientCache.clearExpired('douban-');
-    await ClientCache.clearExpired('bangumi-');
-
-    // 清理localStorage中的过期缓存（兼容性）
-    if (typeof localStorage !== 'undefined') {
-      const keys = Object.keys(localStorage).filter(
-        (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
-      );
-
-      keys.forEach((key) => {
-        try {
-          const cached = localStorage.getItem(key);
-          if (cached) {
-            const { expire } = JSON.parse(cached);
-            if (Date.now() > expire) {
-              localStorage.removeItem(key);
-            }
-          }
-        } catch (e) {
-          // 清理损坏的缓存数据
-          localStorage.removeItem(key);
-        }
-      });
-    }
-  } catch (e) {
-    console.warn('清理过期缓存失败:', e);
-  }
-}
-
-// 获取缓存状态信息（包括bangumi）
-export function getDoubanCacheStats(): {
-  totalItems: number;
-  totalSize: number;
-  byType: Record<string, number>;
-} {
-  if (typeof localStorage === 'undefined') {
-    return { totalItems: 0, totalSize: 0, byType: {} };
-  }
-
-  const keys = Object.keys(localStorage).filter(
-    (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
-  );
-  const byType: Record<string, number> = {};
-  let totalSize = 0;
-
-  keys.forEach((key) => {
-    const type = key.split('-')[1]; // douban-{type}-{params} 或 bangumi-{type}
-    byType[type] = (byType[type] || 0) + 1;
-
-    const data = localStorage.getItem(key);
-    if (data) {
-      totalSize += data.length;
-    }
-  });
-
-  return {
-    totalItems: keys.length,
-    totalSize,
-    byType,
-  };
-}
-
-// 清理所有缓存（豆瓣+bangumi）
-export function clearDoubanCache(): void {
-  if (typeof localStorage === 'undefined') return;
-
-  const keys = Object.keys(localStorage).filter(
-    (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
-  );
-  keys.forEach((key) => localStorage.removeItem(key));
-}
-
-// 初始化缓存系统（应该在应用启动时调用）
-export async function initDoubanCache(): Promise<void> {
-  if (typeof window === 'undefined') return;
-
-  // 立即清理一次过期缓存
-  await cleanExpiredCache();
-
-  // 每10分钟清理一次过期缓存
-  setInterval(() => cleanExpiredCache(), 10 * 60 * 1000);
-}
 
 interface DoubanCategoriesParams {
   kind: 'tv' | 'movie';
@@ -218,12 +74,7 @@ async function fetchJsonWithTimeout<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   // 检查是否使用代理
-  const finalUrl =
-    proxyUrl === 'https://cors-anywhere.com/'
-      ? `${proxyUrl}${url}`
-      : proxyUrl
-        ? `${proxyUrl}${encodeURIComponent(url)}`
-        : url;
+  const finalUrl = proxyUrl ? `${proxyUrl}${encodeURIComponent(url)}` : url;
 
   return withAbortableTimeout(
     async (requestSignal) => {
@@ -750,144 +601,6 @@ async function fetchDoubanRecommends(
     };
   } catch (error) {
     throw new Error(`获取豆瓣推荐数据失败: ${(error as Error).message}`);
-  }
-}
-
-/**
- * 按演员名字搜索相关电影/电视剧
- */
-interface DoubanActorSearchParams {
-  actorName: string;
-  type?: 'movie' | 'tv';
-  pageLimit?: number;
-  pageStart?: number;
-}
-
-export async function getDoubanActorMovies(
-  params: DoubanActorSearchParams,
-): Promise<DoubanResult> {
-  const { actorName, type = 'movie', pageLimit = 20, pageStart = 0 } = params;
-
-  // 验证参数
-  if (!actorName?.trim()) {
-    throw new Error('演员名字不能为空');
-  }
-
-  // 检查缓存
-  const cacheKey = getCacheKey('actor', {
-    actorName,
-    type,
-    pageLimit,
-    pageStart,
-  });
-  const cached = await getCache(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  try {
-    // 使用豆瓣搜索API
-    const searchUrl = `https://search.douban.com/movie/subject_search?search_text=${encodeURIComponent(
-      actorName.trim(),
-    )}`;
-
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        Referer: 'https://www.douban.com/',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const html = await response.text();
-
-    // 解析HTML中的JSON数据
-    const dataMatch = html.match(/window\.__DATA__\s*=\s*({.*?});/s);
-    if (!dataMatch) {
-      throw new Error('无法解析搜索结果数据');
-    }
-
-    const searchData = JSON.parse(dataMatch[1]);
-    const items = searchData.items || [];
-
-    // 过滤掉第一个结果（通常是演员本人的资料页）和不相关的结果
-    let filteredItems = items.slice(1).filter((item: any) => {
-      // 过滤掉书籍等非影视内容
-      const abstract = item.abstract || '';
-      const isBook =
-        abstract.includes('出版') ||
-        abstract.includes('页数') ||
-        item.url?.includes('/book/');
-      const isPerson = item.url?.includes('/celebrity/');
-      return !isBook && !isPerson;
-    });
-
-    // 按类型过滤
-    if (type === 'movie') {
-      filteredItems = filteredItems.filter((item: any) => {
-        const abstract = item.abstract || '';
-        return (
-          !abstract.includes('季') &&
-          !abstract.includes('集') &&
-          !abstract.includes('剧集')
-        );
-      });
-    } else if (type === 'tv') {
-      filteredItems = filteredItems.filter((item: any) => {
-        const abstract = item.abstract || '';
-        return (
-          abstract.includes('季') ||
-          abstract.includes('集') ||
-          abstract.includes('剧集') ||
-          abstract.includes('电视')
-        );
-      });
-    }
-
-    // 分页处理
-    const startIndex = pageStart;
-    const endIndex = startIndex + pageLimit;
-    const paginatedItems = filteredItems.slice(startIndex, endIndex);
-
-    // 转换数据格式
-    const list: DoubanItem[] = paginatedItems.map((item: any) => {
-      // 从abstract中提取年份
-      const yearMatch = item.abstract?.match(/(\d{4})/);
-      const year = yearMatch ? yearMatch[1] : '';
-
-      return {
-        id: item.id?.toString() || '',
-        title: item.title || '',
-        poster: item.cover_url || '',
-        rate: item.rating?.value ? item.rating.value.toFixed(1) : '',
-        year: year,
-      };
-    });
-
-    const result = {
-      code: 200,
-      message: '获取成功',
-      list: list,
-    };
-
-    // 保存到缓存
-    await setCache(cacheKey, result, DOUBAN_CACHE_EXPIRE.lists);
-
-    return result;
-  } catch (error) {
-    console.error(`搜索演员 ${actorName} 失败:`, error);
-    return {
-      code: 500,
-      message: `搜索演员 ${actorName} 失败: ${(error as Error).message}`,
-      list: [],
-    };
   }
 }
 

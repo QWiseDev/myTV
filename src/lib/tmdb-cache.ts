@@ -1,7 +1,7 @@
-import { ClientCache } from './client-cache';
+import { createPrefixedCache } from './prefixed-cache';
 
 // TMDB数据缓存配置（秒）
-const TMDB_CACHE_EXPIRE = {
+export const TMDB_CACHE_EXPIRE = {
   actor_search: 6 * 60 * 60, // 演员搜索6小时（较稳定）
   person_details: 24 * 60 * 60, // 人物详情24小时（基本不变）
   movie_credits: 12 * 60 * 60, // 演员电影作品12小时（较稳定）
@@ -13,149 +13,9 @@ const TMDB_CACHE_EXPIRE = {
   discover: 4 * 60 * 60, // 发现内容4小时
 };
 
-// 缓存工具函数
-function getCacheKey(prefix: string, params: Record<string, unknown>): string {
-  const sortedParams = Object.keys(params)
-    .filter((key) => params[key] !== undefined && params[key] !== null)
-    .sort()
-    .map((key) => `${key}=${params[key]}`)
-    .join('&');
-  return `tmdb-${prefix}-${sortedParams}`;
-}
-
-// 统一缓存获取方法
-async function getCache<T = unknown>(key: string): Promise<T | null> {
-  try {
-    // 优先从统一存储获取
-    const cached = await ClientCache.get<T>(key);
-    if (cached) return cached;
-
-    // 兜底：从localStorage获取（兼容性）
-    if (typeof localStorage !== 'undefined') {
-      const localCached = localStorage.getItem(key);
-      if (localCached) {
-        try {
-          const { data, expire } = JSON.parse(localCached);
-          if (Date.now() <= expire) {
-            return data;
-          }
-          localStorage.removeItem(key);
-        } catch (e) {
-          localStorage.removeItem(key);
-        }
-      }
-    }
-
-    return null;
-  } catch (e) {
-    console.warn('获取TMDB缓存失败:', e);
-    return null;
-  }
-}
-
-// 统一缓存设置方法
-async function setCache(
-  key: string,
-  data: unknown,
-  expireSeconds: number,
-): Promise<void> {
-  try {
-    // 主要存储：统一存储
-    await ClientCache.set(key, data, expireSeconds);
-
-    // 兜底存储：localStorage（兼容性，短期缓存）
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const cacheData = {
-          data,
-          expire: Date.now() + expireSeconds * 1000,
-          created: Date.now(),
-        };
-        localStorage.setItem(key, JSON.stringify(cacheData));
-      } catch (e) {
-        console.warn(`⚠️ TMDB缓存localStorage存储失败: ${key}`, e);
-        // localStorage可能满了，忽略错误
-      }
-    }
-  } catch (e) {
-    console.warn('设置TMDB缓存失败:', key, e);
-  }
-}
-
-// 清理过期缓存
-async function cleanExpiredCache(): Promise<void> {
-  try {
-    // 清理统一存储中的过期缓存
-    await ClientCache.clearExpired('tmdb-');
-
-    // 清理localStorage中的过期缓存
-    if (typeof localStorage !== 'undefined') {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('tmdb-')) {
-          try {
-            const cached = localStorage.getItem(key);
-            if (cached) {
-              const { expire } = JSON.parse(cached);
-              if (Date.now() > expire) {
-                keysToRemove.push(key);
-              }
-            }
-          } catch (e) {
-            keysToRemove.push(key);
-          }
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-    }
-  } catch (e) {
-    console.warn('清理TMDB过期缓存失败:', e);
-  }
-}
-
-// 获取缓存状态信息
-export function getTMDBCacheStats(): {
-  totalItems: number;
-  totalSize: number;
-  byType: Record<string, number>;
-} {
-  if (typeof localStorage === 'undefined') {
-    return { totalItems: 0, totalSize: 0, byType: {} };
-  }
-
-  const keys = Object.keys(localStorage).filter((key) =>
-    key.startsWith('tmdb-'),
-  );
-  const byType: Record<string, number> = {};
-  let totalSize = 0;
-
-  keys.forEach((key) => {
-    const type = key.split('-')[1]; // tmdb-{type}-{params}
-    byType[type] = (byType[type] || 0) + 1;
-
-    const data = localStorage.getItem(key);
-    if (data) {
-      totalSize += data.length;
-    }
-  });
-
-  return {
-    totalItems: keys.length,
-    totalSize,
-    byType,
-  };
-}
-
-// 清理所有TMDB缓存
-export function clearTMDBCache(): void {
-  if (typeof localStorage === 'undefined') return;
-
-  const keys = Object.keys(localStorage).filter((key) =>
-    key.startsWith('tmdb-'),
-  );
-  keys.forEach((key) => localStorage.removeItem(key));
-}
+// 与豆瓣客户端共用同一套双写缓存实现，仅命名空间不同
+const { getCacheKey, getCache, setCache, cleanExpiredCache } =
+  createPrefixedCache('tmdb', 'TMDB');
 
 // 初始化缓存系统
 async function initTMDBCache(): Promise<void> {
@@ -171,10 +31,4 @@ if (typeof window !== 'undefined') {
   initTMDBCache().catch(console.error);
 }
 
-export {
-  cleanExpiredCache,
-  getCache,
-  getCacheKey,
-  setCache,
-  TMDB_CACHE_EXPIRE,
-};
+export { cleanExpiredCache, getCache, getCacheKey, setCache };

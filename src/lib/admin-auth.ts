@@ -52,11 +52,3 @@ export async function getAdminRoleFromRequest(
   const config = await getConfig();
   return resolveRoleFromConfig(config, username);
 }
-
-export async function ensureAdmin(request: NextRequest): Promise<AdminRole> {
-  const role = await getAdminRoleFromRequest(request);
-  if (!role) {
-    throw new Error('UNAUTHORIZED');
-  }
-  return role;
-}
