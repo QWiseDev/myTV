@@ -107,6 +107,17 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
       videoId,
       videoTitle,
       videoType,
+      action: 'add',
+    });
+  }, [videoId, videoTitle, videoType, trackVideoFavorite]);
+
+  // 追踪取消收藏（此前被误记为分享事件）
+  const trackUnfavorite = useCallback(() => {
+    trackVideoFavorite({
+      videoId,
+      videoTitle,
+      videoType,
+      action: 'remove',
     });
   }, [videoId, videoTitle, videoType, trackVideoFavorite]);
 
@@ -195,6 +206,7 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackPause,
     trackComplete,
     trackFavorite,
+    trackUnfavorite,
     trackShare,
     trackDownload,
     trackLoadTime,

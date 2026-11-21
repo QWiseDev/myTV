@@ -166,20 +166,6 @@ export interface NetDiskLink {
 
 export type NetDiskResults = Record<string, NetDiskLink[]>;
 
-// ==================== 换源测速结果类型 ====================
-
-export interface EpisodeVideoInfo {
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-  hasError?: boolean;
-  levels?: unknown;
-  maxResolution?: string;
-  minResolution?: string;
-  maxBandwidth?: number;
-  minBandwidth?: number;
-}
-
 // ==================== 播放器事件回调类型 ====================
 
 export interface PlayerEventCallbacks {

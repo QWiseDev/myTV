@@ -50,7 +50,6 @@ import {
   type SourceChangeOwner,
   useSourceSwitcher,
 } from './hooks/useSourceSwitcher';
-import type { EpisodeVideoInfo } from './types';
 import { preloadArtplayerModules } from './utils/artplayerLoader';
 import {
   type DanmakuItemLike,
@@ -128,9 +127,6 @@ function PlayPageClient() {
     useMemoryMonitor({
       checkInterval: 30000, // ✅ 从 15s 改为 30s，减少检查频率降低 CPU 占用
       enableAutoCleanup: true,
-      onPressureChange: (_pressure, _info) => {
-        // 根据内存压力调整弹幕配置
-      },
     });
 
   // -----------------------------------------------------------------------------
@@ -211,15 +207,8 @@ function PlayPageClient() {
   } = state.video;
 
   // -----------------------------------------------------------------------------
-  // 📊 播放页面分析埋点
+  // 📊 播放页面分析埋点（在 detail 声明之后，videoType 按集数推导）
   // -----------------------------------------------------------------------------
-  const analytics = usePlayPageAnalytics({
-    videoId: currentId,
-    videoTitle: videoTitle,
-    videoType: 'movie', // 可以根据实际内容动态设置
-    source: currentSource,
-    duration: state.playback.duration,
-  });
   const setVideoTitle = useCallback(
     (title: string) => actions.setVideoInfo({ title }),
     [actions],
@@ -306,6 +295,14 @@ function PlayPageClient() {
   // 状态变量（State）- 保留部分未迁移的状态
   // -----------------------------------------------------------------------------
   const [detail, setDetail] = useState<SearchResult | null>(null);
+
+  const analytics = usePlayPageAnalytics({
+    videoId: currentId,
+    videoTitle: videoTitle,
+    videoType: (detail?.episodes?.length || 0) > 1 ? 'tv' : 'movie',
+    source: currentSource,
+    duration: state.playback.duration,
+  });
 
   // 去广告开关（从 localStorage 继承，默认 true）
   const [blockAdEnabled, setBlockAdEnabled] = useState<boolean>(() => {
@@ -406,7 +403,7 @@ function PlayPageClient() {
     handleToggleFavorite();
     // 📊 分析埋点：收藏/取消收藏事件
     if (favorited) {
-      analytics.trackShare('other'); // 使用share函数来取消收藏
+      analytics.trackUnfavorite(); // 取消收藏
     } else {
       analytics.trackFavorite(); // 添加收藏
     }
@@ -472,11 +469,6 @@ function PlayPageClient() {
     // 默认关闭优选，优先保证加载速度，用户可在设置中开启
     return false;
   });
-
-  // 保存优选时的测速结果，避免EpisodeSelector重复测速
-  const [precomputedVideoInfo] = useState<Map<string, EpisodeVideoInfo>>(
-    new Map(),
-  );
 
   // 换源加载状态
   const [isVideoLoading, setIsVideoLoading] = useState(true);
@@ -774,7 +766,6 @@ function PlayPageClient() {
     currentSourceRef,
     currentIdRef,
     availableSources,
-    setError,
     currentEpisodeIndex,
     resumeTimeRef,
     setVideoTitle,
@@ -839,6 +830,13 @@ function PlayPageClient() {
     setDanmuEpisodeOffset((prev) => prev + offset);
     danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
   }, []);
+
+  // 集数偏移是用户针对当前片调整的：换到另一部片（站内跳转不卸载本组件）
+  // 必须复位，否则沿用上一部的偏移；同片换源标题/douban_id 不变则保留
+  useEffect(() => {
+    setDanmuEpisodeOffset(0);
+    danmuEpisodeOffsetRef.current = 0;
+  }, [videoTitle, videoDoubanId]);
 
   usePlayerInitializer({
     videoUrl,
@@ -990,7 +988,6 @@ function PlayPageClient() {
               onLoadSources: loadAvailableSources,
               sourceSearchLoading,
               sourceSearchError,
-              precomputedVideoInfo,
             }}
             infoProps={{
               detail,
@@ -1028,7 +1025,7 @@ function PlayPageClient() {
 
 export default function PlayPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<LoadingScreen />}>
       <PlayPageDataBoundary />
     </Suspense>
   );

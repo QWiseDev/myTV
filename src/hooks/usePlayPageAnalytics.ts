@@ -34,6 +34,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     trackPlay,
     trackPause,
     trackFavorite,
+    trackUnfavorite,
     trackShare,
     trackDownload,
     trackProgress,
@@ -393,6 +394,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
 
     // 视频操作
     trackFavorite,
+    trackUnfavorite,
     trackShare,
     trackDownload,
 

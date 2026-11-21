@@ -26,20 +26,6 @@ import {
 
 import { VirtualGrid } from './VirtualGrid';
 
-// 定义视频信息类型
-interface VideoInfo {
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-  hasError?: boolean; // 添加错误状态标识
-  // ✅ 新增：完整的流信息
-  levels?: unknown;
-  maxResolution?: string;
-  minResolution?: string;
-  maxBandwidth?: number;
-  minBandwidth?: number;
-}
-
 interface EpisodeSelectorProps {
   /** 总集数 */
   totalEpisodes: number;
@@ -61,8 +47,6 @@ interface EpisodeSelectorProps {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
-  /** 预计算的测速结果，避免重复测速 */
-  precomputedVideoInfo?: Map<string, VideoInfo>;
 }
 
 /** 估算文本显示宽度：全角字符按 1，半角字符按 0.6 */
@@ -89,7 +73,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   onLoadSources,
   sourceSearchLoading = false,
   sourceSearchError = null,
-  precomputedVideoInfo,
 }) => {
   const router = useRouter();
   const pageCount = Math.ceil(totalEpisodes / episodesPerPage);
@@ -229,35 +212,6 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     },
     [selectedEpisodeIndex],
   );
-
-  // 当有预计算结果时，先作为占位合入统一 store（checkedAt=0 不参与新鲜度复用），
-  // 后续仍会走一次真实可播探测覆盖
-  useEffect(() => {
-    if (precomputedVideoInfo && precomputedVideoInfo.size > 0) {
-      setProbeResults((prev) => {
-        const newMap = new Map(prev);
-        precomputedVideoInfo.forEach((videoInfo, sourceKey) => {
-          const cacheKey = buildEpisodeProbeCacheKey(
-            sourceKey,
-            selectedEpisodeIndex,
-          );
-          // 不覆盖已有真实结果，避免切回旧集时被占位数据冲掉
-          if (newMap.has(cacheKey)) return;
-          newMap.set(cacheKey, {
-            sourceKey,
-            episodeIndex: selectedEpisodeIndex,
-            status: videoInfo.hasError ? 'error' : 'success',
-            quality: videoInfo.quality,
-            loadSpeed: videoInfo.loadSpeed,
-            pingTimeMs: videoInfo.pingTime,
-            message: videoInfo.hasError ? '历史测速失败' : '历史测速结果',
-            checkedAt: 0,
-          });
-        });
-        return newMap;
-      });
-    }
-  }, [precomputedVideoInfo, selectedEpisodeIndex]);
 
   // 读取本地"优选和测速"开关，默认开启
   const [optimizationEnabled] = useState<boolean>(() => {

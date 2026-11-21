@@ -3,8 +3,6 @@ import { Suspense } from 'react';
 
 import type { SearchResult } from '@/lib/types';
 
-import type { EpisodeVideoInfo } from '@/app/play/types';
-
 const EpisodeSelector = dynamic(() => import('@/components/EpisodeSelector'), {
   ssr: false,
 });
@@ -28,7 +26,6 @@ interface EpisodePanelProps {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
-  precomputedVideoInfo?: Map<string, EpisodeVideoInfo>;
 }
 
 export default function EpisodePanel({
@@ -45,7 +42,6 @@ export default function EpisodePanel({
   onLoadSources,
   sourceSearchLoading,
   sourceSearchError,
-  precomputedVideoInfo,
 }: EpisodePanelProps) {
   return (
     <div className='flex flex-col h-full min-h-0'>
@@ -65,7 +61,6 @@ export default function EpisodePanel({
               onLoadSources={onLoadSources}
               sourceSearchLoading={sourceSearchLoading}
               sourceSearchError={sourceSearchError}
-              precomputedVideoInfo={precomputedVideoInfo}
             />
           </Suspense>
         </div>

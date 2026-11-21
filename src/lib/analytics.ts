@@ -12,6 +12,8 @@ export interface VideoEvent {
   duration?: number;
   quality?: string;
   position?: number;
+  /** 收藏类事件的动作：add 收藏 / remove 取消收藏 */
+  action?: 'add' | 'remove';
 }
 
 export interface UserEvent {
@@ -153,6 +155,7 @@ class ClarityAnalytics {
       video_id: event.videoId,
       video_title: event.videoTitle,
       video_type: event.videoType || 'unknown',
+      action: event.action || 'add',
     });
   }
 

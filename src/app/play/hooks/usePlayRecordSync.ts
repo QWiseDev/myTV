@@ -23,7 +23,6 @@ interface UsePlayRecordSyncOptions {
 
 interface ShouldRestorePlayRecordTimeOptions {
   targetTime: number;
-  isInitialLoad: boolean;
   isRestoringFromRecord: boolean;
   isEpisodeChanging: boolean;
   isSourceChanging: boolean;
@@ -32,7 +31,6 @@ interface ShouldRestorePlayRecordTimeOptions {
 
 export function shouldRestorePlayRecordTime({
   targetTime,
-  isInitialLoad,
   isRestoringFromRecord,
   isEpisodeChanging,
   isSourceChanging,
@@ -43,7 +41,6 @@ export function shouldRestorePlayRecordTime({
   }
 
   return (
-    isInitialLoad ||
     isRestoringFromRecord ||
     (!isSourceChanging && (isSameEpisodeRecord || !isEpisodeChanging))
   );
@@ -116,9 +113,6 @@ export const usePlayRecordSync = ({
         setCurrentEpisodeIndex(targetIndex);
       }
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlIndex = parseInt(urlParams.get('episode') || '0', 10);
-      const isInitialLoad = urlIndex > 0 && urlIndex === targetIndex + 1;
       const isSameEpisodeRecord =
         targetIndex === currentEpisodeIndexRef.current;
 
@@ -126,7 +120,6 @@ export const usePlayRecordSync = ({
       // 如果播放记录正好是当前集，仍应恢复进度，否则刷新首集会从头播放。
       const shouldRestoreTime = shouldRestorePlayRecordTime({
         targetTime,
-        isInitialLoad,
         isRestoringFromRecord: isRestoringFromRecordRef.current,
         isEpisodeChanging: isEpisodeChangingRef.current,
         isSourceChanging: isSourceChangingRef.current,

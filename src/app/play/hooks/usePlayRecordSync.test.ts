@@ -5,7 +5,6 @@ describe('shouldRestorePlayRecordTime', () => {
     expect(
       shouldRestorePlayRecordTime({
         targetTime: 120,
-        isInitialLoad: false,
         isRestoringFromRecord: false,
         isEpisodeChanging: true,
         isSourceChanging: false,
@@ -18,7 +17,6 @@ describe('shouldRestorePlayRecordTime', () => {
     expect(
       shouldRestorePlayRecordTime({
         targetTime: 120,
-        isInitialLoad: false,
         isRestoringFromRecord: true,
         isEpisodeChanging: false,
         isSourceChanging: true,
@@ -31,7 +29,6 @@ describe('shouldRestorePlayRecordTime', () => {
     expect(
       shouldRestorePlayRecordTime({
         targetTime: 120,
-        isInitialLoad: false,
         isRestoringFromRecord: false,
         isEpisodeChanging: false,
         isSourceChanging: true,
@@ -44,7 +41,6 @@ describe('shouldRestorePlayRecordTime', () => {
     expect(
       shouldRestorePlayRecordTime({
         targetTime: 0,
-        isInitialLoad: true,
         isRestoringFromRecord: true,
         isEpisodeChanging: false,
         isSourceChanging: false,

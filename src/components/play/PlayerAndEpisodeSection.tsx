@@ -42,10 +42,6 @@ interface EpisodePanelConfig {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
-  precomputedVideoInfo?: Map<
-    string,
-    { quality: string; loadSpeed: string; pingTime: number }
-  >;
 }
 
 interface PlayerAndEpisodeSectionProps {
