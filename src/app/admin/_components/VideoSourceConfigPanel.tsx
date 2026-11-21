@@ -156,8 +156,11 @@ const VideoSourceConfig = ({
     }
   }, [config]);
 
-  // 通用 API 请求
-  const callSourceApi = async (body: Record<string, unknown>) => {
+  // 通用 API 请求（skipRefresh：批量导入等场景延后统一刷新，避免 N+1 次 /api/admin/config）
+  const callSourceApi = async (
+    body: Record<string, unknown>,
+    skipRefresh = false,
+  ) => {
     try {
       const resp = await fetch('/api/admin/source', {
         method: 'POST',
@@ -184,7 +187,9 @@ const VideoSourceConfig = ({
       }
 
       // 成功后刷新配置
-      await refreshConfig();
+      if (!skipRefresh) {
+        await refreshConfig();
+      }
     } catch (err) {
       showError(err instanceof Error ? err.message : '操作失败', showAlert);
       throw err; // 向上抛出方便调用处判断
@@ -783,14 +788,17 @@ const VideoSourceConfig = ({
             continue;
           }
 
-          // 调用API导入
-          await callSourceApi({
-            action: 'add',
-            key: item.key,
-            name: item.name,
-            api: item.api,
-            detail: item.detail || '',
-          });
+          // 调用API导入（跳过逐条刷新，循环结束后统一 refreshConfig）
+          await callSourceApi(
+            {
+              action: 'add',
+              key: item.key,
+              name: item.name,
+              api: item.api,
+              detail: item.detail || '',
+            },
+            true,
+          );
 
           result.success++;
           result.details.push({
