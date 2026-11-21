@@ -397,7 +397,10 @@ async function resolveEpisodeByScoring(
     String(episodeNum || episode || '1'),
   );
   if (matchCandidate) pushAll([matchCandidate]);
-  pushAll(await searchKlmEpisodeCandidates(apiBaseUrl, title, episode));
+  // 不带 episode 参数：danmu_api 的集数过滤按它自己的编号，衍生版条目
+  // 会被过滤成错位集（线上实测沉浸版第1期被过滤成第3期候选），
+  // 打分路径取全量候选，选择统一交给 scoreEpisodeCandidate
+  pushAll(await searchKlmEpisodeCandidates(apiBaseUrl, title, null));
   pushAll(
     await resolveEpisodeViaAnimeSearch(apiBaseUrl, title, year, episode, {
       softYearFilter: true,
