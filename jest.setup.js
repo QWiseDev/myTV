@@ -14,6 +14,11 @@ for (const key of [
   'ReadableStream',
   'WritableStream',
   'TransformStream',
+  // fetch API 三件套：lib/auth 的 requireUser 顶层引入 next/server（NextRequest 继承 Request），
+  // jsdom 沙箱没有这些全局，会导致所有间接依赖 lib/auth 的测试套件加载失败
+  'Request',
+  'Response',
+  'Headers',
 ]) {
   if (
     typeof globalThis[key] === 'undefined' &&

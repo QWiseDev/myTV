@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
@@ -38,10 +38,9 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     // 检查存储类型是否支持统计功能
     if (!db.isStatsSupported()) {
@@ -117,10 +116,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     // 检查存储类型是否支持统计功能
     if (!db.isStatsSupported()) {
@@ -191,10 +189,9 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     // 检查存储类型是否支持统计功能
     if (!db.isStatsSupported()) {
@@ -287,10 +284,9 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     // 检查存储类型是否支持统计功能
     if (!db.isStatsSupported()) {

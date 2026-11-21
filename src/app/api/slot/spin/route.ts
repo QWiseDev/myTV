@@ -1,6 +1,7 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { checkWin, getRandomSymbol, SLOT_SYMBOLS } from '@/lib/slot-config';
 
@@ -405,26 +406,19 @@ function spinLuckyWheel(betAmount: number): {
 
 // 使用共享的checkWin函数
 
-// 用户认证中间件
-async function authenticateUser(
-  req: NextRequest,
-): Promise<{ username: string | null; error?: string }> {
-  const authCookie = req.cookies.get('user_auth')?.value;
-
-  if (!authCookie) {
+// 用户认证：复用统一的 cookie 解析（兼容旧 auth cookie 与签名信息）
+function authenticateUser(req: NextRequest): {
+  username: string | null;
+  error?: string;
+} {
+  const authInfo = getAuthInfoFromCookie(req);
+  if (!authInfo) {
     return { username: null, error: '用户未登录' };
   }
-
-  try {
-    const authData = JSON.parse(decodeURIComponent(authCookie));
-    if (!authData.username) {
-      return { username: null, error: '无效的用户信息' };
-    }
-    return { username: authData.username };
-  } catch (error) {
-    console.error('解析用户认证信息失败:', error);
-    return { username: null, error: '认证信息格式错误' };
+  if (!authInfo.username) {
+    return { username: null, error: '无效的用户信息' };
   }
+  return { username: authInfo.username };
 }
 
 export async function POST(req: NextRequest) {

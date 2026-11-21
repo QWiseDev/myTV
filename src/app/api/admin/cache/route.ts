@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { DatabaseCacheManager } from '@/lib/database-cache';
 import { db } from '@/lib/db';
 
@@ -9,10 +9,9 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 // 缓存统计接口
 export async function GET(request: NextRequest) {
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo || !authInfo.username) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = requireUser(request);
+  if (!auth.authInfo) return auth.response;
+  const authInfo = auth.authInfo;
 
   // 只有站长(owner)可以访问缓存管理
   if (authInfo.username !== process.env.USERNAME) {
@@ -51,10 +50,9 @@ export async function GET(request: NextRequest) {
 
 // 缓存清理接口
 export async function DELETE(request: NextRequest) {
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo || !authInfo.username) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = requireUser(request);
+  if (!auth.authInfo) return auth.response;
+  const authInfo = auth.authInfo;
 
   // 只有站长(owner)可以访问缓存管理
   if (authInfo.username !== process.env.USERNAME) {

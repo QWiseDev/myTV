@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { CalendarCacheManager } from '@/lib/calendar-cache';
 import { getFilters, getReleaseCalendar } from '@/lib/release-calendar-scraper';
 import { ReleaseCalendarResult } from '@/lib/types';
@@ -14,10 +14,8 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   // 检查用户认证
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo || !authInfo.username) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = requireUser(request);
+  if (!auth.authInfo) return auth.response;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -152,10 +150,8 @@ export async function GET(request: NextRequest) {
 
 // 手动刷新缓存的API
 export async function POST(request: NextRequest) {
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo || !authInfo.username) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = requireUser(request);
+  if (!auth.authInfo) return auth.response;
 
   try {
     // 清除数据库缓存

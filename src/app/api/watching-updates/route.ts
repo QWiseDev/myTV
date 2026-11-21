@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import {
   getCachedWatchingUpdatesForUser,
@@ -10,10 +10,9 @@ import {
 export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo?.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     const guardResult = await ensureUserAccessOrResponse(authInfo.username);
     if ('response' in guardResult) {

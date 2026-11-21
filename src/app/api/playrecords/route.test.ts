@@ -13,9 +13,27 @@ const mockGetPlayRecord = jest.fn();
 const mockInvalidateWatchingUpdatesForUser = jest.fn();
 const mockSavePlayRecord = jest.fn();
 
-jest.mock('@/lib/auth', () => ({
-  getAuthInfoFromCookie: mockGetAuthInfoFromCookie,
-}));
+jest.mock('@/lib/auth', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires -- jest 工厂 mock 内无法使用顶层 import
+  const { NextResponse } = require('next/server');
+
+  return {
+    getAuthInfoFromCookie: mockGetAuthInfoFromCookie,
+    // 与真实 requireUser 行为一致的轻量替身：由 mockGetAuthInfoFromCookie 决定鉴权结果
+    requireUser: (request: unknown) => {
+      const authInfo = mockGetAuthInfoFromCookie(request);
+      if (!authInfo || !authInfo.username) {
+        return {
+          response: NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 },
+          ),
+        };
+      }
+      return { authInfo };
+    },
+  };
+});
 
 jest.mock('@/lib/db', () => ({
   db: {

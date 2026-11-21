@@ -324,43 +324,53 @@ function rewriteM3U8Content(
 
     // 处理 EXT-X-MAP 标签中的 URI
     if (line.startsWith('#EXT-X-MAP:')) {
-      line = rewriteMapUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'segment',
+      });
     }
 
     // 处理 EXT-X-KEY 标签中的 URI
     if (line.startsWith('#EXT-X-KEY:')) {
-      line = rewriteKeyUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'key',
+      });
     }
 
     // 处理 EXT-X-MEDIA 标签中的 URI (音频轨道等)
     if (line.startsWith('#EXT-X-MEDIA:')) {
-      line = rewriteMediaUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'm3u8',
+        onInvalid: 'strip',
+      });
     }
 
     // 处理 LL-HLS 部分片段 (EXT-X-PART)
     if (line.startsWith('#EXT-X-PART:')) {
-      line = rewritePartUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'segment',
+      });
     }
 
     // 处理内容导向 (EXT-X-CONTENT-STEERING)
     if (line.startsWith('#EXT-X-CONTENT-STEERING:')) {
-      line = rewriteContentSteeringUri(
-        line,
-        baseUrl,
-        proxyBase,
-        source,
-        variables,
-      );
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        attr: 'SERVER-URI',
+        endpoint: 'm3u8',
+      });
     }
 
     // 处理会话数据 (EXT-X-SESSION-DATA) - 可能包含 URI
     if (line.startsWith('#EXT-X-SESSION-DATA:')) {
-      line = rewriteSessionDataUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'segment',
+      });
     }
 
     // 处理会话密钥 (EXT-X-SESSION-KEY)
     if (line.startsWith('#EXT-X-SESSION-KEY:')) {
-      line = rewriteSessionKeyUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'key',
+      });
     }
 
     // 处理嵌套的 M3U8 文件 (EXT-X-STREAM-INF)
@@ -394,29 +404,19 @@ function rewriteM3U8Content(
 
     // 处理预加载提示 (EXT-X-PRELOAD-HINT)
     if (line.startsWith('#EXT-X-PRELOAD-HINT:')) {
-      line = rewritePreloadHintUri(line, baseUrl, proxyBase, source, variables);
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'segment',
+      });
     }
 
     // 处理渲染报告 (EXT-X-RENDITION-REPORT)
     if (line.startsWith('#EXT-X-RENDITION-REPORT:')) {
-      line = rewriteRenditionReportUri(
-        line,
-        baseUrl,
-        proxyBase,
-        source,
-        variables,
-      );
+      line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
+        endpoint: 'm3u8',
+      });
     }
 
-    // 处理服务器控制 (EXT-X-SERVER-CONTROL)
-    if (line.startsWith('#EXT-X-SERVER-CONTROL:')) {
-      line = rewriteServerControlUri(line, baseUrl, proxyBase, variables);
-    }
-
-    // 处理跳过片段 (EXT-X-SKIP)
-    if (line.startsWith('#EXT-X-SKIP:')) {
-      line = rewriteSkipUri(line, baseUrl, proxyBase, variables);
-    }
+    // EXT-X-SERVER-CONTROL 与 EXT-X-SKIP 不含 URI，无需处理，原样透传
 
     rewrittenLines.push(line);
   }
@@ -478,170 +478,59 @@ function processDefineVariables(
   return line; // 返回原始标签，让客户端处理
 }
 
-function rewriteMapUri(
+/**
+ * 通用的 HLS 标签 URI 重写：
+ * 匹配 attr="..." → 变量替换 → 解析相对路径 → 指向代理端点。
+ * 各 EXT-X-* 标签的差异只剩属性名、代理端点与无效 URI 的处理方式。
+ */
+function rewriteTagUri(
   line: string,
   baseUrl: string,
   proxyBase: string,
   source: string | null,
-  variables?: Map<string, string>,
-) {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
-    return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-  }
-  return line;
-}
-
-function rewriteKeyUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-) {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'key', resolvedUrl, source);
-    return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-  }
-  return line;
-}
-
-function rewriteMediaUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-) {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-
-    // 检查URI是否有效，避免nan值
-    if (!originalUri || originalUri === 'nan' || originalUri.includes('nan')) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('检测到无效的音频轨道URI:', originalUri, '原始行:', line);
-      }
-      // 移除URI属性，让HLS.js忽略这个音频轨道
-      return line.replace(/,?URI="[^"]*"/, '');
-    }
-
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-
-    try {
-      const resolvedUrl = resolveUrl(baseUrl, originalUri);
-      const proxyUrl = createProxyUrl(proxyBase, 'm3u8', resolvedUrl, source);
-      return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('解析音频轨道URI失败:', originalUri, error);
-      }
-      // 移除URI属性，让HLS.js忽略这个音频轨道
-      return line.replace(/,?URI="[^"]*"/, '');
-    }
-  }
-  return line;
-}
-
-// 处理 LL-HLS 部分片段
-function rewritePartUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
+  variables: Map<string, string> | undefined,
+  options: {
+    /** 标签上携带 URI 的属性名，默认 URI */
+    attr?: string;
+    /** 重写后指向的代理端点 */
+    endpoint: 'm3u8' | 'key' | 'segment';
+    /** 无效 URI（如 EXT-X-MEDIA 中的 "nan"）处理：strip 移除属性让 HLS.js 忽略该轨道，keep 保留原行 */
+    onInvalid?: 'strip' | 'keep';
+  },
 ): string {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
-    return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
+  const { attr = 'URI', endpoint, onInvalid = 'keep' } = options;
+  const uriMatch = line.match(new RegExp(`${attr}="([^"]+)"`));
+  if (!uriMatch) {
+    return line;
   }
-  return line;
+
+  let originalUri = uriMatch[1];
+  if (variables) {
+    originalUri = substituteVariables(originalUri, variables);
+  }
+
+  const stripAttr = () => line.replace(new RegExp(`,?${attr}="[^"]*"`), '');
+
+  if (!originalUri || originalUri === 'nan' || originalUri.includes('nan')) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('检测到无效的URI:', originalUri, '原始行:', line);
+    }
+    return onInvalid === 'strip' ? stripAttr() : line;
+  }
+
+  try {
+    const resolvedUrl = resolveUrl(baseUrl, originalUri);
+    const proxyUrl = createProxyUrl(proxyBase, endpoint, resolvedUrl, source);
+    return line.replace(uriMatch[0], `${attr}="${proxyUrl}"`);
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('解析URI失败:', originalUri, error);
+    }
+    return onInvalid === 'strip' ? stripAttr() : line;
+  }
 }
 
-// 处理内容导向
-function rewriteContentSteeringUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-): string {
-  const serverUriMatch = line.match(/SERVER-URI="([^"]+)"/);
-  if (serverUriMatch) {
-    let originalUri = serverUriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'm3u8', resolvedUrl, source);
-    return line.replace(serverUriMatch[0], `SERVER-URI="${proxyUrl}"`);
-  }
-  return line;
-}
-
-// 处理会话数据
-function rewriteSessionDataUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-): string {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'segment', resolvedUrl, source);
-    return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-  }
-  return line;
-}
-
-// 处理会话密钥
-function rewriteSessionKeyUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-): string {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-    const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, 'key', resolvedUrl, source);
-    return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-  }
-  return line;
-}
-
-// 处理日期范围标签中的 URI
+// 处理日期范围标签中的 URI (SCTE-35 等，可能包含多个 URI 属性)
 function rewriteDateRangeUri(
   line: string,
   baseUrl: string,
@@ -681,92 +570,4 @@ function rewriteDateRangeUri(
   }
 
   return result;
-}
-
-// 处理预加载提示 - LL-HLS 功能
-function rewritePreloadHintUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-): string {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-
-    try {
-      const resolvedUrl = resolveUrl(baseUrl, originalUri);
-      const proxyUrl = createProxyUrl(
-        proxyBase,
-        'segment',
-        resolvedUrl,
-        source,
-      );
-
-      return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('解析预加载提示URI失败:', originalUri, error);
-      }
-      return line;
-    }
-  }
-  return line;
-}
-
-// 处理渲染报告
-function rewriteRenditionReportUri(
-  line: string,
-  baseUrl: string,
-  proxyBase: string,
-  source: string | null,
-  variables?: Map<string, string>,
-): string {
-  const uriMatch = line.match(/URI="([^"]+)"/);
-  if (uriMatch) {
-    let originalUri = uriMatch[1];
-    if (variables) {
-      originalUri = substituteVariables(originalUri, variables);
-    }
-
-    try {
-      const resolvedUrl = resolveUrl(baseUrl, originalUri);
-      const proxyUrl = createProxyUrl(proxyBase, 'm3u8', resolvedUrl, source);
-      return line.replace(uriMatch[0], `URI="${proxyUrl}"`);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('解析渲染报告URI失败:', originalUri, error);
-      }
-      return line;
-    }
-  }
-  return line;
-}
-
-// 处理服务器控制
-function rewriteServerControlUri(
-  line: string,
-  _baseUrl: string,
-  _proxyBase: string,
-  _variables?: Map<string, string>,
-): string {
-  // EXT-X-SERVER-CONTROL 通常不包含 URI，但为了完整性保留此函数
-  // 如果将来有包含 URI 的扩展，可以在此处理
-  return line;
-}
-
-// 处理跳过片段
-function rewriteSkipUri(
-  line: string,
-  _baseUrl: string,
-  _proxyBase: string,
-  _variables?: Map<string, string>,
-): string {
-  // EXT-X-SKIP 不包含 URI，只包含 SKIPPED-SEGMENTS 等属性
-  // 保持原样返回
-  return line;
 }

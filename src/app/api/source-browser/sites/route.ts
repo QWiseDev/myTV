@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites } from '@/lib/config';
 
 export const runtime = 'nodejs';
@@ -8,10 +8,9 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     const availableSites = await getAvailableApiSites(authInfo.username);
     const sources = availableSites

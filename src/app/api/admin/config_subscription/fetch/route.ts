@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import {
   ConfigSubscriptionFetchError,
   fetchDecodedConfigSubscription,
@@ -14,10 +14,9 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     // 权限检查：仅站长可以拉取配置订阅
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     if (authInfo.username !== process.env.USERNAME) {
       return NextResponse.json(

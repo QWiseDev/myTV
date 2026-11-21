@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 // 从cookie获取认证信息 (服务端使用)
 export function getAuthInfoFromCookie(request: NextRequest): {
@@ -23,6 +23,33 @@ export function getAuthInfoFromCookie(request: NextRequest): {
   } catch (error) {
     return null;
   }
+}
+
+export interface AuthInfoWithUsername {
+  password?: string;
+  username: string;
+  signature?: string;
+  timestamp?: number;
+  loginTime?: number;
+}
+
+// 两个成员都显式声明属性（optional + undefined），确保 TS 4.9 下 `!auth.authInfo` 能正确收窄
+type RequireUserResult =
+  | { authInfo: AuthInfoWithUsername; response?: undefined }
+  | { authInfo?: undefined; response: NextResponse };
+
+/**
+ * API 路由的用户鉴权守卫：无登录 cookie 或缺少 username 时返回 401 响应。
+ * 与 ensureUserAccessOrResponse 保持相同约定 —— 用 `'response' in result` 判定失败。
+ */
+export function requireUser(request: NextRequest): RequireUserResult {
+  const authInfo = getAuthInfoFromCookie(request);
+  if (!authInfo || !authInfo.username) {
+    return {
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    };
+  }
+  return { authInfo: authInfo as AuthInfoWithUsername };
 }
 
 // 从cookie获取认证信息 (客户端使用)
