@@ -29,7 +29,6 @@ import {
   canToggleVideoCardFavorite,
   cardContainerStyle,
   getVideoCardConfig,
-  getVideoCardEntryPoster,
   getVideoCardSearchType,
   navigateVideoCardPlayUrl,
   noPointerStyle,
@@ -416,7 +415,6 @@ const VideoCard = memo(function VideoCard({
     episodes: actualEpisodes,
     type,
   });
-  const entryPoster = getVideoCardEntryPoster(from, actualPoster);
   const {
     isLoading,
     imageLoaded,
@@ -579,7 +577,6 @@ const VideoCard = memo(function VideoCard({
         searchType: actualSearchType,
         isAggregate,
         query: actualQuery,
-        poster: entryPoster,
       }),
     [
       origin,
@@ -592,7 +589,6 @@ const VideoCard = memo(function VideoCard({
       actualSearchType,
       actualQuery,
       actualDoubanId,
-      entryPoster,
     ],
   );
 

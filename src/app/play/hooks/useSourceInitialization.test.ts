@@ -267,8 +267,7 @@ describe('useSourceInitialization', () => {
     });
 
     expect(params.setVideoCover).toHaveBeenCalledWith(routePoster);
-    expect(new URL(window.location.href).searchParams.get('poster')).toBe(
-      routePoster,
-    );
+    // 封面仍作为 fallbackCover 生效，但不再写进地址栏
+    expect(new URL(window.location.href).searchParams.get('poster')).toBeNull();
   });
 });

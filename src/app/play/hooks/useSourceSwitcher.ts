@@ -268,11 +268,8 @@ export function useSourceSwitcher({
         } else {
           newUrl.searchParams.delete('year');
         }
-        if (resolvedDetail.poster) {
-          newUrl.searchParams.set('poster', resolvedDetail.poster);
-        } else {
-          newUrl.searchParams.delete('poster');
-        }
+        // 封面不再进地址栏：由详情接口回填；旧的 poster 参数在此被清掉
+        newUrl.searchParams.delete('poster');
         if (resolvedDoubanId > 0) {
           newUrl.searchParams.set('douban_id', String(resolvedDoubanId));
         } else {

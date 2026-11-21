@@ -163,9 +163,8 @@ describe('useSourceSwitcher', () => {
 
     const url = new URL(window.location.href);
     expect(url.searchParams.get('title')).toBe('Hydrated title');
-    expect(url.searchParams.get('poster')).toBe(
-      'https://example.com/hydrated.jpg',
-    );
+    // 封面不再进地址栏，旧 poster 参数会被清掉
+    expect(url.searchParams.get('poster')).toBeNull();
     expect(url.searchParams.get('douban_id')).toBe('222');
     expect(url.searchParams.get('stitle')).toBe('Search');
     expect(url.searchParams.get('stype')).toBe('tv');

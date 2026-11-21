@@ -473,11 +473,8 @@ export function useSourceInitialization({
           newUrl.searchParams.set('year', resolvedYear);
         }
         newUrl.searchParams.set('title', resolvedTitle);
-        if (resolvedCover) {
-          newUrl.searchParams.set('poster', resolvedCover);
-        } else {
-          newUrl.searchParams.delete('poster');
-        }
+        // 封面不再进地址栏：由详情接口 / 播放记录兜底回填；旧的 poster 参数在此被清掉
+        newUrl.searchParams.delete('poster');
         if (resolvedDoubanId > 0) {
           newUrl.searchParams.set('douban_id', String(resolvedDoubanId));
         } else {

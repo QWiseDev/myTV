@@ -87,13 +87,6 @@ export function getVideoCardSearchType({
   return episodes === 1 ? 'movie' : 'tv';
 }
 
-export function getVideoCardEntryPoster(
-  from: string,
-  poster: string,
-): string | undefined {
-  return from === 'douban' || from === 'search' ? poster : undefined;
-}
-
 export interface VideoCardLocation {
   assign(url: string): void;
 }
@@ -167,7 +160,6 @@ export interface BuildPlayUrlParams {
   searchType?: string;
   isAggregate?: boolean;
   query?: string;
-  poster?: string;
 }
 
 export function buildPlayUrl(params: BuildPlayUrlParams): string {
@@ -182,15 +174,11 @@ export function buildPlayUrl(params: BuildPlayUrlParams): string {
     searchType,
     isAggregate,
     query,
-    poster,
   } = params;
 
   const doubanIdParam =
     doubanId && doubanId > 0 ? `&douban_id=${doubanId}` : '';
   const resolvedTitle = title.trim() || query?.trim() || '';
-  const posterParam = poster?.trim()
-    ? `&poster=${encodeURIComponent(poster.trim())}`
-    : '';
 
   if (origin === 'live' && source && id) {
     return `/live?source=${source.replace('live_', '')}&id=${id.replace(
@@ -202,7 +190,7 @@ export function buildPlayUrl(params: BuildPlayUrlParams): string {
   if (from === 'douban' || (isAggregate && !source && !id)) {
     return `/play?title=${encodeURIComponent(resolvedTitle)}${
       year ? `&year=${year}` : ''
-    }${doubanIdParam}${posterParam}${searchType ? `&stype=${searchType}` : ''}${
+    }${doubanIdParam}${searchType ? `&stype=${searchType}` : ''}${
       isAggregate ? '&prefer=true' : ''
     }${query ? `&stitle=${encodeURIComponent(query.trim())}` : ''}`;
   }
@@ -210,7 +198,7 @@ export function buildPlayUrl(params: BuildPlayUrlParams): string {
   if (source && id) {
     return `/play?source=${source}&id=${id}&title=${encodeURIComponent(resolvedTitle)}${
       year ? `&year=${year}` : ''
-    }${doubanIdParam}${posterParam}${isAggregate ? '&prefer=true' : ''}${
+    }${doubanIdParam}${isAggregate ? '&prefer=true' : ''}${
       query ? `&stitle=${encodeURIComponent(query.trim())}` : ''
     }${searchType ? `&stype=${searchType}` : ''}`;
   }

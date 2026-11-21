@@ -2,7 +2,6 @@ import {
   buildPlayUrl,
   buildVideoCardSubjectUrl,
   canToggleVideoCardFavorite,
-  getVideoCardEntryPoster,
   getVideoCardSearchType,
   navigateVideoCardPlayUrl,
   shouldCheckSearchFavoriteStatus,
@@ -43,10 +42,7 @@ describe('buildPlayUrl', () => {
     );
   });
 
-  it('keeps poster metadata when opening a douban card', () => {
-    const poster =
-      'https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2884182275.jpg';
-
+  it('omits poster from the url when opening a douban card', () => {
     expect(
       buildPlayUrl({
         from: 'douban',
@@ -54,12 +50,9 @@ describe('buildPlayUrl', () => {
         year: '2026',
         doubanId: 35465012,
         searchType: 'tv',
-        poster,
       }),
     ).toBe(
-      `/play?title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&douban_id=35465012&poster=${encodeURIComponent(
-        poster,
-      )}&stype=tv`,
+      '/play?title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&douban_id=35465012&stype=tv',
     );
   });
 });
@@ -169,15 +162,6 @@ describe('getVideoCardSearchType', () => {
         type: 'movie',
       }),
     ).toBe('tv');
-  });
-});
-
-describe('getVideoCardEntryPoster', () => {
-  it('keeps poster metadata only for douban and search entries', () => {
-    expect(getVideoCardEntryPoster('douban', 'poster-a')).toBe('poster-a');
-    expect(getVideoCardEntryPoster('search', 'poster-a')).toBe('poster-a');
-    expect(getVideoCardEntryPoster('playrecord', 'poster-a')).toBeUndefined();
-    expect(getVideoCardEntryPoster('favorite', 'poster-a')).toBeUndefined();
   });
 });
 
