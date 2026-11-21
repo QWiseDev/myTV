@@ -172,36 +172,44 @@ export async function searchFromApi(
       relevanceScore: number;
     }> = [];
 
-    for (const variant of searchVariants) {
-      const apiUrl =
-        apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(variant);
+    // 变体分批并行请求：逐个串行时单变体超时 8s、最坏 8s×N，分批并发在保持选取语义不变的前提下大幅缩短等待
+    const VARIANT_BATCH_SIZE = 3;
+    for (let i = 0; i < searchVariants.length; i += VARIANT_BATCH_SIZE) {
+      const batch = searchVariants.slice(i, i + VARIANT_BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (variant) => {
+          const apiUrl =
+            apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(variant);
+          try {
+            // 使用新的缓存搜索函数处理第一页
+            const firstPageResult = await searchWithCache(
+              apiSite,
+              variant,
+              1,
+              apiUrl,
+              8000,
+            );
 
-      try {
-        // 使用新的缓存搜索函数处理第一页
-        const firstPageResult = await searchWithCache(
-          apiSite,
-          variant,
-          1,
-          apiUrl,
-          8000,
-        );
-
-        if (firstPageResult.results.length > 0) {
-          // 计算相关性分数
-          const relevanceScore = calculateRelevanceScore(
-            query,
-            variant,
-            firstPageResult.results,
-          );
-
-          allVariantResults.push({
-            variant,
-            results: firstPageResult.results,
-            relevanceScore,
-          });
-        }
-      } catch (error) {
-        /* 忽略错误 */
+            if (firstPageResult.results.length > 0) {
+              // 计算相关性分数
+              return {
+                variant,
+                results: firstPageResult.results,
+                relevanceScore: calculateRelevanceScore(
+                  query,
+                  variant,
+                  firstPageResult.results,
+                ),
+              };
+            }
+          } catch (error) {
+            /* 忽略错误 */
+          }
+          return null;
+        }),
+      );
+      for (const item of batchResults) {
+        if (item) allVariantResults.push(item);
       }
     }
 

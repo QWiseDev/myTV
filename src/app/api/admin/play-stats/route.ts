@@ -2,10 +2,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
-import { PlayRecord } from '@/lib/types';
+import { PlayRecord, UserPlayStat } from '@/lib/types';
 
 // 导出类型供页面组件使用
 export type { PlayStatsResult } from '@/lib/types';
@@ -24,10 +24,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo || !authInfo.username) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = requireUser(request);
+  if (!auth.authInfo) return auth.response;
+  const authInfo = auth.authInfo;
 
   try {
     const config = await getConfig();
@@ -82,8 +81,38 @@ export async function GET(request: NextRequest) {
     // 计算近7天的日期范围
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+    // 分批并行收集每个用户的统计数据（串行逐用户 2 次 RTT，在隧道环境下代价极高）
+    const USER_DATA_BATCH_SIZE = 8;
+    const userDatas: Array<{
+      user: (typeof allUsers)[0];
+      userPlayStat: UserPlayStat | null;
+      records: PlayRecord[];
+    }> = [];
+    for (let i = 0; i < allUsers.length; i += USER_DATA_BATCH_SIZE) {
+      const batch = allUsers.slice(i, i + USER_DATA_BATCH_SIZE);
+      const rows = await Promise.all(
+        batch.map(async (user) => {
+          let userPlayStat: UserPlayStat | null = null;
+          try {
+            userPlayStat = await storage.getUserPlayStat(user.username);
+          } catch {
+            userPlayStat = null;
+          }
+          const userPlayRecords = await storage.getAllPlayRecords(
+            user.username,
+          );
+          return {
+            user,
+            userPlayStat,
+            records: Object.values(userPlayRecords) as PlayRecord[],
+          };
+        }),
+      );
+      userDatas.push(...rows);
+    }
+
     // 为每个用户获取播放记录统计
-    for (const user of allUsers) {
+    for (const { user, userPlayStat, records } of userDatas) {
       try {
         // 计算用户注册相关统计
         // 设置项目开始时间，2025年9月14日
@@ -120,27 +149,13 @@ export async function GET(request: NextRequest) {
           registrationData[regDate] = (registrationData[regDate] || 0) + 1;
         }
 
-        // 获取用户最后登录时间和登入次数（从用户统计中获取真实登入时间）
-        let lastLoginTime = 0;
-        let loginCount = 0;
-        try {
-          const userPlayStat = await storage.getUserPlayStat(user.username);
-          // 优先使用用户统计中的登入时间，这是真实的登录时间
-          lastLoginTime =
-            userPlayStat.lastLoginTime ||
-            userPlayStat.lastLoginDate ||
-            userPlayStat.firstLoginTime ||
-            0;
-          loginCount = userPlayStat.loginCount || 0;
-        } catch (err) {
-          // 获取失败时默认为0
-          lastLoginTime = 0;
-          loginCount = 0;
-        }
-
-        // 获取用户的所有播放记录
-        const userPlayRecords = await storage.getAllPlayRecords(user.username);
-        const records = Object.values(userPlayRecords);
+        // 获取用户最后登录时间和登入次数（已在上方批量并行预取）
+        const lastLoginTime =
+          userPlayStat?.lastLoginTime ||
+          userPlayStat?.lastLoginDate ||
+          userPlayStat?.firstLoginTime ||
+          0;
+        const loginCount = userPlayStat?.loginCount || 0;
 
         if (records.length === 0) {
           // 没有播放记录的用户也要显示

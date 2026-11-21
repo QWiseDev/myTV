@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
 import { db } from '@/lib/db';
 
@@ -22,12 +22,9 @@ interface ChatRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-
-    // 检查用户权限
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     const username = authInfo.username;
 
@@ -380,29 +377,10 @@ ${
         const parsedVideos = await handleVideoLinkParsing(videoLinks);
 
         // 构建返回格式
-        const response = {
-          id: aiResult.id || `chatcmpl-${Date.now()}`,
-          object: 'chat.completion',
-          created: aiResult.created || Math.floor(Date.now() / 1000),
-          model: aiResult.model || requestBody.model,
-          choices: aiResult.choices || [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: aiContent,
-              },
-              finish_reason: aiResult.choices?.[0]?.finish_reason || 'stop',
-            },
-          ],
-          usage: aiResult.usage || {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-          },
+        const response = buildChatResponse(aiResult, requestBody, aiContent, {
           videoLinks: parsedVideos, // 添加解析的视频链接数据
           type: 'video_link_parse',
-        };
+        });
 
         // 缓存结果（只对简单问题进行短时缓存，15分钟）
         if (cacheKey) {
@@ -479,33 +457,18 @@ ${
         );
 
         // 构建YouTube推荐响应
-        const response = {
-          id: aiResult.id || `chatcmpl-${Date.now()}`,
-          object: 'chat.completion',
-          created: aiResult.created || Math.floor(Date.now() / 1000),
-          model: aiResult.model || requestBody.model,
-          choices: aiResult.choices || [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content:
-                  aiContent +
-                  (youtubeVideos.length > 0
-                    ? `\n\n为您推荐以下${youtubeVideos.length}个YouTube视频：`
-                    : '\n\n抱歉，没有找到相关的YouTube视频，请尝试其他关键词。'),
-              },
-              finish_reason: aiResult.choices?.[0]?.finish_reason || 'stop',
-            },
-          ],
-          usage: aiResult.usage || {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
+        const response = buildChatResponse(
+          aiResult,
+          requestBody,
+          aiContent +
+            (youtubeVideos.length > 0
+              ? `\n\n为您推荐以下${youtubeVideos.length}个YouTube视频：`
+              : '\n\n抱歉，没有找到相关的YouTube视频，请尝试其他关键词。'),
+          {
+            youtubeVideos,
+            type: 'youtube_recommend',
           },
-          youtubeVideos,
-          type: 'youtube_recommend',
-        };
+        );
 
         // 缓存结果
         if (cacheKey) {
@@ -523,28 +486,9 @@ ${
     const recommendations = extractRecommendations(aiContent);
 
     // 构建返回格式
-    const response = {
-      id: aiResult.id || `chatcmpl-${Date.now()}`,
-      object: 'chat.completion',
-      created: aiResult.created || Math.floor(Date.now() / 1000),
-      model: aiResult.model || requestBody.model,
-      choices: aiResult.choices || [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: aiContent,
-          },
-          finish_reason: aiResult.choices?.[0]?.finish_reason || 'stop',
-        },
-      ],
-      usage: aiResult.usage || {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-      },
-      recommendations: recommendations, // 添加结构化推荐数据
-    };
+    const response = buildChatResponse(aiResult, requestBody, aiContent, {
+      recommendations, // 添加结构化推荐数据
+    });
 
     // 缓存结果（只对简单问题进行短时缓存，15分钟）
     if (cacheKey) {
@@ -604,11 +548,9 @@ ${
 // 获取AI推荐历史
 export async function GET(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const authInfo = auth.authInfo;
 
     const username = authInfo.username;
     const historyKey = `ai-recommend-history-${username}`;
@@ -633,29 +575,30 @@ export async function GET(request: NextRequest) {
 async function handleVideoLinkParsing(
   videoLinks: Array<{ videoId: string; originalUrl: string }>,
 ) {
-  const parsedVideos = [];
+  // 逐链接并发请求 oEmbed（每个链接恰好产出一条结果，Promise.all 保持顺序）
+  const parsedVideos = await Promise.all(
+    videoLinks.map(async (link) => {
+      try {
+        // 使用YouTube oEmbed API获取视频信息（公开，无需API Key）
+        const response = await fetch(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${link.videoId}&format=json`,
+        );
 
-  for (const link of videoLinks) {
-    try {
-      // 使用YouTube oEmbed API获取视频信息（公开，无需API Key）
-      const response = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${link.videoId}&format=json`,
-      );
+        if (response.ok) {
+          const videoInfo = await response.json();
+          return {
+            videoId: link.videoId,
+            originalUrl: link.originalUrl,
+            title: videoInfo?.title || '直接播放的YouTube视频',
+            channelName: videoInfo?.author_name || '未知频道',
+            thumbnail: `https://img.youtube.com/vi/${link.videoId}/mqdefault.jpg`,
+            playable: true,
+            embedUrl: `https://www.youtube.com/embed/${link.videoId}?autoplay=1&rel=0`,
+          };
+        }
 
-      if (response.ok) {
-        const videoInfo = await response.json();
-        parsedVideos.push({
-          videoId: link.videoId,
-          originalUrl: link.originalUrl,
-          title: videoInfo?.title || '直接播放的YouTube视频',
-          channelName: videoInfo?.author_name || '未知频道',
-          thumbnail: `https://img.youtube.com/vi/${link.videoId}/mqdefault.jpg`,
-          playable: true,
-          embedUrl: `https://www.youtube.com/embed/${link.videoId}?autoplay=1&rel=0`,
-        });
-      } else {
         // 即使oEmbed失败，也提供基本信息
-        parsedVideos.push({
+        return {
           videoId: link.videoId,
           originalUrl: link.originalUrl,
           title: '直接播放的YouTube视频',
@@ -663,21 +606,53 @@ async function handleVideoLinkParsing(
           thumbnail: `https://img.youtube.com/vi/${link.videoId}/mqdefault.jpg`,
           playable: true,
           embedUrl: `https://www.youtube.com/embed/${link.videoId}?autoplay=1&rel=0`,
-        });
+        };
+      } catch (error) {
+        console.error(`解析视频 ${link.videoId} 失败:`, error);
+        return {
+          videoId: link.videoId,
+          originalUrl: link.originalUrl,
+          title: '解析失败的视频',
+          error: '无法获取视频信息',
+          playable: false,
+        };
       }
-    } catch (error) {
-      console.error(`解析视频 ${link.videoId} 失败:`, error);
-      parsedVideos.push({
-        videoId: link.videoId,
-        originalUrl: link.originalUrl,
-        title: '解析失败的视频',
-        error: '无法获取视频信息',
-        playable: false,
-      });
-    }
-  }
+    }),
+  );
 
   return parsedVideos;
+}
+
+// 构建标准的 chat.completion 响应体（三个返回分支共用，差异通过 extras 传入）
+function buildChatResponse(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- aiResult 来自 openaiResponse.json()，字段随上游模型变化
+  aiResult: any,
+  requestBody: Record<string, unknown>,
+  content: string,
+  extras: Record<string, unknown>,
+) {
+  return {
+    id: aiResult.id || `chatcmpl-${Date.now()}`,
+    object: 'chat.completion',
+    created: aiResult.created || Math.floor(Date.now() / 1000),
+    model: aiResult.model || requestBody.model,
+    choices: aiResult.choices || [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content,
+        },
+        finish_reason: aiResult.choices?.[0]?.finish_reason || 'stop',
+      },
+    ],
+    usage: aiResult.usage || {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+    },
+    ...extras,
+  };
 }
 
 // 从AI回复中提取YouTube搜索关键词（参考alpha逻辑）
@@ -698,50 +673,58 @@ async function searchYouTubeVideos(
   keywords: string[],
   youtubeConfig: { apiKey?: string },
 ) {
-  const videos = [];
-
   // 检查API Key
   if (!youtubeConfig.apiKey) {
     throw new Error('YouTube API Key未配置');
   }
 
-  // 使用真实YouTube API
-  for (const keyword of keywords) {
-    if (videos.length >= 4) break;
+  const { apiKey } = youtubeConfig;
 
-    try {
-      const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-      searchUrl.searchParams.set('key', youtubeConfig.apiKey);
-      searchUrl.searchParams.set('q', keyword);
-      searchUrl.searchParams.set('part', 'snippet');
-      searchUrl.searchParams.set('type', 'video');
-      searchUrl.searchParams.set('maxResults', '1');
-      searchUrl.searchParams.set('order', 'relevance');
+  // 使用真实YouTube API（关键词最多 4 个，按关键词顺序并发搜索，取前 4 个命中结果）
+  const searchResults = await Promise.allSettled(
+    keywords.map(async (keyword) => {
+      try {
+        const searchUrl = new URL(
+          'https://www.googleapis.com/youtube/v3/search',
+        );
+        searchUrl.searchParams.set('key', apiKey);
+        searchUrl.searchParams.set('q', keyword);
+        searchUrl.searchParams.set('part', 'snippet');
+        searchUrl.searchParams.set('type', 'video');
+        searchUrl.searchParams.set('maxResults', '1');
+        searchUrl.searchParams.set('order', 'relevance');
 
-      const response = await fetch(searchUrl.toString());
+        const response = await fetch(searchUrl.toString());
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.items && data.items.length > 0) {
-          const video = data.items[0];
-          videos.push({
-            id: video.id.videoId,
-            title: video.snippet.title,
-            description: video.snippet.description,
-            thumbnail:
-              video.snippet.thumbnails?.medium?.url ||
-              video.snippet.thumbnails?.default?.url,
-            channelTitle: video.snippet.channelTitle,
-            publishedAt: video.snippet.publishedAt,
-          });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.items && data.items.length > 0) {
+            const video = data.items[0];
+            return {
+              id: video.id.videoId,
+              title: video.snippet.title,
+              description: video.snippet.description,
+              thumbnail:
+                video.snippet.thumbnails?.medium?.url ||
+                video.snippet.thumbnails?.default?.url,
+              channelTitle: video.snippet.channelTitle,
+              publishedAt: video.snippet.publishedAt,
+            };
+          }
         }
+        return null;
+      } catch (error) {
+        console.error(`搜索关键词 "${keyword}" 失败:`, error);
+        return null;
       }
-    } catch (error) {
-      console.error(`搜索关键词 "${keyword}" 失败:`, error);
-    }
-  }
+    }),
+  );
 
-  return videos;
+  return searchResults
+    .flatMap((result) =>
+      result.status === 'fulfilled' && result.value ? [result.value] : [],
+    )
+    .slice(0, 4);
 }
 
 // 从AI回复中提取推荐信息的辅助函数

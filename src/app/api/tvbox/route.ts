@@ -423,7 +423,9 @@ export async function GET(request: NextRequest) {
           }
 
           // 动态获取源站分类（使用并发控制）
-          let categories: string[] = [
+          // 30 分钟缓存：TVBox 客户端会定期拉取配置，避免每次都对全部源站发起外呼
+          const TVBOX_CATEGORIES_TTL = 30 * 60;
+          const DEFAULT_CATEGORIES = [
             '电影',
             '电视剧',
             '综艺',
@@ -431,72 +433,98 @@ export async function GET(request: NextRequest) {
             '纪录片',
           ]; // 默认分类
 
-          categories = await categoriesLimiter.run(async () => {
-            try {
-              // 尝试获取源站的分类数据
-              const categoriesUrl = `${source.api}?ac=list`;
+          let categories: string[] = DEFAULT_CATEGORIES;
+          const categoriesCacheKey = `tvbox:cats:${source.api}`;
+          let cachedCategories: string[] | null = null;
+          try {
+            cachedCategories = (await db.getCache(categoriesCacheKey)) as
+              | string[]
+              | null;
+          } catch (cacheError) {
+            console.warn('[TVBox] 读取分类缓存失败:', cacheError);
+          }
 
-              const response = await withAbortableTimeout(
-                (signal) =>
-                  fetch(categoriesUrl, {
-                    signal,
-                    headers: {
-                      'User-Agent': 'TVBox/1.0.0',
-                    },
-                  }),
-                10000, // 10秒超时
-              );
+          if (Array.isArray(cachedCategories) && cachedCategories.length > 0) {
+            categories = cachedCategories;
+          } else {
+            categories = await categoriesLimiter.run(async () => {
+              try {
+                // 尝试获取源站的分类数据
+                const categoriesUrl = `${source.api}?ac=list`;
 
-              if (response.ok) {
-                const data = await response.json();
-                if (data.class && Array.isArray(data.class)) {
-                  return data.class
-                    .map(
-                      (cat: { type_name?: string; name?: string }) =>
-                        cat.type_name || cat.name || '',
-                    )
-                    .filter((name: string) => name);
+                const response = await withAbortableTimeout(
+                  (signal) =>
+                    fetch(categoriesUrl, {
+                      signal,
+                      headers: {
+                        'User-Agent': 'TVBox/1.0.0',
+                      },
+                    }),
+                  10000, // 10秒超时
+                );
+
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.class && Array.isArray(data.class)) {
+                    return data.class
+                      .map(
+                        (cat: { type_name?: string; name?: string }) =>
+                          cat.type_name || cat.name || '',
+                      )
+                      .filter((name: string) => name);
+                  }
                 }
-              }
-            } catch (error) {
-              // 优化的错误处理：区分不同类型的错误
-              if (error instanceof Error) {
-                if (
-                  error.name === 'TimeoutError' ||
-                  error.name === 'AbortError'
-                ) {
-                  console.warn(
-                    `[TVBox] 获取源站 ${source.name} 分类超时(10s)，使用默认分类`,
-                  );
-                } else if (
-                  error.message.includes('JSON') ||
-                  error.message.includes('parse')
-                ) {
-                  console.warn(
-                    `[TVBox] 源站 ${source.name} 返回的分类数据格式错误，使用默认分类`,
-                  );
-                } else if (
-                  error.message.includes('ENOTFOUND') ||
-                  error.message.includes('ECONNREFUSED')
-                ) {
-                  console.warn(
-                    `[TVBox] 无法连接到源站 ${source.name}，使用默认分类`,
-                  );
+              } catch (error) {
+                // 优化的错误处理：区分不同类型的错误
+                if (error instanceof Error) {
+                  if (
+                    error.name === 'TimeoutError' ||
+                    error.name === 'AbortError'
+                  ) {
+                    console.warn(
+                      `[TVBox] 获取源站 ${source.name} 分类超时(10s)，使用默认分类`,
+                    );
+                  } else if (
+                    error.message.includes('JSON') ||
+                    error.message.includes('parse')
+                  ) {
+                    console.warn(
+                      `[TVBox] 源站 ${source.name} 返回的分类数据格式错误，使用默认分类`,
+                    );
+                  } else if (
+                    error.message.includes('ENOTFOUND') ||
+                    error.message.includes('ECONNREFUSED')
+                  ) {
+                    console.warn(
+                      `[TVBox] 无法连接到源站 ${source.name}，使用默认分类`,
+                    );
+                  } else {
+                    console.warn(
+                      `[TVBox] 获取源站 ${source.name} 分类失败: ${error.message}，使用默认分类`,
+                    );
+                  }
                 } else {
                   console.warn(
-                    `[TVBox] 获取源站 ${source.name} 分类失败: ${error.message}，使用默认分类`,
+                    `[TVBox] 获取源站 ${source.name} 分类失败（未知错误），使用默认分类`,
                   );
                 }
-              } else {
-                console.warn(
-                  `[TVBox] 获取源站 ${source.name} 分类失败（未知错误），使用默认分类`,
-                );
               }
-            }
 
-            // 返回默认分类
-            return ['电影', '电视剧', '综艺', '动漫', '纪录片'];
-          });
+              // 返回默认分类
+              return DEFAULT_CATEGORIES;
+            });
+
+            // 结果写入缓存（含默认分类兜底，避免死源反复拖慢配置生成）
+            try {
+              await db.setCache(
+                categoriesCacheKey,
+                categories,
+                TVBOX_CATEGORIES_TTL,
+              );
+            } catch (cacheError) {
+              console.warn('[TVBox] 写入分类缓存失败:', cacheError);
+            }
+          }
 
           return {
             key: source.key || source.name,
