@@ -1,5 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 
+import { ClientCache } from '@/lib/client-cache';
+
 import { useDanmuController } from './useDanmuController';
 import { getDanmuCacheItem, setDanmuCacheItem } from '../utils/danmuCache';
 
@@ -22,6 +24,7 @@ describe('useDanmuController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    ClientCache.clearMemory();
     (getDanmuCacheItem as jest.Mock).mockResolvedValue(null);
     (setDanmuCacheItem as jest.Mock).mockResolvedValue(undefined);
   });
@@ -36,15 +39,21 @@ describe('useDanmuController', () => {
       resolve: (response: Response) => void;
       signal?: AbortSignal;
     }> = [];
-    global.fetch = jest.fn(
-      (_url: RequestInfo | URL, options?: RequestInit) =>
-        new Promise<Response>((resolve) => {
-          pendingResponses.push({
-            resolve,
-            signal: options?.signal as AbortSignal | undefined,
-          });
-        }),
-    ) as typeof fetch;
+    global.fetch = jest.fn((url: RequestInfo | URL, options?: RequestInit) => {
+      // 共享弹幕选择的读取请求立即返回空，测试只跟踪弹幕本体请求
+      if (String(url).includes('/api/cache')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ data: null }),
+        } as Response);
+      }
+      return new Promise<Response>((resolve) => {
+        pendingResponses.push({
+          resolve,
+          signal: options?.signal as AbortSignal | undefined,
+        });
+      });
+    }) as typeof fetch;
 
     const currentEpisodeIndexRef = { current: 0 };
     const danmuLoadingRef = { current: false };
@@ -100,9 +109,14 @@ describe('useDanmuController', () => {
   test('rejects a result when the media identity changes before it returns', async () => {
     const cacheWrite = createDeferred<void>();
     (setDanmuCacheItem as jest.Mock).mockReturnValueOnce(cacheWrite.promise);
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ danmu: [{ text: '旧集弹幕' }] }),
+    global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('/api/cache')) {
+        return { ok: true, json: async () => ({ data: null }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ danmu: [{ text: '旧集弹幕' }] }),
+      } as Response;
     }) as typeof fetch;
 
     const currentEpisodeIndexRef = { current: 0 };
@@ -140,10 +154,16 @@ describe('useDanmuController', () => {
     jest.useFakeTimers();
     const cacheWrite = createDeferred<void>();
     (setDanmuCacheItem as jest.Mock).mockReturnValueOnce(cacheWrite.promise);
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ danmu: [{ text: '迟到弹幕' }] }),
-    }) as typeof fetch;
+    const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('/api/cache')) {
+        return { ok: true, json: async () => ({ data: null }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ danmu: [{ text: '迟到弹幕' }] }),
+      } as Response;
+    }) as unknown as jest.Mock;
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     const plugin = {
       reset: jest.fn(),
@@ -182,7 +202,10 @@ describe('useDanmuController', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const danmuFetchCount = fetchMock.mock.calls.filter(
+      (call) => !String(call[0]).includes('/api/cache'),
+    ).length;
+    expect(danmuFetchCount).toBe(1);
     expect(setDanmuCacheItem).toHaveBeenCalledTimes(1);
 
     act(() => {
@@ -209,5 +232,107 @@ describe('useDanmuController', () => {
     expect(plugin.load).toHaveBeenCalledTimes(1);
     expect(plugin.hide).toHaveBeenCalledTimes(1);
     expect(art.notice.show).toBe('外部弹幕已关闭');
+  });
+
+  test('本地没有选择时采用其他用户的共享选择作为默认弹幕', async () => {
+    const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+      const href = String(url);
+      if (href.includes('/api/cache')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: { episodeId: 'shared-1', title: '共享' },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ danmu: [{ text: '共享弹幕' }] }),
+      } as Response;
+    }) as unknown as jest.Mock;
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useDanmuController({
+        artPlayerRef: { current: null },
+        danmuOperationTimeoutRef: { current: null },
+        externalDanmuEnabledRef: { current: true },
+        setExternalDanmuEnabled: jest.fn(),
+        videoTitleRef: { current: '测试剧' },
+        videoYearRef: { current: '2026' },
+        videoDoubanIdRef: { current: 123 },
+        videoUrlRef: { current: 'https://example.com/episode.m3u8' },
+        currentEpisodeIndexRef: { current: 0 },
+        danmuLoadingRef: { current: false },
+        lastDanmuLoadKeyRef: { current: '' },
+        currentSourceRef: { current: 'source-a' },
+        danmuEpisodeOffsetRef: { current: 0 },
+      }),
+    );
+
+    await expect(result.current.loadExternalDanmu()).resolves.toEqual([
+      { text: '共享弹幕' },
+    ]);
+    const danmuUrl = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .find((url) => !url.includes('/api/cache'));
+    // 命中手动选择时走 danmu_api 的 comment 接口
+    expect(danmuUrl).toContain('action=comment&id=shared-1');
+  });
+
+  test('本地手动选择优先于共享选择，不再读取共享记录', async () => {
+    const media = JSON.stringify(['测试剧', '2026', 123]);
+    localStorage.setItem(
+      'player_danmaku_selections_v1',
+      JSON.stringify({
+        [JSON.stringify([media, 0])]: { episodeId: 'local-1', title: '本地' },
+      }),
+    );
+    const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('/api/cache')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: { episodeId: 'shared-1', title: '共享' },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ danmu: [{ text: '本地弹幕' }] }),
+      } as Response;
+    }) as unknown as jest.Mock;
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useDanmuController({
+        artPlayerRef: { current: null },
+        danmuOperationTimeoutRef: { current: null },
+        externalDanmuEnabledRef: { current: true },
+        setExternalDanmuEnabled: jest.fn(),
+        videoTitleRef: { current: '测试剧' },
+        videoYearRef: { current: '2026' },
+        videoDoubanIdRef: { current: 123 },
+        videoUrlRef: { current: 'https://example.com/episode.m3u8' },
+        currentEpisodeIndexRef: { current: 0 },
+        danmuLoadingRef: { current: false },
+        lastDanmuLoadKeyRef: { current: '' },
+        currentSourceRef: { current: 'source-a' },
+        danmuEpisodeOffsetRef: { current: 0 },
+      }),
+    );
+
+    await expect(result.current.loadExternalDanmu()).resolves.toEqual([
+      { text: '本地弹幕' },
+    ]);
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes('/api/cache'),
+      ),
+    ).toBe(false);
+    const danmuUrl = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .find((url) => !url.includes('/api/cache'));
+    expect(danmuUrl).toContain('action=comment&id=local-1');
   });
 });

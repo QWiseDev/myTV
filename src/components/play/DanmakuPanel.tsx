@@ -13,10 +13,13 @@ import {
   type DanmakuAnime,
   type DanmakuEpisode,
   type DanmakuFilters,
+  type ManualDanmakuSelection,
+  fetchSharedDanmakuSelection,
   readDanmakuFilters,
   readDanmakuSelection,
   saveDanmakuFilters,
   saveDanmakuSelection,
+  syncSharedDanmakuSelection,
 } from '@/lib/danmaku';
 
 interface Props {
@@ -42,6 +45,9 @@ export default function DanmakuPanel({
   const [selection, setSelection] = useState(() =>
     readDanmakuSelection(mediaKey, episodeIndex),
   );
+  // 本地没有手动选择时，展示其他用户的选择（播放端也会默认采用它）
+  const [sharedSelection, setSharedSelection] =
+    useState<ManualDanmakuSelection | null>(null);
   const [filters, setFilters] = useState(readDanmakuFilters);
   const [words, setWords] = useState(filters.keywords.join('\n'));
   const [loading, setLoading] = useState(false);
@@ -49,6 +55,26 @@ export default function DanmakuPanel({
   const [error, setError] = useState('');
   const requestRef = useRef<AbortController | null>(null);
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => {
+    setSelection(readDanmakuSelection(mediaKey, episodeIndex));
+  }, [mediaKey, episodeIndex]);
+
+  useEffect(() => {
+    if (selection) {
+      setSharedSelection(null);
+      return;
+    }
+    let cancelled = false;
+    fetchSharedDanmakuSelection(mediaKey, episodeIndex)
+      .then((value) => {
+        if (!cancelled) setSharedSelection(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaKey, episodeIndex, selection]);
 
   async function query(
     params: Record<string, string>,
@@ -91,6 +117,9 @@ export default function DanmakuPanel({
       setSelection(value);
       setError('');
       onToggle(true);
+      // 手动选择镜像到服务端：其他用户播放同一内容且未选择时默认采用。
+      // 「恢复自动匹配」同样清除共享记录，否则会被默认选择覆盖回原样。
+      void syncSharedDanmakuSelection(mediaKey, episodeIndex, value);
     } catch {
       setError('无法保存弹幕选择，请检查浏览器存储权限');
     }
@@ -120,7 +149,10 @@ export default function DanmakuPanel({
           <MessageSquare size={16} className='shrink-0' />
           弹幕管理
           <span className='truncate font-normal text-gray-500'>
-            {selection?.title || '自动匹配'}
+            {selection?.title ||
+              (sharedSelection
+                ? `共享 · ${sharedSelection.title}`
+                : '自动匹配')}
           </span>
         </span>
       </summary>

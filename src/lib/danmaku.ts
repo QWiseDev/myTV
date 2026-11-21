@@ -1,3 +1,5 @@
+import { ClientCache } from '@/lib/client-cache';
+
 export interface DanmakuAnime {
   id: string;
   title: string;
@@ -13,7 +15,6 @@ export interface ManualDanmakuSelection {
   episodeId: string;
   title: string;
 }
-
 export interface DanmakuFilters {
   keywords: string[];
   blockTop: boolean;
@@ -75,6 +76,65 @@ export function saveDanmakuSelection(
     SELECTION_KEY,
     JSON.stringify(Object.fromEntries(Object.entries(saved).slice(-100))),
   );
+}
+
+/**
+ * 手动弹幕选择的服务端共享镜像（经 /api/cache 存储于 redis）。
+ *
+ * 本地选择仍然优先：只有本浏览器从未手动选择过该集时，
+ * 才把其他用户选中的绑定作为默认弹幕源使用。
+ */
+const SHARED_SELECTION_KEY_PREFIX = 'danmaku-shared-sel';
+const SHARED_SELECTION_TTL_SECONDS = 90 * 24 * 60 * 60;
+
+function sharedSelectionCacheKey(media: string, episodeIndex: number): string {
+  return `${SHARED_SELECTION_KEY_PREFIX}:${media}:${episodeIndex}`;
+}
+
+function isManualDanmakuSelection(
+  value: unknown,
+): value is ManualDanmakuSelection {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as ManualDanmakuSelection).episodeId === 'string' &&
+    typeof (value as ManualDanmakuSelection).title === 'string'
+  );
+}
+
+/** 读取同一内容下其他用户最近手动选中的弹幕绑定；无记录或网络失败返回 null。 */
+export async function fetchSharedDanmakuSelection(
+  media: string,
+  episodeIndex: number,
+): Promise<ManualDanmakuSelection | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const data = await ClientCache.get<ManualDanmakuSelection>(
+      sharedSelectionCacheKey(media, episodeIndex),
+    );
+    return isManualDanmakuSelection(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入/清除共享弹幕绑定（用户手动选择或恢复自动匹配时调用）。 */
+export async function syncSharedDanmakuSelection(
+  media: string,
+  episodeIndex: number,
+  selection: ManualDanmakuSelection | null,
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const key = sharedSelectionCacheKey(media, episodeIndex);
+  try {
+    if (selection) {
+      await ClientCache.set(key, selection, SHARED_SELECTION_TTL_SECONDS);
+    } else {
+      await ClientCache.delete(key);
+    }
+  } catch (error) {
+    console.warn('同步共享弹幕选择失败:', error);
+  }
 }
 
 export function readDanmakuFilters(): DanmakuFilters {

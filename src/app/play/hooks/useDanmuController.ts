@@ -2,7 +2,11 @@
 
 import { MutableRefObject, useCallback, useRef } from 'react';
 
-import { danmakuMediaKey, readDanmakuSelection } from '@/lib/danmaku';
+import {
+  danmakuMediaKey,
+  fetchSharedDanmakuSelection,
+  readDanmakuSelection,
+} from '@/lib/danmaku';
 
 import {
   ArtPlayerLike,
@@ -58,15 +62,40 @@ export function useDanmuController({
   const loadExternalDanmu = useCallback(async (): Promise<
     DanmakuItemLike[]
   > => {
+    // 手动选择解析：本地选择优先；本地没有时采用其他用户的选择作为默认。
+    const mediaKey = danmakuMediaKey(
+      videoTitleRef.current,
+      videoYearRef.current,
+      videoDoubanIdRef.current,
+    );
+    const selectionEpisode =
+      currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current;
+    const localSelection = readDanmakuSelection(mediaKey, selectionEpisode);
+    const manualSelection = localSelection
+      ? null
+      : await fetchSharedDanmakuSelection(mediaKey, selectionEpisode);
+    const manualEpisodeId =
+      localSelection?.episodeId ?? manualSelection?.episodeId;
+
+    if (!localSelection) {
+      // 共享选择的请求期间媒体可能已切换（换集/换源），此时丢弃结果，
+      // 由切换流程自身的重新加载接管，避免给新集数挂上旧集的选择。
+      const mediaNow = danmakuMediaKey(
+        videoTitleRef.current,
+        videoYearRef.current,
+        videoDoubanIdRef.current,
+      );
+      const episodeNow =
+        currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current;
+      if (mediaNow !== mediaKey || episodeNow !== selectionEpisode) {
+        const error = new Error('弹幕请求媒体已变化');
+        error.name = 'AbortError';
+        throw error;
+      }
+    }
+
     const getCurrentRequestInput = () => ({
-      manualEpisodeId: readDanmakuSelection(
-        danmakuMediaKey(
-          videoTitleRef.current,
-          videoYearRef.current,
-          videoDoubanIdRef.current,
-        ),
-        currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current,
-      )?.episodeId,
+      manualEpisodeId,
       enabled: externalDanmuEnabledRef.current,
       videoTitle: videoTitleRef.current,
       videoYear: videoYearRef.current,
