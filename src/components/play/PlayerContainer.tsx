@@ -180,7 +180,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
                   ? '显示选集和换源面板'
                   : '收起选集和换源面板'
               }
-              className={`group absolute right-0 top-1/2 z-20 flex h-[110px] w-10 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-white/10 bg-[#262626]/60 text-white/85 shadow-lg shadow-black/30 backdrop-blur-md transition-all duration-300 hover:bg-[#262626]/85 hover:text-white active:scale-95 ${
+              className={`group absolute right-0 top-1/2 z-20 hidden h-[110px] w-10 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-white/10 bg-[#262626]/60 text-white/85 shadow-lg shadow-black/30 backdrop-blur-md transition-all duration-300 hover:bg-[#262626]/85 hover:text-white active:scale-95 md:flex ${
                 showOverlay ? 'opacity-100' : 'pointer-events-none opacity-0'
               }`}
             >

@@ -542,7 +542,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         };
 
         const chromecastConfig =
-          isChrome && !isIOS
+          isChrome && !isIOS && !isMobile
             ? artplayerPluginChromecast({
                 onStateChange: () => {
                   /* no-op */

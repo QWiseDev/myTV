@@ -68,7 +68,7 @@ function isArtplayerPlugin(plugin: unknown): plugin is ArtplayerPluginConfig {
  * 获取基础 Artplayer 配置
  */
 export function getBaseArtplayerConfig(options: ArtplayerConfigOptions) {
-  const { container, url, poster, isIOS, isSafari } = options;
+  const { container, url, poster, isIOS, isSafari, isMobile } = options;
 
   return {
     container,
@@ -79,7 +79,9 @@ export function getBaseArtplayerConfig(options: ArtplayerConfigOptions) {
     // iOS设备需要静音才能自动播放
     muted: isIOS || isSafari,
     autoplay: true,
-    pip: true,
+    // 移动端控制栏空间有限：PiP 与网页全屏没有使用场景，直接关掉，
+    // 把空间留给画质/倍速/设置/全屏，避免全屏按钮被挤出可视区
+    pip: !isMobile,
     autoSize: false,
     autoMini: false,
     screenshot: false,
@@ -89,7 +91,7 @@ export function getBaseArtplayerConfig(options: ArtplayerConfigOptions) {
     playbackRate: true,
     aspectRatio: false,
     fullscreen: true,
-    fullscreenWeb: true,
+    fullscreenWeb: !isMobile,
     subtitleOffset: false,
     miniProgressBar: false,
     mutex: true,

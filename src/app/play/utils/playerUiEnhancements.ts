@@ -64,6 +64,31 @@ export function fixControlSelectorInteraction(): Cleanup {
 }
 
 /**
+ * 移动端控制栏精简。
+ *
+ * 小屏放不下全部控件，全屏按钮会被挤出可视区：音量在移动端用设备键
+ * 调节，直接隐藏（artplayer 会给移动端 UA 的播放器加 .art-mobile 类）。
+ * PiP / 网页全屏已在配置层关闭（artplayerConfig.ts）。
+ */
+export function hideRedundantControlsOnMobile(): Cleanup {
+  const styleId = 'art-mobile-controls-slim';
+  if (document.getElementById(styleId)) return noop;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    .art-video-player.art-mobile .art-control-volume {
+      display: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+
+  return () => {
+    style.remove();
+  };
+}
+
+/**
  * 优化弹幕控件的 CSS
  * 隐藏弹幕开关按钮和发射器，优化配置面板显示
  */
@@ -494,6 +519,7 @@ export function applyAllUiEnhancements(
 
   const cleanups = [
     fixControlSelectorInteraction(),
+    hideRedundantControlsOnMobile(),
     optimizeDanmukuControlsCSS(),
     fixDanmakuProgressConflict(),
     addMobileDanmakuToggle(artPlayerRef),
