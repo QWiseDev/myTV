@@ -46,7 +46,11 @@ import {
 } from '../utils/playerTimings';
 import type { PlayArtplayer } from '../utils/playerTypes';
 import { applyAllUiEnhancements } from '../utils/playerUiEnhancements';
-import { addQualityControl, addSpeedControl } from '../utils/qualitySelector';
+import {
+  type QualityControls,
+  addSpeedControl,
+  createQualityControls,
+} from '../utils/qualitySelector';
 import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
 import { installSuperResolution } from '../utils/superResolution';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
@@ -261,6 +265,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           source: currentSource,
           id: currentId,
         },
+        {
+          // 同集播放地址相同的源（常为同一 CDN 的多个聚合站）一并标记失败
+          failedUrl: latestParamsRef.current.videoUrl,
+          episodeIndex: currentEpisodeIndexRef.current,
+        },
       );
 
       availableSourcesRef.current = sources;
@@ -301,6 +310,20 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         }
 
         const activeParams = latestParamsRef.current;
+        const mediaVideo = artPlayer.video as HTMLVideoElement | undefined;
+
+        // 媒体数据已就绪只是自动播放被浏览器拦截时，不判源失败：
+        // 否则移动端会把每个可用源都标成失败并来回切换，表现为「一直不播放」。
+        if (
+          mediaVideo &&
+          mediaVideo.readyState >= VIDEO_HAVE_CURRENT_DATA &&
+          mediaVideo.videoWidth > 0
+        ) {
+          setLoading(false);
+          setIsVideoLoading(false);
+          return;
+        }
+
         setLoading(false);
         setIsVideoLoading(false);
 
@@ -635,87 +658,27 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
           // ✅ 控制栏「画质」「倍速」按钮（参考爱奇艺：文字按钮 + 上浮选择面板）
           // 单码率源也显示画质按钮（展示实际分辨率），多码率源额外提供切换项。
-          // 换集/换源会复用播放器实例并再次触发 ready：用实例标记避免重复注入与重复包装 destroy。
+          // 换集复用播放器时不会再次触发 ready，控件内部监听 restart/media 事件，
+          // 按当前 hls 实例重建自己，因此这里只负责首次注入与统一销毁。
           try {
-            type HlsLive = HlsRuntimeInstance & {
-              on: (event: string, listener: () => void) => void;
-              off: (event: string, listener: () => void) => void;
+            const qualityArt = artPlayer as PlayArtplayer & {
+              __qualityControls?: QualityControls;
             };
-            const readLiveHls = () =>
-              (artPlayer.video as HTMLVideoElement as HlsMediaVideo).hls as
-                | HlsLive
-                | undefined;
 
-            const installed = Boolean(
-              (artPlayer as PlayArtplayer & { __controlsInstalled?: boolean })
-                .__controlsInstalled,
-            );
-
-            if (!installed) {
-              (
-                artPlayer as PlayArtplayer & { __controlsInstalled?: boolean }
-              ).__controlsInstalled = true;
-
-              const initialHls = readLiveHls();
-              let cleanupQuality: (() => void) | undefined;
-              let qualityInstalled = false;
-
-              // 档位信息要等 manifest 解析；单码率靠 videoHeight，可能更晚
-              const installQualityControl = () => {
-                if (qualityInstalled) return;
-                if (artPlayerRef.current !== artPlayer) return;
-                const liveHls = readLiveHls();
-                // 既没有 hls 也没有可读分辨率时留待下一轮事件
-                const hasResolution =
-                  (liveHls?.levels ?? []).some((l) => (l.height ?? 0) > 0) ||
-                  ((artPlayer.video as HTMLVideoElement | undefined)
-                    ?.videoHeight ?? 0) > 0;
-                if (!hasResolution) return;
-                qualityInstalled = true;
-                cleanupQuality = addQualityControl(artPlayer, liveHls);
-              };
-
-              if (initialHls) {
-                initialHls.on('hlsManifestParsed', installQualityControl);
-              }
-              // 单码率源 manifest 后仍无 height，等元数据/首帧再试
-              const videoEl = artPlayer.video as HTMLVideoElement | undefined;
-              videoEl?.addEventListener(
-                'loadedmetadata',
-                installQualityControl,
-              );
-              videoEl?.addEventListener('loadeddata', installQualityControl);
-              installQualityControl();
-
+            if (!qualityArt.__qualityControls) {
+              const qualityControls = createQualityControls(artPlayer);
+              qualityArt.__qualityControls = qualityControls;
               const cleanupSpeed = addSpeedControl(artPlayer);
 
               const originalDestroy = artPlayer.destroy;
               artPlayer.destroy = function (removeHtml?: boolean) {
-                initialHls?.off('hlsManifestParsed', installQualityControl);
-                videoEl?.removeEventListener(
-                  'loadedmetadata',
-                  installQualityControl,
-                );
-                videoEl?.removeEventListener(
-                  'loadeddata',
-                  installQualityControl,
-                );
-                cleanupQuality?.();
+                qualityControls.dispose();
                 cleanupSpeed?.();
                 return originalDestroy.call(this, removeHtml);
               };
-            } else {
-              // 实例复用（换集/换源）：按新的 HLS 实例重建画质按钮
-              const liveHls = readLiveHls();
-              const rebuilt = addQualityControl(artPlayer, liveHls);
-              if (!rebuilt && liveHls) {
-                const onManifest = () => {
-                  addQualityControl(artPlayer, liveHls);
-                  liveHls.off('hlsManifestParsed', onManifest);
-                };
-                liveHls.on('hlsManifestParsed', onManifest);
-              }
             }
+
+            qualityArt.__qualityControls.sync();
           } catch (error) {
             console.warn('⚠️ 初始化控制栏画质/倍速按钮失败:', error);
           }
@@ -892,12 +855,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             isRestoringFromRecordRef.current = false;
           }
 
-          if (isIOS || isSafari) {
-            scheduleAutoPlayWithFallback(artPlayer, {
-              isActivePlayer,
-              lastVolumeRef,
-            });
-          }
+          // 所有平台都走一遍自动播放兜底：Android Chrome 等移动端
+          // 会拦截非静音自动播放，兜底负责静音起播并在起播后恢复声音
+          scheduleAutoPlayWithFallback(artPlayer, {
+            isActivePlayer,
+            lastVolumeRef,
+          });
 
           setTimeout(() => {
             if (!isActivePlayer()) return;

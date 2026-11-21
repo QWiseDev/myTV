@@ -1307,6 +1307,8 @@ describe('usePlayerInitializer', () => {
         id: 'id-b',
         source: 'source-b',
         source_name: 'source-b',
+        // 不同源的播放地址不同：同地址的源会在失败时被一并标记
+        episodes: ['https://example.com/source-b.m3u8'],
       };
       params.availableSourcesRef = {
         current: [params.detail, fallbackSource],
@@ -1353,6 +1355,7 @@ describe('usePlayerInitializer', () => {
           id: 'id-b',
           source: 'source-b',
           source_name: 'source-b',
+          episodes: ['https://example.com/source-b.m3u8'],
         },
       ]);
       expect(params.handleSourceChange).not.toHaveBeenCalled();

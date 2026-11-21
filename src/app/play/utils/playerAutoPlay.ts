@@ -75,11 +75,22 @@ export function scheduleAutoPlayWithFallback(
 
           if (playErrorName === 'NotAllowedError') {
             if (playAttempts < maxAttempts) {
-              artPlayer.volume = 0.1;
+              // 自动播放策略只认 muted，调低音量无效；
+              // 静音起播（浏览器始终放行），起播成功后再恢复声音。
+              artPlayer.muted = true;
+              artPlayer.volume = lastVolumeRef.current || DEFAULT_VOLUME;
               await new Promise((resolve) =>
                 setTimeout(resolve, AUTOPLAY_NOT_ALLOWED_RETRY_DELAY_MS),
               );
-              return attemptPlay();
+              const mutedPlayOk = await attemptPlay();
+              if (mutedPlayOk) {
+                setTimeout(() => {
+                  if (isActivePlayer() && artPlayer.muted) {
+                    artPlayer.muted = false;
+                  }
+                }, FIRST_PLAY_UNMUTE_DELAY_MS);
+              }
+              return mutedPlayOk;
             }
             return false;
           } else if (playErrorName === 'AbortError') {
@@ -114,9 +125,12 @@ export function scheduleAutoPlayWithFallback(
           try {
             await artPlayer.play();
             setTimeout(() => {
-              if (isActivePlayer() && !artPlayer.muted) {
-                artPlayer.volume = lastVolumeRef.current || DEFAULT_VOLUME;
+              if (!isActivePlayer()) return;
+              // 静音起播成功后，用户交互触发的播放要恢复声音
+              if (artPlayer.muted) {
+                artPlayer.muted = false;
               }
+              artPlayer.volume = lastVolumeRef.current || DEFAULT_VOLUME;
             }, INTERACTION_UNMUTE_DELAY_MS);
           } catch (error) {
             console.warn('用户交互播放失败:', error);

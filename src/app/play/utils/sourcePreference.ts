@@ -64,6 +64,36 @@ export const PREFERRED_SOURCE_KEYS: string[] = ['dyttzyapi.com'];
 export const PREFERRED_SOURCE_NAMES: string[] = ['电影天堂'];
 
 /**
+ * 轻量级连通性探测：必须以 cors 模式发出，才能反映「浏览器可播性」。
+ *
+ * no-cors 的 HEAD 对跨域限制完全无感——被 CORS 拦截或已 5xx 的源照样
+ * 被当成「快源」选中，移动端随后播放失败，failover 代价高昂（实测
+ * 「后会友期」在移动端因此一直无法播放）。
+ * - 请求被拒（CORS / 网络错误 / 超时）→ 抛错，由调用方标记不可用
+ * - 404 / 5xx → 资源确实缺失或已挂 → 不可用
+ * - 其余状态（含 403/405/501 等 HEAD 兼容性差异）→ 可用，仅以耗时参与排序
+ */
+async function probeSourceReachability(
+  url: string,
+  timeoutMs: number,
+): Promise<{ available: boolean; pingTime: number }> {
+  const startTime = performance.now();
+  const timeout = createTimeoutSignal(timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      mode: 'cors',
+      signal: timeout.signal,
+    });
+    const pingTime = Math.round(performance.now() - startTime);
+    const available = response.ok || [403, 405, 501].includes(response.status);
+    return { available, pingTime };
+  } finally {
+    timeout.clear();
+  }
+}
+
+/**
  * 聚合搜源结果按优先源置顶排序（稳定排序，其余保持原相对顺序）。
  * 优选测速只探测列表前几个源，优先源排前可大幅提高其命中率。
  */
@@ -126,17 +156,72 @@ export async function lightweightPreference(
   sources: SearchResult[],
   setSpeedTestProgress: (progress: SpeedTestProgress | null) => void,
 ): Promise<SearchResult> {
-  // 🚀 优化：进一步减少测试数量以加速加载
-  const maxTestCount = 5; // 从8减少到5，只测试最快的5个源
-  const sourcesToTest = sources.slice(0, maxTestCount);
+  if (sources.length === 0) {
+    throw new Error('没有可用的播放源');
+  }
+  if (sources.length === 1) return sources[0];
 
-  const results = await Promise.all(
-    sourcesToTest.map(async (source, index) => {
-      try {
-        // 更新进度：显示当前正在测试的源
+  const results = await probeSourcesInBatches(sources, setSpeedTestProgress);
+
+  // 按可用性和响应时间排序
+  const sortedResults = results
+    .filter((r) => r.available)
+    .sort((a, b) => a.pingTime - b.pingTime);
+
+  if (sortedResults.length === 0) {
+    console.warn('所有源都不可用，返回第一个');
+    return sources[0];
+  }
+
+  // 清除测速进度状态
+  setSpeedTestProgress(null);
+
+  return sortedResults[0].source;
+}
+
+/** 轻量级优选的批次大小与最大批次数（最多探测 15 个源） */
+const LIGHTWEIGHT_BATCH_SIZE = 5;
+const LIGHTWEIGHT_MAX_BATCHES = 3;
+
+/**
+ * 分批探测源连通性。
+ * 优先源排在列表前部，但坏源（CORS 禁区 / 已挂）也常成片出现：
+ * 首批挑不出可用源时继续往后探测，而不是直接拿第一个源去播放。
+ */
+async function probeSourcesInBatches(
+  sources: SearchResult[],
+  setSpeedTestProgress: (progress: SpeedTestProgress | null) => void,
+): Promise<
+  Array<{ source: SearchResult; pingTime: number; available: boolean }>
+> {
+  const all: Array<{
+    source: SearchResult;
+    pingTime: number;
+    available: boolean;
+  }> = [];
+
+  for (
+    let batchIndex = 0;
+    batchIndex < LIGHTWEIGHT_MAX_BATCHES;
+    batchIndex += 1
+  ) {
+    const batchStart = batchIndex * LIGHTWEIGHT_BATCH_SIZE;
+    const batch = sources.slice(
+      batchStart,
+      batchStart + LIGHTWEIGHT_BATCH_SIZE,
+    );
+    if (batch.length === 0) break;
+
+    const batchResults = await Promise.all(
+      batch.map(async (source, index) => {
+        const currentIndex = batchStart + index + 1;
+        const progressTotal = Math.min(
+          sources.length,
+          batchStart + batch.length,
+        );
         setSpeedTestProgress({
-          current: index + 1,
-          total: sourcesToTest.length,
+          current: currentIndex,
+          total: progressTotal,
           currentSource: source.source_name,
         });
 
@@ -147,66 +232,41 @@ export async function lightweightPreference(
         const episodeUrl =
           source.episodes.length > 1 ? source.episodes[1] : source.episodes[0];
 
-        // 仅测试连通性和响应时间（缩短超时时间）
-        const startTime = performance.now();
-        const timeout = createTimeoutSignal(2000);
         try {
-          await fetch(episodeUrl, {
-            method: 'HEAD',
-            mode: 'no-cors',
-            signal: timeout.signal,
+          const { available, pingTime } = await probeSourceReachability(
+            episodeUrl,
+            2000,
+          );
+          setSpeedTestProgress({
+            current: currentIndex,
+            total: progressTotal,
+            currentSource: source.source_name,
+            result: `${Math.round(pingTime)}ms`,
           });
-        } finally {
-          timeout.clear();
+          return { source, pingTime, available };
+        } catch (error) {
+          console.warn(`轻量级测速失败: ${source.source_name}`, error);
+
+          // 更新进度：显示失败
+          setSpeedTestProgress({
+            current: currentIndex,
+            total: progressTotal,
+            currentSource: source.source_name,
+            result: '连接失败',
+          });
+
+          return { source, pingTime: 9999, available: false };
         }
-        const pingTime = performance.now() - startTime;
+      }),
+    );
 
-        // 更新进度：显示测试结果
-        setSpeedTestProgress({
-          current: index + 1,
-          total: sourcesToTest.length,
-          currentSource: source.source_name,
-          result: `${Math.round(pingTime)}ms`,
-        });
+    all.push(...batchResults);
 
-        return {
-          source,
-          pingTime: Math.round(pingTime),
-          available: true,
-        };
-      } catch (error) {
-        console.warn(`轻量级测速失败: ${source.source_name}`, error);
-
-        // 更新进度：显示失败
-        setSpeedTestProgress({
-          current: index + 1,
-          total: sourcesToTest.length,
-          currentSource: source.source_name,
-          result: '连接失败',
-        });
-
-        return { source, pingTime: 9999, available: false };
-      }
-    }),
-  );
-
-  // 按可用性和响应时间排序
-  const sortedResults = results
-    .filter((r) => r.available)
-    .sort((a, b) => a.pingTime - b.pingTime);
-
-  if (sortedResults.length === 0) {
-    console.warn('所有源都不可用，返回第一个');
-    if (sources.length === 0) {
-      throw new Error('没有可用的播放源');
-    }
-    return sources[0];
+    // 本批已有可用源即停止；否则继续下一批
+    if (all.some((r) => r.available)) break;
   }
 
-  // 清除测速进度状态
-  setSpeedTestProgress(null);
-
-  return sortedResults[0].source;
+  return all;
 }
 
 /**
@@ -468,19 +528,21 @@ async function iPadLightweightPreference(
         const episodeUrl =
           source.episodes.length > 1 ? source.episodes[1] : source.episodes[0];
 
-        // 仅测试连通性和响应时间（使用较短的超时时间）
-        const startTime = performance.now();
-        const timeout = createTimeoutSignal(2500);
-        try {
-          await fetch(episodeUrl, {
-            method: 'HEAD',
-            mode: 'no-cors',
-            signal: timeout.signal,
+        // 仅测试连通性和响应时间（使用较短的超时时间）；
+        // cors 模式才能识别跨域禁区，避免把浏览器里播不了的源排到最前
+        const { available, pingTime } = await probeSourceReachability(
+          episodeUrl,
+          2500,
+        );
+        if (!available) {
+          setSpeedTestProgress({
+            current: index + 1,
+            total: sourcesToTest.length,
+            currentSource: source.source_name,
+            result: '连接失败',
           });
-        } finally {
-          timeout.clear();
+          return { source, pingTime, available: false, score: 0 };
         }
-        const pingTime = performance.now() - startTime;
 
         // 更新进度：显示测试结果
         setSpeedTestProgress({
