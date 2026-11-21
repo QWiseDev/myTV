@@ -257,6 +257,49 @@ export function pickDeclaredResolutionHeight(manifestText: string): number {
 }
 
 /**
+ * 顺着 manifest 走到真正的媒体分片。
+ *
+ * 多码率主列表的首项往往是子 m3u8，直接对子列表测速只能读到几 KB 文本，
+ * 因此只要首项仍是 m3u8 就再下钻一层，且不再要求外层缺少 RESOLUTION 声明。
+ * 分辨率声明仍以外层（最大档）为准，仅在外层未声明时用子列表补。
+ */
+export async function followManifestToSegment(
+  manifestText: string,
+  baseUrl: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ segmentUrl: string | null; declaredHeight: number }> {
+  let declaredHeight = pickDeclaredResolutionHeight(manifestText);
+  let segmentUrl = pickFirstMediaSegment(manifestText, baseUrl);
+
+  if (!segmentUrl || !isLikelyHlsUrl(segmentUrl)) {
+    return { segmentUrl, declaredHeight };
+  }
+
+  try {
+    const response = await fetch(segmentUrl, {
+      signal: options.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) return { segmentUrl, declaredHeight };
+    const childText = await response.text();
+
+    if (declaredHeight === 0) {
+      const childHeight = pickDeclaredResolutionHeight(childText);
+      if (childHeight > 0) declaredHeight = childHeight;
+    }
+
+    // 重定向后的相对路径要基于最终地址解析
+    const childBase = response.url || segmentUrl;
+    const childSegment = pickFirstMediaSegment(childText, childBase);
+    if (childSegment) segmentUrl = childSegment;
+  } catch {
+    // 子列表读取失败时保留外层信息
+  }
+
+  return { segmentUrl, declaredHeight };
+}
+
+/**
  * 以独立请求精确测量首个分片下载速度。
  *
  * 为什么不复用 hls.js 的 stats：hls.js 会并发预加载多个分片，且其
@@ -271,21 +314,43 @@ export async function measureSegmentLoadSpeed(
     timeoutMs?: number;
     /** 读够该字节数即可停止，避免为测速白下载整个分片 */
     maxBytes?: number;
+    /** 被中止时也按已读字节给结论（慢源因此能显示低速而不是「未知」） */
+    partialOnAbort?: boolean;
   } = {},
 ): Promise<string> {
   const timeoutMs =
     typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
   const maxBytes =
     typeof options.maxBytes === 'number' ? options.maxBytes : 512 * 1024;
+  const partialOnAbort = options.partialOnAbort === true;
 
   if (options.signal?.aborted) return '未知';
 
+  // 样本下限：读取量太小或时间窗太短时，速度没有统计意义
+  const MIN_SAMPLE_BYTES = 64 * 1024;
+  const MIN_SAMPLE_MS = 20;
+
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort, { once: true });
 
   let bytes = 0;
+  // 从请求发出即开始计时：TTFB 与首个 chunk 的合并缓冲都计入窗口，
+  // 否则慢首包会被算成高速，或快源因窗口过短被判成「未知」。
+  const startedAt = performance.now();
+
+  const reportPartial = () => {
+    if (options.signal?.aborted && !partialOnAbort) return '未知';
+    const duration = performance.now() - startedAt;
+    if (bytes < MIN_SAMPLE_BYTES || duration < MIN_SAMPLE_MS) return '未知';
+    return formatSpeed(bytes, duration);
+  };
+
   try {
     const response = await fetch(segmentUrl, {
       signal: controller.signal,
@@ -295,9 +360,6 @@ export async function measureSegmentLoadSpeed(
     if (!response.ok || !response.body) return '未知';
 
     const reader = response.body.getReader();
-    // 从请求发出即开始计时：第一个 chunk 可能在合并缓冲后一次性到达极大块，
-    // 若从「首块之后」才开始计时，会得出远超链路能力的速度。
-    const startedAt = performance.now();
 
     while (bytes < maxBytes) {
       const { done, value } = await reader.read();
@@ -308,9 +370,12 @@ export async function measureSegmentLoadSpeed(
     void reader.cancel().catch(() => undefined);
 
     // 至少读到 64KB 且耗时足够长，结果才有统计意义；否则视为样本不足
-    if (bytes < 64 * 1024 || duration < 60) return '未知';
+    if (bytes < MIN_SAMPLE_BYTES || duration < MIN_SAMPLE_MS) return '未知';
     return formatSpeed(bytes, duration);
   } catch {
+    // 超时/被中止时已经读到不少数据：按已测字节与耗时给出低速结论，
+    // 否则最慢的源会和「没测过」看起来一样。
+    if (timedOut || partialOnAbort) return reportPartial();
     return '未知';
   } finally {
     clearTimeout(timer);
@@ -415,6 +480,17 @@ export async function probePlayableMediaUrl(
   // 0 表示未知：HLS 取 manifest TTFB，直链用串行 HEAD 探活
   let pingTimeMs = 0;
 
+  // 旁路测速专用中止开关：探测结束后必须停掉，避免退出后仍在后台下载分片
+  const speedController = new AbortController();
+  const abortSpeedProbe = () => {
+    try {
+      if (!speedController.signal.aborted) speedController.abort();
+    } catch {
+      // ignore
+    }
+  };
+  options.signal.addEventListener('abort', abortSpeedProbe, { once: true });
+
   // 动态导入 hls.js，避免在测试/SSR 环境下引入副作用
   let hlsInstance: { destroy: () => void } | null = null;
 
@@ -423,6 +499,7 @@ export async function probePlayableMediaUrl(
       clearTimeout(pendingResolveTimer);
       pendingResolveTimer = null;
     }
+    options.signal.removeEventListener('abort', abortSpeedProbe);
     try {
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -483,7 +560,11 @@ export async function probePlayableMediaUrl(
         const timer = setTimeout(() => {
           if (settled) return;
           settled = true;
-          finish();
+          // 放弃等待：停掉还在跑的分片下载，避免和正在播放的视频抢带宽；
+          // 中止后测速会按已读字节结算，短暂等它落定以拿到低速结论。
+          abortSpeedProbe();
+          void speedProbe?.finally(finish);
+          setTimeout(finish, 200);
         }, 1200);
         void speedProbe.finally(() => {
           if (settled) return;
@@ -501,6 +582,7 @@ export async function probePlayableMediaUrl(
         video.removeEventListener('loadedmetadata', onLoadedMetadata);
         video.removeEventListener('playing', onPlaying);
         video.removeEventListener('error', onVideoError);
+        abortSpeedProbe();
         cleanup();
         reject(new EpisodeSourceProbeError(message, details));
       };
@@ -587,54 +669,32 @@ export async function probePlayableMediaUrl(
 
           // 独立测速（与 hls.js 并行）：拉 manifest 取首分片自行计时。
           // hls.js 内部 stats 在并发预加载下不可靠，这里不依赖它。
+          // 使用专用 signal：探测结束/放弃等待时要能立刻停掉下载。
           speedProbe = (async () => {
             try {
               const manifestResponse = await fetch(url, {
-                signal: options.signal,
+                signal: speedController.signal,
                 cache: 'no-store',
               });
               if (!manifestResponse.ok) return;
               const manifestText = await manifestResponse.text();
+              // 重定向后相对路径要基于最终地址解析，否则会拼到错误路径
+              const manifestBase = manifestResponse.url || url;
 
-              // 分辨率声明可能在外层主列表，也可能需要再下一层：
-              // 外层无声明且首项是子 m3u8（多码率主列表）时，递归一层读取。
-              let declaredHeight = pickDeclaredResolutionHeight(manifestText);
-              let segmentUrl = pickFirstMediaSegment(manifestText, url);
-
-              if (
-                declaredHeight === 0 &&
-                segmentUrl &&
-                isLikelyHlsUrl(segmentUrl)
-              ) {
-                try {
-                  const childResponse = await fetch(segmentUrl, {
-                    signal: options.signal,
-                    cache: 'no-store',
-                  });
-                  if (childResponse.ok) {
-                    const childText = await childResponse.text();
-                    const childHeight = pickDeclaredResolutionHeight(childText);
-                    if (childHeight > 0) {
-                      declaredHeight = childHeight;
-                    }
-                    const childSegment = pickFirstMediaSegment(
-                      childText,
-                      segmentUrl,
-                    );
-                    if (childSegment) segmentUrl = childSegment;
-                  }
-                } catch {
-                  // 子列表读取失败时保留外层信息
-                }
-              }
+              // 多码率主列表还要再下钻一层才能拿到真正的媒体分片
+              const { segmentUrl, declaredHeight } =
+                await followManifestToSegment(manifestText, manifestBase, {
+                  signal: speedController.signal,
+                });
 
               if (declaredHeight > 0 && quality === '未知') {
                 quality = qualityFromHeight(declaredHeight);
               }
               if (!segmentUrl) return;
               const speed = await measureSegmentLoadSpeed(segmentUrl, {
-                signal: options.signal,
+                signal: speedController.signal,
                 timeoutMs: 6000,
+                partialOnAbort: true,
               });
               if (speed !== '未知') {
                 loadSpeed = speed;

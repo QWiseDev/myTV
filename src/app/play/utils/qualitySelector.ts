@@ -58,6 +58,7 @@ export interface ArtPlayerControlCapable {
 const QUALITY_CONTROL_NAME = 'quality';
 const SPEED_CONTROL_NAME = 'speed';
 const AUTO_VALUE = 'auto';
+const AUTO_LABEL = '智能';
 
 function levelLabel(height: number, index: number): string {
   if (height > 0) return `${height}P`;
@@ -143,26 +144,41 @@ function resolveQualityState(
   const videoLabel = videoHeight > 0 ? `${videoHeight}P` : '画质';
 
   if (levels.length >= 2) {
-    const currentLevel = hls?.currentLevel ?? -1;
-    const active = typeof hls?.loadLevel === 'number' ? hls.loadLevel : -1;
-    const matched =
-      levels.find((item) => item.index === currentLevel) ??
-      (currentLevel === -1
-        ? levels.find((item) => item.index === active)
-        : undefined);
+    // hls.js 的 currentLevel 在自动模式下也会返回当前播放分片的档位（不是 -1），
+    // 只有 autoLevelEnabled 能可靠区分「智能」与手动锁定。
+    const currentLevel =
+      typeof hls?.currentLevel === 'number' ? hls.currentLevel : -1;
+    const isAuto =
+      typeof hls?.autoLevelEnabled === 'boolean'
+        ? hls.autoLevelEnabled
+        : currentLevel === -1;
+    // 自动模式下面板里标注当前实际生效的档位，按钮仍显示「智能」
+    const activeIndex = isAuto
+      ? typeof hls?.loadLevel === 'number' && hls.loadLevel >= 0
+        ? hls.loadLevel
+        : currentLevel
+      : currentLevel;
+    const activeLevel = levels.find((item) => item.index === activeIndex);
 
     return {
-      text:
-        currentLevel === -1
-          ? (matched?.label ?? '智能')
-          : (matched?.label ?? videoLabel),
+      text: isAuto
+        ? AUTO_LABEL
+        : (levels.find((item) => item.index === currentLevel)?.label ??
+          videoLabel),
       switchable: true,
       selector: [
-        { html: '智能', value: AUTO_VALUE, default: currentLevel === -1 },
+        {
+          html:
+            isAuto && activeLevel
+              ? `${AUTO_LABEL} · ${activeLevel.label}`
+              : AUTO_LABEL,
+          value: AUTO_VALUE,
+          default: isAuto,
+        },
         ...levels.map(({ index, label }) => ({
           html: label,
           value: String(index),
-          default: currentLevel === index,
+          default: !isAuto && currentLevel === index,
         })),
       ],
     };
@@ -208,8 +224,10 @@ export function addQualityControl(
         } catch {
           // hls 实例已销毁时忽略
         }
+        // 切换后的真实档位由 hls 在后续 LEVEL_SWITCHED 给出，先按写入口径刷新；
+        // 延后一帧执行，避免在点击回调里重建正在响应的面板节点。
         state = resolveQualityState(art, hls);
-        paint();
+        schedulePaint();
       }
       // artplayer 会用返回值替换按钮 innerHTML，必须返回带样式的 span，
       // 否则按钮会显示字面量 "undefined"
@@ -222,6 +240,7 @@ export function addQualityControl(
   });
 
   const paint = () => {
+    if (disposed) return;
     updateControlLabel(art, 'data-quality-control', state.text);
     // 档位/可切换性变化时同步面板选项
     try {
@@ -229,6 +248,16 @@ export function addQualityControl(
     } catch {
       // 更新失败不影响播放
     }
+  };
+
+  let disposed = false;
+  let paintTimer: ReturnType<typeof setTimeout> | null = null;
+  const schedulePaint = () => {
+    if (paintTimer) return;
+    paintTimer = setTimeout(() => {
+      paintTimer = null;
+      paint();
+    }, 0);
   };
 
   let control: ControlElementLike | undefined;
@@ -239,9 +268,15 @@ export function addQualityControl(
   }
 
   const refresh = () => {
+    if (disposed) return;
     const next = resolveQualityState(art, hls);
+    // 自动模式下按钮文案不变，但面板里标注的实际档位会变，需要一起比较
+    const signature = (stateLike: { selector: SelectorItem[] }) =>
+      stateLike.selector
+        .map((item) => `${item.html}:${item.default ? 1 : 0}`)
+        .join('|');
     const changed =
-      next.text !== state.text || next.switchable !== state.switchable;
+      next.text !== state.text || signature(next) !== signature(state);
     state = next;
     if (changed) paint();
   };
@@ -255,6 +290,11 @@ export function addQualityControl(
   videoEl?.addEventListener('resize', refresh);
 
   return () => {
+    disposed = true;
+    if (paintTimer) {
+      clearTimeout(paintTimer);
+      paintTimer = null;
+    }
     hls?.off('hlsLevelSwitched', onLevelSwitch);
     videoEl?.removeEventListener('loadedmetadata', refresh);
     videoEl?.removeEventListener('resize', refresh);
@@ -264,6 +304,120 @@ export function addQualityControl(
       // ignore
     }
     control?.remove();
+  };
+}
+
+type HlsCarrierVideo = HTMLVideoElement & {
+  hls?: LevelAwareHls | null;
+};
+
+/** 画质控件需要的 artplayer 能力面（含事件订阅） */
+export type QualityControlArt = ArtPlayerControlCapable & {
+  on: (event: string, listener: () => void) => void;
+  off: (event: string, listener: () => void) => void;
+};
+
+export interface QualityControls {
+  /** 按当前生效的 hls 实例对齐控件（换集/换源后调用） */
+  sync: () => void;
+  dispose: () => void;
+}
+
+/**
+ * 画质控件的生命周期管理器。
+ *
+ * 换集复用播放器时 artplayer 不会再次触发 `ready`，但 hls 实例会被重建；
+ * 旧控件仍绑定已销毁的实例，选档无效。这里负责在 hls 实例变化后
+ * 先卸载旧控件、再按新实例重建，并等待新实例解析出档位后再挂载。
+ */
+export function createQualityControls(
+  art: QualityControlArt | null | undefined,
+): QualityControls {
+  if (!art?.controls) {
+    return { sync: () => undefined, dispose: () => undefined };
+  }
+
+  // 闭包里无法沿用类型收窄，这里固定一份非空引用
+  const player = art;
+
+  let installedHls: LevelAwareHls | undefined;
+  let cleanup: Cleanup | undefined;
+  let pendingHls: LevelAwareHls | undefined;
+  let boundVideo: HTMLVideoElement | undefined;
+  let disposed = false;
+
+  const readHls = (): LevelAwareHls | undefined =>
+    (player.video as HlsCarrierVideo | undefined)?.hls ?? undefined;
+
+  const stopWaiting = () => {
+    pendingHls?.off('hlsManifestParsed', sync);
+    pendingHls = undefined;
+  };
+
+  const unbindVideo = () => {
+    boundVideo?.removeEventListener('loadedmetadata', sync);
+    boundVideo?.removeEventListener('loadeddata', sync);
+    boundVideo?.removeEventListener('resize', sync);
+    boundVideo = undefined;
+  };
+
+  function sync() {
+    if (disposed) return;
+
+    // artplayer 换集时会复用 video 元素，一般不会变；重建时兜底重新绑定
+    const video = player.video;
+    if (video !== boundVideo) {
+      unbindVideo();
+      boundVideo = video;
+      video?.addEventListener('loadedmetadata', sync);
+      video?.addEventListener('loadeddata', sync);
+      video?.addEventListener('resize', sync);
+    }
+
+    const hls = readHls();
+    if (cleanup && hls === installedHls) return;
+
+    const uninstall = () => {
+      cleanup?.();
+      cleanup = undefined;
+      installedHls = undefined;
+    };
+
+    // hls 实例存在但档位还没解析：先卸掉绑定旧实例的控件，等 manifest 解析完
+    if (hls && (hls.levels?.length ?? 0) === 0) {
+      uninstall();
+      if (pendingHls !== hls) {
+        stopWaiting();
+        pendingHls = hls;
+        hls.on('hlsManifestParsed', sync);
+      }
+      return;
+    }
+
+    // 原生 HLS / 直链：只靠解码出的分辨率，没有就继续等 loadedmetadata
+    if (!hls && (player.video?.videoHeight ?? 0) <= 0) return;
+
+    stopWaiting();
+    uninstall();
+    installedHls = hls;
+    cleanup = addQualityControl(player, hls);
+    if (!cleanup) installedHls = undefined;
+  }
+
+  player.on('restart', sync);
+  sync();
+
+  return {
+    sync,
+    dispose: () => {
+      disposed = true;
+      player.off('restart', sync);
+      unbindVideo();
+      stopWaiting();
+      cleanup?.();
+      cleanup = undefined;
+      installedHls = undefined;
+    },
   };
 }
 
@@ -299,7 +453,10 @@ export function addSpeedControl(
       default: Math.abs(rate - currentRate) < 0.001,
     }));
 
-  const option: Record<string, unknown> = {
+  let disposed = false;
+  let paintTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const buildOption = (): Record<string, unknown> => ({
     name: SPEED_CONTROL_NAME,
     position: 'right',
     index: 31,
@@ -316,32 +473,57 @@ export function addSpeedControl(
       } catch {
         // ignore
       }
+      // 面板里的高亮档位要跟着更新，延后一帧避免重建正在响应的节点
+      schedulePaint();
       return `<span style="${CONTROL_TEXT_STYLE}">${escapeHtml(buttonText)}</span>`;
     },
     mounted(this: unknown, element: HTMLElement) {
       element.setAttribute('data-speed-control', 'true');
     },
+  });
+
+  const paint = () => {
+    if (disposed) return;
+    updateControlLabel(art, 'data-speed-control', buttonText);
+    try {
+      art.controls?.update(buildOption());
+    } catch {
+      // 更新失败不影响播放
+    }
+  };
+
+  const schedulePaint = () => {
+    if (paintTimer || disposed) return;
+    paintTimer = setTimeout(() => {
+      paintTimer = null;
+      paint();
+    }, 0);
   };
 
   let control: ControlElementLike | undefined;
   try {
-    control = art.controls.add(option);
+    control = art.controls.add(buildOption());
   } catch {
     return undefined;
   }
 
-  // 播放页其它入口（快捷键、设置面板）改倍速时同步文案
+  // 播放页其它入口（快捷键、设置面板）改倍速时同步按钮文案与面板高亮
   const videoEl = art.video;
   const onRateChange = () => {
     const next = readRate();
     if (Math.abs(next - currentRate) < 0.001) return;
     currentRate = next;
     buttonText = formatRate(next);
-    updateControlLabel(art, 'data-speed-control', buttonText);
+    paint();
   };
   videoEl?.addEventListener('ratechange', onRateChange);
 
   return () => {
+    disposed = true;
+    if (paintTimer) {
+      clearTimeout(paintTimer);
+      paintTimer = null;
+    }
     videoEl?.removeEventListener('ratechange', onRateChange);
     try {
       art.controls?.remove(SPEED_CONTROL_NAME);

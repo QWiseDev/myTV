@@ -1,57 +1,102 @@
 import {
   type ArtPlayerControlCapable,
+  type LevelAwareHls,
+  type QualityControlArt,
   addQualityControl,
   addSpeedControl,
+  createQualityControls,
   getSwitchableLevels,
 } from './qualitySelector';
 
-type MockHls = {
+type MockHls = LevelAwareHls & {
   levels?: Array<{ height?: number; width?: number; bitrate?: number }>;
-  currentLevel?: number;
-  loadLevel?: number;
-  autoLevelEnabled?: boolean;
   on: jest.Mock;
   off: jest.Mock;
 };
 
-function createHls(levels: MockHls['levels'], currentLevel = -1): MockHls {
+// 与 hls.js 行为对齐：自动模式下 currentLevel 仍是当前播放档位（不是 -1）
+function createHls(
+  levels: MockHls['levels'],
+  currentLevel = -1,
+  overrides: Partial<MockHls> = {},
+): MockHls {
   return {
     levels,
     currentLevel,
-    loadLevel: -1,
-    autoLevelEnabled: true,
+    loadLevel: currentLevel,
+    autoLevelEnabled: currentLevel === -1,
     on: jest.fn(),
     off: jest.fn(),
+    ...overrides,
   };
 }
 
-type MockArt = ArtPlayerControlCapable & {
-  controls: { add: jest.Mock; remove: jest.Mock };
-  template: { $controlsRight?: HTMLElement };
-  __remove: jest.Mock;
+type Listener = () => void;
+
+type MockVideo = {
+  videoHeight: number;
+  playbackRate: number;
+  hls?: LevelAwareHls | null;
+  addEventListener: jest.Mock;
+  removeEventListener: jest.Mock;
+  emit: (event: string) => void;
 };
 
-function createVideo(height = 0) {
+type MockArt = ArtPlayerControlCapable &
+  QualityControlArt & {
+    controls: { add: jest.Mock; remove: jest.Mock; update: jest.Mock };
+    template: { $controlsRight?: HTMLElement };
+    __remove: jest.Mock;
+    __emit: (event: string) => void;
+    __handlers: (event: string) => Listener[];
+  };
+
+function createVideo(height = 0): MockVideo {
+  const listeners = new Map<string, Set<Listener>>();
   return {
     videoHeight: height,
     playbackRate: 1,
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-  } as unknown as HTMLVideoElement;
+    addEventListener: jest.fn((event: string, handler: Listener) => {
+      const set = listeners.get(event) ?? new Set<Listener>();
+      set.add(handler);
+      listeners.set(event, set);
+    }),
+    removeEventListener: jest.fn((event: string, handler: Listener) => {
+      listeners.get(event)?.delete(handler);
+    }),
+    emit: (event: string) => {
+      listeners.get(event)?.forEach((handler) => handler());
+    },
+  };
 }
 
 function createArt(playbackRate = 1): MockArt {
   const remove = jest.fn();
-  return {
+  const listeners = new Map<string, Set<Listener>>();
+  const art: Partial<MockArt> = {
     controls: {
       add: jest.fn((_option: unknown) => ({ remove })),
       remove: jest.fn(),
+      update: jest.fn((_option: unknown) => ({ remove })),
     },
     template: {},
     playbackRate,
     video: undefined,
+    on: jest.fn((event: string, handler: Listener) => {
+      const set = listeners.get(event) ?? new Set<Listener>();
+      set.add(handler);
+      listeners.set(event, set);
+    }),
+    off: jest.fn((event: string, handler: Listener) => {
+      listeners.get(event)?.delete(handler);
+    }),
     __remove: remove,
-  } as MockArt;
+    __handlers: (event: string) => Array.from(listeners.get(event) ?? []),
+    __emit: (event: string) => {
+      listeners.get(event)?.forEach((handler) => handler());
+    },
+  };
+  return art as MockArt;
 }
 
 const MULTI_LEVELS = [
@@ -111,7 +156,7 @@ describe('qualitySelector', () => {
 
     test('单码率且 hls 无 height 时回退到 video 实际分辨率', () => {
       const art = createArt();
-      art.video = createVideo(720);
+      art.video = createVideo(720) as unknown as HTMLVideoElement;
       const hls = createHls([{ height: 0, bitrate: 0 }]);
       addQualityControl(art, hls);
       const option = art.controls.add.mock.calls[0][0] as { html: string };
@@ -120,7 +165,7 @@ describe('qualitySelector', () => {
 
     test('无 hls 但已有视频分辨率时也显示', () => {
       const art = createArt();
-      art.video = createVideo(480);
+      art.video = createVideo(480) as unknown as HTMLVideoElement;
       addQualityControl(art, undefined);
       const option = art.controls.add.mock.calls[0][0] as { html: string };
       expect(option.html).toContain('480P');
@@ -132,9 +177,10 @@ describe('qualitySelector', () => {
       expect(art.controls.add).not.toHaveBeenCalled();
     });
 
-    test('多码率源注入控制栏按钮，默认显示「智能」并含档位面板', () => {
+    test('多码率源注入控制栏按钮，自动模式显示「智能」并高亮智能项', () => {
       const art = createArt();
-      const hls = createHls(MULTI_LEVELS);
+      // ABR 模式下 currentLevel 已经是当前播放档位（1），不是 -1
+      const hls = createHls(MULTI_LEVELS, 1, { autoLevelEnabled: true });
       const cleanup = addQualityControl(art, hls);
 
       expect(cleanup).toBeInstanceOf(Function);
@@ -144,24 +190,33 @@ describe('qualitySelector', () => {
         name: string;
         position: string;
         html: string;
-        selector: Array<{ html: string; value: string }>;
+        selector: Array<{ html: string; value: string; default?: boolean }>;
       };
       expect(option.name).toBe('quality');
       expect(option.position).toBe('right');
+      // 自动模式不能显示成手动锁定的档位
       expect(option.html).toContain('智能');
+      expect(option.html).not.toContain('1080P');
       expect(option.selector.map((s) => s.html)).toEqual([
-        '智能',
+        '智能 · 1080P',
         '1080P',
         '720P',
       ]);
+      expect(option.selector[0].default).toBe(true);
+      expect(option.selector.slice(1).some((s) => s.default)).toBe(false);
     });
 
-    test('手动档位时按钮显示具体分辨率', () => {
+    test('手动档位时按钮显示具体分辨率，且只高亮该档', () => {
       const art = createArt();
-      const hls = createHls(MULTI_LEVELS, 1); // 直接选中 1080P 档
+      const hls = createHls(MULTI_LEVELS, 1); // 手动选中 1080P 档
       addQualityControl(art, hls);
-      const option = art.controls.add.mock.calls[0][0] as { html: string };
+      const option = art.controls.add.mock.calls[0][0] as {
+        html: string;
+        selector: Array<{ html: string; default?: boolean }>;
+      };
       expect(option.html).toContain('1080P');
+      expect(option.selector[0].default).toBe(false);
+      expect(option.selector[1].default).toBe(true);
     });
 
     test('选择档位写入 hls.currentLevel；选智能写 -1', () => {
@@ -198,6 +253,89 @@ describe('qualitySelector', () => {
     });
   });
 
+  describe('createQualityControls', () => {
+    function setup(video: MockVideo, hls: LevelAwareHls | undefined) {
+      const art = createArt();
+      art.video = video as unknown as HTMLVideoElement;
+      video.hls = hls;
+      return art;
+    }
+
+    test('hls 换实例后（换集复用播放器）按新实例重建控件', () => {
+      const video = createVideo(1080);
+      const hlsA = createHls(MULTI_LEVELS);
+      const art = setup(video, hlsA);
+      const controls = createQualityControls(art);
+
+      expect(art.controls.add).toHaveBeenCalledTimes(1);
+      expect(hlsA.on).toHaveBeenCalledWith(
+        'hlsLevelSwitched',
+        expect.any(Function),
+      );
+
+      // 同源下一集：artplayer 复用玩家，只替换 hls 实例
+      const hlsB = createHls(MULTI_LEVELS, 0, { autoLevelEnabled: true });
+      video.hls = hlsB;
+      art.__emit('restart');
+
+      expect(art.controls.remove).toHaveBeenCalledWith('quality');
+      expect(art.controls.add).toHaveBeenCalledTimes(2);
+      // 旧实例的事件必须解绑，避免选档写到已销毁实例
+      expect(hlsA.off).toHaveBeenCalledWith(
+        'hlsLevelSwitched',
+        expect.any(Function),
+      );
+      const latest = art.controls.add.mock.calls[1][0] as {
+        selector: Array<{ html: string }>;
+      };
+      expect(latest.selector.map((s) => s.html)).toContain('1080P');
+
+      controls.dispose();
+    });
+
+    test('新 hls 尚未解析档位时先卸载旧控件，解析完再挂载', () => {
+      const video = createVideo(1080);
+      const hlsA = createHls(MULTI_LEVELS);
+      const art = setup(video, hlsA);
+      const controls = createQualityControls(art);
+      expect(art.controls.add).toHaveBeenCalledTimes(1);
+
+      const hlsB = createHls([], -1);
+      video.hls = hlsB;
+      art.__emit('restart');
+
+      // 旧控件（绑定已销毁实例）被移除，但新控件要等档位信息
+      expect(art.controls.remove).toHaveBeenCalledWith('quality');
+      expect(art.controls.add).toHaveBeenCalledTimes(1);
+
+      const onManifest = (hlsB.on as jest.Mock).mock.calls.find(
+        (call) => call[0] === 'hlsManifestParsed',
+      )?.[1] as Listener;
+      expect(onManifest).toBeInstanceOf(Function);
+
+      hlsB.levels = MULTI_LEVELS;
+      onManifest();
+
+      expect(art.controls.add).toHaveBeenCalledTimes(2);
+      controls.dispose();
+    });
+
+    test('dispose 后不再响应事件', () => {
+      const video = createVideo(1080);
+      const art = setup(video, createHls(MULTI_LEVELS));
+      const controls = createQualityControls(art);
+      controls.dispose();
+
+      const hlsB = createHls(MULTI_LEVELS);
+      video.hls = hlsB;
+      controls.sync();
+
+      expect(art.controls.add).toHaveBeenCalledTimes(1);
+      expect(art.off).toHaveBeenCalledWith('restart', expect.any(Function));
+      expect(video.removeEventListener).toHaveBeenCalled();
+    });
+  });
+
   describe('addSpeedControl', () => {
     test('注入倍速按钮，默认显示当前倍速', () => {
       const art = createArt(1);
@@ -231,6 +369,30 @@ describe('qualitySelector', () => {
 
       option.onSelect({ value: '1.5', html: '1.5X' });
       expect(art.playbackRate).toBe(1.5);
+    });
+
+    test('外部改倍速（设置面板/长按快进）时同步按钮与面板高亮', () => {
+      const video = createVideo();
+      const art = createArt(1);
+      art.video = video as unknown as HTMLVideoElement;
+      const cleanup = addSpeedControl(art);
+
+      // 与 artplayer 一致：art.playbackRate 反映 video.playbackRate
+      video.playbackRate = 2;
+      art.playbackRate = 2;
+      video.emit('ratechange');
+
+      expect(art.controls.update).toHaveBeenCalled();
+      const updateOption = art.controls.update.mock.calls.at(-1)?.[0] as {
+        html: string;
+        selector: Array<{ html: string; default?: boolean }>;
+      };
+      expect(updateOption.html).toContain('2.0X');
+      expect(
+        updateOption.selector.find((s) => s.html === '2.0X')?.default,
+      ).toBe(true);
+
+      cleanup?.();
     });
 
     test('清理时移除按钮', () => {

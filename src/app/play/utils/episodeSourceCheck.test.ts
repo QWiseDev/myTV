@@ -4,10 +4,12 @@ import {
   buildEpisodeProbeCacheKey,
   EPISODE_PROBE_CACHE_TTL_MS,
   EpisodeSourceCheckResult,
+  followManifestToSegment,
   formatSpeed,
   getOptimalProbeConcurrency,
   isEpisodeProbeResultFresh,
   isLikelyHlsUrl,
+  measureSegmentLoadSpeed,
   pickDeclaredResolutionHeight,
   pickFirstMediaSegment,
   planEpisodeSourceChecks,
@@ -140,7 +142,6 @@ describe('episodeSourceCheck', () => {
     expect(isLikelyHlsUrl('https://example.com/live.m3u8#segment')).toBe(true);
     expect(isLikelyHlsUrl('https://example.com/live.mp4#segment')).toBe(false);
   });
-
   test('planEpisodeSourceChecks: current source is placed first', () => {
     const a = createSource({ id: 'a', source: 's1', source_name: 'S1' });
     const b = createSource({ id: 'b', source: 's2', source_name: 'S2' });
@@ -369,5 +370,208 @@ describe('episodeSourceCheck', () => {
     const statuses = Object.values(finals);
     expect(statuses).toContain('success');
     expect(statuses).toContain('cancelled');
+  });
+
+  describe('followManifestToSegment', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    function stubFetch(response: {
+      ok?: boolean;
+      url?: string;
+      text?: string;
+    }) {
+      const mock = jest.fn().mockResolvedValue({
+        ok: response.ok ?? true,
+        url: response.url,
+        text: async () => response.text ?? '',
+      });
+      global.fetch = mock as unknown as typeof fetch;
+      return mock;
+    }
+
+    test('多码率主列表已声明 RESOLUTION 时仍下钻到真实分片', async () => {
+      const master = [
+        '#EXTM3U',
+        '#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=1280x720',
+        'low/index.m3u8',
+        '#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1920x1080',
+        'high/index.m3u8',
+      ].join('\n');
+      const child = ['#EXTM3U', '#EXTINF:6,', 'seg0.ts'].join('\n');
+      const mock = stubFetch({
+        url: 'https://cdn.test/low/index.m3u8',
+        text: child,
+      });
+
+      const result = await followManifestToSegment(
+        master,
+        'https://cdn.test/master.m3u8',
+      );
+
+      // 只测子列表文本会读不到足够字节，必须继续走到 .ts
+      expect(mock).toHaveBeenCalledTimes(1);
+      expect(mock.mock.calls[0][0]).toBe('https://cdn.test/low/index.m3u8');
+      expect(result.segmentUrl).toBe('https://cdn.test/low/seg0.ts');
+      // 分辨率取外层声明的最大档，不被子列表覆盖
+      expect(result.declaredHeight).toBe(1080);
+    });
+
+    test('相对路径以重定向后的最终地址为基准', async () => {
+      const master = [
+        '#EXTM3U',
+        '#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1920x1080',
+        'v1/index.m3u8',
+      ].join('\n');
+      stubFetch({
+        url: 'https://edge.test/moved/index.m3u8',
+        text: ['#EXTM3U', '#EXTINF:6,', 'seg1.ts'].join('\n'),
+      });
+
+      const result = await followManifestToSegment(
+        master,
+        'https://cdn.test/a/master.m3u8',
+      );
+
+      expect(result.segmentUrl).toBe('https://edge.test/moved/seg1.ts');
+      expect(result.declaredHeight).toBe(1080);
+    });
+
+    test('子列表读取失败时保留外层分片信息', async () => {
+      global.fetch = jest
+        .fn()
+        .mockRejectedValue(new Error('network')) as unknown as typeof fetch;
+      const master = [
+        '#EXTM3U',
+        '#EXT-X-STREAM-INF:RESOLUTION=1280x720',
+        'low.m3u8',
+      ].join('\n');
+
+      const result = await followManifestToSegment(
+        master,
+        'https://cdn.test/master.m3u8',
+      );
+
+      expect(result.segmentUrl).toBe('https://cdn.test/low.m3u8');
+      expect(result.declaredHeight).toBe(720);
+    });
+  });
+
+  describe('measureSegmentLoadSpeed', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    function toKbps(speed: string): number {
+      const [value, unit] = speed.split(' ');
+      return unit === 'MB/s'
+        ? Number.parseFloat(value) * 1024
+        : Number.parseFloat(value);
+    }
+
+    test('计时包含首字节延迟，快源不会被判成未知或算出虚高值', async () => {
+      const chunk = new Uint8Array(128 * 1024);
+      const reader = {
+        read: jest
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: chunk })
+          .mockResolvedValueOnce({ done: true }),
+        cancel: jest.fn().mockResolvedValue(undefined),
+      };
+      global.fetch = jest.fn(async () => {
+        // 模拟 TTFB：请求发出到拿到响应头耗时 120ms
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        return { ok: true, body: { getReader: () => reader } };
+      }) as unknown as typeof fetch;
+
+      const speed = await measureSegmentLoadSpeed('https://cdn.test/seg.ts');
+
+      expect(speed).not.toBe('未知');
+      // 128KB / 约 120ms ≈ 1.0 MB/s；旧实现从首块之后计时会得到虚高值或未知
+      expect(toKbps(speed)).toBeGreaterThan(500);
+      expect(toKbps(speed)).toBeLessThan(3 * 1024);
+    });
+
+    test('超时中断时按已测字节与耗时给出低速结论', async () => {
+      const chunk = new Uint8Array(64 * 1024);
+      const reader = {
+        read: jest
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: chunk })
+          .mockImplementationOnce(
+            () =>
+              new Promise((_resolve, reject) => {
+                setTimeout(() => reject(new Error('aborted')), 60);
+              }),
+          ),
+        cancel: jest.fn().mockResolvedValue(undefined),
+      };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        body: { getReader: () => reader },
+      }) as unknown as typeof fetch;
+
+      const speed = await measureSegmentLoadSpeed('https://cdn.test/slow.ts', {
+        timeoutMs: 20,
+      });
+
+      // 慢源要有低速结论，而不是和没测过一样显示「未知」
+      expect(speed).not.toBe('未知');
+      expect(speed).toMatch(/(KB\/s|MB\/s)$/);
+    });
+
+    test('partialOnAbort: 中止时按已读字节结算低速', async () => {
+      const chunk = new Uint8Array(64 * 1024);
+      const reader = {
+        read: jest
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: chunk })
+          .mockImplementationOnce(
+            () =>
+              new Promise((_resolve, reject) => {
+                setTimeout(() => reject(new Error('aborted')), 60);
+              }),
+          ),
+        cancel: jest.fn().mockResolvedValue(undefined),
+      };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        body: { getReader: () => reader },
+      }) as unknown as typeof fetch;
+
+      const controller = new AbortController();
+      const promise = measureSegmentLoadSpeed('https://cdn.test/slow.ts', {
+        signal: controller.signal,
+        partialOnAbort: true,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      // 被放弃等待中止时，慢源仍应给出低速结论
+      await expect(promise).resolves.toMatch(/(KB\/s|MB\/s)$/);
+    });
+
+    test('外部取消返回未知，不编造速度', async () => {
+      global.fetch = jest.fn(
+        (_url: string, init: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            );
+          }),
+      ) as unknown as typeof fetch;
+
+      const controller = new AbortController();
+      const promise = measureSegmentLoadSpeed('https://cdn.test/seg.ts', {
+        signal: controller.signal,
+      });
+      controller.abort();
+
+      await expect(promise).resolves.toBe('未知');
+    });
   });
 });
