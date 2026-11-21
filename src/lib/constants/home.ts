@@ -29,6 +29,8 @@ export const HOME_RENDER_LIMITS = {
   HOT_SECTION: 12,
   BANGUMI: 12,
   CONTINUE_WATCHING_PAGE: 12,
+  /** banner 轮播里继续追记录帧数（其余帧位由热门电影补足） */
+  HERO_CONTINUE: 4,
 } as const;
 
 export const HOME_VIDEO_CARD_SIZES =

@@ -3,7 +3,10 @@
 import { Film, Sparkles, Tv } from 'lucide-react';
 import { lazy, Suspense, useMemo } from 'react';
 
-import { HOME_VIDEO_CARD_SIZES } from '@/lib/constants/home';
+import {
+  HOME_RENDER_LIMITS,
+  HOME_VIDEO_CARD_SIZES,
+} from '@/lib/constants/home';
 import type {
   HomeErrorState,
   HomeLoadingState,
@@ -85,50 +88,51 @@ export default function HomeTabContent({
   const { criticalLoading, tertiaryLoading, tvLoading, varietyLoading } =
     loading;
 
-  // 爱奇艺式首屏轮播：最近一条继续追记录作为第一帧
-  const heroContinueItem = useMemo<HeroContinueItem | null>(() => {
-    const records = continueWatching.playRecords;
-    let latestKey: string | null = null;
-    let latestTime = 0;
-    for (const [key, record] of Object.entries(records)) {
-      if (record.save_time > latestTime) {
-        latestTime = record.save_time;
-        latestKey = key;
-      }
+  // 爱奇艺式首屏轮播：最近 4 条继续追记录作为前几帧（按最近观看排序，同名多源去重）
+  const heroContinueItems = useMemo<HeroContinueItem[]>(() => {
+    const entries = Object.entries(continueWatching.playRecords)
+      .filter(([, record]) => record.title && record.cover)
+      .sort((a, b) => b[1].save_time - a[1].save_time);
+
+    const items: HeroContinueItem[] = [];
+    const seenTitles = new Set<string>();
+    for (const [key, record] of entries) {
+      if (items.length >= HOME_RENDER_LIMITS.HERO_CONTINUE) break;
+      if (seenTitles.has(record.title)) continue;
+
+      const parsed = parseStorageKey(key);
+      if (!parsed?.source || !parsed.id) continue;
+
+      const href = buildPlayUrl({
+        from: 'playrecord',
+        source: parsed.source,
+        id: parsed.id,
+        title: record.title,
+        year: record.year,
+      });
+      if (!href) continue;
+
+      seenTitles.add(record.title);
+      items.push({
+        key,
+        title: record.title,
+        poster: record.cover,
+        year: record.year,
+        episodeLabel:
+          record.total_episodes > 1
+            ? `看到第 ${record.index} 集 / 共 ${record.total_episodes} 集`
+            : undefined,
+        href,
+      });
     }
-    if (!latestKey) return null;
-
-    const record = records[latestKey];
-    const parsed = parseStorageKey(latestKey);
-    if (!parsed?.source || !parsed.id) return null;
-
-    const href = buildPlayUrl({
-      from: 'playrecord',
-      source: parsed.source,
-      id: parsed.id,
-      title: record.title,
-      year: record.year,
-    });
-    if (!href) return null;
-
-    return {
-      key: latestKey,
-      title: record.title,
-      poster: record.cover,
-      year: record.year,
-      episodeLabel:
-        record.total_episodes > 1
-          ? `看到第 ${record.index} 集 / 共 ${record.total_episodes} 集`
-          : undefined,
-      href,
-    };
+    return items;
   }, [continueWatching.playRecords]);
 
   return (
     <>
       {/* 爱奇艺式首屏大轮播 */}
       <HeroCarousel
-        continueItem={heroContinueItem}
+        continueItems={heroContinueItems}
         movies={hotMovies}
         loading={criticalLoading || continueWatching.loading}
       />

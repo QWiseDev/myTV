@@ -9,7 +9,7 @@ import type { TMDBHeroInfo } from '@/lib/tmdb.client';
 import type { DoubanItem } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
 
-/** 继续追首帧所需的最小信息（由 HomeTabContent 从播放记录派生） */
+/** 继续追轮播帧所需的最小信息（由 HomeTabContent 从播放记录派生） */
 export interface HeroContinueItem {
   key: string;
   title: string;
@@ -32,35 +32,46 @@ interface HeroSlide {
 }
 
 const AUTO_ADVANCE_INTERVAL_MS = 5000;
+/** 轮播总帧数上限：继续追帧在前，热门电影补足剩余帧位 */
+const HERO_SLIDE_TOTAL = 8;
 
 interface HeroCarouselProps {
-  /** 继续追记录（最近一条），有则作为第一帧 */
-  continueItem?: HeroContinueItem | null;
-  /** 热门电影，取前 5 张参与轮播 */
+  /** 继续追记录（最近优先），依次作为前几帧 */
+  continueItems?: HeroContinueItem[];
+  /** 热门电影，补足剩余帧位（整轮最多 8 帧） */
   movies: DoubanItem[];
   loading?: boolean;
 }
 
 function buildSlides(
-  continueItem: HeroContinueItem | null | undefined,
+  continueItems: HeroContinueItem[] | undefined,
   movies: DoubanItem[],
 ): HeroSlide[] {
   const slides: HeroSlide[] = [];
+  const seenTitles = new Set<string>();
 
-  if (continueItem?.title && continueItem.poster) {
+  for (const item of continueItems || []) {
+    if (!item.title || !item.poster) continue;
+    const title = item.title.trim();
+    if (!title || seenTitles.has(title)) continue;
+    seenTitles.add(title);
     slides.push({
-      key: `continue:${continueItem.key}`,
+      key: `continue:${item.key}`,
       kind: 'continue',
-      title: continueItem.title,
-      poster: continueItem.poster,
-      year: continueItem.year,
-      episodeLabel: continueItem.episodeLabel,
-      href: continueItem.href,
+      title: item.title,
+      poster: item.poster,
+      year: item.year,
+      episodeLabel: item.episodeLabel,
+      href: item.href,
     });
   }
 
   for (const movie of movies) {
     if (!movie.title || !movie.poster) continue;
+    const title = movie.title.trim();
+    // 与继续追帧或其他电影重名的直接跳过
+    if (!title || seenTitles.has(title)) continue;
+    seenTitles.add(title);
     slides.push({
       key: `douban:${movie.id}`,
       kind: 'douban',
@@ -72,7 +83,7 @@ function buildSlides(
         movie.year ? `&year=${movie.year}` : ''
       }${movie.id ? `&douban_id=${movie.id}` : ''}&stype=movie`,
     });
-    if (slides.length >= 6) break;
+    if (slides.length >= HERO_SLIDE_TOTAL) break;
   }
 
   return slides;
@@ -83,13 +94,13 @@ function buildSlides(
  * 移动端隐藏右侧海报卡，保留单屏轮播与指示条。
  */
 export default function HeroCarousel({
-  continueItem,
+  continueItems,
   movies,
   loading = false,
 }: HeroCarouselProps) {
   const slides = useMemo(
-    () => buildSlides(continueItem, movies),
-    [continueItem, movies],
+    () => buildSlides(continueItems, movies),
+    [continueItems, movies],
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);

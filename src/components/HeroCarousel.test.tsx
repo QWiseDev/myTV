@@ -75,16 +75,101 @@ const MOVIES: DoubanItem[] = [
 ];
 
 describe('HeroCarousel', () => {
-  it('renders continue item as the first slide', () => {
+  it('renders up to 4 continue items as the leading slides with movies filling the rest', () => {
     render(
       <HeroCarousel
-        continueItem={{
-          key: 'src1+id1',
-          title: '追更剧',
-          poster: 'https://img/cover.jpg',
-          episodeLabel: '看到第 3 集 / 共 20 集',
-          href: '/play?source=src1&id=id1&title=x',
-        }}
+        continueItems={[
+          {
+            key: 'src1+id1',
+            title: '追更剧一',
+            poster: 'https://img/cover1.jpg',
+            episodeLabel: '看到第 3 集 / 共 20 集',
+            href: '/play?source=src1&id=id1&title=x',
+          },
+          {
+            key: 'src2+id2',
+            title: '追更剧二',
+            poster: 'https://img/cover2.jpg',
+            episodeLabel: '看到第 5 集 / 共 12 集',
+            href: '/play?source=src2&id=id2&title=y',
+          },
+          {
+            key: 'src3+id3',
+            title: '追更剧三',
+            poster: 'https://img/cover3.jpg',
+            href: '/play?source=src3&id=id3&title=z',
+          },
+          {
+            key: 'src4+id4',
+            title: '追更剧四',
+            poster: 'https://img/cover4.jpg',
+            episodeLabel: '看到第 2 集 / 共 8 集',
+            href: '/play?source=src4&id=id4&title=w',
+          },
+        ]}
+        movies={MOVIES}
+      />,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: '追更剧一' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('看到第 3 集 / 共 20 集')).toBeInTheDocument();
+    expect(screen.getByText('看到第 2 集 / 共 8 集')).toBeInTheDocument();
+    // 4 条继续追帧各带一个「继续播放」按钮
+    expect(screen.getAllByText('继续播放')).toHaveLength(4);
+    // 帧序：4 条继续追在前，热门电影补足剩余帧位（4 + 3 = 7 帧）
+    expect(screen.getAllByRole('button', { name: /切换到/ })).toHaveLength(7);
+    // 非当前帧带 aria-hidden，切到电影三帧后标题才可查
+    fireEvent.click(screen.getByRole('button', { name: '切换到 热门电影三' }));
+    expect(
+      screen.getByRole('heading', { name: '热门电影三' }),
+    ).toBeInTheDocument();
+  });
+
+  it('skips slides with duplicate titles (movies colliding with continue items)', () => {
+    render(
+      <HeroCarousel
+        continueItems={[
+          {
+            key: 'src1+id1',
+            title: '追更剧一',
+            poster: 'https://img/cover1.jpg',
+            episodeLabel: '看到第 3 集 / 共 20 集',
+            href: '/play?source=src1&id=id1&title=x',
+          },
+        ]}
+        movies={[
+          {
+            id: 'dup',
+            title: '追更剧一',
+            poster: 'https://img/dup.jpg',
+            rate: '9.0',
+            year: '2026',
+          },
+          ...MOVIES,
+        ]}
+      />,
+    );
+
+    // 重名电影被跳过：1 继续追 + 3 电影 = 4 帧
+    expect(screen.getAllByRole('button', { name: /切换到/ })).toHaveLength(4);
+    expect(screen.getAllByText('继续播放')).toHaveLength(1);
+    expect(screen.queryByText('9.0分')).not.toBeInTheDocument();
+  });
+
+  it('renders movies as leading slides when fewer continue items exist', () => {
+    render(
+      <HeroCarousel
+        continueItems={[
+          {
+            key: 'src1+id1',
+            title: '追更剧',
+            poster: 'https://img/cover.jpg',
+            episodeLabel: '看到第 3 集 / 共 20 集',
+            href: '/play?source=src1&id=id1&title=x',
+          },
+        ]}
         movies={MOVIES}
       />,
     );
