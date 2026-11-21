@@ -184,7 +184,10 @@ export class DanmakuLoadManager {
 
   constructor(
     private readonly now: () => number = Date.now,
-    private readonly timeoutMs = 15000,
+    // 服务端弹幕链路（豆瓣提链 → danmu_api 抓爱奇艺弹幕）暖缓存也要 9~15s，
+    // 冷缓存会超过 15s；超时中止后客户端不写缓存，下次还得重付全程，
+    // 表现为弹幕一直加载不出来。放宽到 30s 与服务端 iqiyi 抓取上限对齐。
+    private readonly timeoutMs = 30000,
   ) {}
 
   reset() {

@@ -370,11 +370,15 @@ function PlayPageClient() {
   const videoDoubanIdRef = useSyncedRef(videoDoubanId);
   const detailRef = useSyncedRef(detail);
   const currentEpisodeIndexRef = useSyncedRef(currentEpisodeIndex);
-  // 本地集名与同版式序数：弹幕智能匹配（综艺按日期/版式对齐）用
-  const episodeTitle = detail?.episodes?.[currentEpisodeIndex]?.trim() || '';
+  // 本地集名与同版式序数：弹幕智能匹配（综艺按日期/版式对齐）用。
+  // 必须取 episodes_titles（集名）；episodes 存的是 m3u8 播放地址，
+  // 地址里的日期目录会被 extractEpisodeDate 误解析成日期污染匹配。
+  // 集名缺失时宁可不传（服务端回退 legacy 序数匹配），也不要传地址。
+  const episodeTitle =
+    detail?.episodes_titles?.[currentEpisodeIndex]?.trim() || '';
   const episodeTitleRef = useSyncedRef(episodeTitle);
   const variantEpisodeRef = useSyncedRef(
-    computeVariantOrdinal(detail?.episodes || [], currentEpisodeIndex),
+    computeVariantOrdinal(detail?.episodes_titles || [], currentEpisodeIndex),
   );
   const availableSourcesRef = useSyncedRef(availableSources);
   const videoUrlRequestIdRef = useRef(0);
