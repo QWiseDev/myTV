@@ -532,7 +532,6 @@ export default function ShortVideoPage() {
           {CATEGORIES.map((category) => (
             <button
               key={category.id}
-              data-category-id={category.id}
               onClick={() => handleCategoryChange(category.id)}
               className={`w-10 h-10 md:w-12 md:h-12 rounded-full text-xs font-medium transition-all duration-300 flex items-center justify-center text-center ${
                 selectedCategory === category.id
@@ -554,23 +553,6 @@ export default function ShortVideoPage() {
           }
           .scrollbar-hide::-webkit-scrollbar {
             display: none;
-          }
-
-          /* PC端左侧栏目栏样式优化 */
-          @media (min-width: 640px) {
-            .pc-category-button {
-              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .pc-category-button:hover {
-              transform: translateX(2px) scale(1.05);
-            }
-
-            .pc-category-button.active {
-              background: rgba(255, 255, 255, 0.2);
-              box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-              transform: translateX(2px) scale(1.05);
-            }
           }
 
           /* 在短视频页面隐藏移动端底部导航和禁用滚动 */

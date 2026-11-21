@@ -14,6 +14,7 @@ import {
   getCachedWatchingUpdates,
   getDetailedWatchingUpdates,
 } from '@/lib/watching-updates';
+import { useBackToTopController } from '@/hooks/useBackToTopController';
 
 import PageLayout from '@/components/PageLayout';
 
@@ -68,6 +69,7 @@ const PlayStatsPage = () => {
   } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const { scrollToTop } = useBackToTopController({ setShowBackToTop });
   const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
     null,
   );
@@ -176,26 +178,7 @@ const PlayStatsPage = () => {
   }, [isAdmin, fetchAdminStats, fetchUserStats]);
 
   const cleanExpiredCache = useCallback(() => {
-    const CACHE_DURATION = 2 * 60 * 60 * 1000;
     const now = Date.now();
-
-    const cacheTimeKey = 'upcoming_releases_cache_time';
-    const cachedTime = localStorage.getItem(cacheTimeKey);
-
-    if (cachedTime) {
-      const age = now - parseInt(cachedTime);
-      if (age >= CACHE_DURATION) {
-        localStorage.removeItem('upcoming_releases_cache');
-        localStorage.removeItem(cacheTimeKey);
-      }
-    }
-
-    const keysToCheck = [
-      'moontv_watching_updates',
-      'moontv_last_update_check',
-      'release_calendar_all_data',
-      'release_calendar_all_data_time',
-    ];
 
     const watchingUpdateTime = localStorage.getItem('moontv_last_update_check');
     if (watchingUpdateTime) {
@@ -206,20 +189,6 @@ const PlayStatsPage = () => {
         localStorage.removeItem('moontv_last_update_check');
       }
     }
-
-    keysToCheck.forEach((key) => {
-      if (key.endsWith('_time')) {
-        const timeStr = localStorage.getItem(key);
-        if (timeStr) {
-          const age = now - parseInt(timeStr);
-          if (age >= CACHE_DURATION) {
-            const dataKey = key.replace('_time', '');
-            localStorage.removeItem(dataKey);
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    });
   }, []);
 
   const fetchUpcomingReleases = useCallback(async () => {
@@ -256,8 +225,6 @@ const PlayStatsPage = () => {
     try {
       localStorage.removeItem('moontv_watching_updates');
       localStorage.removeItem('moontv_last_update_check');
-      localStorage.removeItem('upcoming_releases_cache');
-      localStorage.removeItem('upcoming_releases_cache_time');
 
       safeCheckWatchingUpdates(true);
       await fetchStats();
@@ -360,29 +327,6 @@ const PlayStatsPage = () => {
     }
     return undefined;
   }, [authInfo, safeCheckWatchingUpdates]);
-
-  useEffect(() => {
-    const getScrollTop = () =>
-      document.body.scrollTop || document.documentElement.scrollTop || 0;
-
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      setShowBackToTop(scrollTop > 300);
-    };
-
-    document.body.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      document.body.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  const scrollToTop = useCallback(() => {
-    try {
-      document.body.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (error) {
-      document.body.scrollTop = 0;
-    }
-  }, []);
 
   if (!authInfo) {
     return (

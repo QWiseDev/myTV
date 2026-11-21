@@ -13,6 +13,7 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { safeJsonParse } from '@/lib/safe-storage';
+import { useBackToTopController } from '@/hooks/useBackToTopController';
 import { useSearchPageAnalytics } from '@/hooks/useSearchPageAnalytics';
 
 import NetDiskSearchResults from '@/components/NetDiskSearchResults';
@@ -43,6 +44,7 @@ function SearchPageClient() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   // 返回顶部按钮显示状态
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const { scrollToTop } = useBackToTopController({ setShowBackToTop });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -188,41 +190,8 @@ function SearchPageClient() {
       },
     );
 
-    // 获取滚动位置的函数 - 专门针对 body 滚动
-    const getScrollTop = () => {
-      return document.body.scrollTop || 0;
-    };
-
-    // 使用 requestAnimationFrame 持续检测滚动位置
-    let isRunning = false;
-    const checkScrollPosition = () => {
-      if (!isRunning) return;
-
-      const scrollTop = getScrollTop();
-      const shouldShow = scrollTop > 300;
-      setShowBackToTop(shouldShow);
-
-      requestAnimationFrame(checkScrollPosition);
-    };
-
-    // 启动持续检测
-    isRunning = true;
-    checkScrollPosition();
-
-    // 监听 body 元素的滚动事件
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      setShowBackToTop(scrollTop > 300);
-    };
-
-    document.body.addEventListener('scroll', handleScroll, { passive: true });
-
     return () => {
       unsubscribe();
-      isRunning = false; // 停止 requestAnimationFrame 循环
-
-      // 移除 body 滚动事件监听器
-      document.body.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
@@ -375,20 +344,6 @@ function SearchPageClient() {
 
     router.push(`/search?q=${encodeURIComponent(suggestion)}`);
     // 其余由 searchParams 变化的 effect 处理
-  };
-
-  // 返回顶部功能
-  const scrollToTop = () => {
-    try {
-      // 根据调试结果，真正的滚动容器是 document.body
-      document.body.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    } catch (error) {
-      // 如果平滑滚动完全失败，使用立即滚动
-      document.body.scrollTop = 0;
-    }
   };
 
   // 当前搜索词：搜索框内容优先，其次 URL q 参数（各结果区组件共用）

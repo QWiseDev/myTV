@@ -403,8 +403,21 @@ function LivePageClient() {
     setCurrentSourceSearchResults(results);
   };
 
-  // 防抖搜索
-  const debouncedSearch = debounce(searchCurrentSourceChannels, 300);
+  // 防抖搜索：debounced 实例只建一次（每次渲染重建会让定时器不断重置、防抖失效），
+  // 调用时转发到最新的搜索闭包以拿到最新频道列表
+  const searchLatestRef = useRef(searchCurrentSourceChannels);
+  useEffect(() => {
+    searchLatestRef.current = searchCurrentSourceChannels;
+  });
+
+  const debouncedSearchRef = useRef<((query: string) => void) | null>(null);
+  if (debouncedSearchRef.current === null) {
+    debouncedSearchRef.current = debounce(
+      (query: string) => searchLatestRef.current(query),
+      300,
+    );
+  }
+  const debouncedSearch = debouncedSearchRef.current;
 
   // 处理搜索输入
   const handleSearchChange = (query: string) => {

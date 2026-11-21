@@ -94,7 +94,7 @@ export default function SourceBrowserPage() {
   const [sortBy, setSortBy] = useState<
     'default' | 'title-asc' | 'title-desc' | 'year-asc' | 'year-desc'
   >('default');
-  const [debounceId, setDebounceId] = useState<NodeJS.Timeout | null>(null);
+  const debounceIdRef = useRef<NodeJS.Timeout | null>(null);
 
   // 二级筛选（地区 / 年份 / 关键词）
   const [filterKeyword, setFilterKeyword] = useState('');
@@ -714,8 +714,10 @@ export default function SourceBrowserPage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   setQuery(val);
-                  if (debounceId) clearTimeout(debounceId);
-                  const id = setTimeout(() => {
+                  if (debounceIdRef.current) {
+                    clearTimeout(debounceIdRef.current);
+                  }
+                  debounceIdRef.current = setTimeout(() => {
                     setMode(val.trim() ? 'search' : 'category');
                     if (val.trim()) {
                       fetchSearch(activeSourceKey, val.trim(), 1);
@@ -723,7 +725,6 @@ export default function SourceBrowserPage() {
                       fetchItems(activeSourceKey, activeCategory, 1);
                     }
                   }, 500);
-                  setDebounceId(id);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

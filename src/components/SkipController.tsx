@@ -967,29 +967,3 @@ export default function SkipController({
     </div>
   );
 }
-
-// 导出跳过控制器的设置按钮组件
-export function SkipSettingsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className='flex items-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors'
-      title='设置跳过片头片尾'
-    >
-      <svg
-        className='w-4 h-4'
-        fill='none'
-        stroke='currentColor'
-        viewBox='0 0 24 24'
-      >
-        <path
-          strokeLinecap='round'
-          strokeLinejoin='round'
-          strokeWidth={2}
-          d='M13 5l7 7-7 7M5 5l7 7-7 7'
-        />
-      </svg>
-      <span>跳过设置</span>
-    </button>
-  );
-}

@@ -404,11 +404,8 @@ const VideoCard = memo(function VideoCard({
   const actualEpisodes = episodes;
   const actualYear = year;
   const actualQuery = query || '';
-  const cardIdentity = JSON.stringify([
-    from,
-    actualSource ?? null,
-    actualId ?? null,
-  ]);
+  // 用 NUL 分隔保持与原 JSON 数组编码同级的唯一性，省去每张卡片每次渲染的 stringify 开销
+  const cardIdentity = `${from}\u0000${actualSource ?? ''}\u0000${actualId ?? ''}`;
   const latestCardIdentityRef = useRef(cardIdentity);
   const favoriteMutationsRef = useRef(new Map<string, Promise<void>>());
   const deleteMutationsRef = useRef(new Map<string, Promise<void>>());

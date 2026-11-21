@@ -5,7 +5,6 @@ import {
   addQualityControl,
   addSpeedControl,
   createQualityControls,
-  getSwitchableLevels,
 } from './qualitySelector';
 
 type MockHls = LevelAwareHls & {
@@ -105,36 +104,6 @@ const MULTI_LEVELS = [
 ];
 
 describe('qualitySelector', () => {
-  describe('getSwitchableLevels', () => {
-    test('单码率源（仅一档）不提供画质切换', () => {
-      expect(
-        getSwitchableLevels(createHls([{ height: 1080, bitrate: 2400000 }])),
-      ).toEqual([]);
-      // 单码率且 hls.js 未解析出 height 的常见情形
-      expect(
-        getSwitchableLevels(createHls([{ height: 0, bitrate: 0 }])),
-      ).toEqual([]);
-    });
-
-    test('多码率源返回全部档位，按分辨率高到低排序', () => {
-      const levels = getSwitchableLevels(createHls(MULTI_LEVELS));
-      expect(levels.map((l) => l.label)).toEqual(['1080P', '720P']);
-    });
-
-    test('过滤无分辨率且无码率的无效档', () => {
-      const levels = getSwitchableLevels(
-        createHls([{ height: 0, bitrate: 0 }, ...MULTI_LEVELS]),
-      );
-      expect(levels).toHaveLength(2);
-    });
-
-    test('hls 实例缺失或 levels 为空时安全返回', () => {
-      expect(getSwitchableLevels(null)).toEqual([]);
-      expect(getSwitchableLevels(undefined)).toEqual([]);
-      expect(getSwitchableLevels(createHls([]))).toEqual([]);
-    });
-  });
-
   describe('addQualityControl', () => {
     test('单码率源也显示画质按钮，展示该档分辨率且不可切换', () => {
       const art = createArt();

@@ -10,7 +10,7 @@ import {
   XCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
@@ -156,36 +156,49 @@ export default function SourceTestModule() {
       return result;
     });
 
-    await Promise.allSettled(testPromises);
+    const settled = await Promise.allSettled(testPromises);
     setIsTestingAll(false);
 
-    // 等待状态更新完成后，再检查是否进行自动播放测试
-    setTimeout(() => {
-      // 确保测试结果已更新
-      const currentResults = Array.from(testResults.entries());
-      const successfulResults = currentResults.filter(
-        ([, result]) =>
-          result.status === 'success' && result.results.length > 0,
+    // 自动播放测试：直接用本轮 Promise 结果判断，读 state 会拿到闭包旧值
+    if (autoPlayTest) {
+      const successfulResults = settled.flatMap((item) =>
+        item.status === 'fulfilled' &&
+        item.value.status === 'success' &&
+        item.value.results.length > 0
+          ? [[item.value.source, item.value] as [string, SourceTestResult]]
+          : [],
       );
 
-      if (autoPlayTest && successfulResults.length > 0) {
+      if (successfulResults.length > 0) {
         // 确保在下一个事件循环中执行，避免状态更新冲突
         setTimeout(() => {
-          handleAutoTestVideos(false); // 传入 false 表示不显示提示
+          handleAutoTestVideos(false, successfulResults); // 传入 false 表示不显示提示
         }, 100);
       }
-    }, 2000); // 延迟2秒后自动开始视频测试
+    }
   };
 
   // 自动测试视频播放功能
-  const handleAutoTestVideos = async (showAlert = true) => {
+  // presetResults：handleTestAll 自动触发时直接携带本轮结果，避免闭包旧值
+  const handleAutoTestVideos = async (
+    showAlert = true,
+    presetResults?: Array<[string, SourceTestResult]>,
+  ) => {
     if (!searchKeyword.trim()) {
       if (showAlert) alert('请输入搜索关键词');
       return;
     }
 
+    // 未显式传入结果时（按钮入口）从当前 state 读取
+    const successfulResults =
+      presetResults ??
+      Array.from(testResults.entries()).filter(
+        ([, result]) =>
+          result.status === 'success' && result.results.length > 0,
+      );
+
     // 确保有测试结果
-    if (testResults.size === 0) {
+    if (successfulResults.length === 0) {
       if (showAlert) alert('请先运行搜索测试');
       return;
     }
@@ -194,11 +207,6 @@ export default function SourceTestModule() {
 
     try {
       // 对所有成功的源进行视频测试
-      const successfulResults = Array.from(testResults.entries()).filter(
-        ([, result]) =>
-          result.status === 'success' && result.results.length > 0,
-      );
-
       for (const [sourceKey, result] of successfulResults) {
         try {
           // 更新状态为测试中
@@ -234,13 +242,9 @@ export default function SourceTestModule() {
       console.error('自动视频测试过程中发生错误:', error);
     } finally {
       setIsAutoTestingVideos(false);
-      const finalSuccessfulResults = Array.from(testResults.entries()).filter(
-        ([, result]) =>
-          result.status === 'success' && result.results.length > 0,
-      );
 
       if (showAlert) {
-        alert(`自动视频测试完成！共测试 ${finalSuccessfulResults.length} 个源`);
+        alert(`自动视频测试完成！共测试 ${successfulResults.length} 个源`);
       }
     }
   };
@@ -327,79 +331,71 @@ export default function SourceTestModule() {
     }
   };
 
-  // 获取统计信息
-  const getStats = () => {
+  // 统计信息：单次遍历计数，仅在测试结果变化时重算（测试期间每个结果回写都会触发渲染）
+  const stats = useMemo(() => {
     const results = Array.from(testResults.values());
-    const enabledResults = results.filter((r) => !r.disabled);
-    const disabledResults = results.filter((r) => r.disabled);
+    const enabledTotals = {
+      total: 0,
+      success: 0,
+      error: 0,
+      timeout: 0,
+      testing: 0,
+    };
+    const disabledTotals = {
+      total: 0,
+      success: 0,
+      error: 0,
+      timeout: 0,
+      testing: 0,
+    };
 
-    const enabledTotal = enabledResults.length;
-    const enabledSuccess = enabledResults.filter(
-      (r) => r.status === 'success',
-    ).length;
-    const enabledError = enabledResults.filter(
-      (r) => r.status === 'error',
-    ).length;
-    const enabledTimeout = enabledResults.filter(
-      (r) => r.status === 'timeout',
-    ).length;
-    const enabledTesting = enabledResults.filter(
-      (r) => r.status === 'testing',
-    ).length;
-
-    const disabledTotal = disabledResults.length;
-    const disabledSuccess = disabledResults.filter(
-      (r) => r.status === 'success',
-    ).length;
-    const disabledError = disabledResults.filter(
-      (r) => r.status === 'error',
-    ).length;
-    const disabledTimeout = disabledResults.filter(
-      (r) => r.status === 'timeout',
-    ).length;
-    const disabledTesting = disabledResults.filter(
-      (r) => r.status === 'testing',
-    ).length;
-
-    const total = results.length;
-    const success = enabledSuccess + disabledSuccess;
-    const error = enabledError + disabledError;
-    const timeout = enabledTimeout + disabledTimeout;
-    const testing = enabledTesting + disabledTesting;
+    for (const r of results) {
+      const bucket = r.disabled ? disabledTotals : enabledTotals;
+      bucket.total++;
+      if (
+        r.status === 'success' ||
+        r.status === 'error' ||
+        r.status === 'timeout' ||
+        r.status === 'testing'
+      ) {
+        bucket[r.status]++;
+      }
+    }
 
     // 视频测试统计
-    const playStatuses = Array.from(playTestStatuses.values());
-    const videoTested = playStatuses.filter((p) => p.status !== 'idle').length;
-    const videoSuccess = playStatuses.filter(
-      (p) => p.status === 'success',
-    ).length;
-    const videoError = playStatuses.filter((p) => p.status === 'error').length;
-    const autoTested = playStatuses.filter((p) => p.autoTested).length;
+    let videoTested = 0;
+    let videoSuccess = 0;
+    let videoError = 0;
+    let autoTested = 0;
+    for (const p of Array.from(playTestStatuses.values())) {
+      if (p.status !== 'idle') videoTested++;
+      if (p.status === 'success') videoSuccess++;
+      if (p.status === 'error') videoError++;
+      if (p.autoTested) autoTested++;
+    }
 
     return {
-      total,
-      success,
-      error,
-      timeout,
-      testing,
-      enabledTotal,
-      enabledSuccess,
-      enabledError,
-      enabledTimeout,
-      enabledTesting,
-      disabledTotal,
-      disabledSuccess,
-      disabledError,
-      disabledTimeout,
-      disabledTesting,
+      total: results.length,
+      success: enabledTotals.success + disabledTotals.success,
+      error: enabledTotals.error + disabledTotals.error,
+      timeout: enabledTotals.timeout + disabledTotals.timeout,
+      testing: enabledTotals.testing + disabledTotals.testing,
+      enabledTotal: enabledTotals.total,
+      enabledSuccess: enabledTotals.success,
+      enabledError: enabledTotals.error,
+      enabledTimeout: enabledTotals.timeout,
+      enabledTesting: enabledTotals.testing,
+      disabledTotal: disabledTotals.total,
+      disabledSuccess: disabledTotals.success,
+      disabledError: disabledTotals.error,
+      disabledTimeout: disabledTotals.timeout,
+      disabledTesting: disabledTotals.testing,
       videoTested,
       videoSuccess,
       videoError,
       autoTested,
     };
-  };
-
-  const stats = getStats();
+  }, [testResults, playTestStatuses]);
 
   // 状态图标
   const getStatusIcon = (status: string, disabled?: boolean) => {
@@ -497,8 +493,8 @@ export default function SourceTestModule() {
     );
   };
 
-  // 计算排序后的源列表
-  const getSortedSources = () => {
+  // 计算排序后的源列表（useMemo 缓存，避免每次渲染全量重排序）
+  const sortedSources = useMemo(() => {
     const scope = onlyEnabled ? sources.filter((s) => !s.disabled) : sources;
 
     // 如果是默认排序，保持原始顺序，不排序
@@ -585,7 +581,7 @@ export default function SourceTestModule() {
       return sortOrder === 'desc' ? -cmp : cmp;
     });
     return arr;
-  };
+  }, [onlyEnabled, sources, sortKey, sortOrder, testResults, playTestStatuses]);
 
   return (
     <div className='max-w-7xl mx-auto p-3 sm:p-4 space-y-4 sm:space-y-6'>
@@ -874,7 +870,7 @@ export default function SourceTestModule() {
         </div>
 
         <div className='space-y-3'>
-          {getSortedSources().map((source) => {
+          {sortedSources.map((source) => {
             const result = testResults.get(source.key);
             return (
               <div

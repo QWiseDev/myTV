@@ -83,14 +83,6 @@ export function getDisplayLevels(
     .sort((a, b) => b.height - a.height || a.index - b.index);
 }
 
-/** 是否具备真正的切换能力（至少两档） */
-export function getSwitchableLevels(
-  hls: LevelAwareHls | null | undefined,
-): Array<{ index: number; height: number; label: string }> {
-  const levels = getDisplayLevels(hls);
-  return levels.length >= 2 ? levels : [];
-}
-
 /** 控制栏按钮的通用样式（与 artplayer 图标按钮视觉对齐） */
 const CONTROL_TEXT_STYLE =
   'display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:100%;padding:0 6px;font-size:13px;font-weight:600;letter-spacing:0.02em;color:inherit;';

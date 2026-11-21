@@ -15,6 +15,7 @@ import {
   getDoubanRecommends,
 } from '@/lib/douban.client';
 import { DoubanItem, DoubanResult } from '@/lib/types';
+import { useBackToTopController } from '@/hooks/useBackToTopController';
 
 import DoubanCustomSelector from '@/components/DoubanCustomSelector';
 import DoubanSelector from '@/components/DoubanSelector';
@@ -32,6 +33,7 @@ function DoubanPageClient() {
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // 返回顶部按钮显示状态
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const { scrollToTop } = useBackToTopController({ setShowBackToTop });
 
   // 用于存储最新参数值的 refs
   const currentParamsRef = useRef({
@@ -122,43 +124,6 @@ function DoubanPageClient() {
 
     return () => clearTimeout(timer);
   }, []); // 只在组件挂载时执行一次
-
-  // 监听滚动位置，控制返回顶部按钮显示
-  useEffect(() => {
-    // 获取滚动位置的函数 - 专门针对 body 滚动
-    const getScrollTop = () => {
-      return document.body.scrollTop || 0;
-    };
-
-    // 使用 requestAnimationFrame 持续检测滚动位置
-    let isRunning = false;
-    const checkScrollPosition = () => {
-      if (!isRunning) return;
-
-      const scrollTop = getScrollTop();
-      const shouldShow = scrollTop > 300;
-      setShowBackToTop(shouldShow);
-
-      requestAnimationFrame(checkScrollPosition);
-    };
-
-    // 启动持续检测
-    isRunning = true;
-    checkScrollPosition();
-
-    // 监听 body 元素的滚动事件
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      setShowBackToTop(scrollTop > 300);
-    };
-
-    document.body.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      isRunning = false;
-      document.body.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   // type变化时立即重置selectorsReady（最高优先级）
   useEffect(() => {
@@ -710,20 +675,6 @@ function DoubanPageClient() {
     const queryString = params.toString();
     const activePath = `/douban${queryString ? `?${queryString}` : ''}`;
     return activePath;
-  };
-
-  // 返回顶部功能
-  const scrollToTop = () => {
-    try {
-      // 根据调试结果，真正的滚动容器是 document.body
-      document.body.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    } catch (error) {
-      // 如果平滑滚动完全失败，使用立即滚动
-      document.body.scrollTop = 0;
-    }
   };
 
   return (

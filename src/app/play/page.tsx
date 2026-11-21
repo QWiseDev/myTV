@@ -17,6 +17,7 @@ import { computeVariantOrdinal } from '@/lib/danmu/episode-match';
 import { generateStorageKey } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
 import { isUsableImageUrl, selectUsableImageUrl } from '@/lib/utils';
+import { useBackToTopController } from '@/hooks/useBackToTopController';
 import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
@@ -28,7 +29,6 @@ import {
   usePlaybackData,
 } from '@/contexts/PlayPageContext';
 
-import { useBackToTopController } from './hooks/useBackToTopController';
 import { useBangumiDetails } from './hooks/useBangumiDetails';
 import { useDanmuController } from './hooks/useDanmuController';
 import { useEpisodeControls } from './hooks/useEpisodeControls';
@@ -52,9 +52,10 @@ import {
 } from './hooks/useSourceSwitcher';
 import type { EpisodeVideoInfo } from './types';
 import { preloadArtplayerModules } from './utils/artplayerLoader';
-import type {
-  DanmakuItemLike,
-  DanmakuPluginLike,
+import {
+  type DanmakuItemLike,
+  type DanmakuPluginLike,
+  terminateDanmakuWorker,
 } from './utils/danmakuRuntime';
 import { readExternalDanmuPref } from './utils/danmuPreference';
 import { detectDevice } from './utils/deviceDetection';
@@ -704,24 +705,13 @@ function PlayPageClient() {
           videoErrorHandlerRef.current = null;
         }
 
-        // 1. 清理弹幕插件的WebWorker
-        if (artPlayerRef.current.plugins?.artplayerPluginDanmuku) {
-          const danmukuPlugin =
-            artPlayerRef.current.plugins.artplayerPluginDanmuku;
-
-          // 尝试获取并清理WebWorker
-          if (
-            danmukuPlugin.worker &&
-            typeof danmukuPlugin.worker.terminate === 'function'
-          ) {
-            danmukuPlugin.worker.terminate();
-          }
-
-          // 清空弹幕数据
-          if (typeof danmukuPlugin.reset === 'function') {
-            danmukuPlugin.reset();
-          }
+        // 1. 清理弹幕插件的WebWorker，并清空弹幕数据
+        const danmukuPlugin =
+          artPlayerRef.current.plugins?.artplayerPluginDanmuku;
+        if (danmukuPlugin && typeof danmukuPlugin.reset === 'function') {
+          danmukuPlugin.reset();
         }
+        terminateDanmakuWorker(artPlayerRef.current);
 
         // 2. 销毁HLS实例
         if (artPlayerRef.current.video.hls) {

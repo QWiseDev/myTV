@@ -13,8 +13,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { readJsonFromStorage } from '@/lib/safe-storage';
 import { ReleaseCalendarItem, ReleaseCalendarResult } from '@/lib/types';
+import { useBackToTopController } from '@/hooks/useBackToTopController';
 
 import PageLayout from '@/components/PageLayout';
 
@@ -44,6 +44,7 @@ export default function ReleaseCalendarPage() {
 
   // 返回顶部按钮状态
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const { scrollToTop } = useBackToTopController({ setShowBackToTop });
 
   // 日历视图的当前月份
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
@@ -64,52 +65,11 @@ export default function ReleaseCalendarPage() {
     });
   };
 
-  // 清理过期缓存
-  const cleanExpiredCache = () => {
-    const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2小时
-    const now = Date.now();
-
-    // 检查release calendar缓存
-    const cacheTimeKey = 'release_calendar_all_data_time';
-    const cachedTime = localStorage.getItem(cacheTimeKey);
-
-    if (cachedTime) {
-      const age = now - parseInt(cachedTime);
-      if (age >= CACHE_DURATION) {
-        localStorage.removeItem('release_calendar_all_data');
-        localStorage.removeItem(cacheTimeKey);
-      }
-    }
-
-    // 清理其他可能过期的缓存项
-    const keysToCheck = [
-      'upcoming_releases_cache',
-      'upcoming_releases_cache_time',
-    ];
-
-    keysToCheck.forEach((key) => {
-      if (key.endsWith('_time')) {
-        const timeStr = localStorage.getItem(key);
-        if (timeStr) {
-          const age = now - parseInt(timeStr);
-          if (age >= CACHE_DURATION) {
-            const dataKey = key.replace('_time', '');
-            localStorage.removeItem(dataKey);
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    });
-  };
-
   // 获取数据（简化版，移除localStorage缓存，依赖API数据库缓存）
   const fetchData = async (reset = false) => {
     try {
       setLoading(true);
       setError(null);
-
-      // 清理过期的localStorage缓存（兼容性清理）
-      cleanExpiredCache();
 
       // 🌐 直接从API获取数据（API有数据库缓存，全局共享，24小时有效）
       const apiUrl = reset
@@ -213,10 +173,6 @@ export default function ReleaseCalendarPage() {
   // 处理刷新按钮点击（简化版，清除数据库缓存并刷新）
   const handleRefreshClick = async () => {
     try {
-      // 清除遗留的localStorage缓存（兼容性清理）
-      localStorage.removeItem('release_calendar_all_data');
-      localStorage.removeItem('release_calendar_all_data_time');
-
       // 🔄 强制刷新（API会清除数据库缓存并重新获取）
       await fetchData(true);
     } catch (error) {
@@ -237,23 +193,7 @@ export default function ReleaseCalendarPage() {
 
     setFilters(resetFiltersState);
     setCurrentPage(1);
-
-    // 如果有缓存数据，使用重置后的过滤条件重新应用过滤
-    // 遗留缓存可能已损坏，解析失败时按无缓存处理，回退到重新拉取
-    const allData = readJsonFromStorage<ReleaseCalendarResult | null>(
-      'release_calendar_all_data',
-      null,
-    );
-    if (allData) {
-      // 直接使用重置后的过滤条件，而不是依赖state（state更新是异步的）
-      const filteredData = applyClientSideFiltersWithParams(
-        allData,
-        resetFiltersState,
-      );
-      setData(filteredData);
-    } else {
-      fetchData(false);
-    }
+    fetchData(false);
   };
 
   // 前端分页逻辑
@@ -279,41 +219,6 @@ export default function ReleaseCalendarPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意 mount-only：仅在页面挂载时拉取一次数据；fetchData 为普通函数每次渲染重建，加入依赖会导致每次渲染重复请求
   }, []);
-
-  // 监听滚动事件以显示/隐藏返回顶部按钮
-  useEffect(() => {
-    const getScrollTop = () => {
-      return document.body.scrollTop || document.documentElement.scrollTop || 0;
-    };
-
-    // 滚动事件处理
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      setShowBackToTop(scrollTop > 300);
-    };
-
-    // 监听 body 元素的滚动事件（参考play-stats页面的实现方式）
-    document.body.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      document.body.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  // 返回顶部功能
-  const scrollToTop = () => {
-    try {
-      // 根据play-stats页面的实现，真正的滚动容器是 document.body
-      document.body.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    } catch (e) {
-      // 降级方案
-      document.body.scrollTop = 0;
-      document.documentElement.scrollTop = 0;
-    }
-  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
