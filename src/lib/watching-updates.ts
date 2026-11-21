@@ -18,7 +18,6 @@ const WATCHING_UPDATES_BATCH_PAUSE = 150; // 每批之间的间隔（毫秒）
 
 // 内存缓存（用于非 localStorage 模式，避免 QuotaExceededError）
 let memoryWatchingUpdatesCache: WatchingUpdatesCache | null = null;
-let memoryLastCheckTime = 0;
 
 // 🔧 新增：Sources API缓存，避免重复调用
 // 与 /api/sources 返回结构对齐（仅含 key/name 两个必要字段）
@@ -151,7 +150,6 @@ export async function fetchWatchingUpdatesFromServer(
     }
 
     cacheWatchingUpdates(data);
-    memoryLastCheckTime = data.timestamp || Date.now();
     dispatchWatchingUpdatesEvent(
       Boolean(data.hasUpdates),
       data.updatedCount || 0,
@@ -188,10 +186,10 @@ export async function checkWatchingUpdates(
     const currentTime = Date.now();
 
     if (!forceRefresh) {
-      const lastCheckTime =
-        STORAGE_TYPE !== 'localstorage'
-          ? memoryLastCheckTime
-          : parseInt(localStorage.getItem(LAST_CHECK_TIME_KEY) || '0');
+      // checkWatchingUpdates 对非 localstorage 模式已提前走服务端路径，这里必然是本地模式
+      const lastCheckTime = parseInt(
+        localStorage.getItem(LAST_CHECK_TIME_KEY) || '0',
+      );
 
       if (currentTime - lastCheckTime < CACHE_DURATION) {
         const cached = getDetailedWatchingUpdates();
@@ -254,11 +252,7 @@ export async function checkWatchingUpdates(
         updatedSeries: [],
       };
       cacheWatchingUpdates(emptyResult);
-      if (STORAGE_TYPE !== 'localstorage') {
-        memoryLastCheckTime = currentTime;
-      } else {
-        localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
-      }
+      localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
       dispatchWatchingUpdatesEvent(false, 0);
       return;
     }
@@ -377,11 +371,7 @@ export async function checkWatchingUpdates(
     };
 
     cacheWatchingUpdates(result);
-    if (STORAGE_TYPE !== 'localstorage') {
-      memoryLastCheckTime = currentTime;
-    } else {
-      localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
-    }
+    localStorage.setItem(LAST_CHECK_TIME_KEY, currentTime.toString());
 
     dispatchWatchingUpdatesEvent(hasAnyUpdates, updatedCount);
   };
@@ -559,7 +549,6 @@ function cacheWatchingUpdates(data: WatchingUpdate): void {
 
     if (STORAGE_TYPE !== 'localstorage') {
       memoryWatchingUpdatesCache = cacheData;
-      memoryLastCheckTime = cacheData.timestamp;
       return;
     }
 
@@ -656,7 +645,6 @@ export function markUpdatesAsViewed(): void {
 export function forceClearWatchingUpdatesCache(): void {
   try {
     memoryWatchingUpdatesCache = null;
-    memoryLastCheckTime = 0;
 
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(WATCHING_UPDATES_CACHE_KEY);
