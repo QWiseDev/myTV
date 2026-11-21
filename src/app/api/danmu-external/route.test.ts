@@ -774,6 +774,102 @@ describe('GET /api/danmu-external', () => {
     expect(data.danmu[0].text).toBe('上期弹幕');
   });
 
+  it('正片带日期时序数硬门槛让位：本地全局序数≠danmu正片编号仍选对（真实数据回归）', async () => {
+    // 线上实测回归：本地「第20261029期上」全局序数为 6，但 danmu_api 正片
+    // 编号是「第3期上」（本地列表混排沉浸版/加更导致序数错位）——
+    // 带日期时不能启用序数硬门槛，否则锁死第6期上
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/match')) {
+        return jsonResponse({ success: true, isMatched: false });
+      }
+      if (url.includes('/api/v2/search/episodes')) {
+        return { ok: false } as Response;
+      }
+      if (url.includes('/api/v2/search/anime')) {
+        return jsonResponse({
+          success: true,
+          animes: [
+            { animeId: 295201, animeTitle: '后会友期(2026)【综艺】from 360' },
+            {
+              animeId: 295202,
+              animeTitle: '后会友期 沉浸版(2026)【综艺】from 360',
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/bangumi/295201')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [
+              {
+                episodeId: 12714,
+                episodeTitle: '第1期：再见朋友！出发前采 2026-10-22期',
+              },
+              {
+                episodeId: 12715,
+                episodeTitle: '第2期：朋友再见！尴尬 2026-10-22期',
+              },
+              {
+                episodeId: 12716,
+                episodeTitle: '抢鲜版：厉娜许飞下周正片抢先看 2026-10-23期',
+              },
+              {
+                episodeId: 12717,
+                episodeTitle: '第3期上：话需讲清楚 2026-10-29期',
+              },
+              {
+                episodeId: 12718,
+                episodeTitle: '第3期下：这一刻我等了好久 2026-10-29期',
+              },
+              {
+                episodeId: 12719,
+                episodeTitle: '加更版：厉娜怒怼许飞现场翻脸 2026-10-23期',
+              },
+              {
+                episodeId: 13086,
+                episodeTitle: '第6期上：我需要你看见我 2026-11-19期',
+              },
+            ],
+          },
+        });
+      }
+      if (url.includes('/api/v2/bangumi/295202')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [
+              {
+                episodeId: 12800,
+                episodeTitle: '沉浸版：许飞厉娜十五年不联系 2026-10-22期',
+              },
+            ],
+          },
+        });
+      }
+      if (url.includes('/api/v2/comment/12717')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '2.2,1,16777215,16777215', m: '第3期上弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=6&episode_title=${encodeURIComponent('第20261029期上')}`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.platforms[0].episodeId).toBe('12717');
+    expect(data.platforms[0].episodeTitle).toContain('第3期上');
+    expect(data.danmu[0].text).toBe('第3期上弹幕');
+  });
+
   it('match 错配集数时复核拦截并降级到 search/episodes 正确选集', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
     mockFetchDoubanWithVerification.mockResolvedValue({

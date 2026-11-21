@@ -541,8 +541,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           },
         };
 
+        // 移动端也注入：按钮由 relocateCornerControlsOnMobile 和画中画
+        // 一起挪到播放器右上角，不占控制栏空间（playerUiEnhancements.ts）
         const chromecastConfig =
-          isChrome && !isIOS && !isMobile
+          isChrome && !isIOS
             ? artplayerPluginChromecast({
                 onStateChange: () => {
                   /* no-op */

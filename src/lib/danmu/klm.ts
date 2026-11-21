@@ -267,7 +267,7 @@ async function resolveEpisodeViaAnimeSearch(
   title: string,
   year?: string | null,
   episode?: string | null,
-  options: { softYearFilter?: boolean } = {},
+  options: { softYearFilter?: boolean; allEpisodes?: boolean } = {},
 ): Promise<KlmEpisodeMatch[]> {
   if (!title.trim()) return [];
 
@@ -324,6 +324,15 @@ async function resolveEpisodeViaAnimeSearch(
   for (const result of details) {
     if (result.status !== 'fulfilled') continue;
     const { animeTitle, episodes } = result.value;
+    if (options.allEpisodes) {
+      // 打分路径：交出全部集，由 scoreEpisodeCandidate 统一裁决
+      for (const item of episodes) {
+        if (item.episodeId) {
+          candidates.push({ ...item, animeTitle });
+        }
+      }
+      continue;
+    }
     const matched = episodes.find(
       (item) => extractEpisodeNumber(item.episodeTitle || '') === episodeNum,
     );
@@ -392,16 +401,20 @@ async function resolveEpisodeByScoring(
   pushAll(
     await resolveEpisodeViaAnimeSearch(apiBaseUrl, title, year, episode, {
       softYearFilter: true,
+      allEpisodes: true,
     }),
   );
   if (candidates.length === 0) {
     return { danmu: [], resolvedEpisode: null };
   }
 
-  // 硬底线：目标序数可解析且存在序数完全一致的候选时，只在一致子集内挑，
-  // 拦截标题相似度错配（沿用 legacy 的复核语义）；对不齐时退回全候选打分
+  // 硬底线仅在「正片且本地集名没有日期信号」时启用：序数完全一致的候选
+  // 存在时只在一致子集内挑，拦截标题相似度错配。
+  // 带日期或衍生版目标时序数不可靠（本地列表混排沉浸版/加更，全局序数
+  // 与 danmu_api 正片编号天然错位，线上实测「第20261029期上」会被序数
+  // 门锁到第6期上），此时交给 scoreEpisodeCandidate 以日期/版式主导。
   const ordinalPool =
-    episodeNum > 0
+    variant === '正片' && !date && episodeNum > 0
       ? candidates.filter(
           (item) =>
             extractEpisodeNumber(item.episodeTitle || '') === episodeNum,

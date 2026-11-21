@@ -79,9 +79,10 @@ export function getBaseArtplayerConfig(options: ArtplayerConfigOptions) {
     // iOS设备需要静音才能自动播放
     muted: isIOS || isSafari,
     autoplay: true,
-    // 移动端控制栏空间有限：PiP 与网页全屏没有使用场景，直接关掉，
-    // 把空间留给画质/倍速/设置/全屏，避免全屏按钮被挤出可视区
-    pip: !isMobile,
+    // 移动端控制栏空间有限：网页全屏没有使用场景直接关掉；PiP 移动端
+    // 不占底栏，由 relocateCornerControlsOnMobile 挪到播放器右上角
+    // （playerUiEnhancements.ts），避免全屏按钮被挤出可视区
+    pip: true,
     autoSize: false,
     autoMini: false,
     screenshot: false,

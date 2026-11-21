@@ -92,6 +92,83 @@ export function hideRedundantControlsOnMobile(): Cleanup {
 }
 
 /**
+ * 移动端把投屏（Chromecast）与画中画（PiP）按钮挪到播放器右上角。
+ *
+ * 两个按钮在移动端仍有用，但底栏空间寸土寸金，留在控制栏会把倍速/全屏
+ * 挤出可视区。挂载后把它们移出 .art-controls、锚定到播放器右上角，
+ * 随控制栏一起淡入淡出。
+ */
+export function relocateCornerControlsOnMobile(): Cleanup {
+  const isMobile =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    );
+  if (!isMobile) return noop;
+
+  const styleId = 'art-cast-corner-style';
+  let style: HTMLStyleElement | null = null;
+  if (!document.getElementById(styleId)) {
+    style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .art-video-player .art-control-chromecast.art-cast-corner,
+      .art-video-player .art-control-pip.art-cast-corner {
+        position: absolute;
+        /* 顶部 12~44px 是跳过设置按钮（PlayerContainer top-3 right-3），
+           投屏/画中画排在它下方，留 8px 间距 */
+        top: 52px;
+        right: 10px;
+        z-index: 55; /* 高于 video(10)/字幕(20)/弹幕(30)/layer(40)/mask(50)，低于 bottom(60)/loading(70) */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--art-transition-duration) ease;
+      }
+      /* 画中画排在投屏左侧 */
+      .art-video-player .art-control-pip.art-cast-corner {
+        right: 52px;
+      }
+      .art-video-player .art-control-chromecast.art-cast-corner svg,
+      .art-video-player .art-control-pip.art-cast-corner svg {
+        width: 22px;
+        height: 22px;
+      }
+      .art-video-player.art-control-show .art-control-chromecast.art-cast-corner,
+      .art-video-player.art-control-show .art-control-pip.art-cast-corner {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const movedButtons: HTMLElement[] = [];
+  // 等待 chromecast 插件挂载控制按钮（与其他 UI 增强的延迟策略一致）
+  const setupTimer = setTimeout(() => {
+    const player = document.querySelector('.art-video-player');
+    if (!player) return;
+    for (const sel of ['.art-control-chromecast', '.art-control-pip']) {
+      const btn = player.querySelector(sel) as HTMLElement | null;
+      if (!btn) continue;
+      btn.classList.add('art-cast-corner');
+      player.appendChild(btn);
+      movedButtons.push(btn);
+    }
+  }, 1500);
+
+  return () => {
+    clearTimeout(setupTimer);
+    movedButtons.forEach((btn) => btn.classList.remove('art-cast-corner'));
+    style?.remove();
+  };
+}
+
+/**
  * 优化弹幕控件的 CSS
  * 隐藏弹幕开关按钮和发射器，优化配置面板显示
  */
@@ -101,15 +178,10 @@ export function optimizeDanmukuControlsCSS(): Cleanup {
   const style = document.createElement('style');
   style.id = 'danmuku-controls-optimize';
   style.textContent = `
-    /* 隐藏弹幕开关按钮和发射器 */
+    /* 隐藏弹幕开关按钮和发射器（移动端也不显示，控制栏空间留给
+       播放/时间/倍速/全屏；弹幕显隐后续如需入口可放设置面板） */
     .artplayer-plugin-danmuku .apd-toggle {
       display: none !important;
-    }
-
-    @media (max-width: 768px) {
-      .artplayer-plugin-danmuku .apd-toggle {
-        display: inline-flex !important;
-      }
     }
 
     .artplayer-plugin-danmuku .apd-emitter {
@@ -523,6 +595,7 @@ export function applyAllUiEnhancements(
   const cleanups = [
     fixControlSelectorInteraction(),
     hideRedundantControlsOnMobile(),
+    relocateCornerControlsOnMobile(),
     optimizeDanmukuControlsCSS(),
     fixDanmakuProgressConflict(),
     addMobileDanmakuToggle(artPlayerRef),
