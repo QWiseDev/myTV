@@ -799,7 +799,8 @@ describe('usePlayerInitializer', () => {
 
     expect(params.switchPromiseRef.current).toBe(currentSwitch.promise);
     expect(params.artPlayerRef.current).toBe(secondPlayer);
-    expect(firstPlayer.title).toBe('old title');
+    // 旧实例保持第一轮初始化设置的初始标题，不被第二轮触碰
+    expect(firstPlayer.title).toBe('title-1 - 第1集');
     expect(firstPlayer.poster).toBe('old.jpg');
 
     await act(async () => {
@@ -1111,7 +1112,8 @@ describe('usePlayerInitializer', () => {
     });
 
     expect(params.switchPromiseRef.current).toBeNull();
-    expect(player.title).toBe('old title');
+    // 已卸载实例保持第一轮初始化设置的初始标题，迟到结算不触碰
+    expect(player.title).toBe('title - 第1集');
     expect(player.poster).toBe('old.jpg');
   });
 

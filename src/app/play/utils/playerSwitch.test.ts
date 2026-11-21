@@ -1,5 +1,6 @@
 import {
   applyPlayerMediaSwitch,
+  buildDisplayTitle,
   shouldRebuildPlayerForMediaSwitch,
   switchPlayerMedia,
 } from './playerSwitch';
@@ -18,6 +19,23 @@ function createPlayer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('playerSwitch', () => {
+  describe('buildDisplayTitle', () => {
+    test('有选集名称时原样追加在集数之后', () => {
+      expect(buildDisplayTitle('剧集', 2, '入学篇')).toBe(
+        '剧集 - 第3集 入学篇',
+      );
+      expect(buildDisplayTitle('剧集', 2, '第3集')).toBe('剧集 - 第3集 第3集');
+      expect(buildDisplayTitle('综艺', 0, '第20261022期第01期')).toBe(
+        '综艺 - 第1集 第20261022期第01期',
+      );
+    });
+
+    test('无集名或空白时保持原格式', () => {
+      expect(buildDisplayTitle('剧集', 2)).toBe('剧集 - 第3集');
+      expect(buildDisplayTitle('剧集', 2, '  ')).toBe('剧集 - 第3集');
+    });
+  });
+
   test('source switch rebuilds player to reset HLS media pipeline', () => {
     expect(
       shouldRebuildPlayerForMediaSwitch({

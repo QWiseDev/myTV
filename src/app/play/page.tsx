@@ -969,6 +969,7 @@ function PlayPageClient() {
               currentSource,
               currentId,
               detailTitle: detail?.title,
+              episodeName: detail?.episodes_titles?.[currentEpisodeIndex],
               episodeIndex: currentEpisodeIndex,
               artPlayerRef,
               duration: videoDuration,

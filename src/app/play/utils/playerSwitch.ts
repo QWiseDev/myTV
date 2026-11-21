@@ -12,6 +12,8 @@ export interface PlayerMediaSwitchOptions {
   title: string;
   poster: string;
   episodeIndex: number;
+  /** 选集面板中该集的名称（episodes_titles），有额外信息时拼进播放器标题 */
+  episodeTitle?: string;
   isEpisodeChange: boolean;
   resumeTime?: number | null;
 }
@@ -53,6 +55,20 @@ export function clampRestoreTime(
   return time;
 }
 
+/**
+ * 播放器左上角标题：`影片名 - 第X集 选集名称`，选集名称原样取自选集面板
+ * （episodes_titles），无集名时只显示到集数。
+ */
+export function buildDisplayTitle(
+  title: string,
+  episodeIndex: number,
+  episodeTitle?: string,
+): string {
+  const base = `${title} - 第${episodeIndex + 1}集`;
+  const name = episodeTitle?.trim();
+  return name ? `${base} ${name}` : base;
+}
+
 export async function switchPlayerMedia(
   player: SwitchablePlayer,
   options: PlayerMediaSwitchOptions,
@@ -66,7 +82,11 @@ export async function switchPlayerMedia(
   await player.switchUrl(options.videoUrl);
 
   const result: PlayerMediaSwitchResult = {
-    displayTitle: `${options.title} - 第${options.episodeIndex + 1}集`,
+    displayTitle: buildDisplayTitle(
+      options.title,
+      options.episodeIndex,
+      options.episodeTitle,
+    ),
     poster: options.poster,
     resetCurrentTime: false,
   };

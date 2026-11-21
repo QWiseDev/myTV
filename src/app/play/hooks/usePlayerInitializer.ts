@@ -37,6 +37,7 @@ import { detectPlayerBrowserSupport } from '../utils/playerBrowserSupport';
 import {
   type PlayerMediaSwitchResult,
   applyPlayerMediaSwitch,
+  buildDisplayTitle,
   shouldRebuildPlayerForMediaSwitch,
   switchPlayerMedia,
 } from '../utils/playerSwitch';
@@ -427,6 +428,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               title: videoTitle,
               poster: videoCover,
               episodeIndex: currentEpisodeIndex,
+              episodeTitle: detail?.episodes_titles?.[currentEpisodeIndex],
               isEpisodeChange,
               resumeTime,
             });
@@ -588,6 +590,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         artPlayerRef.current = new Artplayer(playerConfig) as PlayArtplayer;
         const artPlayer = artPlayerRef.current;
+        // 左上角初始标题：与换集后的 displayTitle 保持同一格式（换集由 applyPlayerMediaSwitch 更新）
+        artPlayer.title = buildDisplayTitle(
+          videoTitle,
+          currentEpisodeIndex,
+          detail?.episodes_titles?.[currentEpisodeIndex],
+        );
         installSuperResolution(artPlayer);
         // 播放器实例在换集/换源时会复用；事件监听必须跨 effect generation 保持生效。
         // generation 只约束尚未提交的异步初始化，实例事件只校验当前播放器身份。

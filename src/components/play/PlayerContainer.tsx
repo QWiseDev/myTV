@@ -17,6 +17,8 @@ interface PlayerContainerProps {
   currentSource?: string;
   currentId?: string;
   detailTitle?: string;
+  /** 选集面板中当前集的名称（episodes_titles），有额外信息时展示在集数旁 */
+  episodeName?: string;
   episodeIndex: number;
   artPlayerRef: MutableRefObject<ArtPlayerLike | null>;
   duration: number;
@@ -37,6 +39,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
       currentSource,
       currentId,
       detailTitle,
+      episodeName,
       episodeIndex,
       artPlayerRef,
       duration,
@@ -123,6 +126,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
               </span>
               <span className='ml-3 text-xs lg:text-sm text-white/70 whitespace-nowrap'>
                 第{episodeIndex + 1}集
+                {episodeName?.trim() ? ` ${episodeName.trim()}` : ''}
               </span>
             </div>
           )}
