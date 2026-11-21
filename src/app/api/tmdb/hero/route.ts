@@ -14,7 +14,9 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const titles = searchParams.getAll('title').slice(0, MAX_TITLES);
+  // 客户端每个 title 都会配一个 year（无年份传空串），保证两者按下标对齐
   const years = searchParams.getAll('year');
+  const yearsAligned = years.length === searchParams.getAll('title').length;
 
   if (titles.length === 0 || titles.some((title) => !title.trim())) {
     return NextResponse.json(
@@ -41,7 +43,9 @@ export async function GET(request: NextRequest) {
     const entries = await Promise.all(
       titles.map(async (title, index) => {
         try {
-          const info = await getTMDBHeroInfoByTitle(title, years[index]);
+          // 数量对不上（旧客户端）时放弃年份，避免错位匹配到别的片
+          const year = yearsAligned ? years[index]?.trim() : '';
+          const info = await getTMDBHeroInfoByTitle(title, year || undefined);
           return [title, info] as const;
         } catch (error) {
           console.error(`[TMDB横图] 搜索失败: ${title}`, error);

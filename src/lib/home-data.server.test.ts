@@ -88,17 +88,31 @@ describe('home data server cache', () => {
     expect(second).toEqual(first);
   });
 
-  it('does not cache an empty failed critical result', async () => {
+  it('skips upstream during the failure cooldown and retries afterwards', async () => {
     mockFetchDoubanData
       .mockRejectedValueOnce(new Error('upstream failed'))
       .mockResolvedValueOnce(createDoubanResponse());
+    const startedAt = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(startedAt);
 
-    const failed = await getServerInitialHomeData();
-    const retried = await getServerInitialHomeData();
+    try {
+      const failed = await getServerInitialHomeData();
+      // 冷却期内不再请求上游，直接返回空数据交给客户端补载
+      const coolingDown = await getServerInitialHomeData();
 
-    expect(failed.hotMovies).toEqual([]);
-    expect(retried).toEqual(partialHomeData);
-    expect(mockFetchDoubanData).toHaveBeenCalledTimes(2);
+      expect(failed.hotMovies).toEqual([]);
+      expect(coolingDown.hotMovies).toEqual([]);
+      expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
+
+      // 冷却期结束后恢复请求，失败结果不会被当作数据缓存
+      nowSpy.mockReturnValue(startedAt + 60_000);
+      const retried = await getServerInitialHomeData();
+
+      expect(retried).toEqual(partialHomeData);
+      expect(mockFetchDoubanData).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('aborts a critical request after its deadline', async () => {

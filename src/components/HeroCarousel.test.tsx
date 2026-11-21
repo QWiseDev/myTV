@@ -7,12 +7,14 @@ jest.mock('next/image', () => ({
     props: Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
       fill?: boolean;
       priority?: boolean;
+      unoptimized?: boolean;
       src: string | { src: string };
     },
   ) => {
     const { src, ...imageProps } = props;
     delete imageProps.fill;
     delete imageProps.priority;
+    delete imageProps.unoptimized;
 
     return React.createElement('img', {
       ...imageProps,

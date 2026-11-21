@@ -103,8 +103,11 @@ function handleAuthFailure(
   request: NextRequest,
   pathname: string,
 ): NextResponse {
-  // 如果是 API 路由，返回 401 状态码
-  if (pathname.startsWith('/api')) {
+  // API 路由与图片优化器返回 401 状态码（图片请求重定向到登录页没有意义）
+  if (
+    pathname.startsWith('/api') ||
+    pathname.startsWith(IMAGE_OPTIMIZER_PATH)
+  ) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -116,8 +119,15 @@ function handleAuthFailure(
   return NextResponse.redirect(loginUrl);
 }
 
+// 图片优化器会让源站抓取并转码任意外链，必须鉴权，避免被当作开放代理耗尽源站并发
+const IMAGE_OPTIMIZER_PATH = '/_next/image';
+
 // 判断是否需要跳过认证的路径
 function shouldSkipAuth(pathname: string): boolean {
+  if (pathname.startsWith(IMAGE_OPTIMIZER_PATH)) {
+    return false;
+  }
+
   const skipPaths = [
     '/_next',
     '/favicon.ico',
@@ -140,6 +150,6 @@ function shouldSkipAuth(pathname: string): boolean {
 // 配置middleware匹配规则
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/image-proxy|api/proxy/spider.jar|api/telegram/|api/feedback).*)',
+    '/((?!_next/static|favicon.ico|login|register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/image-proxy|api/proxy/spider.jar|api/telegram/|api/feedback).*)',
   ],
 };

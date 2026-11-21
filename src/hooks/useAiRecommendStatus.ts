@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { DELAYS } from '@/lib/constants/home';
+
+// 服务端渲染时 useLayoutEffect 会告警，退回 useEffect
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 const AI_STATUS_CACHE_KEY = 'home_ai_status_cache_v1';
 const AI_STATUS_CACHE_TTL = 12 * 60 * 60 * 1000;
@@ -43,7 +47,8 @@ export function useAiRecommendStatus() {
   const [aiEnabled, setAiEnabled] = useState(false);
   const aiCheckTriggeredRef = useRef(false);
 
-  useEffect(() => {
+  // 用 layout effect 在首次绘制前读取本地缓存，避免 AI 按钮晚一帧出现把内容顶下去
+  useIsomorphicLayoutEffect(() => {
     if (aiCheckTriggeredRef.current || typeof window === 'undefined') return;
 
     const cachedAiStatus = readCachedAiStatus();

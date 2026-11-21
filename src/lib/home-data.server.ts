@@ -22,6 +22,10 @@ let memoryCriticalMoviesCache: CriticalMoviesCache | null = null;
 let inflightCriticalMoviesPromise: Promise<DoubanItem[]> | null = null;
 let homeDataCacheGeneration = 0;
 
+/** 失败冷却：上游故障期间不让每个 SSR 请求都等满超时，直接交给客户端补载 */
+const HOME_DATA_FAILURE_COOLDOWN_MS = 15_000;
+let criticalMoviesFailedUntil = 0;
+
 function readMemoryCriticalMovies(): DoubanItem[] | null {
   if (
     !memoryCriticalMoviesCache ||
@@ -57,6 +61,11 @@ async function getCriticalMovies(): Promise<DoubanItem[]> {
     return inflightCriticalMoviesPromise;
   }
 
+  // 冷却期内跳过上游请求，避免故障时每个首页请求都占用源站连接到超时
+  if (Date.now() < criticalMoviesFailedUntil) {
+    return EMPTY_HOME_DATA.hotMovies;
+  }
+
   const generation = homeDataCacheGeneration;
   const request = withAbortableTimeout(async (signal) => {
     const target = buildDoubanCategoryUrl({
@@ -74,8 +83,12 @@ async function getCriticalMovies(): Promise<DoubanItem[]> {
 
   try {
     const movies = await request;
-    if (movies.length > 0 && generation === homeDataCacheGeneration) {
-      writeMemoryCriticalMovies(movies);
+    if (generation === homeDataCacheGeneration) {
+      if (movies.length > 0) {
+        writeMemoryCriticalMovies(movies);
+      } else {
+        criticalMoviesFailedUntil = Date.now() + HOME_DATA_FAILURE_COOLDOWN_MS;
+      }
     }
     return movies;
   } finally {
@@ -98,4 +111,5 @@ export function clearServerHomeDataMemoryCache(): void {
   homeDataCacheGeneration += 1;
   memoryCriticalMoviesCache = null;
   inflightCriticalMoviesPromise = null;
+  criticalMoviesFailedUntil = 0;
 }

@@ -13,6 +13,8 @@ import {
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 const TMDB_BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280';
+// TMDB 上游请求超时（毫秒）
+const TMDB_FETCH_TIMEOUT_MS = 6000;
 
 // TMDB API 响应类型
 interface TMDBPerson {
@@ -174,6 +176,8 @@ async function fetchTMDB<T>(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       ...(useBearer ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
+    // 超时兜底：源站并发有限，TMDB 不通时不能让请求长期占用连接
+    signal: AbortSignal.timeout(TMDB_FETCH_TIMEOUT_MS),
   });
 
   if (!response.ok) {

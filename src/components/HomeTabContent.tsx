@@ -109,6 +109,9 @@ export default function HomeTabContent({
         id: parsed.id,
         title: record.title,
         year: record.year,
+        // 与下方继续观看卡片保持一致，带上豆瓣 ID 与搜索标题
+        doubanId: record.douban_id,
+        query: record.search_title,
       });
       if (!href) continue;
 

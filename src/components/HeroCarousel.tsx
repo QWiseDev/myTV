@@ -3,11 +3,15 @@
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TMDBHeroInfo } from '@/lib/tmdb.client';
 import type { DoubanItem } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
+import {
+  buildPlayUrl,
+  shouldUseUnoptimizedImage,
+} from '@/lib/video-card-utils';
 
 /** 继续追轮播帧所需的最小信息（由 HomeTabContent 从播放记录派生） */
 export interface HeroContinueItem {
@@ -79,9 +83,14 @@ function buildSlides(
       poster: movie.poster,
       rate: movie.rate || undefined,
       year: movie.year || undefined,
-      href: `/play?title=${encodeURIComponent(movie.title)}${
-        movie.year ? `&year=${movie.year}` : ''
-      }${movie.id ? `&douban_id=${movie.id}` : ''}&stype=movie`,
+      // 复用统一的播放链接构造，与下方热门电影卡片保持一致
+      href: buildPlayUrl({
+        from: 'douban',
+        title: movie.title,
+        year: movie.year,
+        doubanId: Number(movie.id),
+        searchType: 'movie',
+      }),
     });
     if (slides.length >= HERO_SLIDE_TOTAL) break;
   }
@@ -117,45 +126,53 @@ export default function HeroCarousel({
 
   useEffect(() => {
     if (paused || slides.length <= 1) return;
+    // 用户偏好减少动态效果时不自动轮播，仍可手动切换
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return;
+    }
     const timer = setInterval(() => {
+      // 标签页在后台时不推进，避免回来时帧已跳走并白白加载图片
+      if (document.hidden) return;
       setActiveIndex((current) => (current + 1) % slides.length);
     }, AUTO_ADVANCE_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [paused, slides.length]);
 
-  // 异步拉取 TMDB 横图（按标题批量查询），未配置 TMDB 时静默保持海报模糊垫底
-  const backdropQuery = useMemo(() => {
+  // 异步拉取 TMDB 横图（按标题批量查询），未配置 TMDB 时静默保持海报模糊垫底。
+  // 查询串作为稳定依赖：播放记录对象引用变化但帧内容不变时不重复请求。
+  const backdropQueryString = useMemo(() => {
     const seen = new Set<string>();
-    const list: { key: string; title: string; year?: string }[] = [];
+    const params = new URLSearchParams();
     for (const slide of slides) {
       const title = slide.title.trim();
       if (!title || seen.has(title)) continue;
       seen.add(title);
-      list.push({ key: slide.key, title, year: slide.year });
+      params.append('title', title);
+      // 无年份也传空串，保证服务端 title/year 按下标对齐
+      params.append('year', slide.year?.trim() || '');
     }
-    return list;
+    return params.toString();
   }, [slides]);
 
   useEffect(() => {
     // 无 fetch 的环境（jsdom 测试等）直接跳过，保持海报模糊垫底
     if (typeof fetch === 'undefined') return;
-    if (backdropQuery.length === 0) return;
+    if (!backdropQueryString) return;
     const controller = new AbortController();
-    const params = new URLSearchParams();
-    backdropQuery.forEach(({ title, year }) => {
-      params.append('title', title);
-      if (year) params.append('year', year);
-    });
+    const titles = new URLSearchParams(backdropQueryString).getAll('title');
 
     // v2：接口响应结构升级后强制绕过浏览器旧缓存
-    fetch(`/api/tmdb/hero?v=2&${params.toString()}`, {
+    fetch(`/api/tmdb/hero?v=2&${backdropQueryString}`, {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { info?: Record<string, TMDBHeroInfo | null> } | null) => {
         if (!data?.info) return;
         const next: Record<string, TMDBHeroInfo> = {};
-        for (const { title } of backdropQuery) {
+        for (const title of titles) {
           const info = data.info[title];
           if (info?.backdrop) next[title] = info;
         }
@@ -165,13 +182,24 @@ export default function HeroCarousel({
         // TMDB 未启用/网络失败：保持模糊海报降级
       });
     return () => controller.abort();
-  }, [backdropQuery]);
+  }, [backdropQueryString]);
+
+  // 只为「当前帧 + 下一帧」挂载图片，已挂载过的帧保留（淡出过渡不闪）。
+  // 避免 8 帧的底图/海报/横图在首屏同时发起请求。
+  const mediaSlideKeysRef = useRef(new Set<string>());
+  if (slides.length > 0) {
+    const current = slides[activeIndex] ?? slides[0];
+    const upcoming = slides[(activeIndex + 1) % slides.length];
+    mediaSlideKeysRef.current.add(current.key);
+    if (upcoming) mediaSlideKeysRef.current.add(upcoming.key);
+  }
 
   if (slides.length === 0) {
     if (!loading) return null;
     return (
       <div
-        className='mb-6 h-[220px] w-full animate-pulse rounded-xl bg-[#e8e8e8] dark:bg-[#2a2a2a]'
+        // 高度与真实轮播保持一致，避免数据到达时布局跳动
+        className='mb-6 h-[220px] w-full animate-pulse rounded-xl bg-[#e8e8e8] sm:h-[300px] lg:h-[360px] dark:bg-[#2a2a2a]'
         aria-label='推荐加载中'
       />
     );
@@ -185,10 +213,18 @@ export default function HeroCarousel({
       className='group relative mb-6'
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      // 键盘聚焦到轮播内（播放按钮/指示条）时同样暂停自动切换
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
     >
       <div className='relative h-[220px] overflow-hidden rounded-xl sm:h-[300px] lg:h-[360px]'>
         {slides.map((slide, index) => {
-          const info = infoByTitle[slide.title];
+          const info = infoByTitle[slide.title.trim()];
+          const isActive = index === activeIndex;
+          const showMedia = mediaSlideKeysRef.current.has(slide.key);
+          const posterSrc = processImageUrl(slide.poster);
+          // 外链/代理图直连，不经源站 /_next/image（源站并发有限）
+          const posterUnoptimized = shouldUseUnoptimizedImage(posterSrc);
           return (
             <div
               key={slide.key}
@@ -200,21 +236,27 @@ export default function HeroCarousel({
               }`}
             >
               {/* 背景层：海报模糊放大垫底，TMDB 横图就绪后叠加清晰横图 */}
-              <Image
-                src={processImageUrl(slide.poster)}
-                alt=''
-                fill
-                priority={index === 0}
-                sizes='100vw'
-                className='scale-110 object-cover blur-2xl brightness-[0.55]'
-                aria-hidden
-              />
-              {info?.backdrop && (
+              {showMedia && (
+                <Image
+                  src={posterSrc}
+                  alt=''
+                  fill
+                  priority={index === 0}
+                  unoptimized={posterUnoptimized}
+                  referrerPolicy='no-referrer'
+                  // 模糊垫底不需要高清：与右侧海报卡共用同一档小图
+                  sizes='180px'
+                  className='scale-110 object-cover blur-2xl brightness-[0.55]'
+                  aria-hidden
+                />
+              )}
+              {showMedia && info?.backdrop && (
                 <Image
                   src={info.backdrop}
                   alt=''
                   fill
-                  sizes='100vw'
+                  // 横图仍走优化器（已鉴权、按帧懒挂载），按容器实际宽度取图
+                  sizes='(max-width: 1280px) 100vw, 1280px'
                   className='animate-fade-in object-cover brightness-[0.8]'
                   aria-hidden
                 />
@@ -271,6 +313,8 @@ export default function HeroCarousel({
                   )}
                   <Link
                     href={slide.href}
+                    // 隐藏帧的链接移出 Tab 序列，避免键盘聚焦到不可见元素
+                    tabIndex={isActive ? undefined : -1}
                     className='mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#00be06] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] sm:mt-4 sm:px-5'
                   >
                     <Play size={16} className='fill-current' />
@@ -278,13 +322,17 @@ export default function HeroCarousel({
                   </Link>
                 </div>
                 <div className='relative hidden aspect-[2/3] w-[150px] shrink-0 overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/20 sm:block lg:w-[180px]'>
-                  <Image
-                    src={processImageUrl(slide.poster)}
-                    alt={slide.title}
-                    fill
-                    sizes='180px'
-                    className='object-cover'
-                  />
+                  {showMedia && (
+                    <Image
+                      src={posterSrc}
+                      alt={slide.title}
+                      fill
+                      unoptimized={posterUnoptimized}
+                      referrerPolicy='no-referrer'
+                      sizes='180px'
+                      className='object-cover'
+                    />
+                  )}
                 </div>
               </div>
             </div>

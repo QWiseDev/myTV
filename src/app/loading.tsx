@@ -38,6 +38,9 @@ export default function HomeLoading() {
             <div className='h-9 w-40 bg-[#f2f2f2]/80 dark:bg-[#2a2a2a]/80 rounded-md animate-pulse' />
           </div>
 
+          {/* 首屏轮播骨架：高度与 HeroCarousel 一致，避免内容到达后整页下移 */}
+          <div className='mb-6 h-[220px] w-full animate-pulse rounded-xl bg-[#e8e8e8] sm:h-[300px] lg:h-[360px] dark:bg-[#2a2a2a]' />
+
           <SectionSkeleton count={SKELETON_CONFIG.CONTINUE_WATCHING_COUNT} />
           <SectionSkeleton />
           <SectionSkeleton />
