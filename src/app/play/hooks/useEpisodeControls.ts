@@ -81,12 +81,22 @@ export function useEpisodeControls({
 
   const handleKeyboardShortcuts = useCallback(
     (e: KeyboardEvent) => {
-      // 忽略输入框中的按键事件
+      // 带 Ctrl/Cmd 的组合键留给浏览器（页内查找、前进后退等），不当作播放快捷键
+      if (e.ctrlKey || e.metaKey) return;
+
+      // 忽略输入类控件中的按键事件
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName;
       if (
-        (e.target as HTMLElement).tagName === 'INPUT' ||
-        (e.target as HTMLElement).tagName === 'TEXTAREA'
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        tagName === 'SELECT' ||
+        target?.isContentEditable
       )
         return;
+
+      // 焦点在按钮/链接上时，空格交还给控件自身，避免同时触发点击和播放暂停
+      if (e.key === ' ' && (tagName === 'BUTTON' || tagName === 'A')) return;
 
       // Alt + 左箭头 = 上一集
       if (e.altKey && e.key === 'ArrowLeft') {

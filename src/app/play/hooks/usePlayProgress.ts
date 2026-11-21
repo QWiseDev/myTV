@@ -236,6 +236,18 @@ export function usePlayProgress({
     lastSaveTimeRef,
   ]);
 
+  // 站内跳转离开播放页不会触发 beforeunload / visibilitychange，卸载时补存一次。
+  // 进度在调用瞬间同步读取，早于页面后续 effect 清理里的播放器销毁。
+  const saveCurrentPlayProgressRef = useRef(saveCurrentPlayProgress);
+  useEffect(() => {
+    saveCurrentPlayProgressRef.current = saveCurrentPlayProgress;
+  }, [saveCurrentPlayProgress]);
+  useEffect(() => {
+    return () => {
+      void saveCurrentPlayProgressRef.current();
+    };
+  }, []);
+
   useEffect(() => {
     const handleBeforeUnload = () => {
       const payload = buildPlayProgressPayload({

@@ -60,6 +60,18 @@ export type { PlayArtplayer } from '../utils/playerTypes';
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
 
+/** 片尾最后这段时间内不保存进度，避免记录停在片尾字幕处 */
+const NEAR_END_SKIP_SAVE_SECONDS = 180;
+/** 只有足够长的视频才启用片尾跳过；短剧等短视频整片都不足阈值，必须照常保存 */
+const NEAR_END_MIN_DURATION_SECONDS = NEAR_END_SKIP_SAVE_SECONDS * 2;
+
+export function isNearVideoEnd(currentTime: number, duration: number): boolean {
+  return (
+    duration >= NEAR_END_MIN_DURATION_SECONDS &&
+    duration - currentTime < NEAR_END_SKIP_SAVE_SECONDS
+  );
+}
+
 type AnalyticsHandlers = {
   handlePlay: (position?: number, quality?: string) => void;
   handlePause: (
@@ -159,6 +171,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const customAdFilterCodeRef = useCustomAdFilterCode();
   const initializationGenerationRef = useRef(0);
   const mediaSessionRef = useRef(0);
+  // 每个媒体只走一次自动播放兜底：canplay 在拖动进度/缓冲恢复后也会触发，
+  // 若每次都 play()，暂停状态拖进度条会被自动恢复播放
+  const autoPlayFallbackDoneRef = useRef(false);
+  // 同一次媒体加载的故障（HLS 致命错误 / video 元素错误 / 播放器 error 常连环触发）
+  // 只处理一次，避免后续调用解除换源锁并重启同一场自动换源
+  const sourceFailureHandledRef = useRef(false);
   const mediaLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -175,6 +193,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   useEffect(() => {
     const generation = ++initializationGenerationRef.current;
     const mediaSession = ++mediaSessionRef.current;
+    autoPlayFallbackDoneRef.current = false;
+    sourceFailureHandledRef.current = false;
     const isCurrentInitialization = () =>
       initializationGenerationRef.current === generation;
 
@@ -254,6 +274,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       finalNotice: string,
       options: { allowAutoSwitch?: boolean } = {},
     ) => {
+      // HLS 致命错误、video 元素错误、播放器 error 会针对同一次失败连环触发，
+      // 第一个事件已经完成标记失败/自动换源，后续事件只可能重复这一动作
+      if (sourceFailureHandledRef.current) return;
+      sourceFailureHandledRef.current = true;
       const allowAutoSwitch = options.allowAutoSwitch ?? true;
       const owner = sourceChangeOwnerRef.current;
       const isUserSwitchInFlight =
@@ -766,10 +790,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           releaseWakeLock();
           const currentTime = artPlayer.currentTime || 0;
           const duration = artPlayer.duration || 0;
-          const remainingTime = duration - currentTime;
-          const isNearEnd = duration > 0 && remainingTime < 180;
 
-          if (!isNearEnd) {
+          if (!isNearVideoEnd(currentTime, duration)) {
             saveCurrentPlayProgress();
           }
 
@@ -865,27 +887,34 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             isRestoringFromRecordRef.current = false;
           }
 
-          // 所有平台都走一遍自动播放兜底：Android Chrome 等移动端
-          // 会拦截非静音自动播放，兜底负责静音起播并在起播后恢复声音
-          scheduleAutoPlayWithFallback(artPlayer, {
-            isActivePlayer,
-            lastVolumeRef,
-          });
+          // 自动播放兜底与音量/倍速回填只在换媒体后的首个 canplay 执行一次；
+          // canplay 在拖动进度、缓冲恢复后也会触发，重复执行会
+          // 把暂停中的播放器自动恢复播放，并清掉刚弹出的提示
+          if (!autoPlayFallbackDoneRef.current) {
+            autoPlayFallbackDoneRef.current = true;
 
-          setTimeout(() => {
-            if (!isActivePlayer()) return;
-            if (Math.abs(artPlayer.volume - lastVolumeRef.current) > 0.01) {
-              artPlayer.volume = lastVolumeRef.current;
-            }
-            if (
-              Math.abs(artPlayer.playbackRate - lastPlaybackRateRef.current) >
-                0.01 &&
-              isWebKit
-            ) {
-              artPlayer.playbackRate = lastPlaybackRateRef.current;
-            }
-            artPlayer.notice.show = '';
-          }, 0);
+            // 所有平台都走一遍自动播放兜底：Android Chrome 等移动端
+            // 会拦截非静音自动播放，兜底负责静音起播并在起播后恢复声音
+            scheduleAutoPlayWithFallback(artPlayer, {
+              isActivePlayer,
+              lastVolumeRef,
+            });
+
+            setTimeout(() => {
+              if (!isActivePlayer()) return;
+              if (Math.abs(artPlayer.volume - lastVolumeRef.current) > 0.01) {
+                artPlayer.volume = lastVolumeRef.current;
+              }
+              if (
+                Math.abs(artPlayer.playbackRate - lastPlaybackRateRef.current) >
+                  0.01 &&
+                isWebKit
+              ) {
+                artPlayer.playbackRate = lastPlaybackRateRef.current;
+              }
+              artPlayer.notice.show = '';
+            }, 0);
+          }
 
           setIsVideoLoading(false);
           finishSourceSwitch('播放器就绪');
@@ -928,8 +957,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const interval =
             process.env.NEXT_PUBLIC_STORAGE_TYPE === 'upstash' ? 30000 : 10000;
 
-          const remainingTime = duration - currentTime;
-          const isNearEnd = duration > 0 && remainingTime < 180;
+          const isNearEnd = isNearVideoEnd(currentTime, duration);
 
           if (saveNow - lastSaveTimeRef.current > interval && !isNearEnd) {
             saveCurrentPlayProgress();
