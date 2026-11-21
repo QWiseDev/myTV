@@ -51,7 +51,6 @@ interface UseSourceSwitcherParams {
   currentSourceRef: MutableRefObject<string>;
   currentIdRef: MutableRefObject<string>;
   availableSources: SearchResult[];
-  setError: (msg: string | null) => void;
   currentEpisodeIndex: number;
   resumeTimeRef: MutableRefObject<number | null>;
   setVideoTitle: (title: string) => void;
@@ -81,7 +80,6 @@ export function useSourceSwitcher({
   currentSourceRef,
   currentIdRef,
   availableSources,
-  setError,
   currentEpisodeIndex,
   resumeTimeRef,
   setVideoTitle,
@@ -110,6 +108,18 @@ export function useSourceSwitcher({
       sourceChangeOwnerRef.current = null;
     };
   }, [isSourceChangingRef, sourceChangeOwnerRef]);
+
+  // 换源失败时播放器实例基本都还活着（失败多发生在提交状态之前），
+  // 用播放器内提示代替整页 ErrorScreen，保留当前正常播放。
+  const showSwitchFailureNotice = useCallback(
+    (message: string) => {
+      const art = artPlayerRef.current;
+      if (art?.notice) {
+        art.notice.show = `换源失败：${message}`;
+      }
+    },
+    [artPlayerRef],
+  );
 
   const handleSourceChange = useCallback(
     async (
@@ -181,7 +191,7 @@ export function useSourceSwitcher({
           isSourceChangingRef.current = false;
           sourceChangeOwnerRef.current = null;
           setIsVideoLoading(false);
-          setError('未找到匹配结果');
+          showSwitchFailureNotice('未找到匹配结果');
           return;
         }
 
@@ -327,14 +337,16 @@ export function useSourceSwitcher({
         sourceChangeOwnerRef.current = null;
         if (!isStillOnSourcePage()) return;
         setIsVideoLoading(false);
-        setError(err instanceof Error ? err.message : '换源失败');
+        showSwitchFailureNotice(
+          err instanceof Error ? err.message : '换源失败',
+        );
       }
     },
     [
       artPlayerRef,
       currentEpisodeIndex,
-      currentIdRef,
       currentSourceRef,
+      currentIdRef,
       danmuLoadingRef,
       danmuOperationTimeoutRef,
       episodeSwitchTimeoutRef,
@@ -348,13 +360,13 @@ export function useSourceSwitcher({
       setCurrentSource,
       setDetail,
       setAvailableSources,
-      setError,
       setIsVideoLoading,
       setVideoCover,
       setVideoDoubanId,
       setVideoLoadingStage,
       setVideoTitle,
       setVideoYear,
+      showSwitchFailureNotice,
       sourceChangeOwnerRef,
       videoDoubanIdRef,
     ],

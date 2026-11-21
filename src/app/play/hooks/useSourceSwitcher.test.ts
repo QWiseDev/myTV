@@ -52,7 +52,6 @@ function createParams(availableSources: SearchResult[]) {
     currentSourceRef: { current: 'source-a' },
     currentIdRef: { current: 'id-a' },
     availableSources,
-    setError: jest.fn(),
     currentEpisodeIndex: 0,
     resumeTimeRef: { current: null },
     setVideoTitle: jest.fn(),
@@ -109,7 +108,6 @@ describe('useSourceSwitcher', () => {
     });
 
     expect(params.setDetail).toHaveBeenCalledWith(sourceB);
-    expect(params.setError).not.toHaveBeenCalledWith('未找到匹配结果');
   });
 
   test('hydrates before committing and keeps the old play record', async () => {
@@ -189,9 +187,33 @@ describe('useSourceSwitcher', () => {
     });
 
     expect(params.setCurrentSource).not.toHaveBeenCalled();
-    expect(params.setError).toHaveBeenCalledWith(
-      '目标播放源当前集没有可播放地址',
-    );
+    expect(params.isSourceChangingRef.current).toBe(false);
+    expect(params.setIsVideoLoading).toHaveBeenLastCalledWith(false);
+  });
+
+  test('keeps the current player and shows a notice when switching fails mid-playback', async () => {
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', {
+      douban_id: 2,
+      episodes: [],
+    });
+    const notice = { show: '' };
+    const params = createParams([sourceA, sourceB]);
+    params.artPlayerRef.current = {
+      notice,
+    } as unknown as typeof params.artPlayerRef.current;
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    await act(async () => {
+      await result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'fallback title',
+      );
+    });
+
+    // 正在播放时不走整页错误，避免卸载播放器
+    expect(notice.show).toContain('目标播放源当前集没有可播放地址');
     expect(params.isSourceChangingRef.current).toBe(false);
     expect(params.setIsVideoLoading).toHaveBeenLastCalledWith(false);
   });
@@ -236,7 +258,6 @@ describe('useSourceSwitcher', () => {
 
     expect(params.setCurrentSource).not.toHaveBeenCalled();
     expect(params.setDetail).not.toHaveBeenCalled();
-    expect(params.setError).not.toHaveBeenCalled();
     expect(replaceStateSpy).not.toHaveBeenCalled();
     expect(params.isSourceChangingRef.current).toBe(false);
 
@@ -283,7 +304,6 @@ describe('useSourceSwitcher', () => {
 
     expect(params.setCurrentSource).not.toHaveBeenCalled();
     expect(params.setDetail).not.toHaveBeenCalled();
-    expect(params.setError).not.toHaveBeenCalled();
     expect(replaceStateSpy).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe('/browse');
     expect(params.isSourceChangingRef.current).toBe(false);
@@ -349,7 +369,6 @@ describe('useSourceSwitcher', () => {
     expect(params.setCurrentSource).not.toHaveBeenCalled();
     expect(params.setCurrentId).not.toHaveBeenCalled();
     expect(params.setDetail).not.toHaveBeenCalled();
-    expect(params.setError).not.toHaveBeenCalled();
     expect(params.isSourceChangingRef.current).toBe(true);
     expect(params.sourceChangeOwnerRef.current).toEqual({
       by: 'user',
