@@ -8,6 +8,7 @@ const mockGetAuthInfoFromCookie = jest.fn();
 const mockEnsureUserAccessOrResponse = jest.fn();
 const mockClearAllPlayRecords = jest.fn();
 const mockDeletePlayRecord = jest.fn();
+const mockGetAllPlayRecords = jest.fn();
 const mockGetPlayRecord = jest.fn();
 const mockInvalidateWatchingUpdatesForUser = jest.fn();
 const mockSavePlayRecord = jest.fn();
@@ -20,6 +21,7 @@ jest.mock('@/lib/db', () => ({
   db: {
     clearAllPlayRecords: mockClearAllPlayRecords,
     deletePlayRecord: mockDeletePlayRecord,
+    getAllPlayRecords: mockGetAllPlayRecords,
     getPlayRecord: mockGetPlayRecord,
     savePlayRecord: mockSavePlayRecord,
   },
@@ -90,6 +92,7 @@ describe('POST /api/playrecords', () => {
     mockEnsureUserAccessOrResponse.mockResolvedValue({});
     mockClearAllPlayRecords.mockResolvedValue(undefined);
     mockDeletePlayRecord.mockResolvedValue(undefined);
+    mockGetAllPlayRecords.mockResolvedValue({});
     mockInvalidateWatchingUpdatesForUser.mockResolvedValue(undefined);
   });
 

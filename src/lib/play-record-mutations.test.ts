@@ -1,13 +1,18 @@
+import { generateStorageKey } from './storage-key';
 import type { PlayRecord } from './types';
 
 const mockDeleteCache = jest.fn();
 const mockGetPlayRecord = jest.fn();
 const mockSavePlayRecord = jest.fn();
+const mockGetAllPlayRecords = jest.fn();
+const mockDeletePlayRecord = jest.fn();
 
 jest.mock('./db', () => ({
   db: {
     getPlayRecord: mockGetPlayRecord,
     savePlayRecord: mockSavePlayRecord,
+    getAllPlayRecords: mockGetAllPlayRecords,
+    deletePlayRecord: mockDeletePlayRecord,
   },
 }));
 
@@ -53,6 +58,8 @@ describe('play record mutations', () => {
     jest.clearAllMocks();
     mockDeleteCache.mockResolvedValue(undefined);
     mockSavePlayRecord.mockResolvedValue(undefined);
+    mockGetAllPlayRecords.mockResolvedValue({});
+    mockDeletePlayRecord.mockResolvedValue(undefined);
   });
 
   it('does not recreate a record deleted before a cron refresh acquires the queue', async () => {
@@ -93,5 +100,69 @@ describe('play record mutations', () => {
 
     expect(result).toEqual({ ignored: true });
     expect(mockSavePlayRecord).not.toHaveBeenCalled();
+  });
+
+  describe('cross-source same-title merge', () => {
+    const otherKey = generateStorageKey('dyttky', 'id-old');
+
+    it('deletes older same-title records from other sources and keeps the incoming one', async () => {
+      mockGetPlayRecord.mockResolvedValue(null);
+      mockGetAllPlayRecords.mockResolvedValue({
+        [otherKey]: createRecord({ save_time: 50, source_name: '另一源' }),
+      });
+
+      const result = await savePlayRecordMutation(
+        'merge-user',
+        'bfzy',
+        'id-new',
+        createRecord({ save_time: 100 }),
+      );
+
+      expect(result).toEqual({ ignored: false });
+      expect(mockDeletePlayRecord).toHaveBeenCalledWith(
+        'merge-user',
+        'dyttky',
+        'id-old',
+      );
+      expect(mockSavePlayRecord).toHaveBeenCalledTimes(1);
+      // 合并删除了旧源记录，追更缓存需要失效
+      expect(mockDeleteCache).toHaveBeenCalledWith('merge-user');
+    });
+
+    it('ignores the incoming save when a newer same-title record exists', async () => {
+      mockGetPlayRecord.mockResolvedValue(null);
+      mockGetAllPlayRecords.mockResolvedValue({
+        [otherKey]: createRecord({ save_time: 200 }),
+      });
+
+      const result = await savePlayRecordMutation(
+        'merge-stale-user',
+        'bfzy',
+        'id-new',
+        createRecord({ save_time: 100 }),
+      );
+
+      expect(result).toEqual({ ignored: true });
+      expect(mockDeletePlayRecord).not.toHaveBeenCalled();
+      expect(mockSavePlayRecord).not.toHaveBeenCalled();
+    });
+
+    it('keeps records of a different year even when titles match', async () => {
+      mockGetPlayRecord.mockResolvedValue(null);
+      mockGetAllPlayRecords.mockResolvedValue({
+        [otherKey]: createRecord({ year: '2010', save_time: 50 }),
+      });
+
+      const result = await savePlayRecordMutation(
+        'merge-year-user',
+        'bfzy',
+        'id-new',
+        createRecord({ save_time: 100 }),
+      );
+
+      expect(result).toEqual({ ignored: false });
+      expect(mockDeletePlayRecord).not.toHaveBeenCalled();
+      expect(mockSavePlayRecord).toHaveBeenCalledTimes(1);
+    });
   });
 });

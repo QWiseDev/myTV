@@ -26,6 +26,7 @@ import {
   STORAGE_TYPE,
   triggerGlobalError,
 } from '../core';
+import { findCrossKeySameShowRecords } from '../../play-record-merge';
 import {
   DEFAULT_PLAY_RECORDS_PAGE_SIZE,
   paginatePlayRecords,
@@ -378,6 +379,14 @@ export async function savePlayRecord(
           username,
           (records) => {
             records[key] = record;
+            // 镜像服务端跨源同名合并：乐观快照里同步移除旧源记录，避免界面残留
+            for (const target of findCrossKeySameShowRecords(
+              record,
+              key,
+              records,
+            )) {
+              delete records[target.key];
+            }
           },
         );
         if (applied) {
@@ -442,6 +451,14 @@ export async function savePlayRecord(
     try {
       const allRecords = await getAllPlayRecords();
       allRecords[key] = record;
+      // 跨源同名合并：同名只留最新一条（与服务端保存链路同一规则）
+      for (const target of findCrossKeySameShowRecords(
+        record,
+        key,
+        allRecords,
+      )) {
+        delete allRecords[target.key];
+      }
       localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
       window.dispatchEvent(
         new CustomEvent('playRecordsUpdated', {

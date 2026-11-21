@@ -630,6 +630,11 @@ describe('play record cache races', () => {
   it('reconciles a failed delete before applying the next queued save', async () => {
     const reconciliationRequest = createDeferred<Response>();
     const initialRecord = createRecord();
+    // 保存下一条不同标题的记录：同名会触发跨源同名合并，与本用例的补偿语义无关
+    const nextRecord = createRecord({
+      title: '另一部剧',
+      search_title: '另一部剧',
+    });
     let getRequestCount = 0;
     const fetchMock = jest.fn(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -658,7 +663,7 @@ describe('play record cache races', () => {
         return {
           json: async () => ({
             'source+id': initialRecord,
-            'source+next': createRecord(),
+            'source+next': nextRecord,
           }),
           ok: true,
           status: 200,
@@ -682,7 +687,6 @@ describe('play record cache races', () => {
     const deletePromise = deletePlayRecord('source', 'id').catch(
       () => undefined,
     );
-    const nextRecord = createRecord();
     const savePromise = savePlayRecord('source', 'next', nextRecord, {});
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(

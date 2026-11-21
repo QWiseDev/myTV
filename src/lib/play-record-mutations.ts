@@ -1,4 +1,6 @@
 import { db } from './db';
+import { findCrossKeySameShowRecords } from './play-record-merge';
+import { generateStorageKey, parseStorageKey } from './storage-key';
 import type { PlayRecord } from './types';
 import { invalidateWatchingUpdatesForUser } from './watching-updates-cache';
 import { shouldInvalidateWatchingUpdates } from './watching-updates-invalidation';
@@ -73,6 +75,31 @@ export async function savePlayRecordMutation(
       return { ignored: true };
     }
 
+    // 跨源同名合并：同一部作品只保留最新的播放记录
+    const allRecords = await db.getAllPlayRecords(username);
+    const mergeTargets = findCrossKeySameShowRecords(
+      record,
+      generateStorageKey(source, id),
+      allRecords,
+    );
+    // 已存在更新的同名记录时，本次写入视为过期回写，直接忽略
+    if (
+      mergeTargets.some(
+        (target) =>
+          typeof target.record.save_time === 'number' &&
+          target.record.save_time > incomingSaveTime,
+      )
+    ) {
+      return { ignored: true };
+    }
+    let mergedAny = false;
+    for (const target of mergeTargets) {
+      const parsed = parseStorageKey(target.key);
+      if (!parsed) continue;
+      await db.deletePlayRecord(username, parsed.source, parsed.id);
+      mergedAny = true;
+    }
+
     const originalEpisodes =
       record.original_episodes !== undefined &&
       record.original_episodes !== null
@@ -88,7 +115,10 @@ export async function savePlayRecordMutation(
     } as PlayRecord;
 
     await db.savePlayRecord(username, source, id, finalRecord);
-    if (shouldInvalidateWatchingUpdates(existingRecord, finalRecord)) {
+    if (
+      mergedAny ||
+      shouldInvalidateWatchingUpdates(existingRecord, finalRecord)
+    ) {
       await invalidateWatchingUpdates(username);
     }
 
