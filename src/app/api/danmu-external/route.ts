@@ -43,6 +43,17 @@ export async function GET(request: NextRequest) {
   const year = searchParams.get('year');
   const episode = searchParams.get('episode'); // 新增集数参数
   const videoUrl = searchParams.get('video_url');
+  // 本地集名与同版式内序数：综艺智能匹配（日期/版式/序数综合打分）用
+  const episodeTitle = searchParams.get('episode_title')?.slice(0, 100) || null;
+  const variantEpisodeRaw = Number.parseInt(
+    searchParams.get('variant_episode') || '',
+    10,
+  );
+  const variantEpisode =
+    Number.isFinite(variantEpisodeRaw) && variantEpisodeRaw > 0
+      ? variantEpisodeRaw
+      : null;
+  const episodeMeta = episodeTitle ? { episodeTitle, variantEpisode } : null;
 
   if (!doubanId && !title) {
     return NextResponse.json(
@@ -76,6 +87,7 @@ export async function GET(request: NextRequest) {
         title,
         year,
         episode,
+        episodeMeta,
       );
 
       if (directKlmResult.danmu.length > 0) {
@@ -109,6 +121,7 @@ export async function GET(request: NextRequest) {
           title,
           year,
           episode,
+          episodeMeta,
         );
         if (fallbackKlmResult.danmu.length > 0) {
           return klmEpisodeResponse(fallbackKlmResult);

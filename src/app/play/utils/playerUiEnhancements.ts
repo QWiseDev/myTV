@@ -66,8 +66,10 @@ export function fixControlSelectorInteraction(): Cleanup {
 /**
  * 移动端控制栏精简。
  *
- * 小屏放不下全部控件，全屏按钮会被挤出可视区：音量在移动端用设备键
- * 调节，直接隐藏（artplayer 会给移动端 UA 的播放器加 .art-mobile 类）。
+ * 小屏放不下全部控件：控制栏溢出时整行会被引擎推出可视区，最左边的
+ * 播放按钮反而先消失。音量在移动端用设备键调节；画质在移动端意义不大
+ * （小屏 + 自动码率），两者直接隐藏（artplayer 会给移动端 UA 的播放器
+ * 加 .art-mobile 类），把空间留给播放/时间/倍速/全屏。
  * PiP / 网页全屏已在配置层关闭（artplayerConfig.ts）。
  */
 export function hideRedundantControlsOnMobile(): Cleanup {
@@ -77,7 +79,8 @@ export function hideRedundantControlsOnMobile(): Cleanup {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
-    .art-video-player.art-mobile .art-control-volume {
+    .art-video-player.art-mobile .art-control-volume,
+    .art-video-player.art-mobile .art-control-quality {
       display: none !important;
     }
   `;

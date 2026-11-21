@@ -13,6 +13,7 @@ import {
 
 import { logAccess } from '@/lib/access-log';
 import { danmakuMediaKey } from '@/lib/danmaku';
+import { computeVariantOrdinal } from '@/lib/danmu/episode-match';
 import { generateStorageKey } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
 import { isUsableImageUrl, selectUsableImageUrl } from '@/lib/utils';
@@ -371,6 +372,12 @@ function PlayPageClient() {
   const videoDoubanIdRef = useSyncedRef(videoDoubanId);
   const detailRef = useSyncedRef(detail);
   const currentEpisodeIndexRef = useSyncedRef(currentEpisodeIndex);
+  // 本地集名与同版式序数：弹幕智能匹配（综艺按日期/版式对齐）用
+  const episodeTitle = detail?.episodes?.[currentEpisodeIndex]?.trim() || '';
+  const episodeTitleRef = useSyncedRef(episodeTitle);
+  const variantEpisodeRef = useSyncedRef(
+    computeVariantOrdinal(detail?.episodes || [], currentEpisodeIndex),
+  );
   const availableSourcesRef = useSyncedRef(availableSources);
   const videoUrlRequestIdRef = useRef(0);
 
@@ -631,6 +638,8 @@ function PlayPageClient() {
       videoYearRef,
       videoDoubanIdRef,
       videoUrlRef,
+      episodeTitleRef,
+      variantEpisodeRef,
       danmuLoadingRef,
       lastDanmuLoadKeyRef,
       currentSourceRef,

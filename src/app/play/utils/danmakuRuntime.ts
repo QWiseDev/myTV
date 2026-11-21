@@ -64,6 +64,10 @@ export type DanmakuRequestInput = {
   videoUrl?: string;
   episodeIndex: number;
   episodeOffset: number;
+  /** 本地集名（如「第20261022期沉浸版」），供服务端综艺智能匹配 */
+  episodeTitle?: string;
+  /** 本地集名在同版式（沉浸版/加更等）内的序数，从 1 起 */
+  variantEpisode?: number;
   source?: string;
 };
 
@@ -123,6 +127,12 @@ export function createDanmakuRequest(
   }
   if (input.videoUrl) {
     params.set('video_url', input.videoUrl);
+  }
+  if (input.episodeTitle) {
+    params.set('episode_title', input.episodeTitle.slice(0, 100));
+  }
+  if (input.variantEpisode && input.variantEpisode > 0) {
+    params.set('variant_episode', String(input.variantEpisode));
   }
   if (episode > 0) {
     params.set('episode', String(episode));

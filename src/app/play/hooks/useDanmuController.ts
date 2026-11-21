@@ -30,6 +30,10 @@ interface UseDanmuControllerParams {
   videoDoubanIdRef: MutableRefObject<number | null | undefined>;
   videoUrlRef: MutableRefObject<string>;
   currentEpisodeIndexRef: MutableRefObject<number>; // 🔧 新增：使用 ref 获取最新集数
+  /** 本地集名（综艺智能匹配：日期/版式/序数打分用） */
+  episodeTitleRef: MutableRefObject<string>;
+  /** 本地集名在同版式内的序数（从 1 起） */
+  variantEpisodeRef: MutableRefObject<number>;
   danmuLoadingRef: MutableRefObject<boolean>;
   lastDanmuLoadKeyRef: MutableRefObject<string>;
   currentSourceRef: MutableRefObject<string>;
@@ -46,6 +50,8 @@ export function useDanmuController({
   videoDoubanIdRef,
   videoUrlRef,
   currentEpisodeIndexRef, // 🔧 新增
+  episodeTitleRef,
+  variantEpisodeRef,
   danmuLoadingRef,
   lastDanmuLoadKeyRef,
   currentSourceRef,
@@ -103,6 +109,8 @@ export function useDanmuController({
       videoUrl: videoUrlRef.current,
       episodeIndex: currentEpisodeIndexRef.current,
       episodeOffset: danmuEpisodeOffsetRef.current,
+      episodeTitle: episodeTitleRef.current,
+      variantEpisode: variantEpisodeRef.current,
       source: currentSourceRef.current,
     });
     const requestInput = getCurrentRequestInput();
@@ -144,6 +152,8 @@ export function useDanmuController({
     currentSourceRef,
     currentEpisodeIndexRef,
     danmuEpisodeOffsetRef,
+    episodeTitleRef,
+    variantEpisodeRef,
     danmuLoadingRef,
     externalDanmuEnabledRef,
     videoDoubanIdRef,

@@ -658,6 +658,122 @@ describe('GET /api/danmu-external', () => {
     expect(commentUrls[0]).toContain('12714');
   });
 
+  it('episode_title 为沉浸版时按版式命中沉浸版条目（日期与正片相同也不错绑）', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/match')) {
+        return jsonResponse({ success: true, isMatched: false });
+      }
+      if (url.includes('/api/v2/search/episodes')) {
+        return { ok: false } as Response;
+      }
+      if (url.includes('/api/v2/search/anime')) {
+        return jsonResponse({
+          success: true,
+          animes: [
+            { animeId: 295201, animeTitle: '后会友期(2026)【综艺】from 360' },
+            {
+              animeId: 295202,
+              animeTitle: '后会友期 沉浸版(2026)【综艺】from 360',
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/bangumi/295201')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [
+              { episodeId: 12714, episodeTitle: '第1期：正片 2026-10-22期' },
+            ],
+          },
+        });
+      }
+      if (url.includes('/api/v2/bangumi/295202')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [{ episodeId: 12800, episodeTitle: '第1期：沉浸版' }],
+          },
+        });
+      }
+      if (url.includes('/api/v2/comment/12800')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '3.3,1,16777215,16777215', m: '沉浸版弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=1&episode_title=${encodeURIComponent(
+          '第20261022期沉浸版',
+        )}&variant_episode=1`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.platforms[0].episodeId).toBe('12800');
+    expect(data.danmu[0].text).toBe('沉浸版弹幕');
+  });
+
+  it('episode_title 带日期时在同序数候选中按日期裁决', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/match')) {
+        return jsonResponse({ success: true, isMatched: false });
+      }
+      if (url.includes('/api/v2/search/episodes')) {
+        return { ok: false } as Response;
+      }
+      if (url.includes('/api/v2/search/anime')) {
+        return jsonResponse({
+          success: true,
+          animes: [
+            { animeId: 295201, animeTitle: '后会友期(2026)【综艺】from 360' },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/bangumi/295201')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [
+              { episodeId: 12714, episodeTitle: '第1期：正片 2026-10-22期' },
+              { episodeId: 12715, episodeTitle: '第2期：上 2026-10-22期' },
+              { episodeId: 12716, episodeTitle: '第2期：下 2026-10-23期' },
+            ],
+          },
+        });
+      }
+      if (url.includes('/api/v2/comment/12715')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '1.1,1,16777215,16777215', m: '上期弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=111&title=${encodeURIComponent(
+          '后会友期',
+        )}&year=2026&episode=2&episode_title=${encodeURIComponent(
+          '第20261022期第02期',
+        )}`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    // 同为第2期的两个候选（22 日 / 23 日），按本地集名日期选中 22 日
+    expect(data.platforms[0].episodeId).toBe('12715');
+    expect(data.danmu[0].text).toBe('上期弹幕');
+  });
+
   it('match 错配集数时复核拦截并降级到 search/episodes 正确选集', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0);
     mockFetchDoubanWithVerification.mockResolvedValue({

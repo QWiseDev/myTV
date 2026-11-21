@@ -72,6 +72,8 @@ describe('useDanmuController', () => {
         lastDanmuLoadKeyRef: { current: '' },
         currentSourceRef: { current: 'source-a' },
         danmuEpisodeOffsetRef: { current: 0 },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
       }),
     );
 
@@ -135,6 +137,8 @@ describe('useDanmuController', () => {
         lastDanmuLoadKeyRef: { current: '' },
         currentSourceRef: { current: 'source-a' },
         danmuEpisodeOffsetRef: { current: 0 },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
       }),
     );
 
@@ -193,6 +197,8 @@ describe('useDanmuController', () => {
         lastDanmuLoadKeyRef: { current: '' },
         currentSourceRef: { current: 'source-a' },
         danmuEpisodeOffsetRef: { current: 0 },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
       }),
     );
 
@@ -267,6 +273,8 @@ describe('useDanmuController', () => {
         lastDanmuLoadKeyRef: { current: '' },
         currentSourceRef: { current: 'source-a' },
         danmuEpisodeOffsetRef: { current: 0 },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
       }),
     );
 
@@ -319,6 +327,8 @@ describe('useDanmuController', () => {
         lastDanmuLoadKeyRef: { current: '' },
         currentSourceRef: { current: 'source-a' },
         danmuEpisodeOffsetRef: { current: 0 },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
       }),
     );
 
