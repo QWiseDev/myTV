@@ -1,6 +1,7 @@
 import { db } from './db';
 import { fetchVideoDetail } from './fetchVideoDetail';
-import { parseStorageKey } from './storage-key';
+import { serializePlayRecordMutation } from './play-record-serialization';
+import { generateStorageKey, parseStorageKey } from './storage-key';
 import { SearchResult } from './types';
 import { PlayRecord } from './types';
 
@@ -8,6 +9,8 @@ const WATCHING_UPDATES_CACHE_PREFIX = 'watching-updates:';
 const WATCHING_UPDATES_CACHE_TTL_SECONDS = 3 * 60 * 60; // 3小时，覆盖2小时定时任务间隔
 const WATCHING_UPDATES_CONCURRENCY = 2;
 const WATCHING_UPDATES_BATCH_PAUSE = 150;
+const WATCHING_UPDATES_REFRESH_THROTTLE_PREFIX = 'watching-updates:refresh:';
+const WATCHING_UPDATES_REFRESH_THROTTLE_SECONDS = 30 * 60; // 首页主动刷新节流：同一用户 30 分钟一次
 
 const watchingUpdatesCacheGenerations = new Map<string, number>();
 const watchingUpdatesSavedGenerations = new Map<string, number>();
@@ -47,6 +50,50 @@ export type VideoDetailResolver = (
   id: string,
   fallbackTitle: string,
 ) => Promise<SearchResult | null>;
+
+// 备注完结判定：已完结 / 全40集 / 40集全 / 共40集。
+// 刻意不匹配裸"完结"，避免"未完结"、"即将完结"误判。
+const COMPLETED_REMARKS_PATTERN = /已完结|(?:全|共)\d+集|\d+集全/;
+
+export function isCompletedRemarks(remarks?: string | null): boolean {
+  if (!remarks) {
+    return false;
+  }
+  return COMPLETED_REMARKS_PATTERN.test(remarks);
+}
+
+export interface WatchingUpdatesRecordPatch {
+  source: string;
+  id: string;
+  // 回写基线：构建补丁时的记录 save_time，防止覆盖用户后来的进度保存
+  baselineSaveTime: number;
+  nextRecord: PlayRecord;
+}
+
+// 对齐旧 cron 的 applyDetailToPlayRecord：把详情带回的集数/备注/元数据回写记录
+function buildRecordPatchFromDetail(
+  record: PlayRecord,
+  detail: SearchResult,
+): PlayRecord | null {
+  const episodeCount = detail.episodes?.length || 0;
+  const remarksChanged =
+    Boolean(detail.remarks) && detail.remarks !== record.remarks;
+  const episodesChanged =
+    episodeCount > 0 && episodeCount !== record.total_episodes;
+  if (!episodesChanged && !remarksChanged) {
+    return null;
+  }
+
+  return {
+    ...record,
+    title: detail.title || record.title,
+    cover: detail.poster || record.cover,
+    year: detail.year || record.year,
+    douban_id: detail.douban_id || record.douban_id,
+    total_episodes: episodesChanged ? episodeCount : record.total_episodes,
+    remarks: detail.remarks || record.remarks,
+  };
+}
 
 function getWatchingUpdatesCacheKey(username: string): string {
   return `${WATCHING_UPDATES_CACHE_PREFIX}${username}`;
@@ -198,7 +245,10 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
   playRecords: Record<string, PlayRecord>,
   timestamp = Date.now(),
   detailResolver?: VideoDetailResolver,
-): Promise<CachedWatchingUpdate> {
+): Promise<{
+  updates: CachedWatchingUpdate;
+  recordPatches: WatchingUpdatesRecordPatch[];
+}> {
   const records = Object.entries(playRecords)
     .filter(([, record]) => parsePositiveNumber(record.total_episodes) > 1)
     .sort((left, right) => {
@@ -209,17 +259,21 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
 
   if (records.length === 0) {
     return {
-      hasUpdates: false,
-      timestamp,
-      updatedCount: 0,
-      continueWatchingCount: 0,
-      updatedSeries: [],
+      updates: {
+        hasUpdates: false,
+        timestamp,
+        updatedCount: 0,
+        continueWatchingCount: 0,
+        updatedSeries: [],
+      },
+      recordPatches: [],
     };
   }
 
   let updatedCount = 0;
   let continueWatchingCount = 0;
   const updatedSeries: CachedWatchingSeries[] = [];
+  const recordPatches: WatchingUpdatesRecordPatch[] = [];
   const detailCache = new Map<string, Promise<SearchResult | null>>();
 
   const defaultDetailResolver: VideoDetailResolver = async (
@@ -248,19 +302,12 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
     return detailPromise;
   };
 
-  const resolveLatestEpisodes = async (
+  const resolveLatestDetail = async (
     source: string,
     id: string,
     fallbackTitle: string,
-    fallbackEpisodes: number,
-  ): Promise<number> => {
-    const detail = await (detailResolver || defaultDetailResolver)(
-      source,
-      id,
-      fallbackTitle,
-    );
-    const latestEpisodes = detail?.episodes?.length || 0;
-    return latestEpisodes > 0 ? latestEpisodes : fallbackEpisodes;
+  ): Promise<SearchResult | null> => {
+    return (detailResolver || defaultDetailResolver)(source, id, fallbackTitle);
   };
 
   const handleSingleRecord = async (
@@ -273,12 +320,25 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
     const originalEpisodes = normalizeOriginalEpisodes(record);
     const currentEpisode = Math.max(parsePositiveNumber(record.index), 0);
 
-    const latestEpisodes = await resolveLatestEpisodes(
-      source,
-      id,
-      record.title,
-      totalEpisodes,
-    );
+    // 备注表明已完结的剧集不会再更新，直接信任记录数据，避免为完结剧打源站
+    const detail = isCompletedRemarks(record.remarks)
+      ? null
+      : await resolveLatestDetail(source, id, record.title);
+    const fetchedEpisodes = detail?.episodes?.length || 0;
+    const latestEpisodes =
+      fetchedEpisodes > 0 ? fetchedEpisodes : totalEpisodes;
+
+    const recordPatch = detail
+      ? buildRecordPatchFromDetail(record, detail)
+      : null;
+    if (recordPatch) {
+      recordPatches.push({
+        source,
+        id,
+        baselineSaveTime: record.save_time,
+        nextRecord: recordPatch,
+      });
+    }
 
     const protectedTotalEpisodes = Math.max(
       latestEpisodes,
@@ -316,7 +376,7 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
         ? protectedTotalEpisodes - currentEpisode
         : 0,
       latestEpisodes: protectedTotalEpisodes,
-      remarks: record.remarks,
+      remarks: detail?.remarks || record.remarks,
     });
   };
 
@@ -340,11 +400,14 @@ export async function buildWatchingUpdatesFromRecordsWithDetails(
   });
 
   return {
-    hasUpdates: updatedCount > 0 || continueWatchingCount > 0,
-    timestamp,
-    updatedCount,
-    continueWatchingCount,
-    updatedSeries,
+    updates: {
+      hasUpdates: updatedCount > 0 || continueWatchingCount > 0,
+      timestamp,
+      updatedCount,
+      continueWatchingCount,
+      updatedSeries,
+    },
+    recordPatches,
   };
 }
 
@@ -370,6 +433,77 @@ export async function invalidateWatchingUpdatesForUser(
     getWatchingUpdatesCacheGeneration(username) + 1,
   );
   await db.deleteCache(getWatchingUpdatesCacheKey(username));
+}
+
+function getWatchingUpdatesRefreshThrottleKey(username: string): string {
+  return `${WATCHING_UPDATES_REFRESH_THROTTLE_PREFIX}${username}`;
+}
+
+/**
+ * 主动刷新节流：同一用户 30 分钟内只放行一次重建。
+ * 节流键带 TTL 自动过期；缓存缺失触发的重建不经过此闸门。
+ */
+export async function tryAcquireWatchingUpdatesRefreshSlot(
+  username: string,
+): Promise<boolean> {
+  const throttleKey = getWatchingUpdatesRefreshThrottleKey(username);
+  const lastRefreshAt = await db.getCache(throttleKey);
+  if (lastRefreshAt) {
+    return false;
+  }
+
+  await db.setCache(
+    throttleKey,
+    Date.now(),
+    WATCHING_UPDATES_REFRESH_THROTTLE_SECONDS,
+  );
+  return true;
+}
+
+/** 释放刷新节流槽位（重建失败时调用，让下次请求可以重试）。 */
+export function releaseWatchingUpdatesRefreshSlot(
+  username: string,
+): Promise<void> {
+  return db.deleteCache(getWatchingUpdatesRefreshThrottleKey(username));
+}
+
+/**
+ * 把重建期间从源站拿到的最新集数/备注回写到播放记录（承接原 cron 的记录刷新职责）。
+ * 属于衍生数据同步：追更缓存已包含同一份源站快照，因此这里刻意不触发缓存失效。
+ * 基线守卫：记录在回写前被用户更新过（save_time 变化）则放弃，避免覆盖用户进度。
+ */
+export async function applyWatchingUpdatesRecordPatches(
+  username: string,
+  recordPatches: WatchingUpdatesRecordPatch[],
+): Promise<void> {
+  if (recordPatches.length === 0) {
+    return;
+  }
+
+  for (const { source, id, baselineSaveTime, nextRecord } of recordPatches) {
+    await serializePlayRecordMutation(username, async () => {
+      const key = generateStorageKey(source, id);
+      const allRecords = await db.getAllPlayRecords(username);
+      const currentRecord = allRecords[key];
+      if (!currentRecord || currentRecord.save_time !== baselineSaveTime) {
+        return;
+      }
+
+      const isAlreadySynced =
+        currentRecord.total_episodes === nextRecord.total_episodes &&
+        currentRecord.remarks === nextRecord.remarks &&
+        currentRecord.title === nextRecord.title &&
+        currentRecord.cover === nextRecord.cover &&
+        currentRecord.year === nextRecord.year &&
+        (currentRecord.douban_id ?? undefined) ===
+          (nextRecord.douban_id ?? undefined);
+      if (isAlreadySynced) {
+        return;
+      }
+
+      await db.savePlayRecord(username, source, id, nextRecord);
+    });
+  }
 }
 
 async function saveWatchingUpdatesForUser(
@@ -406,16 +540,18 @@ export async function rebuildWatchingUpdatesForUser(
         continue;
       }
 
-      const updates = await buildWatchingUpdatesFromRecordsWithDetails(
-        records,
-        Date.now(),
-        detailResolver,
-      );
+      const { updates, recordPatches } =
+        await buildWatchingUpdatesFromRecordsWithDetails(
+          records,
+          Date.now(),
+          detailResolver,
+        );
       if (generation !== getWatchingUpdatesCacheGeneration(username)) {
         continue;
       }
 
       await saveWatchingUpdatesForUser(username, updates);
+      await applyWatchingUpdatesRecordPatches(username, recordPatches);
       if (generation === getWatchingUpdatesCacheGeneration(username)) {
         return updates;
       }

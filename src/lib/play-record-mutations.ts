@@ -1,35 +1,14 @@
 import { db } from './db';
 import { findCrossKeySameShowRecords } from './play-record-merge';
+import { serializePlayRecordMutation } from './play-record-serialization';
 import { generateStorageKey, parseStorageKey } from './storage-key';
 import type { PlayRecord } from './types';
 import { invalidateWatchingUpdatesForUser } from './watching-updates-cache';
 import { shouldInvalidateWatchingUpdates } from './watching-updates-invalidation';
 
-const playRecordMutationQueues = new Map<string, Promise<void>>();
-
-export async function serializePlayRecordMutation<T>(
-  username: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = playRecordMutationQueues.get(username) || Promise.resolve();
-  const waitForPrevious = previous.catch(() => undefined);
-  let release: () => void = () => undefined;
-  const current = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const tail = waitForPrevious.then(() => current);
-  playRecordMutationQueues.set(username, tail);
-
-  await waitForPrevious;
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (playRecordMutationQueues.get(username) === tail) {
-      playRecordMutationQueues.delete(username);
-    }
-  }
-}
+// 串行化队列已抽到 play-record-serialization（无依赖叶子模块），
+// 此处保留同名导出以兼容现有调用方。
+export { serializePlayRecordMutation };
 
 async function invalidateWatchingUpdates(username: string): Promise<void> {
   try {

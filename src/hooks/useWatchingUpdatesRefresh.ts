@@ -83,7 +83,8 @@ export function useWatchingUpdatesRefresh({
       isCheckingRef.current = true;
       const eventVersion = watchingUpdatesEventVersionRef.current;
       const { checkWatchingUpdates } = await import('@/lib/watching-updates');
-      await checkWatchingUpdates(isInvalidationCheck);
+      // 始终请求服务端刷新：服务端按用户 30 分钟节流，缓存缺失或被失效时始终重建
+      await checkWatchingUpdates(true);
       lastCheckAtRef.current = Date.now();
       if (!isMountedRef.current) return;
       if (

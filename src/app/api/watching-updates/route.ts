@@ -5,9 +5,12 @@ import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import {
   getCachedWatchingUpdatesForUser,
   rebuildWatchingUpdatesForUser,
+  releaseWatchingUpdatesRefreshSlot,
+  tryAcquireWatchingUpdatesRefreshSlot,
 } from '@/lib/watching-updates-cache';
 
 export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   try {
     const auth = requireUser(request);
@@ -20,15 +23,26 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const forceRebuild =
+    const wantsRefresh =
       searchParams.get('force') === '1' || searchParams.get('force') === 'true';
 
-    let updates = forceRebuild
-      ? null
-      : await getCachedWatchingUpdatesForUser(authInfo.username);
+    const username = authInfo.username;
+    let updates = await getCachedWatchingUpdatesForUser(username);
 
     if (!updates) {
-      updates = await rebuildWatchingUpdatesForUser(authInfo.username);
+      // 缓存缺失（过期或被失效）时始终重建，不受节流限制
+      updates = await rebuildWatchingUpdatesForUser(username);
+    } else if (
+      wantsRefresh &&
+      (await tryAcquireWatchingUpdatesRefreshSlot(username))
+    ) {
+      try {
+        updates = await rebuildWatchingUpdatesForUser(username);
+      } catch (error) {
+        // 释放节流槽位，让下次请求可以重试重建
+        await releaseWatchingUpdatesRefreshSlot(username);
+        throw error;
+      }
     }
 
     return NextResponse.json(updates, {

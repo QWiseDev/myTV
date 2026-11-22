@@ -6,16 +6,8 @@ import { getConfig, refineConfig } from '@/lib/config';
 import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { db } from '@/lib/db';
-import { fetchVideoDetail } from '@/lib/fetchVideoDetail';
 import { refreshEnabledLiveChannels } from '@/lib/live';
-import { savePlayRecordMutation } from '@/lib/play-record-mutations';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
-import { parseStorageKey } from '@/lib/storage-key';
-import { Favorite, PlayRecord, SearchResult } from '@/lib/types';
-import {
-  rebuildWatchingUpdatesForUser,
-  VideoDetailResolver,
-} from '@/lib/watching-updates-cache';
 
 export const runtime = 'nodejs';
 
@@ -88,11 +80,9 @@ async function cronJob() {
     console.error('❌ 直播频道刷新失败:', err);
   }
 
-  try {
-    await refreshRecordsFavoritesAndWatchingUpdates();
-  } catch (err) {
-    console.error('❌ 播放记录、收藏和追更提醒缓存刷新失败:', err);
-  }
+  // 播放记录/收藏/追更提醒的刷新已改为按用户触发：
+  // 用户进首页经 /api/watching-updates?force=1 按需刷新（30 分钟节流），
+  // 定时全量拉取已移除，避免为不活跃用户空转打源站。
 }
 
 async function refreshAllLiveChannels() {
@@ -126,185 +116,6 @@ async function refreshConfig() {
     } catch (e) {
       console.error('刷新配置失败:', e);
     }
-  }
-}
-
-function createSharedDetailResolver(): VideoDetailResolver {
-  const detailCache = new Map<string, Promise<SearchResult | null>>();
-
-  return async (
-    source: string,
-    id: string,
-    fallbackTitle: string,
-  ): Promise<SearchResult | null> => {
-    const key = `${source}+${id}`;
-    let promise = detailCache.get(key);
-    if (!promise) {
-      promise = fetchVideoDetail({
-        source,
-        id,
-        fallbackTitle: fallbackTitle.trim(),
-      })
-        .then((detail) => {
-          const successPromise = Promise.resolve(detail);
-          detailCache.set(key, successPromise);
-          return detail;
-        })
-        .catch((err) => {
-          console.error(`获取视频详情失败 (${source}+${id}):`, err);
-          return null;
-        });
-    }
-    return promise;
-  };
-}
-
-function applyDetailToPlayRecord(
-  record: PlayRecord,
-  detail: SearchResult,
-): PlayRecord {
-  const episodeCount = detail.episodes?.length || 0;
-  if (episodeCount <= 0 || episodeCount === record.total_episodes) {
-    return record;
-  }
-
-  return {
-    title: detail.title || record.title,
-    source_name: record.source_name,
-    cover: detail.poster || record.cover,
-    index: record.index,
-    total_episodes: episodeCount,
-    play_time: record.play_time,
-    year: detail.year || record.year,
-    douban_id: detail.douban_id || record.douban_id,
-    total_time: record.total_time,
-    save_time: record.save_time,
-    search_title: record.search_title,
-    original_episodes: record.original_episodes,
-    remarks: record.remarks,
-  };
-}
-
-function applyDetailToFavorite(fav: Favorite, detail: SearchResult): Favorite {
-  const episodeCount = detail.episodes?.length || 0;
-  if (episodeCount <= 0 || episodeCount === fav.total_episodes) {
-    return fav;
-  }
-
-  return {
-    title: detail.title || fav.title,
-    source_name: fav.source_name,
-    cover: detail.poster || fav.cover,
-    year: detail.year || fav.year,
-    total_episodes: episodeCount,
-    save_time: fav.save_time,
-    search_title: fav.search_title,
-    origin: fav.origin,
-  };
-}
-
-async function refreshRecordsFavoritesAndWatchingUpdates() {
-  try {
-    const users = await db.getAllUsers();
-
-    if (process.env.USERNAME && !users.includes(process.env.USERNAME)) {
-      users.push(process.env.USERNAME);
-    }
-
-    const getDetail = createSharedDetailResolver();
-
-    const skippedUsers: string[] = [];
-    const failedUsers: string[] = [];
-
-    for (const user of users) {
-      // 检查用户是否真的存在
-      const userExists = await db.checkUserExist(user);
-      if (!userExists) {
-        skippedUsers.push(user);
-        continue;
-      }
-
-      // 播放记录
-      try {
-        const playRecords = await db.getAllPlayRecords(user);
-
-        for (const [key, record] of Object.entries(playRecords)) {
-          try {
-            const parsedKey = parseStorageKey(key);
-            if (!parsedKey) {
-              console.warn(`跳过无效的播放记录键: ${key}`);
-              continue;
-            }
-            const { source, id } = parsedKey;
-
-            const detail = await getDetail(source, id, record.title);
-            if (!detail) {
-              console.warn(`跳过无法获取详情的播放记录: ${key}`);
-              continue;
-            }
-
-            const nextRecord = applyDetailToPlayRecord(record, detail);
-
-            if (nextRecord !== record) {
-              await savePlayRecordMutation(user, source, id, nextRecord, {
-                expectedSaveTime: record.save_time,
-                requireExisting: true,
-              });
-            }
-          } catch (err) {
-            console.error(`处理播放记录失败 (${key}):`, err);
-            // 继续处理下一个记录
-          }
-        }
-      } catch (err) {
-        console.error(`获取用户播放记录失败 (${user}):`, err);
-      }
-
-      try {
-        await rebuildWatchingUpdatesForUser(user, getDetail);
-      } catch (error) {
-        failedUsers.push(user);
-        console.error(`刷新追更提醒缓存失败 (${user}):`, error);
-      }
-
-      // 收藏
-      try {
-        let favorites = await db.getAllFavorites(user);
-        favorites = Object.fromEntries(
-          Object.entries(favorites).filter(([_, fav]) => fav.origin !== 'live'),
-        );
-
-        for (const [key, fav] of Object.entries(favorites)) {
-          try {
-            const parsedKey = parseStorageKey(key);
-            if (!parsedKey) {
-              console.warn(`跳过无效的收藏键: ${key}`);
-              continue;
-            }
-            const { source, id } = parsedKey;
-
-            const favDetail = await getDetail(source, id, fav.title);
-            if (!favDetail) {
-              console.warn(`跳过无法获取详情的收藏: ${key}`);
-              continue;
-            }
-
-            const nextFavorite = applyDetailToFavorite(fav, favDetail);
-
-            if (nextFavorite !== fav) {
-              await db.saveFavorite(user, source, id, nextFavorite);
-            }
-          } catch (err) {
-            console.error(`处理收藏失败 (${key}):`, err);
-            // 继续处理下一个收藏
-          }
-        }
-      } catch (err) {
-        console.error(`获取用户收藏失败 (${user}):`, err);
-      }
-    }
-  } catch (err) {
-    console.error('刷新播放记录/收藏/追更提醒缓存任务启动失败', err);
   }
 }
 

@@ -91,7 +91,7 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
-    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
     expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
 
     cancelScheduledCheck?.();
@@ -233,7 +233,7 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(2);
-    expect(mockCheckWatchingUpdates.mock.calls).toEqual([[false], [true]]);
+    expect(mockCheckWatchingUpdates.mock.calls).toEqual([[true], [true]]);
     expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
@@ -308,7 +308,7 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
-    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
     expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
@@ -385,7 +385,7 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
-    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(false);
+    expect(mockCheckWatchingUpdates).toHaveBeenCalledWith(true);
     expect(refreshWatchingUpdates).toHaveBeenCalledTimes(1);
   });
 
@@ -409,7 +409,7 @@ describe('useWatchingUpdatesRefresh', () => {
     });
 
     expect(mockCheckWatchingUpdates).toHaveBeenCalledTimes(1);
-    expect(mockCheckWatchingUpdates).toHaveBeenLastCalledWith(false);
+    expect(mockCheckWatchingUpdates).toHaveBeenLastCalledWith(true);
 
     nowSpy.mockReturnValue(20_000 + 30 * 60 * 1000 - 1);
     await act(async () => {
