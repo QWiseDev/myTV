@@ -61,6 +61,9 @@ export interface FavoriteItem {
   year?: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type SlotUserData = Record<string, any>;
+
 // 存储接口
 export interface IStorage {
   // 播放记录相关
@@ -76,6 +79,7 @@ export interface IStorage {
     options?: PlayRecordsPageOptions,
   ): Promise<PlayRecordsPage>;
   deletePlayRecord(userName: string, key: string): Promise<void>;
+  clearAllPlayRecords(userName: string): Promise<void>;
 
   // 收藏相关
   getFavorite(userName: string, key: string): Promise<Favorite | null>;
@@ -121,6 +125,26 @@ export interface IStorage {
   getAllSkipConfigs(
     userName: string,
   ): Promise<{ [key: string]: EpisodeSkipConfig }>;
+  clearAllSkipConfigs(userName: string): Promise<void>;
+  getEpisodeSkipConfig(
+    userName: string,
+    source: string,
+    id: string,
+  ): Promise<EpisodeSkipConfig | null>;
+  saveEpisodeSkipConfig(
+    userName: string,
+    source: string,
+    id: string,
+    config: EpisodeSkipConfig,
+  ): Promise<void>;
+  deleteEpisodeSkipConfig(
+    userName: string,
+    source: string,
+    id: string,
+  ): Promise<void>;
+  getAllEpisodeSkipConfigs(
+    userName: string,
+  ): Promise<{ [key: string]: EpisodeSkipConfig }>;
 
   // 数据清理相关
   clearAllData(): Promise<void>;
@@ -132,6 +156,24 @@ export interface IStorage {
   setCache(key: string, data: any, expireSeconds?: number): Promise<void>;
   deleteCache(key: string): Promise<void>;
   clearExpiredCache(prefix?: string): Promise<void>;
+  keys(pattern: string): Promise<string[]>;
+
+  // 老虎机相关
+  getSlotUserData(userName: string): Promise<SlotUserData | null>;
+  setSlotUserData(
+    userName: string,
+    data: SlotUserData,
+    expireSeconds?: number,
+  ): Promise<void>;
+  listSlotUsers(): Promise<Array<SlotUserData & { username: string }>>;
+  getSlotLeaderboard(
+    type?: string,
+    limit?: number,
+  ): Promise<Array<SlotUserData & { username: string }>>;
+  incrementRateLimit(
+    key: string,
+    expireSeconds: number,
+  ): Promise<number | null>;
 
   // 播放统计相关
   getPlayStats(): Promise<PlayStatsResult>;
@@ -163,6 +205,7 @@ export interface IStorage {
     limit?: number,
     offset?: number,
   ): Promise<AccessLog[]>;
+  deleteAccessLogs(username?: string): Promise<number>;
 }
 
 // 搜索结果数据结构

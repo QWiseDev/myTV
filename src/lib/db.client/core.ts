@@ -33,8 +33,7 @@ export interface Favorite {
 // ---- 环境变量 ----
 export const STORAGE_TYPE = (() => {
   const raw =
-    (typeof window !== 'undefined' &&
-      (window as any).RUNTIME_CONFIG?.STORAGE_TYPE) ||
+    (typeof window !== 'undefined' && window.RUNTIME_CONFIG?.STORAGE_TYPE) ||
     (process.env.STORAGE_TYPE as
       | 'localstorage'
       | 'redis'

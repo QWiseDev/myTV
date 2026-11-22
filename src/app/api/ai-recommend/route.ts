@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
+import { toDateKey } from '@/lib/date-utils';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 结合当前日期的结构化推荐系统提示词
-    const currentDate = new Date().toISOString().split('T')[0];
+    const currentDate = toDateKey();
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
     const randomElements = [

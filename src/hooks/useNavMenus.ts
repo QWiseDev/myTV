@@ -76,8 +76,8 @@ export function useNavMenuItems(): NavMenuItem[] {
   const [hasCustomCategories, setHasCustomCategories] = useState(false);
 
   useEffect(() => {
-    const runtimeConfig = (window as any).RUNTIME_CONFIG;
-    if (runtimeConfig?.CUSTOM_CATEGORIES?.length > 0) {
+    const customCategories = window.RUNTIME_CONFIG?.CUSTOM_CATEGORIES;
+    if (customCategories && customCategories.length > 0) {
       setHasCustomCategories(true);
     }
   }, []);

@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- 滚轮事件处理器挂载在 DOM 容器上的既有写法，与原直播页实现保持一致 */
-
-import type { MutableRefObject, RefObject } from 'react';
+import { type MutableRefObject, type RefObject, useEffect } from 'react';
 
 import type { LiveChannel } from '../hooks/useLiveSources';
 
@@ -26,6 +24,23 @@ export function GroupTabBar({
   groupContainerRef,
   groupButtonRefs,
 }: GroupTabBarProps) {
+  useEffect(() => {
+    const container = groupContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (container.scrollWidth > container.clientWidth) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [groupContainerRef]);
+
   return (
     <div className='flex items-center gap-4 mb-4 border-b border-gray-300 dark:border-gray-700 -mx-6 px-6 flex-shrink-0'>
       {/* 切换状态提示 */}
@@ -36,38 +51,7 @@ export function GroupTabBar({
         </div>
       )}
 
-      <div
-        className='flex-1 overflow-x-auto'
-        ref={groupContainerRef}
-        onMouseEnter={() => {
-          // 鼠标进入分组标签区域时，添加滚轮事件监听
-          const container = groupContainerRef.current;
-          if (container) {
-            const handleWheel = (e: WheelEvent) => {
-              if (container.scrollWidth > container.clientWidth) {
-                e.preventDefault();
-                container.scrollLeft += e.deltaY;
-              }
-            };
-            container.addEventListener('wheel', handleWheel, {
-              passive: false,
-            });
-            // 将事件处理器存储在容器上，以便后续移除
-            (container as any)._wheelHandler = handleWheel;
-          }
-        }}
-        onMouseLeave={() => {
-          // 鼠标离开分组标签区域时，移除滚轮事件监听
-          const container = groupContainerRef.current;
-          if (container && (container as any)._wheelHandler) {
-            container.removeEventListener(
-              'wheel',
-              (container as any)._wheelHandler,
-            );
-            delete (container as any)._wheelHandler;
-          }
-        }}
-      >
+      <div className='flex-1 overflow-x-auto' ref={groupContainerRef}>
         <div className='flex gap-4 min-w-max'>
           {Object.keys(groupedChannels).map((group, index) => (
             <button

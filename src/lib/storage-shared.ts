@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import type { PlayStatsResult, SlotUserData, UserPlayStat } from './types';
+
 /**
  * redis-base.db 与 upstash.db 两个存储适配器共享的纯函数工具。
  * 只放无状态的数据整形与键名生成逻辑，不包含任何客户端连接细节。
@@ -98,7 +100,7 @@ export function parseRankMembers(raw: unknown): string[] {
 }
 
 // —— 老虎机排行键名与计分 ——
-export type SlotUserData = Record<string, any>;
+export type { SlotUserData };
 
 export const SLOT_RANK_TYPES = ['coins', 'biggestWin', 'totalWins'];
 
@@ -119,3 +121,43 @@ export function slotRankKey(type: string) {
 }
 
 export const SEARCH_HISTORY_LIMIT = 20;
+
+export const EMPTY_PLAY_STATS: PlayStatsResult = {
+  totalUsers: 0,
+  totalWatchTime: 0,
+  totalPlays: 0,
+  avgWatchTimePerUser: 0,
+  avgPlaysPerUser: 0,
+  userStats: [],
+  topSources: [],
+  dailyStats: [],
+  registrationStats: {
+    todayNewUsers: 0,
+    totalRegisteredUsers: 0,
+    registrationTrend: [],
+  },
+  activeUsers: {
+    daily: 0,
+    weekly: 0,
+    monthly: 0,
+  },
+};
+
+export function emptyUserPlayStat(userName: string): UserPlayStat {
+  return {
+    username: userName,
+    totalWatchTime: 0,
+    totalPlays: 0,
+    lastPlayTime: 0,
+    recentRecords: [],
+    avgWatchTime: 0,
+    mostWatchedSource: '',
+    totalMovies: 0,
+    firstWatchDate: Date.now(),
+    lastUpdateTime: Date.now(),
+    loginCount: 0,
+    firstLoginTime: 0,
+    lastLoginTime: 0,
+    lastLoginDate: 0,
+  };
+}

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { toDateKey } from '@/lib/date-utils';
 import { db } from '@/lib/db';
 import { PlayRecord, UserPlayStat } from '@/lib/types';
 
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest) {
 
         // 统计注册时间分布（近7天）
         if (userCreatedAt >= sevenDaysAgo.getTime()) {
-          const regDate = new Date(userCreatedAt).toISOString().split('T')[0];
+          const regDate = toDateKey(userCreatedAt);
           registrationData[regDate] = (registrationData[regDate] || 0) + 1;
         }
 
@@ -200,7 +201,7 @@ export async function GET(request: NextRequest) {
           // 统计近7天数据
           const recordDate = new Date(record.save_time);
           if (recordDate >= sevenDaysAgo) {
-            const dateKey = recordDate.toISOString().split('T')[0];
+            const dateKey = toDateKey(recordDate);
             if (!dailyData[dateKey]) {
               dailyData[dateKey] = { watchTime: 0, plays: 0 };
             }
@@ -301,7 +302,7 @@ export async function GET(request: NextRequest) {
     }> = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = toDateKey(date);
       const data = dailyData[dateKey] || { watchTime: 0, plays: 0 };
       dailyStats.push({
         date: dateKey,
@@ -314,7 +315,7 @@ export async function GET(request: NextRequest) {
     const registrationStats: Array<{ date: string; newUsers: number }> = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = toDateKey(date);
       const newUsers = registrationData[dateKey] || 0;
       registrationStats.push({
         date: dateKey,

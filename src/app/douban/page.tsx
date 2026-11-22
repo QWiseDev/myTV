@@ -83,9 +83,9 @@ function DoubanPageClient() {
 
   // 获取自定义分类数据
   useEffect(() => {
-    const runtimeConfig = (window as any).RUNTIME_CONFIG;
-    if (runtimeConfig?.CUSTOM_CATEGORIES?.length > 0) {
-      setCustomCategories(runtimeConfig.CUSTOM_CATEGORIES);
+    const customCategories = window.RUNTIME_CONFIG?.CUSTOM_CATEGORIES;
+    if (customCategories && customCategories.length > 0) {
+      setCustomCategories(customCategories);
     }
   }, []);
 

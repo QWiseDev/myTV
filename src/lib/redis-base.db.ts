@@ -3,9 +3,12 @@
 import { createClient, RedisClientType } from 'redis';
 
 import { AdminConfig } from './admin.types';
+import { toDateKey } from './date-utils';
 import { parseStorageKey } from './storage-key';
 import {
   decodeHashObject,
+  EMPTY_PLAY_STATS,
+  emptyUserPlayStat,
   encodeHashObject,
   ensureString,
   ensureStringArray,
@@ -124,18 +127,6 @@ export function createRedisClient(
     // 添加错误事件监听
     client.on('error', (err) => {
       console.error(`${config.clientName} client error:`, err);
-    });
-
-    client.on('connect', () => {
-      /* no-op */
-    });
-
-    client.on('reconnecting', () => {
-      /* no-op */
-    });
-
-    client.on('ready', () => {
-      /* no-op */
     });
 
     // 初始连接，带重试机制
@@ -334,23 +325,14 @@ export abstract class BaseRedisStorage implements IStorage {
 
   // 删除用户及其所有数据
   async deleteUser(userName: string): Promise<void> {
-    // 删除用户密码
-    await this.withRetry(() => this.client.del(this.userPwdKey(userName)));
-
-    // 删除搜索历史
-    await this.withRetry(() => this.client.del(this.shKey(userName)));
-
-    // 删除播放记录
-    await this.clearAllPlayRecords(userName);
-
-    // 删除收藏夹
-    await this.withRetry(() => this.client.del(this.favHashKey(userName)));
-
-    // 删除跳过片头片尾配置
-    await this.clearAllSkipConfigs(userName);
-
-    // 删除用户登入统计数据
-    await this.withRetry(() => this.client.del(this.loginStatsKey(userName)));
+    await Promise.all([
+      this.withRetry(() => this.client.del(this.userPwdKey(userName))),
+      this.withRetry(() => this.client.del(this.shKey(userName))),
+      this.clearAllPlayRecords(userName),
+      this.withRetry(() => this.client.del(this.favHashKey(userName))),
+      this.clearAllSkipConfigs(userName),
+      this.withRetry(() => this.client.del(this.loginStatsKey(userName))),
+    ]);
   }
 
   // ---------- 搜索历史 ----------
@@ -888,9 +870,10 @@ export abstract class BaseRedisStorage implements IStorage {
         allUserStats.push(...batchStats);
       }
 
+      // 设置项目开始时间，2025年9月14日
+      const PROJECT_START_DATE = new Date('2025-09-14').getTime();
+
       for (const userStat of allUserStats) {
-        // 设置项目开始时间，2025年9月14日
-        const PROJECT_START_DATE = new Date('2025-09-14').getTime();
         // 模拟用户创建时间（Redis模式下通常没有这个信息，使用首次播放时间或项目开始时间）
         const userCreatedAt = userStat.firstWatchDate || PROJECT_START_DATE;
         const registrationDays =
@@ -903,7 +886,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
         // 统计注册时间分布（近7天）
         if (userCreatedAt >= sevenDaysAgo) {
-          const regDate = new Date(userCreatedAt).toISOString().split('T')[0];
+          const regDate = toDateKey(userCreatedAt);
           registrationData[regDate] = (registrationData[regDate] || 0) + 1;
         }
 
@@ -948,7 +931,7 @@ export abstract class BaseRedisStorage implements IStorage {
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now - i * 24 * 60 * 60 * 1000);
         dailyStats.push({
-          date: date.toISOString().split('T')[0],
+          date: toDateKey(date),
           watchTime: Math.floor(totalWatchTime / 7), // 简化计算
           plays: Math.floor(totalPlays / 7),
         });
@@ -958,7 +941,7 @@ export abstract class BaseRedisStorage implements IStorage {
       const registrationStats = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = date.toISOString().split('T')[0];
+        const dateKey = toDateKey(date);
         registrationStats.push({
           date: dateKey,
           newUsers: registrationData[dateKey] || 0,
@@ -1006,28 +989,7 @@ export abstract class BaseRedisStorage implements IStorage {
       return result;
     } catch (error) {
       console.error('获取播放统计失败:', error);
-      return {
-        totalUsers: 0,
-        totalWatchTime: 0,
-        totalPlays: 0,
-        avgWatchTimePerUser: 0,
-        avgPlaysPerUser: 0,
-        userStats: [],
-        topSources: [],
-        dailyStats: [],
-        // 新增：用户注册统计
-        registrationStats: {
-          todayNewUsers: 0,
-          totalRegisteredUsers: 0,
-          registrationTrend: [],
-        },
-        // 新增：用户活跃度统计
-        activeUsers: {
-          daily: 0,
-          weekly: 0,
-          monthly: 0,
-        },
-      };
+      return EMPTY_PLAY_STATS;
     }
   }
 
@@ -1148,24 +1110,7 @@ export abstract class BaseRedisStorage implements IStorage {
       };
     } catch (error) {
       console.error(`获取用户 ${userName} 统计失败:`, error);
-      return {
-        username: userName,
-        totalWatchTime: 0,
-        totalPlays: 0,
-        lastPlayTime: 0,
-        recentRecords: [],
-        avgWatchTime: 0,
-        mostWatchedSource: '',
-        // 新增字段
-        totalMovies: 0,
-        firstWatchDate: Date.now(),
-        lastUpdateTime: Date.now(),
-        // 登入统计字段
-        loginCount: 0,
-        firstLoginTime: 0,
-        lastLoginTime: 0,
-        lastLoginDate: 0,
-      };
+      return emptyUserPlayStat(userName);
     }
   }
 
@@ -1308,7 +1253,7 @@ export abstract class BaseRedisStorage implements IStorage {
 
   // ---------- 访问日志相关 ----------
   private accessLogKey(timestamp: number, username?: string) {
-    const date = new Date(timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+    const date = toDateKey(timestamp); // YYYY-MM-DD
     if (username) {
       return `al:${date}:${username}:${timestamp}`;
     }
@@ -1326,7 +1271,7 @@ export abstract class BaseRedisStorage implements IStorage {
     try {
       const timestamp = accessLog.timestamp || Date.now();
       const logKey = this.accessLogKey(timestamp, accessLog.username);
-      const date = new Date(timestamp).toISOString().split('T')[0];
+      const date = toDateKey(timestamp);
 
       // 保存访问日志记录
       await this.withRetry(() =>
@@ -1367,13 +1312,13 @@ export abstract class BaseRedisStorage implements IStorage {
       const endTime = filters.endTime || now;
 
       // 生成日期范围
-      const startDate = new Date(startTime).toISOString().split('T')[0];
-      const endDate = new Date(endTime).toISOString().split('T')[0];
+      const startDate = toDateKey(startTime);
+      const endDate = toDateKey(endTime);
 
       // 遍历日期范围内的索引
       const currentDate = new Date(startDate);
-      while (currentDate.toISOString().split('T')[0] <= endDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+      while (toDateKey(currentDate) <= endDate) {
+        const dateStr = toDateKey(currentDate);
         const indexKey = this.accessLogIndexKey(dateStr, filters.username);
 
         // 获取当天的索引列表

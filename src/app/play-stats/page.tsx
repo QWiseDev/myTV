@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
+import { toDateKey } from '@/lib/date-utils';
 import { PlayRecord, ReleaseCalendarItem, UserPlayStat } from '@/lib/types';
 import {
   type WatchingUpdate,
@@ -201,9 +202,7 @@ const PlayStatsPage = () => {
       twoWeeks.setDate(today.getDate() + 14);
 
       const response = await fetch(
-        `/api/release-calendar?dateFrom=${
-          today.toISOString().split('T')[0]
-        }&dateTo=${twoWeeks.toISOString().split('T')[0]}`,
+        `/api/release-calendar?dateFrom=${toDateKey(today)}&dateTo=${toDateKey(twoWeeks)}`,
       );
 
       if (response.ok) {
@@ -270,9 +269,7 @@ const PlayStatsPage = () => {
   }, [router]);
 
   const storageType =
-    (typeof window !== 'undefined' &&
-      (window as unknown as { RUNTIME_CONFIG?: { STORAGE_TYPE?: string } })
-        .RUNTIME_CONFIG?.STORAGE_TYPE) ||
+    (typeof window !== 'undefined' && window.RUNTIME_CONFIG?.STORAGE_TYPE) ||
     'localstorage';
 
   useEffect(() => {

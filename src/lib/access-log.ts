@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 
 import { getAuthInfoFromBrowserCookie } from './auth';
+import { toDateKey } from './date-utils';
 
 /**
  * 访问日志类型定义
@@ -158,7 +159,7 @@ export class AccessLogService {
     try {
       if (typeof window === 'undefined') return;
 
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const today = toDateKey(); // YYYY-MM-DD
       const historyKey = `access_log_history_${today}`;
       const maxHistory = 50; // 最多保留50条今日记录
 

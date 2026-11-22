@@ -71,8 +71,7 @@ export function useVideoSearch({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedFluidSearch = localStorage.getItem('fluidSearch');
-      const defaultFluidSearch =
-        (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
+      const defaultFluidSearch = window.RUNTIME_CONFIG?.FLUID_SEARCH !== false;
       if (savedFluidSearch !== null) {
         setUseFluidSearch(safeJsonParse<boolean>(savedFluidSearch, true));
       } else if (defaultFluidSearch !== undefined) {
@@ -120,7 +119,7 @@ export function useVideoSearch({
           );
         } else {
           const defaultFluidSearch =
-            (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
+            window.RUNTIME_CONFIG?.FLUID_SEARCH !== false;
           currentFluidSearch = defaultFluidSearch;
         }
       }

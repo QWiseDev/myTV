@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use server';
 
+import { toDateKey } from './date-utils';
 import { ReleaseCalendarItem } from './types';
 
 const baseUrl = 'https://g.manmankan.com/dy2013';
@@ -54,7 +55,7 @@ function parseMovieHTML(html: string): ReleaseCalendarItem[] {
         const dateStr = dateMatch[1].replace(/\//g, '-'); // 转换日期格式
 
         // 只保留今天及以后的数据
-        const today = new Date().toISOString().split('T')[0];
+        const today = toDateKey();
         if (dateStr < today) {
           continue;
         }
@@ -144,7 +145,7 @@ function parseTVHTML(html: string): ReleaseCalendarItem[] {
         const dateStr = dateMatch[1].replace(/\//g, '-'); // 转换日期格式
 
         // 只保留今天及以后的数据
-        const today = new Date().toISOString().split('T')[0];
+        const today = toDateKey();
         if (dateStr < today) {
           continue;
         }

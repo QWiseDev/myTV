@@ -3,8 +3,11 @@
 import { Redis } from '@upstash/redis';
 
 import { AdminConfig } from './admin.types';
+import { toDateKey } from './date-utils';
 import {
   decodeHashObject,
+  EMPTY_PLAY_STATS,
+  emptyUserPlayStat,
   encodeHashObject,
   ensureString,
   ensureStringArray,
@@ -226,23 +229,14 @@ export class UpstashRedisStorage implements IStorage {
 
   // 删除用户及其所有数据
   async deleteUser(userName: string): Promise<void> {
-    // 删除用户密码
-    await withRetry(() => this.client.del(this.userPwdKey(userName)));
-
-    // 删除搜索历史
-    await withRetry(() => this.client.del(this.shKey(userName)));
-
-    // 删除播放记录
-    await this.clearAllPlayRecords(userName);
-
-    // 删除收藏夹
-    await withRetry(() => this.client.del(this.favHashKey(userName)));
-
-    // 删除跳过片头片尾配置
-    await this.clearAllSkipConfigs(userName);
-
-    // 删除用户登入统计数据
-    await withRetry(() => this.client.del(this.loginStatsKey(userName)));
+    await Promise.all([
+      withRetry(() => this.client.del(this.userPwdKey(userName))),
+      withRetry(() => this.client.del(this.shKey(userName))),
+      this.clearAllPlayRecords(userName),
+      withRetry(() => this.client.del(this.favHashKey(userName))),
+      this.clearAllSkipConfigs(userName),
+      withRetry(() => this.client.del(this.loginStatsKey(userName))),
+    ]);
   }
 
   // ---------- 搜索历史 ----------
@@ -684,7 +678,7 @@ export class UpstashRedisStorage implements IStorage {
 
           const recordDate = new Date(record.save_time);
           if (recordDate.getTime() >= sevenDaysAgo) {
-            const dateKey = recordDate.toISOString().split('T')[0];
+            const dateKey = toDateKey(recordDate);
             if (!dailyData[dateKey]) {
               dailyData[dateKey] = { watchTime: 0, plays: 0 };
             }
@@ -702,7 +696,7 @@ export class UpstashRedisStorage implements IStorage {
         }
 
         if (userCreatedAt >= sevenDaysAgo) {
-          const regDate = new Date(userCreatedAt).toISOString().split('T')[0];
+          const regDate = toDateKey(userCreatedAt);
           registrationData[regDate] = (registrationData[regDate] || 0) + 1;
         }
 
@@ -759,7 +753,7 @@ export class UpstashRedisStorage implements IStorage {
       }> = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = date.toISOString().split('T')[0];
+        const dateKey = toDateKey(date);
         const data = dailyData[dateKey] || { watchTime: 0, plays: 0 };
         dailyStats.push({
           date: dateKey,
@@ -772,7 +766,7 @@ export class UpstashRedisStorage implements IStorage {
       const registrationStats = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = date.toISOString().split('T')[0];
+        const dateKey = toDateKey(date);
         registrationStats.push({
           date: dateKey,
           newUsers: registrationData[dateKey] || 0,
@@ -817,28 +811,7 @@ export class UpstashRedisStorage implements IStorage {
       return result;
     } catch (error) {
       console.error('获取播放统计失败:', error);
-      return {
-        totalUsers: 0,
-        totalWatchTime: 0,
-        totalPlays: 0,
-        avgWatchTimePerUser: 0,
-        avgPlaysPerUser: 0,
-        userStats: [],
-        topSources: [],
-        dailyStats: [],
-        // 新增：用户注册统计
-        registrationStats: {
-          todayNewUsers: 0,
-          totalRegisteredUsers: 0,
-          registrationTrend: [],
-        },
-        // 新增：用户活跃度统计
-        activeUsers: {
-          daily: 0,
-          weekly: 0,
-          monthly: 0,
-        },
-      };
+      return EMPTY_PLAY_STATS;
     }
   }
 
@@ -970,22 +943,7 @@ export class UpstashRedisStorage implements IStorage {
       return result;
     } catch (error) {
       console.error(`获取用户 ${userName} 统计失败:`, error);
-      const errorResult = {
-        username: userName,
-        totalWatchTime: 0,
-        totalPlays: 0,
-        lastPlayTime: 0,
-        recentRecords: [],
-        avgWatchTime: 0,
-        mostWatchedSource: '',
-        totalMovies: 0,
-        firstWatchDate: Date.now(),
-        lastUpdateTime: Date.now(),
-        loginCount: 0,
-        firstLoginTime: 0,
-        lastLoginTime: 0,
-        lastLoginDate: 0,
-      };
+      const errorResult = emptyUserPlayStat(userName);
 
       // 错误时也存入缓存，避免短时间内重复请求
       this.userStatsCache.set(userName, {

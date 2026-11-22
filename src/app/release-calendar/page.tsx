@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { toDateKey } from '@/lib/date-utils';
 import { ReleaseCalendarItem, ReleaseCalendarResult } from '@/lib/types';
 import { useBackToTopController } from '@/hooks/useBackToTopController';
 
@@ -509,9 +510,7 @@ export default function ReleaseCalendarPage() {
                     );
                     return uniqueCurrentItems;
                   })().map((item) => {
-                    const isToday =
-                      item.releaseDate ===
-                      new Date().toISOString().split('T')[0];
+                    const isToday = item.releaseDate === toDateKey();
                     const isUpcoming = new Date(item.releaseDate) > new Date();
                     const isPast = new Date(item.releaseDate) < new Date();
 
