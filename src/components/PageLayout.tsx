@@ -1,4 +1,8 @@
+'use client';
+
 import { Suspense } from 'react';
+
+import { useIsLoggedIn } from '@/hooks/useIsLoggedIn';
 
 import Header from './Header';
 import MobileBottomNav from './MobileBottomNav';
@@ -20,13 +24,17 @@ const PageLayout = ({
   fullWidth = false,
   theater = false,
 }: PageLayoutProps) => {
+  // 访客（未登录）：隐藏全部导航入口，只留顶栏 Logo 与登录按钮
+  const isLoggedIn = useIsLoggedIn();
+  const showChrome = isLoggedIn;
+
   return (
     <div className='w-full min-h-screen'>
       {/*
         爱奇艺式布局：左侧导航栏仅用于首页/浏览页（md+ 展示）；
         剧场模式（播放页/直播页）沿用爱奇艺播放页式顶部导航，内容全宽
       */}
-      {!theater && (
+      {showChrome && !theater && (
         <Suspense fallback={null}>
           <SideNav activePath={activePath} />
         </Suspense>
@@ -58,9 +66,11 @@ const PageLayout = ({
       </Suspense>
 
       <main
-        className={`flex-1 transition-all duration-300 ${theater ? '' : 'md:pl-44'} ${
-          disableMobilePadding ? 'mb-0' : 'mb-14 md:mb-0'
-        } ${theater ? 'md:h-screen md:overflow-hidden' : ''}`}
+        className={`flex-1 transition-all duration-300 ${
+          theater || !showChrome ? '' : 'md:pl-44'
+        } ${disableMobilePadding || !showChrome ? 'mb-0' : 'mb-14 md:mb-0'} ${
+          theater ? 'md:h-screen md:overflow-hidden' : ''
+        }`}
         style={{
           paddingTop: 'calc(4rem + env(safe-area-inset-top))',
           paddingBottom:
@@ -80,9 +90,11 @@ const PageLayout = ({
         </div>
       </main>
 
-      <div className={`md:hidden ${disableMobilePadding ? 'hidden' : ''}`}>
-        <MobileBottomNav activePath={activePath} />
-      </div>
+      {showChrome && (
+        <div className={`md:hidden ${disableMobilePadding ? 'hidden' : ''}`}>
+          <MobileBottomNav activePath={activePath} />
+        </div>
+      )}
     </div>
   );
 };

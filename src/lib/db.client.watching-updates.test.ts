@@ -6,6 +6,10 @@ jest.mock('./watching-updates', () => ({
   forceClearWatchingUpdatesCache: mockForceClearWatchingUpdatesCache,
 }));
 
+jest.mock('@/lib/auth', () => ({
+  getAuthInfoFromBrowserCookie: () => ({ username: 'test-user' }),
+}));
+
 export {};
 
 function createRecord(overrides: Partial<PlayRecord> = {}): PlayRecord {

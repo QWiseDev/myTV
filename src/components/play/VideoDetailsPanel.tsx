@@ -3,6 +3,7 @@ import Image from 'next/image';
 
 import type { SearchResult } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
+import { useIsLoggedIn } from '@/hooks/useIsLoggedIn';
 
 import type {
   BangumiDetails as BangumiDetailsData,
@@ -127,6 +128,9 @@ export default function VideoDetailsPanel({
     ? movieDetails.genres.slice(0, 3).join(' ')
     : detail?.type_name || detail?.class || '';
 
+  // 访客（未登录）隐藏收藏与网盘等登录功能
+  const isLoggedIn = useIsLoggedIn();
+
   return (
     <div className='pb-6 @container'>
       {/* 头部：海报 + 标题/评分/操作 — 爱奇艺式布局 */}
@@ -190,39 +194,44 @@ export default function VideoDetailsPanel({
           </div>
 
           {/* 操作行 */}
-          <div className='mt-auto pt-3 flex items-center gap-2 flex-wrap'>
-            <FavoriteButton favorited={favorited} onClick={onToggleFavorite} />
+          {isLoggedIn && (
+            <div className='mt-auto pt-3 flex items-center gap-2 flex-wrap'>
+              <FavoriteButton
+                favorited={favorited}
+                onClick={onToggleFavorite}
+              />
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!netdiskResults && !netdiskLoading && videoTitle) {
-                  onNetDiskSearch(videoTitle);
-                }
-                setTimeout(() => {
-                  const element = document.getElementById('netdisk-section');
-                  if (element) {
-                    element.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    });
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!netdiskResults && !netdiskLoading && videoTitle) {
+                    onNetDiskSearch(videoTitle);
                   }
-                }, 100);
-              }}
-              className='flex-shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300'
-            >
-              {netdiskLoading ? (
-                <span className='flex items-center gap-1'>
-                  <span className='inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
-                  搜索中...
-                </span>
-              ) : netdiskTotal > 0 ? (
-                <span>{netdiskTotal}个资源</span>
-              ) : (
-                <span>网盘资源</span>
-              )}
-            </button>
-          </div>
+                  setTimeout(() => {
+                    const element = document.getElementById('netdisk-section');
+                    if (element) {
+                      element.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start',
+                      });
+                    }
+                  }, 100);
+                }}
+                className='flex-shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300'
+              >
+                {netdiskLoading ? (
+                  <span className='flex items-center gap-1'>
+                    <span className='inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+                    搜索中...
+                  </span>
+                ) : netdiskTotal > 0 ? (
+                  <span>{netdiskTotal}个资源</span>
+                ) : (
+                  <span>网盘资源</span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -296,39 +305,41 @@ export default function VideoDetailsPanel({
       {/* 豆瓣短评 */}
       <CommentSection key={videoDoubanId} videoDoubanId={videoDoubanId} />
 
-      {/* 网盘资源区域 */}
-      <div id='netdisk-section' className='mt-6'>
-        <div className='border-t border-gray-200 dark:border-gray-700 pt-5'>
-          <div className='mb-3 flex items-center gap-2'>
-            <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200'>
-              网盘资源
-            </h3>
-            {netdiskLoading && (
-              <span className='inline-block h-4 w-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin'></span>
-            )}
-            {netdiskTotal > 0 && <Tag>{netdiskTotal} 个资源</Tag>}
-          </div>
-          {videoTitle && !netdiskLoading && !netdiskResults && (
-            <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
-              点击上方「网盘资源」按钮开始搜索
-            </p>
-          )}
-          {videoTitle &&
-            !netdiskLoading &&
-            (netdiskResults || netdiskError) && (
+      {/* 网盘资源区域（访客隐藏） */}
+      {isLoggedIn && (
+        <div id='netdisk-section' className='mt-6'>
+          <div className='border-t border-gray-200 dark:border-gray-700 pt-5'>
+            <div className='mb-3 flex items-center gap-2'>
+              <h3 className='text-base font-semibold text-gray-800 dark:text-gray-200'>
+                网盘资源
+              </h3>
+              {netdiskLoading && (
+                <span className='inline-block h-4 w-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin'></span>
+              )}
+              {netdiskTotal > 0 && <Tag>{netdiskTotal} 个资源</Tag>}
+            </div>
+            {videoTitle && !netdiskLoading && !netdiskResults && (
               <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
-                搜索关键词：{videoTitle}
+                点击上方「网盘资源」按钮开始搜索
               </p>
             )}
+            {videoTitle &&
+              !netdiskLoading &&
+              (netdiskResults || netdiskError) && (
+                <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
+                  搜索关键词：{videoTitle}
+                </p>
+              )}
 
-          <NetDiskSearchResults
-            results={netdiskResults}
-            loading={netdiskLoading}
-            error={netdiskError}
-            total={netdiskTotal}
-          />
+            <NetDiskSearchResults
+              results={netdiskResults}
+              loading={netdiskLoading}
+              error={netdiskError}
+              total={netdiskTotal}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

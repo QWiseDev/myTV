@@ -50,6 +50,62 @@ export function requireUser(request: NextRequest): RequireUserResult {
   return { authInfo: authInfo as AuthInfoWithUsername };
 }
 
+// 验证签名（HMAC-SHA256，与登录/中间件共用同一密钥口径）
+export async function verifySignature(
+  data: string,
+  signature: string,
+  secret: string,
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(data);
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+
+    const signatureBuffer = new Uint8Array(
+      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
+    );
+
+    return await crypto.subtle.verify(
+      'HMAC',
+      key,
+      signatureBuffer,
+      messageData,
+    );
+  } catch (error) {
+    console.error('签名验证失败:', error);
+    return false;
+  }
+}
+
+/**
+ * 在路由内解析真实登录用户：无 cookie、缺少 username/signature 或验签失败
+ * 一律返回 null（视为访客）。用于中间件豁免路由的「访客感知」鉴权，
+ * 防止伪造 cookie username 绕过用户级源过滤。
+ */
+export async function resolveRequestUser(
+  request: NextRequest,
+): Promise<{ username: string } | null> {
+  const authInfo = getAuthInfoFromCookie(request);
+  if (!authInfo?.username || !authInfo.signature || !process.env.PASSWORD) {
+    return null;
+  }
+
+  const isValid = await verifySignature(
+    authInfo.username,
+    authInfo.signature,
+    process.env.PASSWORD,
+  );
+  return isValid ? { username: authInfo.username } : null;
+}
+
 // 从cookie获取认证信息 (客户端使用)
 export function getAuthInfoFromBrowserCookie(): {
   username?: string;

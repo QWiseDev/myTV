@@ -2,6 +2,7 @@
 
 import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { generateStorageKey, savePlayRecord } from '@/lib/db.client';
 import type { PlayRecord, SearchResult } from '@/lib/types';
 import { selectUsableImageUrl } from '@/lib/utils';
@@ -265,7 +266,11 @@ export function usePlayProgress({
         currentEpisodeIndex: currentEpisodeIndexRef.current,
         searchTitle,
       });
-      if (payload) {
+      if (
+        payload &&
+        // 访客（未登录）不保存播放进度
+        getAuthInfoFromBrowserCookie()?.username
+      ) {
         sendPlayProgressOnUnload(payload);
       }
       releaseWakeLock();

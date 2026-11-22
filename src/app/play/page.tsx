@@ -18,6 +18,7 @@ import { generateStorageKey } from '@/lib/db.client';
 import type { SearchResult } from '@/lib/types';
 import { isUsableImageUrl, selectUsableImageUrl } from '@/lib/utils';
 import { useBackToTopController } from '@/hooks/useBackToTopController';
+import { useIsLoggedIn } from '@/hooks/useIsLoggedIn';
 import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
@@ -121,6 +122,8 @@ function PlayPageClient() {
 
   // 使用播放数据上下文，避免重复请求
   const { playRecords } = usePlaybackData();
+  // 登录态：访客隐藏换源/收藏/网盘等登录功能
+  const isLoggedIn = useIsLoggedIn();
 
   // 🚀 内存监控 - 集成性能优化
   const { pressure: memoryPressure }: { pressure: MemoryPressure } =
@@ -992,6 +995,7 @@ function PlayPageClient() {
               onLoadSources: loadAvailableSources,
               sourceSearchLoading,
               sourceSearchError,
+              disableSourceSwitch: !isLoggedIn,
             }}
             infoProps={{
               detail,

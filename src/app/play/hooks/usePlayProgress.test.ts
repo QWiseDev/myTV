@@ -10,6 +10,10 @@ jest.mock('@/lib/db.client', () => ({
   savePlayRecord: jest.fn(),
 }));
 
+jest.mock('@/lib/auth', () => ({
+  getAuthInfoFromBrowserCookie: () => ({ username: 'test-user' }),
+}));
+
 function createDetail() {
   return {
     id: 'id',

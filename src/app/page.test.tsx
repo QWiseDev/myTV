@@ -14,6 +14,11 @@ jest.mock('@/components/HomeClient', () => ({
   default: () => null,
 }));
 
+jest.mock('@/components/GuestHome', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 const initialHomeData = {
   hotMovies: [
     {
@@ -29,11 +34,33 @@ const initialHomeData = {
   bangumiCalendarData: [],
 };
 
+const emptyHomeData = {
+  hotMovies: [],
+  hotTvShows: [],
+  hotVarietyShows: [],
+  bangumiCalendarData: [],
+};
+
+// 构造带 HMAC 签名字段的登录 cookie 头
+const loginCookieHeader = () =>
+  `user_auth=${encodeURIComponent(
+    JSON.stringify({ username: 'alice', signature: 'abc' }),
+  )}`;
+
+const getRenderedComponents = async () => {
+  const Home = (await import('./page')).default;
+  const element = await Home();
+  // Home 的直接子节点：HomeClient（已登录）或 GuestHome（访客）
+  return element;
+};
+
 describe('Home page initial data', () => {
-  let Home: typeof import('./page').default;
+  let GuestHome: typeof import('@/components/GuestHome').default;
+  let HomeClient: typeof import('@/components/HomeClient').default;
 
   beforeAll(async () => {
-    Home = (await import('./page')).default;
+    GuestHome = (await import('@/components/GuestHome')).default;
+    HomeClient = (await import('@/components/HomeClient')).default;
   });
 
   beforeEach(() => {
@@ -41,46 +68,47 @@ describe('Home page initial data', () => {
     mockGetServerInitialHomeData.mockReset();
   });
 
-  it('uses the SSR initial-data reader for authenticated requests', async () => {
-    mockHeaders.mockReturnValue({ get: () => 'auth=1' });
-    mockGetServerInitialHomeData.mockResolvedValue(initialHomeData);
-
-    const element = await Home();
-
-    expect(mockGetServerInitialHomeData).toHaveBeenCalledTimes(1);
-    expect(element.props.initialHomeData).toEqual(initialHomeData);
-  });
-
-  it('skips server data loading without a cookie', async () => {
+  it('renders GuestHome for requests without a cookie', async () => {
     mockHeaders.mockReturnValue({ get: () => null });
 
-    const element = await Home();
+    const element = await getRenderedComponents();
 
     expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
-    expect(element.props.initialHomeData).toEqual({
-      hotMovies: [],
-      hotTvShows: [],
-      hotVarietyShows: [],
-      bangumiCalendarData: [],
-    });
+    expect(element.type).toBe(GuestHome);
+  });
+
+  it('renders GuestHome when the cookie has no username/signature', async () => {
+    mockHeaders.mockReturnValue({ get: () => 'user_auth=%7B%7D' });
+
+    const element = await getRenderedComponents();
+
+    expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+    expect(element.type).toBe(GuestHome);
+  });
+
+  it('uses the SSR initial-data reader for authenticated requests', async () => {
+    mockHeaders.mockReturnValue({ get: loginCookieHeader });
+    mockGetServerInitialHomeData.mockResolvedValue(initialHomeData);
+
+    const element = await getRenderedComponents();
+
+    expect(mockGetServerInitialHomeData).toHaveBeenCalledTimes(1);
+    expect(element.type).toBe(HomeClient);
+    expect(element.props.initialHomeData).toEqual(initialHomeData);
   });
 
   it('falls back to empty data when server preloading fails', async () => {
     const consoleError = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    mockHeaders.mockReturnValue({ get: () => 'auth=1' });
+    mockHeaders.mockReturnValue({ get: loginCookieHeader });
     mockGetServerInitialHomeData.mockRejectedValue(new Error('cache failed'));
 
     try {
-      const element = await Home();
+      const element = await getRenderedComponents();
 
-      expect(element.props.initialHomeData).toEqual({
-        hotMovies: [],
-        hotTvShows: [],
-        hotVarietyShows: [],
-        bangumiCalendarData: [],
-      });
+      expect(element.type).toBe(HomeClient);
+      expect(element.props.initialHomeData).toEqual(emptyHomeData);
     } finally {
       consoleError.mockRestore();
     }

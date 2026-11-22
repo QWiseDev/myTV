@@ -229,6 +229,11 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
     return {};
   }
 
+  // 访客（未登录）无播放记录，直接返回空，避免 401 触发跳登录
+  if (!getCurrentPlayRecordsUsername()) {
+    return {};
+  }
+
   const username = getCurrentPlayRecordsUsername();
   const validSnapshot = getValidPlayRecordsSnapshot(username);
 
@@ -276,6 +281,11 @@ export async function getPlayRecordsPage(
     return paginatePlayRecords({}, options);
   }
 
+  // 访客（未登录）无播放记录，直接返回空页，避免 401 触发跳登录
+  if (!getCurrentPlayRecordsUsername()) {
+    return paginatePlayRecords({}, options);
+  }
+
   try {
     const params = new URLSearchParams();
     if (options.cursor) {
@@ -310,6 +320,11 @@ export async function savePlayRecord(
   record: PlayRecord,
   existingRecords?: Record<string, PlayRecord>,
 ): Promise<void> {
+  // 访客（未登录）不保存播放记录
+  if (typeof window !== 'undefined' && !getCurrentPlayRecordsUsername()) {
+    return;
+  }
+
   const key = generateStorageKey(source, id);
   const username = getCurrentPlayRecordsUsername();
 
@@ -404,6 +419,11 @@ export async function deletePlayRecord(
   source: string,
   id: string,
 ): Promise<void> {
+  // 访客（未登录）无播放记录可删除
+  if (typeof window !== 'undefined' && !getCurrentPlayRecordsUsername()) {
+    return;
+  }
+
   const key = generateStorageKey(source, id);
   const username = getCurrentPlayRecordsUsername();
 
@@ -443,6 +463,11 @@ export async function deletePlayRecord(
  * 失败时在队列内执行一次权威补偿读取（结果附着在 PlayRecordsMutationError 上），并仍然 reject。
  */
 export async function clearAllPlayRecords(): Promise<void> {
+  // 访客（未登录）无播放记录可清空
+  if (typeof window !== 'undefined' && !getCurrentPlayRecordsUsername()) {
+    return;
+  }
+
   const username = getCurrentPlayRecordsUsername();
 
   // 乐观更新策略
@@ -485,6 +510,11 @@ export type PlayRecordsAuthoritativeSnapshot = {
  * 抛错（含用户切换取消）由调用方消费。
  */
 export async function reconcilePlayRecordsAuthoritative(): Promise<PlayRecordsAuthoritativeSnapshot> {
+  // 访客（未登录）无播放记录可核实
+  if (typeof window !== 'undefined' && !getCurrentPlayRecordsUsername()) {
+    return { username: null, revision: 0, records: {} };
+  }
+
   const username = getCurrentPlayRecordsUsername();
   return enqueuePlayRecordsMutation(username, async () => {
     if (getCurrentPlayRecordsUsername() !== username) {
@@ -523,6 +553,11 @@ export function getPlayRecordsRevision(): number {
 export async function reconcilePlayRecordsForExternalCaller(
   username: string | null,
 ): Promise<boolean> {
+  // 访客（未登录）无播放记录可补偿
+  if (typeof window !== 'undefined' && !getCurrentPlayRecordsUsername()) {
+    return false;
+  }
+
   if (getCurrentPlayRecordsUsername() !== username) {
     invalidatePlayRecordsSnapshot(username);
     return false;

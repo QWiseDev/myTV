@@ -16,6 +16,20 @@ describe('middleware', () => {
   let middleware: typeof import('./middleware').middleware;
   let consoleLogSpy: jest.SpyInstance;
 
+  const withPassword = async (fn: () => Promise<void>): Promise<void> => {
+    const previousPassword = process.env.PASSWORD;
+    process.env.PASSWORD = 'test-password';
+    try {
+      await fn();
+    } finally {
+      if (previousPassword === undefined) {
+        delete process.env.PASSWORD;
+      } else {
+        process.env.PASSWORD = previousPassword;
+      }
+    }
+  };
+
   beforeAll(async () => {
     global.fetch = edgePrimitives.fetch;
     global.Headers = edgePrimitives.Headers;
@@ -47,10 +61,7 @@ describe('middleware', () => {
   });
 
   it('rejects unauthenticated image optimizer requests with 401', async () => {
-    const previousPassword = process.env.PASSWORD;
-    process.env.PASSWORD = 'test-password';
-
-    try {
+    await withPassword(async () => {
       // 图片优化器会让源站抓取任意外链，未登录不得使用
       const request = new NextRequest(
         'http://localhost/_next/image?url=https%3A%2F%2Fexample.com%2Fa.jpg&w=640&q=75',
@@ -59,13 +70,51 @@ describe('middleware', () => {
       const response = await middleware(request);
 
       expect(response.status).toBe(401);
-    } finally {
-      if (previousPassword === undefined) {
-        delete process.env.PASSWORD;
-      } else {
-        process.env.PASSWORD = previousPassword;
+    });
+  });
+
+  // ---- 访客模式放行清单 ----
+
+  it('allows unauthenticated access to guest pages (/, /play)', async () => {
+    await withPassword(async () => {
+      for (const path of ['/', '/play']) {
+        const request = new NextRequest(`http://localhost${path}`);
+        const response = await middleware(request);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('x-middleware-next')).toBe('1');
       }
-    }
+    });
+  });
+
+  it('allows unauthenticated access to guest playback APIs', async () => {
+    await withPassword(async () => {
+      const paths = [
+        '/api/detail?source=iqiyizyapi.com&id=1',
+        '/api/source-browser/list?source=iqiyizyapi.com&type_id=1&page=1',
+        '/api/douban/details?id=123',
+        '/api/douban/comments?id=123',
+        '/api/danmaku',
+        '/api/danmu-external',
+        '/api/ad-filter',
+      ];
+      for (const path of paths) {
+        const request = new NextRequest(`http://localhost${path}`);
+        const response = await middleware(request);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('x-middleware-next')).toBe('1');
+      }
+    });
+  });
+
+  it('still rejects unauthenticated requests to login-only APIs', async () => {
+    await withPassword(async () => {
+      const paths = ['/api/playrecords', '/api/favorites', '/api/sources'];
+      for (const path of paths) {
+        const request = new NextRequest(`http://localhost${path}`);
+        const response = await middleware(request);
+        expect(response.status).toBe(401);
+      }
+    });
   });
 });
 

@@ -26,6 +26,8 @@ interface EpisodePanelProps {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 访客（未登录）禁用换源 */
+  disableSourceSwitch?: boolean;
 }
 
 export default function EpisodePanel({
@@ -42,6 +44,7 @@ export default function EpisodePanel({
   onLoadSources,
   sourceSearchLoading,
   sourceSearchError,
+  disableSourceSwitch,
 }: EpisodePanelProps) {
   return (
     <div className='flex flex-col h-full min-h-0'>
@@ -61,6 +64,7 @@ export default function EpisodePanel({
               onLoadSources={onLoadSources}
               sourceSearchLoading={sourceSearchLoading}
               sourceSearchError={sourceSearchError}
+              disableSourceSwitch={disableSourceSwitch}
             />
           </Suspense>
         </div>

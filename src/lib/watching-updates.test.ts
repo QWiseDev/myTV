@@ -1,3 +1,7 @@
+jest.mock('@/lib/auth', () => ({
+  getAuthInfoFromBrowserCookie: () => ({ username: 'test-user' }),
+}));
+
 import {
   type WatchingUpdate,
   checkWatchingUpdates,

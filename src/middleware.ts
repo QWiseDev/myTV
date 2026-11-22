@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getAuthInfoFromCookie, verifySignature } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -49,43 +49,7 @@ export async function middleware(request: NextRequest) {
   return handleAuthFailure(request, pathname);
 }
 
-// 验证签名
-async function verifySignature(
-  data: string,
-  signature: string,
-  secret: string,
-): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(data);
-
-  try {
-    // 导入密钥
-    const key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify'],
-    );
-
-    // 将十六进制字符串转换为Uint8Array
-    const signatureBuffer = new Uint8Array(
-      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
-    );
-
-    // 验证签名
-    return await crypto.subtle.verify(
-      'HMAC',
-      key,
-      signatureBuffer,
-      messageData,
-    );
-  } catch (error) {
-    console.error('签名验证失败:', error);
-    return false;
-  }
-}
+// 验证签名已移至 src/lib/auth.ts（访客感知路由复用同一实现）
 
 // 处理认证失败的情况
 function handleAuthFailure(
@@ -111,10 +75,30 @@ function handleAuthFailure(
 // 图片优化器会让源站抓取并转码任意外链，必须鉴权，避免被当作开放代理耗尽源站并发
 const IMAGE_OPTIMIZER_PATH = '/_next/image';
 
+// 访客模式放行：未登录可访问的页面与播放所需 API。
+// 页面精确匹配；API 命中后由路由内部做「访客感知」限源（仅访客源）与限速。
+const GUEST_EXACT_PATHS = ['/', '/play'];
+const GUEST_PREFIX_PATHS = [
+  '/api/detail',
+  '/api/source-browser/',
+  '/api/douban/details',
+  '/api/douban/comments',
+  '/api/danmaku',
+  '/api/danmu-external',
+  '/api/ad-filter',
+];
+
 // 判断是否需要跳过认证的路径
 function shouldSkipAuth(pathname: string): boolean {
   if (pathname.startsWith(IMAGE_OPTIMIZER_PATH)) {
     return false;
+  }
+
+  if (
+    GUEST_EXACT_PATHS.includes(pathname) ||
+    GUEST_PREFIX_PATHS.some((path) => pathname.startsWith(path))
+  ) {
+    return true;
   }
 
   const skipPaths = [

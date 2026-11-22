@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { API_CONFIG, getAvailableApiSites } from '@/lib/config';
+import { resolveRequestUser } from '@/lib/auth';
+import { API_CONFIG } from '@/lib/config';
+import {
+  checkGuestRateLimit,
+  isSourceAllowedForRequest,
+} from '@/lib/guest-source';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
+  const user = await resolveRequestUser(request);
+  if (!user) {
+    const rateLimited = checkGuestRateLimit(request, 'categories');
+    if (rateLimited) return rateLimited;
+  }
 
   const { searchParams } = new URL(request.url);
   const sourceKey = searchParams.get('source');
@@ -19,11 +25,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const availableSites = await getAvailableApiSites(authInfo.username);
-    const source = availableSites.find((s) => s.key === sourceKey);
+    const source = await isSourceAllowedForRequest(
+      user?.username ?? null,
+      sourceKey,
+    );
     if (!source) {
       return NextResponse.json(
-        { error: '你没有权限访问该资源源' },
+        { error: user ? '你没有权限访问该资源源' : '访客仅可访问指定片源' },
         { status: 403 },
       );
     }

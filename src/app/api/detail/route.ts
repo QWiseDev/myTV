@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { getAvailableApiSites } from '@/lib/config';
+import { resolveRequestUser } from '@/lib/auth';
 import { getDetailFromApi } from '@/lib/downstream';
+import {
+  checkGuestRateLimit,
+  isSourceAllowedForRequest,
+} from '@/lib/guest-source';
 
 // 🔧 新增：基于参数的内存缓存
 const detailCache = new Map<string, { data: unknown; timestamp: number }>();
@@ -12,9 +15,11 @@ export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
+  const user = await resolveRequestUser(request);
+  if (!user) {
+    const rateLimited = checkGuestRateLimit(request, 'detail');
+    if (rateLimited) return rateLimited;
+  }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
@@ -29,11 +34,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const apiSites = await getAvailableApiSites(authInfo.username);
-    const apiSite = apiSites.find((site) => site.key === sourceCode);
+    const apiSite = await isSourceAllowedForRequest(
+      user?.username ?? null,
+      sourceCode,
+    );
 
     if (!apiSite) {
-      return NextResponse.json({ error: '无效的API来源' }, { status: 400 });
+      // 访客仅允许访客源，其余来源按 403 拒绝；登录用户保持原 400 语义
+      return NextResponse.json(
+        { error: user ? '无效的API来源' : '访客仅可访问指定片源' },
+        { status: user ? 400 : 403 },
+      );
     }
 
     // 🎯 生成缓存键

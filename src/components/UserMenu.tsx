@@ -2,7 +2,7 @@
 
 'use client';
 
-import { User } from 'lucide-react';
+import { LogIn, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -355,6 +355,20 @@ export const UserMenu: React.FC = () => {
 
   // 计算更新数量（只统计新剧集更新）
   const totalUpdates = watchingUpdatesState.totalUpdates;
+
+  // 访客：未登录时只渲染登录按钮
+  if (mounted && !authInfo?.username) {
+    return (
+      <a
+        href='/login'
+        className='flex items-center gap-1.5 rounded-full bg-[#00be06] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#00a304]'
+        aria-label='登录'
+      >
+        <LogIn className='h-4 w-4' />
+        登录
+      </a>
+    );
+  }
 
   return (
     <>

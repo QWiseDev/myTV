@@ -1,5 +1,7 @@
 'use client';
 
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
+
 // 缓存时长：与服务端 2 小时定时任务对齐
 const SERVER_CACHE_DURATION = 3 * 60 * 60 * 1000; // 3小时缓存
 
@@ -66,6 +68,11 @@ export async function fetchWatchingUpdatesFromServer(
   forceRefresh = false,
 ): Promise<WatchingUpdate | null> {
   if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // 访客（未登录）无追更数据，不请求
+  if (!getAuthInfoFromBrowserCookie()?.username) {
     return null;
   }
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { isPlayPagePath, saveProgressAndNavigate } from '@/lib/play-navigation';
+import { useIsLoggedIn } from '@/hooks/useIsLoggedIn';
 import { isNavActive, useNavMenuItems } from '@/hooks/useNavMenus';
 
 import HeaderSearchPanel from './HeaderSearchPanel';
@@ -34,6 +35,8 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
   const [active, setActive] = useState(activePath);
 
   const menuItems = useNavMenuItems();
+  // 访客（未登录）：隐藏导航、搜索与收藏夹等登录入口，只留 Logo 和登录按钮
+  const isLoggedIn = useIsLoggedIn();
 
   // 优先使用传入的 activePath，否则使用当前完整路径（含 query）
   useEffect(() => {
@@ -93,13 +96,17 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
     >
       <div className='relative h-16 px-3 lg:px-6'>
         <div className='flex h-full items-center gap-3'>
-          {/* Logo：剧场模式全尺寸展示，否则桌面端位于左侧 SideNav */}
-          <div className={`flex-shrink-0 ${theater ? '' : 'md:hidden'}`}>
+          {/* Logo：剧场模式全尺寸展示，否则桌面端位于左侧 SideNav（访客无侧边栏，顶栏展示 Logo） */}
+          <div
+            className={`flex-shrink-0 ${
+              theater || !isLoggedIn ? '' : 'md:hidden'
+            }`}
+          >
             <Logo />
           </div>
 
           {/* 剧场模式：顶部横向导航（爱奇艺播放页式，与旧版顶栏一致） */}
-          {theater && (
+          {theater && isLoggedIn && (
             <nav
               className='hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-1 md:flex lg:gap-1'
               style={{
@@ -146,93 +153,104 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
             </nav>
           )}
 
-          {/* 桌面端爱奇艺式搜索框（剧场模式隐藏，为横向导航让位） */}
-          <form
-            role='search'
-            onSubmit={(e) => {
-              e.preventDefault();
-              runSearch();
-            }}
-            data-search-panel-root
-            className={`relative mx-auto w-full max-w-xl ${
-              theater ? 'hidden' : 'hidden md:block'
-            }`}
-          >
-            <div className='flex h-10 w-full items-center rounded-full border border-[#e8e8e8] bg-[#f5f5f5]/90 pl-4 pr-1 transition-colors focus-within:border-[#00a304]/50 dark:border-[#3a3a3a] dark:bg-[#232323]/90 dark:focus-within:border-[#1acd50]/50'>
-              <Search className='h-4 w-4 shrink-0 text-[#5f5f5f] dark:text-[#a8a8a8]' />
-              <input
-                type='text'
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchPanelOpen(true)}
-                onClick={() => setIsSearchPanelOpen(true)}
-                placeholder='搜索你想看的影视内容'
-                aria-label='搜索'
-                autoComplete='off'
-                className='min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 text-sm text-[#111111] shadow-none outline-none placeholder:text-[#9a9a9a] focus:border-transparent focus:shadow-none focus:ring-0 dark:text-[#f5f5f5] dark:placeholder:text-[#6f6f6f]'
-              />
-              <button
-                type='submit'
-                className='h-8 shrink-0 rounded-lg bg-[#00be06] px-5 text-sm font-medium text-white transition-colors hover:bg-[#00a304] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00be06]'
-              >
-                搜索
-              </button>
-            </div>
+          {/* 桌面端爱奇艺式搜索框（剧场模式隐藏，为横向导航让位；访客隐藏） */}
+          {isLoggedIn && (
+            <form
+              role='search'
+              onSubmit={(e) => {
+                e.preventDefault();
+                runSearch();
+              }}
+              data-search-panel-root
+              className={`relative mx-auto w-full max-w-xl ${
+                theater ? 'hidden' : 'hidden md:block'
+              }`}
+            >
+              <div className='flex h-10 w-full items-center rounded-full border border-[#e8e8e8] bg-[#f5f5f5]/90 pl-4 pr-1 transition-colors focus-within:border-[#00a304]/50 dark:border-[#3a3a3a] dark:bg-[#232323]/90 dark:focus-within:border-[#1acd50]/50'>
+                <Search className='h-4 w-4 shrink-0 text-[#5f5f5f] dark:text-[#a8a8a8]' />
+                <input
+                  type='text'
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchPanelOpen(true)}
+                  onClick={() => setIsSearchPanelOpen(true)}
+                  placeholder='搜索你想看的影视内容'
+                  aria-label='搜索'
+                  autoComplete='off'
+                  className='min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 text-sm text-[#111111] shadow-none outline-none placeholder:text-[#9a9a9a] focus:border-transparent focus:shadow-none focus:ring-0 dark:text-[#f5f5f5] dark:placeholder:text-[#6f6f6f]'
+                />
+                <button
+                  type='submit'
+                  className='h-8 shrink-0 rounded-lg bg-[#00be06] px-5 text-sm font-medium text-white transition-colors hover:bg-[#00a304] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00be06]'
+                >
+                  搜索
+                </button>
+              </div>
 
-            {/* 聚焦弹层：搜索历史 + 片源分类榜单（爱奇艺式） */}
-            <HeaderSearchPanel
-              open={isSearchPanelOpen}
-              onClose={() => setIsSearchPanelOpen(false)}
-            />
-          </form>
+              {/* 聚焦弹层：搜索历史 + 片源分类榜单（爱奇艺式） */}
+              <HeaderSearchPanel
+                open={isSearchPanelOpen}
+                onClose={() => setIsSearchPanelOpen(false)}
+              />
+            </form>
+          )}
 
           {/* 移动端占位，保持右侧贴齐 */}
           <div className='flex-1 md:hidden' />
 
           {/* 右侧功能区 */}
           <div className='ml-auto flex flex-shrink-0 items-center gap-1.5 lg:gap-2'>
-            {/* 桌面端显示收藏夹入口和用户菜单 */}
-            <div className='hidden items-center gap-1.5 md:flex lg:gap-2'>
-              <div className='rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/70 p-1 backdrop-blur-sm dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/70'>
-                <Link
-                  href='/?tab=favorites'
-                  title='收藏夹'
-                  className='flex h-8 w-8 items-center justify-center rounded text-[#5f5f5f] transition-colors hover:text-[#00a304] dark:text-[#a8a8a8] dark:hover:text-[#1acd50]'
+            {isLoggedIn ? (
+              <>
+                {/* 桌面端显示收藏夹入口和用户菜单 */}
+                <div className='hidden items-center gap-1.5 md:flex lg:gap-2'>
+                  <div className='rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/70 p-1 backdrop-blur-sm dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/70'>
+                    <Link
+                      href='/?tab=favorites'
+                      title='收藏夹'
+                      className='flex h-8 w-8 items-center justify-center rounded text-[#5f5f5f] transition-colors hover:text-[#00a304] dark:text-[#a8a8a8] dark:hover:text-[#1acd50]'
+                    >
+                      <Heart className='h-4 w-4' />
+                    </Link>
+                  </div>
+                  <div className='rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/70 p-1 backdrop-blur-sm dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/70'>
+                    <UserMenu />
+                  </div>
+                </div>
+
+                {/* 移动端搜索入口 */}
+                <button
+                  onClick={handleSearchClick}
+                  aria-label='搜索'
+                  className='rounded-md border border-[#e8e8e8] p-2 text-[#5f5f5f] backdrop-blur-sm transition-all duration-300 hover:bg-[#f2f2f2] hover:text-[#111111] dark:border-[#3a3a3a] dark:text-[#a8a8a8] dark:hover:bg-[#2a2a2a] dark:hover:text-[#f5f5f5] md:hidden'
                 >
-                  <Heart className='h-4 w-4' />
-                </Link>
-              </div>
+                  <Search className='h-4 w-4' />
+                </button>
+
+                {/* 移动端汉堡菜单 */}
+                <button
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className='rounded-md border border-[#e8e8e8] p-2 text-[#5f5f5f] backdrop-blur-sm transition-all duration-300 hover:bg-[#f2f2f2] hover:text-[#111111] dark:border-[#3a3a3a] dark:text-[#a8a8a8] dark:hover:bg-[#2a2a2a] dark:hover:text-[#f5f5f5] md:hidden'
+                >
+                  {isMobileMenuOpen ? (
+                    <X className='h-4 w-4 transition-transform duration-300 rotate-90' />
+                  ) : (
+                    <MenuIcon className='h-4 w-4 transition-transform duration-300' />
+                  )}
+                </button>
+              </>
+            ) : (
+              /* 访客：仅登录按钮（桌面 + 移动端） */
               <div className='rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/70 p-1 backdrop-blur-sm dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/70'>
                 <UserMenu />
               </div>
-            </div>
-
-            {/* 移动端搜索入口 */}
-            <button
-              onClick={handleSearchClick}
-              aria-label='搜索'
-              className='rounded-md border border-[#e8e8e8] p-2 text-[#5f5f5f] backdrop-blur-sm transition-all duration-300 hover:bg-[#f2f2f2] hover:text-[#111111] dark:border-[#3a3a3a] dark:text-[#a8a8a8] dark:hover:bg-[#2a2a2a] dark:hover:text-[#f5f5f5] md:hidden'
-            >
-              <Search className='h-4 w-4' />
-            </button>
-
-            {/* 移动端汉堡菜单 */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className='rounded-md border border-[#e8e8e8] p-2 text-[#5f5f5f] backdrop-blur-sm transition-all duration-300 hover:bg-[#f2f2f2] hover:text-[#111111] dark:border-[#3a3a3a] dark:text-[#a8a8a8] dark:hover:bg-[#2a2a2a] dark:hover:text-[#f5f5f5] md:hidden'
-            >
-              {isMobileMenuOpen ? (
-                <X className='h-4 w-4 transition-transform duration-300 rotate-90' />
-              ) : (
-                <MenuIcon className='h-4 w-4 transition-transform duration-300' />
-              )}
-            </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* 移动端菜单下拉 */}
-      {isMobileMenuOpen && (
+      {isMobileMenuOpen && isLoggedIn && (
         <div
           className='absolute left-0 right-0 top-full border-b border-[#e8e8e8] bg-[#ffffff]/96 shadow-sm backdrop-blur-xl dark:border-[#3a3a3a] dark:bg-[#0d0d0d]/96 md:hidden'
           style={{

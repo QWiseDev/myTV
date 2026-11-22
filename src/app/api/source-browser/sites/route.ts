@@ -1,18 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
+import { resolveRequestUser } from '@/lib/auth';
 import { getAvailableApiSites } from '@/lib/config';
+import { checkGuestRateLimit, getGuestSource } from '@/lib/guest-source';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
   try {
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
+    const user = await resolveRequestUser(request);
+    if (!user) {
+      // 访客：仅返回访客源，缺失时返回空列表
+      const rateLimited = checkGuestRateLimit(request, 'sites');
+      if (rateLimited) return rateLimited;
 
-    const availableSites = await getAvailableApiSites(authInfo.username);
+      const guestSource = await getGuestSource();
+      const sources = guestSource
+        ? [
+            {
+              key: guestSource.key,
+              name: guestSource.name,
+              api: guestSource.api,
+            },
+          ]
+        : [];
+      return NextResponse.json({ sources });
+    }
+
+    const availableSites = await getAvailableApiSites(user.username);
     const sources = availableSites
       .filter((s) => Boolean(s.api?.trim()))
       .map((s) => ({ key: s.key, name: s.name, api: s.api }));

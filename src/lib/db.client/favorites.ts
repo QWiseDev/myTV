@@ -10,7 +10,15 @@ import {
   triggerGlobalError,
 } from './core';
 import { readThroughCache } from './read-through-cache';
+import { getAuthInfoFromBrowserCookie } from '../auth';
 import { generateStorageKey } from '../storage-key';
+
+/** 访客（未登录）判定：收藏与播放记录均为登录功能 */
+function isGuest(): boolean {
+  return (
+    typeof window !== 'undefined' && !getAuthInfoFromBrowserCookie()?.username
+  );
+}
 
 function readFavoritesThroughCache(): Promise<Record<string, Favorite>> {
   return readThroughCache<Record<string, Favorite>>({
@@ -49,6 +57,11 @@ export async function getAllFavorites(): Promise<Record<string, Favorite>> {
     return {};
   }
 
+  // 访客（未登录）无收藏
+  if (isGuest()) {
+    return {};
+  }
+
   return readFavoritesThroughCache();
 }
 
@@ -61,6 +74,11 @@ export async function saveFavorite(
   id: string,
   favorite: Favorite,
 ): Promise<void> {
+  // 访客（未登录）不保存收藏
+  if (isGuest()) {
+    return;
+  }
+
   const key = generateStorageKey(source, id);
 
   // 立即更新缓存
@@ -99,6 +117,11 @@ export async function deleteFavorite(
   source: string,
   id: string,
 ): Promise<void> {
+  // 访客（未登录）无收藏可删除
+  if (isGuest()) {
+    return;
+  }
+
   const key = generateStorageKey(source, id);
 
   // 立即更新缓存
@@ -133,6 +156,11 @@ export async function isFavorited(
   source: string,
   id: string,
 ): Promise<boolean> {
+  // 访客（未登录）无收藏
+  if (isGuest()) {
+    return false;
+  }
+
   const key = generateStorageKey(source, id);
 
   try {
@@ -169,6 +197,11 @@ export async function isFavorited(
  * 等待数据库删除成功后再更新缓存。
  */
 export async function clearAllFavorites(): Promise<void> {
+  // 访客（未登录）无收藏可清空
+  if (isGuest()) {
+    return;
+  }
+
   try {
     await fetchWithAuth(`/api/favorites`, {
       method: 'DELETE',

@@ -42,6 +42,8 @@ interface EpisodePanelConfig {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 访客（未登录）禁用换源 */
+  disableSourceSwitch?: boolean;
 }
 
 interface PlayerAndEpisodeSectionProps {
