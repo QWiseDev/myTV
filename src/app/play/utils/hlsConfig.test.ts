@@ -202,10 +202,10 @@ describe('hlsConfig performance defaults', () => {
 
     expect(config.enableWorker).toBe(true);
     expect(config.testBandwidth).toBe(true);
-    expect(config.maxBufferLength).toBe(20);
-    expect(config.backBufferLength).toBe(10);
-    expect(config.maxMaxBufferLength).toBe(90);
-    expect(config.startFragPrefetch).toBe(false);
+    expect(config.maxBufferLength).toBe(60);
+    expect(config.backBufferLength).toBe(30);
+    expect(config.maxMaxBufferLength).toBe(180);
+    expect(config.startFragPrefetch).toBe(true);
     expect(config.fragLoadPolicy?.default.timeoutRetry.maxNumRetry).toBe(3);
     expect(config.fragLoadPolicy?.default.errorRetry.maxNumRetry).toBe(4);
   });
