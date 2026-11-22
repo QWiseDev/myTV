@@ -26,7 +26,10 @@ export function useSearchPageAnalytics(
   const searchSessionIdRef = useRef<string>(
     `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
   );
+  const sessionStartAtRef = useRef<number>(Date.now());
+  const lastSearchAtRef = useRef<number>(0);
   const searchCountRef = useRef<number>(0);
+  const totalResultsRef = useRef<number>(0);
   const lastSearchQueryRef = useRef<string>('');
   const filterHistoryRef = useRef<
     Array<{ filter: string; value: string; timestamp: number }>
@@ -60,6 +63,8 @@ export function useSearchPageAnalytics(
     ) => {
       searchCountRef.current++;
       lastSearchQueryRef.current = query;
+      lastSearchAtRef.current = Date.now();
+      totalResultsRef.current += results.length;
 
       // 基础搜索埋点
       trackSearchQuery(query, results.length, searchTime, {
@@ -177,10 +182,11 @@ export function useSearchPageAnalytics(
   );
 
   const handleFilterClear = useCallback(() => {
+    const clearedCount = filterHistoryRef.current.length;
     filterHistoryRef.current = [];
     trackFeatureUsage('search_filter_clear', true, {
       search_session_id: searchSessionIdRef.current,
-      cleared_filters_count: filterHistoryRef.current.length,
+      cleared_filters_count: clearedCount,
     });
   }, [trackFeatureUsage]);
 
@@ -210,8 +216,9 @@ export function useSearchPageAnalytics(
         click_source: clickSource,
         search_query: lastSearchQueryRef.current,
         result_year: result.year,
-        time_since_search:
-          timestamp - (searchCountRef.current > 0 ? timestamp : 0),
+        time_since_search: lastSearchAtRef.current
+          ? timestamp - lastSearchAtRef.current
+          : 0,
       });
 
       // 转化追踪
@@ -296,7 +303,7 @@ export function useSearchPageAnalytics(
 
   // 搜索会话结束
   const trackSearchSessionEnd = useCallback(() => {
-    const sessionDuration = Date.now();
+    const sessionDuration = Date.now() - sessionStartAtRef.current;
     const uniqueFilters = new Set(
       filterHistoryRef.current.map((f) => `${f.filter}:${f.value}`),
     ).size;
@@ -310,7 +317,10 @@ export function useSearchPageAnalytics(
       unique_filters_used: uniqueFilters,
       total_result_clicks: resultClicksRef.current.length,
       click_through_rate: clickThroughRate,
-      average_results_per_search: 0, // 可以通过累计计算
+      average_results_per_search:
+        searchCountRef.current > 0
+          ? totalResultsRef.current / searchCountRef.current
+          : 0,
       final_query: lastSearchQueryRef.current,
     });
 
@@ -331,15 +341,22 @@ export function useSearchPageAnalytics(
     }
   }, [trackFeatureUsage, trackConversion]);
 
-  // 页面离开时追踪会话结束
+  // 页面离开时追踪会话结束：beforeunload 阶段请求不可靠，改用 visibilitychange/pagehide
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        trackSearchSessionEnd();
+      }
+    };
+    const handlePageHide = () => {
       trackSearchSessionEnd();
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
       trackSearchSessionEnd();
     };
   }, [trackSearchSessionEnd]);

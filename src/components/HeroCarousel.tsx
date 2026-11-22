@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { analytics } from '@/lib/analytics';
 import type { TMDBHeroInfo } from '@/lib/tmdb.client';
 import type { DoubanItem } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
@@ -315,6 +316,13 @@ export default function HeroCarousel({
                     href={slide.href}
                     // 隐藏帧的链接移出 Tab 序列，避免键盘聚焦到不可见元素
                     tabIndex={isActive ? undefined : -1}
+                    onClick={() => {
+                      // banner 播放漏斗起点：帧位 + 类型（片名等由 lib 层脱敏）
+                      analytics.trackFeatureUsage('banner_play_click', true, {
+                        slide_index: index,
+                        slide_kind: slide.kind,
+                      });
+                    }}
                     className='mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#00be06] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] sm:mt-4 sm:px-5'
                   >
                     <Play size={16} className='fill-current' />

@@ -186,6 +186,12 @@ function resolveQualityState(
   };
 }
 
+/** 手动切换画质时的回调（fromLabel/toLabel 为面板展示文案，如 1080P → 自动） */
+export type ManualQualitySwitchHandler = (
+  fromLabel: string,
+  toLabel: string,
+) => void;
+
 /**
  * 添加画质控制栏按钮。
  *
@@ -195,6 +201,7 @@ function resolveQualityState(
 export function addQualityControl(
   art: ArtPlayerControlCapable | null | undefined,
   hls: LevelAwareHls | null | undefined,
+  onManualSwitch?: ManualQualitySwitchHandler,
 ): Cleanup | undefined {
   if (!art?.controls) return undefined;
 
@@ -211,6 +218,9 @@ export function addQualityControl(
     onSelect(item: SelectorItem) {
       if (state.switchable && hls) {
         const value = String(item?.value ?? AUTO_VALUE);
+        const targetLabel = String(item?.html ?? state.text);
+        // 只在真实生效的切档上报（单码率源的面板点击不触发）
+        onManualSwitch?.(state.text, targetLabel);
         try {
           hls.currentLevel = value === AUTO_VALUE ? -1 : Number(value);
         } catch {
@@ -324,6 +334,7 @@ export interface QualityControls {
  */
 export function createQualityControls(
   art: QualityControlArt | null | undefined,
+  onManualSwitch?: ManualQualitySwitchHandler,
 ): QualityControls {
   if (!art?.controls) {
     return { sync: () => undefined, dispose: () => undefined };
@@ -392,7 +403,7 @@ export function createQualityControls(
     stopWaiting();
     uninstall();
     installedHls = hls;
-    cleanup = addQualityControl(player, hls);
+    cleanup = addQualityControl(player, hls, onManualSwitch);
     if (!cleanup) installedHls = undefined;
   }
 

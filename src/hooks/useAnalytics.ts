@@ -13,49 +13,10 @@ import {
  * 提供便捷的埋点方法
  */
 export function useAnalytics() {
-  // 初始化 Analytics - 增强版
+  // 初始化 Analytics（Clarity 未就绪时由 lib 层事件队列兜底，无需轮询等待）
   useEffect(() => {
-    // 只在客户端执行
     if (typeof window === 'undefined') return;
-
-    // 检查是否有用户信息
-    const userId = localStorage.getItem('user_id');
-    const userType =
-      (localStorage.getItem('user_type') as
-        | 'guest'
-        | 'registered'
-        | 'premium') || 'guest';
-
-    // 立即尝试初始化
-    if (analytics.isReady()) {
-      analytics.init(userId || undefined, userType);
-    } else {
-      // 增强的等待机制：检查Clarity是否加载
-      let attempts = 0;
-      const maxAttempts = 50; // 5秒超时
-
-      const checkInterval = setInterval(() => {
-        attempts++;
-
-        // 检查Analytics是否就绪
-        if (analytics.isReady()) {
-          analytics.init(userId || undefined, userType);
-          clearInterval(checkInterval);
-          return;
-        }
-
-        // 超时处理
-        if (attempts >= maxAttempts) {
-          console.warn('[Analytics] 初始化超时，将使用队列模式');
-          clearInterval(checkInterval);
-
-          // 即使超时也要尝试初始化（可能会自动进入队列模式）
-          analytics.init(userId || undefined, userType);
-        }
-      }, 100);
-
-      return () => clearInterval(checkInterval);
-    }
+    analytics.init();
   }, []);
 
   // ==================== 视频相关埋点 ====================
@@ -177,13 +138,11 @@ export function useAnalytics() {
 
   const setUserId = useCallback((userId: string) => {
     analytics.setUserId(userId);
-    localStorage.setItem('user_id', userId);
   }, []);
 
   const setUserType = useCallback(
     (userType: 'guest' | 'registered' | 'premium') => {
       analytics.setUserType(userType);
-      localStorage.setItem('user_type', userType);
     },
     [],
   );

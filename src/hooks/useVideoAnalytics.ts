@@ -22,7 +22,6 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
     trackVideoFavorite,
     trackVideoShare,
     trackVideoDownload,
-    trackPageView,
     trackError,
     trackVideoLoadTime,
   } = useAnalytics();
@@ -34,15 +33,6 @@ export function useVideoAnalytics(options: VideoAnalyticsOptions) {
   const sessionStartTimeRef = useRef<number>(0);
 
   const { videoId, videoTitle, videoType, source, duration } = options;
-
-  // 追踪页面访问
-  useEffect(() => {
-    trackPageView('video_play', videoTitle, {
-      video_id: videoId,
-      video_type: videoType,
-      source,
-    });
-  }, [videoId, videoTitle, videoType, source, trackPageView]);
 
   // 追踪视频开始播放
   const trackPlay = useCallback(

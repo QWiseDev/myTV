@@ -3,6 +3,79 @@
  * 统一管理所有用户行为和业务事件的追踪
  */
 
+/**
+ * 隐私脱敏：源名、片名、视频 ID、搜索词等不外发明文。
+ * 采用稳定哈希（djb2 双种子），同一输入映射到同一输出，
+ * 保留聚合/去重分析能力，但无法还原原文。
+ */
+const SENSITIVE_KEYS = new Set([
+  // 片名/播放记录
+  'video_title',
+  'related_video_title',
+  'result_title',
+  'content_title',
+  // 视频/内容 ID（常内嵌源信息）
+  'video_id',
+  'related_video_id',
+  'result_id',
+  'content_id',
+  // 片源
+  'source',
+  'from_source',
+  'to_source',
+  'source_name',
+  // 搜索词与联想
+  'query',
+  'search_query',
+  'original_query',
+  'final_query',
+  'suggestion',
+  'selected_suggestion',
+  'suggested_query',
+  'query_corrections',
+  // 其他可能携带源 URL/文案的字段
+  'filters',
+  'error_message',
+]);
+
+function stableHash(input: string): string {
+  let h1 = 5381;
+  let h2 = 52711;
+  for (let i = 0; i < input.length; i++) {
+    const c = input.charCodeAt(i);
+    h1 = (h1 * 33) ^ c;
+    h2 = (h2 * 31) ^ (c + i);
+    h1 >>>= 0;
+    h2 >>>= 0;
+  }
+  return h1.toString(36) + h2.toString(36);
+}
+
+function maskValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value ? `h:${stableHash(value)}` : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      typeof item === 'string' && item ? `h:${stableHash(item)}` : item,
+    );
+  }
+  if (value && typeof value === 'object') {
+    return `h:${stableHash(JSON.stringify(value))}`;
+  }
+  return value;
+}
+
+function maskSensitiveProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> {
+  const masked: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    masked[key] = SENSITIVE_KEYS.has(key) ? maskValue(value) : value;
+  }
+  return masked;
+}
+
 // 事件类型定义
 export interface VideoEvent {
   videoId: string;
@@ -54,27 +127,19 @@ class ClarityAnalytics {
   private userType: 'guest' | 'registered' | 'premium' = 'guest';
 
   /**
-   * 初始化 Clarity Analytics
+   * 初始化 Clarity Analytics（身份信息不再从本地存储读取，统一匿名会话）
    */
-  init(userId?: string, userType?: 'guest' | 'registered' | 'premium') {
+  init() {
     if (typeof window === 'undefined' || !window.clarity) {
-      console.warn('[Analytics] Clarity not available');
       return;
     }
 
     this.isInitialized = true;
-
-    if (userId) {
-      this.setUserId(userId);
-    }
-
-    if (userType) {
-      this.setUserType(userType);
-    }
   }
 
   /**
-   * 设置用户ID
+   * 设置用户ID（仅在明确接入用户体系后调用；identify 第二参是
+   * customSessionId，不能传用户类型）
    */
   setUserId(userId: string) {
     if (!this.isInitialized) return;
@@ -82,7 +147,7 @@ class ClarityAnalytics {
     this.userId = userId;
     try {
       if (window.clarity) {
-        window.clarity('identify', userId, this.userType);
+        window.clarity('identify', userId);
         window.clarity('set', 'user_id', userId);
       }
     } catch (error) {
@@ -379,15 +444,7 @@ class ClarityAnalytics {
    */
   private tryInit() {
     if (typeof window !== 'undefined' && window.clarity) {
-      // 从localStorage获取用户信息并初始化
-      const userId = localStorage.getItem('user_id');
-      const userType =
-        (localStorage.getItem('user_type') as
-          | 'guest'
-          | 'registered'
-          | 'premium') || 'guest';
-
-      this.init(userId || undefined, userType);
+      this.init();
     }
   }
 
@@ -404,6 +461,15 @@ class ClarityAnalytics {
   private maxRetries = 5; // 最多重试5次
 
   private queueEvent(eventName: string, properties: Record<string, unknown>) {
+    // 测试环境（jsdom）下 Clarity 永远不可用，排队重试只会留下游离定时器
+    if (
+      typeof process !== 'undefined' &&
+      process.env.NODE_ENV === 'test' &&
+      !window.clarity
+    ) {
+      return;
+    }
+
     // 如果已经重试次数过多，不再添加新事件到队列
     if (this.retryCount >= this.maxRetries) {
       // 静默跳过，不输出日志以减少控制台噪音
@@ -482,15 +548,14 @@ class ClarityAnalytics {
    */
   private sendEvent(eventName: string, properties: Record<string, unknown>) {
     try {
-      // 添加通用属性
-      const enrichedProperties = {
+      // 添加通用属性（referrer 为浏览器标准字段，保留；业务字段统一脱敏）
+      const enrichedProperties = maskSensitiveProperties({
         timestamp: Date.now(),
         page: window.location.pathname,
         referrer: document.referrer,
         user_type: this.userType,
-        user_id: this.userId,
         ...properties,
-      };
+      });
 
       // 发送到 Clarity
       window.clarity?.('event', eventName, enrichedProperties);

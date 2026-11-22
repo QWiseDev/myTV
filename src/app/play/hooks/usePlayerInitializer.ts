@@ -81,6 +81,16 @@ type AnalyticsHandlers = {
   trackProgress: (value: number) => void;
   handleVolumeChange: (volume: number) => void;
   handleSpeedChange: (speed: number) => void;
+  handleBufferStart: () => void;
+  handleBufferEnd: (duration: number) => void;
+  handleSeek: (fromPosition: number, toPosition: number) => void;
+  handleFullscreenToggle: (isFullscreen: boolean) => void;
+  handleQualityChange: (fromQuality: string, toQuality: string) => void;
+  handlePlayerError: (
+    errorType: string,
+    errorMessage: string,
+    context?: Record<string, unknown>,
+  ) => void;
 };
 
 type HlsConstructor = typeof import('hls.js').default;
@@ -180,6 +190,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const mediaLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  // 埋点辅助状态：卡顿起始时间 / 最近一次播放位置
+  const bufferStartAtRef = useRef<number>(0);
+  const lastPlayTimeRef = useRef<number>(0);
 
   const {
     videoUrl,
@@ -674,6 +687,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             videoUrl: video.currentSrc || video.src,
           });
 
+          analytics.handlePlayerError('video_element_error', error.message, {
+            error_code: error.code,
+          });
+
           setIsVideoLoading(false);
           clearMediaLoadingTimeout();
 
@@ -700,7 +717,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             };
 
             if (!qualityArt.__qualityControls) {
-              const qualityControls = createQualityControls(artPlayer);
+              const qualityControls = createQualityControls(
+                artPlayer,
+                (fromLabel, toLabel) =>
+                  // 手动选档：auto 标记由实现侧默认为 false
+                  analytics.handleQualityChange(fromLabel, toLabel),
+              );
               qualityArt.__qualityControls = qualityControls;
               const cleanupSpeed = addSpeedControl(artPlayer);
 
@@ -848,6 +870,28 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           analytics.handleSpeedChange(artPlayer.playbackRate);
         });
 
+        // 缓冲卡顿统计（waiting → playing 为一次完整卡顿）
+        artPlayer.on('video:waiting', () => {
+          if (!isActivePlayer()) return;
+          if (bufferStartAtRef.current === 0) {
+            bufferStartAtRef.current = Date.now();
+            analytics.handleBufferStart();
+          }
+        });
+        artPlayer.on('video:playing', () => {
+          if (!isActivePlayer()) return;
+          if (bufferStartAtRef.current > 0) {
+            analytics.handleBufferEnd(Date.now() - bufferStartAtRef.current);
+            bufferStartAtRef.current = 0;
+          }
+        });
+
+        // 全屏切换埋点
+        artPlayer.on('fullscreen', (flag: boolean) => {
+          if (!isActivePlayer()) return;
+          analytics.handleFullscreenToggle(!!flag);
+        });
+
         artPlayer.on('video:canplay', () => {
           if (!isActivePlayer()) return;
           clearMediaLoadingTimeout();
@@ -946,6 +990,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const currentTime = artPlayer.currentTime || 0;
           const duration = artPlayer.duration || 0;
 
+          lastPlayTimeRef.current = currentTime;
           throttledTimeUpdate(duration);
           lastDanmakuRecoverAt = recoverStoppedDanmaku(
             artPlayer,
@@ -968,6 +1013,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         artPlayer.on('video:seeked', () => {
           if (!isActivePlayer()) return;
           resetDanmakuTimeline(artPlayer);
+          // 拖动进度条埋点：拖动距离基于 timeupdate 维护的最近播放位置
+          const to = artPlayer.currentTime || 0;
+          analytics.handleSeek(lastPlayTimeRef.current, to);
+          lastPlayTimeRef.current = to;
         });
 
         if (artPlayer.video) {

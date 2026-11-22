@@ -4,7 +4,7 @@ import type { Metadata, Viewport } from 'next';
 
 import './globals.css';
 
-import { ClarityProvider } from '@/components/ClarityProvider';
+import { ClarityTracker } from '@/components/ClarityTracker';
 
 import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
 import { SessionTracker } from '../components/SessionTracker';
@@ -105,25 +105,15 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* 仅在生产环境启用 ClarityProvider */}
-          {runtimeConfig.CLARITY_ENABLED ? (
-            <ClarityProvider
-              projectId={runtimeConfig.CLARITY_PROJECT_ID}
-              enable={true}
-            >
-              <SiteProvider siteName={siteName} announcement={announcement}>
-                <SessionTracker />
-                {children}
-                <GlobalErrorIndicator />
-              </SiteProvider>
-            </ClarityProvider>
-          ) : (
-            <SiteProvider siteName={siteName} announcement={announcement}>
-              <SessionTracker />
-              {children}
-              <GlobalErrorIndicator />
-            </SiteProvider>
+          {/* 仅在生产环境启用 Clarity 埋点 */}
+          {runtimeConfig.CLARITY_ENABLED && (
+            <ClarityTracker projectId={runtimeConfig.CLARITY_PROJECT_ID} />
           )}
+          <SiteProvider siteName={siteName} announcement={announcement}>
+            <SessionTracker />
+            {children}
+            <GlobalErrorIndicator />
+          </SiteProvider>
         </ThemeProvider>
       </body>
     </html>

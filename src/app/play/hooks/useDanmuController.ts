@@ -2,6 +2,7 @@
 
 import { MutableRefObject, useCallback, useRef } from 'react';
 
+import { analytics } from '@/lib/analytics';
 import {
   danmakuMediaKey,
   fetchSharedDanmakuSelection,
@@ -118,6 +119,9 @@ export function useDanmuController({
 
     danmuLoadingRef.current = true;
 
+    // 弹幕加载埋点：耗时 / 条数 / 失败（缓存命中与真实请求一并统计）
+    const danmuLoadStartedAt = Date.now();
+
     const loadPromise = loadManagerRef.current.load(requestInput);
     const requestKey = loadManagerRef.current.activeKey;
     lastDanmuLoadKeyRef.current = requestKey;
@@ -135,11 +139,22 @@ export function useDanmuController({
         throw error;
       }
 
+      analytics.trackFeatureUsage('danmu_loaded', true, {
+        count: danmaku.length,
+        duration_ms: Date.now() - danmuLoadStartedAt,
+        manual_selected: Boolean(manualEpisodeId),
+      });
+
       return danmaku;
     } catch (error) {
       if (isDanmakuAbortError(error)) {
         throw error;
       }
+      analytics.trackError(
+        'danmu_load_failed',
+        error instanceof Error ? error.message : '弹幕加载失败',
+        { duration_ms: Date.now() - danmuLoadStartedAt },
+      );
       console.error('加载外部弹幕失败:', error);
       throw error;
     } finally {

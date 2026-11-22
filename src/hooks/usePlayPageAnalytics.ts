@@ -45,12 +45,24 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   // 页面状态 refs
   const playStartTimeRef = useRef<number>(0);
   const lastQualityChangeRef = useRef<string>('');
+  const qualityChangeCountRef = useRef<number>(0);
   const bufferCountRef = useRef<number>(0);
   const errorCountRef = useRef<number>(0);
   const subtitleEnabledRef = useRef<boolean>(false);
   const playbackSpeedRef = useRef<number>(1);
   const volumeLevelRef = useRef<number>(1);
   const isFullscreenRef = useRef<boolean>(false);
+  // 控件事件节流（音量/倍速拖动会连发）
+  const lastEmitAtRef = useRef<Record<string, number>>({});
+
+  const shouldEmit = useCallback((key: string, intervalMs = 500) => {
+    const now = Date.now();
+    if (now - (lastEmitAtRef.current[key] || 0) < intervalMs) {
+      return false;
+    }
+    lastEmitAtRef.current[key] = now;
+    return true;
+  }, []);
 
   const {
     videoId,
@@ -61,9 +73,9 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     seriesId,
   } = options;
 
-  // 页面访问埋点
+  // 页面访问埋点（片名等业务字段在 lib 层统一脱敏，这里只传通用页面标签）
   useEffect(() => {
-    trackPageView('video_play_page', videoTitle, {
+    trackPageView('video_play_page', '播放页', {
       video_id: videoId,
       video_type: videoType,
       episode_number: episodeNumber,
@@ -83,36 +95,22 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     options.source,
   ]);
 
-  // 播放器控制埋点
-  const trackPlayerControl = useCallback(
-    (action: string, metadata?: Record<string, unknown>) => {
-      trackFeatureUsage('player_control', true, {
-        action,
-        video_id: videoId,
-        video_title: videoTitle,
-        current_position: getCurrentSessionTime(),
-        ...metadata,
-      });
-    },
-    [videoId, videoTitle, getCurrentSessionTime, trackFeatureUsage],
-  );
+  // 播放/暂停已由 video_play / video_pause 事件承载，这里不再重复上报
 
   // 播放事件
   const handlePlay = useCallback(
     (position = 0, quality?: string) => {
       playStartTimeRef.current = Date.now();
       trackPlay(position, quality);
-      trackPlayerControl('play', { position, quality });
     },
-    [trackPlay, trackPlayerControl],
+    [trackPlay],
   );
 
   const handlePause = useCallback(
-    (position = 0, reason?: 'user' | 'buffering' | 'error') => {
+    (position = 0) => {
       trackPause(position);
-      trackPlayerControl('pause', { position, reason });
     },
-    [trackPause, trackPlayerControl],
+    [trackPause],
   );
 
   const handleSeek = useCallback(
@@ -131,6 +129,7 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   const handleQualityChange = useCallback(
     (fromQuality: string, toQuality: string, auto = false) => {
       lastQualityChangeRef.current = toQuality;
+      qualityChangeCountRef.current++;
       trackFeatureUsage('quality_change', true, {
         video_id: videoId,
         from_quality: fromQuality,
@@ -192,41 +191,45 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   // 播放速度
   const handleSpeedChange = useCallback(
     (newSpeed: number) => {
+      const oldSpeed = playbackSpeedRef.current;
       playbackSpeedRef.current = newSpeed;
+      if (!shouldEmit('speed') || oldSpeed === newSpeed) return;
       trackFeatureUsage('playback_speed_change', true, {
         video_id: videoId,
         new_speed: newSpeed,
-        old_speed: playbackSpeedRef.current,
+        old_speed: oldSpeed,
         position: getCurrentSessionTime(),
       });
     },
-    [videoId, getCurrentSessionTime, trackFeatureUsage],
+    [videoId, getCurrentSessionTime, trackFeatureUsage, shouldEmit],
   );
 
   // 音量控制
   const handleVolumeChange = useCallback(
     (newVolume: number) => {
       volumeLevelRef.current = newVolume;
+      if (!shouldEmit('volume')) return;
       trackFeatureUsage('volume_change', true, {
         video_id: videoId,
         new_volume: newVolume,
         position: getCurrentSessionTime(),
       });
     },
-    [videoId, getCurrentSessionTime, trackFeatureUsage],
+    [videoId, getCurrentSessionTime, trackFeatureUsage, shouldEmit],
   );
 
   // 全屏切换
   const handleFullscreenToggle = useCallback(
     (isFullscreen: boolean) => {
       isFullscreenRef.current = isFullscreen;
+      if (!shouldEmit('fullscreen')) return;
       trackFeatureUsage('fullscreen_toggle', true, {
         video_id: videoId,
         is_fullscreen: isFullscreen,
         position: getCurrentSessionTime(),
       });
     },
-    [videoId, getCurrentSessionTime, trackFeatureUsage],
+    [videoId, getCurrentSessionTime, trackFeatureUsage, shouldEmit],
   );
 
   // 错误处理
@@ -314,21 +317,25 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
   // 会话结束统计
   const trackSessionEnd = useCallback(() => {
     const totalWatchTime = getTotalWatchTime();
-    const sessionDuration = Date.now() - playStartTimeRef.current;
-    const completionRate = options.duration
-      ? (totalWatchTime / options.duration) * 100
-      : 0;
+    const sessionDuration =
+      playStartTimeRef.current > 0 ? Date.now() - playStartTimeRef.current : 0;
+    const completionRate =
+      options.duration && options.duration > 0
+        ? Math.min((totalWatchTime / options.duration) * 100, 100)
+        : 0;
 
     trackFeatureUsage('play_session_end', true, {
       video_id: videoId,
       total_watch_time: totalWatchTime,
       session_duration: sessionDuration,
-      completion_rate: Math.min(completionRate, 100),
+      completion_rate: completionRate,
       buffer_count: bufferCountRef.current,
       error_count: errorCountRef.current,
-      quality_changes_count: 1, // 可以通过 ref 追踪
+      quality_changes_count: qualityChangeCountRef.current,
+      last_quality: lastQualityChangeRef.current,
       subtitles_used: subtitleEnabledRef.current,
-      avg_playback_speed: playbackSpeedRef.current,
+      last_playback_speed: playbackSpeedRef.current,
+      last_volume: volumeLevelRef.current,
       fullscreen_used: isFullscreenRef.current,
     });
 
@@ -353,15 +360,22 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     trackConversion,
   ]);
 
-  // 页面离开时触发
+  // 页面离开时触发：beforeunload 阶段请求不可靠，改用 visibilitychange/pagehide
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        trackSessionEnd();
+      }
+    };
+    const handlePageHide = () => {
       trackSessionEnd();
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
       trackSessionEnd();
     };
   }, [trackSessionEnd]);

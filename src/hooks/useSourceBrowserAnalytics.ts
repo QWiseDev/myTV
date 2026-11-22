@@ -425,15 +425,22 @@ export function useSourceBrowserAnalytics(
     }
   }, [trackFeatureUsage, trackConversion]);
 
-  // 页面离开时追踪会话结束
+  // 页面离开时追踪会话结束：beforeunload 阶段请求不可靠，改用 visibilitychange/pagehide
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        trackBrowserSessionEnd();
+      }
+    };
+    const handlePageHide = () => {
       trackBrowserSessionEnd();
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
       trackBrowserSessionEnd();
     };
   }, [trackBrowserSessionEnd]);

@@ -9,6 +9,7 @@ import {
   useRef,
 } from 'react';
 
+import { analytics } from '@/lib/analytics';
 import { cachedGet } from '@/lib/api-cache.client';
 import type { SearchResult } from '@/lib/types';
 
@@ -140,6 +141,14 @@ export function useSourceSwitcher({
       if (sourcePageUrl.pathname !== '/play') {
         return;
       }
+
+      // 换源尝试埋点：from/to 源名在 lib 层统一脱敏
+      analytics.trackFeatureUsage('source_switch', true, {
+        from_source: currentSourceRef.current,
+        to_source: newSource,
+        initiated_by: initiatedBy,
+        episode_index: currentEpisodeIndex,
+      });
 
       const operationGeneration = ++operationGenerationRef.current;
       const isCurrentOperation = () =>
@@ -339,6 +348,15 @@ export function useSourceSwitcher({
         setIsVideoLoading(false);
         showSwitchFailureNotice(
           err instanceof Error ? err.message : '换源失败',
+        );
+        analytics.trackError(
+          'source_switch_failed',
+          err instanceof Error ? err.message : '换源失败',
+          {
+            to_source: newSource,
+            initiated_by: initiatedBy,
+            episode_index: currentEpisodeIndex,
+          },
         );
       }
     },
