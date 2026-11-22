@@ -195,6 +195,20 @@ export default function GuestHome() {
           </div>
         ) : (
           <>
+            {/* 访客模式提示条：登录失效/未登录时给出醒目的恢复入口 */}
+            <div className='mt-3 flex items-center justify-between gap-3 rounded-lg border border-[#00be06]/25 bg-[#00be06]/[0.07] px-4 py-2'>
+              <p className='min-w-0 text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                当前为访客模式，仅可观看「爱奇艺」片源；登录后可享播放记录、收藏与全部片源
+              </p>
+              <a
+                href='/login'
+                className='inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#00a304] hover:underline dark:text-[#57e07a]'
+              >
+                <LogIn className='h-3.5 w-3.5' />
+                立即登录
+              </a>
+            </div>
+
             {/* 分类 chips：单行横向滚动 */}
             {categories.length > 0 && !searchKeyword.trim() && (
               <div className='mt-2 flex items-center justify-between gap-4'>

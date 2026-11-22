@@ -15,13 +15,21 @@ export function getAuthInfoFromCookie(request: NextRequest): {
     return null;
   }
 
-  try {
-    const decoded = decodeURIComponent(authCookie.value);
-    const authData = JSON.parse(decoded);
-    return authData;
-  } catch (error) {
-    return null;
+  // 兼容历史上被双重编码的 cookie（generateAuthCookie 手动编码 + cookies.set
+  // 默认编码叠加）：解码一次解析失败且仍含 % 时，再解一次
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const decoded =
+        attempt === 0
+          ? decodeURIComponent(authCookie.value)
+          : decodeURIComponent(decodeURIComponent(authCookie.value));
+      const authData = JSON.parse(decoded);
+      return authData;
+    } catch (error) {
+      // 第一次失败可能是双重编码，继续尝试第二次
+    }
   }
+  return null;
 }
 
 export interface AuthInfoWithUsername {

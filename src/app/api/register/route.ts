@@ -58,7 +58,9 @@ async function generateAuthCookie(
     authData.timestamp = Date.now(); // 添加时间戳防重放攻击
   }
 
-  return encodeURIComponent(JSON.stringify(authData));
+  // 不再手动 encodeURIComponent：NextResponse.cookies.set 默认会编码一次，
+  // 叠加手动编码会产生双重编码 cookie，服务端单次解码无法解析（Next 15 升级回归）
+  return JSON.stringify(authData);
 }
 
 export async function POST(req: NextRequest) {
