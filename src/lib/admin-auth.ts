@@ -22,15 +22,9 @@ async function resolveRoleFromConfig(
   return null;
 }
 
-export async function getAdminRoleFromRequest(
-  request: NextRequest,
+export async function getAdminRoleByUsername(
+  username: string,
 ): Promise<AdminRole | null> {
-  const authInfo = getAuthInfoFromCookie(request);
-  if (!authInfo) {
-    return null;
-  }
-
-  const username = authInfo.username;
   if (!username) {
     return null;
   }
@@ -41,4 +35,15 @@ export async function getAdminRoleFromRequest(
 
   const config = await getConfig();
   return resolveRoleFromConfig(config, username);
+}
+
+export async function getAdminRoleFromRequest(
+  request: NextRequest,
+): Promise<AdminRole | null> {
+  const authInfo = getAuthInfoFromCookie(request);
+  if (!authInfo?.username) {
+    return null;
+  }
+
+  return getAdminRoleByUsername(authInfo.username);
 }

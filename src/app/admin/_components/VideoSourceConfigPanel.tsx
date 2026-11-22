@@ -43,6 +43,7 @@ interface DataSource {
   api: string;
   detail?: string;
   disabled?: boolean;
+  adult?: boolean;
   from: 'config' | 'custom';
 }
 
@@ -224,6 +225,7 @@ const VideoSourceConfig = ({
         name: newSource.name,
         api: newSource.api,
         detail: newSource.detail,
+        adult: newSource.adult,
       });
       setNewSource({
         name: '',
@@ -231,6 +233,7 @@ const VideoSourceConfig = ({
         api: '',
         detail: '',
         disabled: false,
+        adult: false,
         from: 'custom',
       });
       setShowAddForm(false);
@@ -471,6 +474,11 @@ const VideoSourceConfig = ({
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {source.name}
+          {source.adult && (
+            <span className='ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'>
+              成人
+            </span>
+          )}
         </td>
         <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
           {source.key}
@@ -1018,6 +1026,17 @@ const VideoSourceConfig = ({
               className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
             />
           </div>
+          <label className='flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300'>
+            <input
+              type='checkbox'
+              checked={Boolean(newSource.adult)}
+              onChange={(e) =>
+                setNewSource((prev) => ({ ...prev, adult: e.target.checked }))
+              }
+              className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600'
+            />
+            成人源（仅黄果模块可见，不参与全局搜索）
+          </label>
           <div className='flex justify-end'>
             <button
               onClick={handleAddSource}

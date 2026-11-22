@@ -36,6 +36,24 @@ interface ConfigFileStruct {
   };
 }
 
+/**
+ * 内置成人源：仅供黄果模块（登录用户可见）使用。
+ * 随 refineConfig 幂等合并进 SourceConfig，from 为 'config'（可禁用、不可删除）；
+ * 全局搜索/换源/默认片源库均不包含，具体过滤见 getAvailableApiSites / getAdultApiSites。
+ */
+export const BUILT_IN_ADULT_SOURCES: {
+  key: string;
+  name: string;
+  api: string;
+  detail?: string;
+}[] = [
+  {
+    key: 'jp98.vip',
+    name: '黄果',
+    api: 'https://jp98.vip/api.php/provide/vod/',
+  },
+];
+
 export const API_CONFIG = {
   search: {
     path: '?ac=videolist&wd=',
@@ -69,8 +87,18 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
     fileConfig = {} as ConfigFileStruct;
   }
 
-  // 合并文件中的源信息
-  const apiSitesFromFile = Object.entries(fileConfig.api_site || []);
+  // 合并文件中的源信息（内置成人源与文件源一同合并，保证黄果模块始终可用）
+  const builtInAdultKeys = new Set(BUILT_IN_ADULT_SOURCES.map((s) => s.key));
+  const apiSitesFromFile: [string, ApiSite][] = [
+    ...Object.entries(fileConfig.api_site || []),
+    ...BUILT_IN_ADULT_SOURCES.map(
+      (s) =>
+        [s.key, { key: s.key, name: s.name, api: s.api, detail: s.detail }] as [
+          string,
+          ApiSite,
+        ],
+    ),
+  ];
   const currentApiSites = new Map(
     (adminConfig.SourceConfig || []).map((s) => [s.key, s]),
   );
@@ -83,6 +111,9 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
       existingSource.api = site.api;
       existingSource.detail = site.detail;
       existingSource.from = 'config';
+      if (builtInAdultKeys.has(key)) {
+        existingSource.adult = true;
+      }
     } else {
       // 如果不存在，创建新条目
       currentApiSites.set(key, {
@@ -92,6 +123,7 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
         detail: site.detail,
         from: 'config',
         disabled: false,
+        ...(builtInAdultKeys.has(key) ? { adult: true } : {}),
       });
     }
   });
@@ -579,30 +611,32 @@ export async function getCacheTime(): Promise<number> {
   return config.SiteConfig.SiteInterfaceCacheTime || 7200;
 }
 
-export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
-  const config = await getConfig();
-  const allApiSites = config.SourceConfig.filter((s) => !s.disabled);
+/** SourceConfig 条目按用户 enabledApis/tags 过滤后映射为 ApiSite */
+function filterSitesForUser(
+  sites: AdminConfig['SourceConfig'],
+  config: AdminConfig,
+  user?: string,
+): ApiSite[] {
+  const toApiSite = (s: AdminConfig['SourceConfig'][number]): ApiSite => ({
+    key: s.key,
+    name: s.name,
+    api: s.api,
+    detail: s.detail,
+  });
 
   if (!user) {
-    return allApiSites;
+    return sites.map(toApiSite);
   }
 
   const userConfig = config.UserConfig.Users.find((u) => u.username === user);
   if (!userConfig) {
-    return allApiSites;
+    return sites.map(toApiSite);
   }
 
   // 优先根据用户自己的 enabledApis 配置查找
   if (userConfig.enabledApis && userConfig.enabledApis.length > 0) {
     const userApiSitesSet = new Set(userConfig.enabledApis);
-    return allApiSites
-      .filter((s) => userApiSitesSet.has(s.key))
-      .map((s) => ({
-        key: s.key,
-        name: s.name,
-        api: s.api,
-        detail: s.detail,
-      }));
+    return sites.filter((s) => userApiSitesSet.has(s.key)).map(toApiSite);
   }
 
   // 如果没有 enabledApis 配置，则根据 tags 查找
@@ -620,19 +654,26 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     });
 
     if (enabledApisFromTags.size > 0) {
-      return allApiSites
-        .filter((s) => enabledApisFromTags.has(s.key))
-        .map((s) => ({
-          key: s.key,
-          name: s.name,
-          api: s.api,
-          detail: s.detail,
-        }));
+      return sites.filter((s) => enabledApisFromTags.has(s.key)).map(toApiSite);
     }
   }
 
   // 如果都没有配置，返回所有可用的 API 站点
-  return allApiSites;
+  return sites.map(toApiSite);
+}
+
+/** 常规源：排除成人源（黄果模块专用源不参与全局搜索/换源/默认片源库） */
+export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
+  const config = await getConfig();
+  const sites = config.SourceConfig.filter((s) => !s.disabled && !s.adult);
+  return filterSitesForUser(sites, config, user);
+}
+
+/** 成人源：仅黄果模块使用，对登录用户开放（访客不可见） */
+export async function getAdultApiSites(user?: string): Promise<ApiSite[]> {
+  const config = await getConfig();
+  const sites = config.SourceConfig.filter((s) => !s.disabled && s.adult);
+  return filterSitesForUser(sites, config, user);
 }
 
 export async function setCachedConfig(config: AdminConfig) {

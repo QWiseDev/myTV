@@ -2,6 +2,7 @@
 
 import {
   Cat,
+  Citrus,
   Clover,
   Film,
   Globe,
@@ -15,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+
+import { useIsLoggedIn } from '@/hooks/useIsLoggedIn';
 
 export interface NavMenuItem {
   icon: any;
@@ -73,6 +76,7 @@ const CONTENT_MENU_ITEMS: Array<{
  */
 export function useNavMenuItems(): NavMenuItem[] {
   const router = useRouter();
+  const isLoggedIn = useIsLoggedIn();
   const [hasCustomCategories, setHasCustomCategories] = useState(false);
 
   useEffect(() => {
@@ -108,6 +112,16 @@ export function useNavMenuItems(): NavMenuItem[] {
       icon: Star,
       label: '自定义',
       href: '/douban?type=custom',
+      group: 'channel',
+    });
+  }
+
+  // 黄果模块（成人源）：仅登录用户可见，访客隐藏
+  if (isLoggedIn) {
+    items.push({
+      icon: Citrus,
+      label: '黄果',
+      href: '/source-browser?group=adult',
       group: 'channel',
     });
   }

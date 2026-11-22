@@ -3,8 +3,15 @@
 'use client';
 
 import { Search, Server, Tv } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { ClientCache } from '@/lib/client-cache';
 import type {
@@ -41,8 +48,10 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export default function SourceBrowserPage() {
+function SourceBrowserPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isAdultModule = searchParams.get('group') === 'adult';
 
   // 📊 源浏览器分析埋点
   const analytics = useSourceBrowserAnalytics({
@@ -139,9 +148,12 @@ export default function SourceBrowserPage() {
     setSourceError(null);
     const startTime = Date.now();
     try {
-      const res = await fetch('/api/source-browser/sites', {
-        cache: 'no-store',
-      });
+      const res = await fetch(
+        isAdultModule
+          ? '/api/source-browser/sites?group=adult'
+          : '/api/source-browser/sites',
+        { cache: 'no-store' },
+      );
       if (res.status === 401) {
         throw new Error('登录状态已失效，请重新登录');
       }
@@ -177,33 +189,40 @@ export default function SourceBrowserPage() {
       setLoadingSources(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：analytics 为每渲染重建的对象，加入依赖会使 fetchSources 每渲染重建并触发挂载 effect 重复请求；其内部 handler 均为稳定 useCallback
-  }, []); // 移除 analytics 依赖
+  }, [isAdultModule]); // isAdultModule 决定源分组；移除 analytics 依赖
 
-  const fetchCategories = useCallback(async (sourceKey: string) => {
-    if (!sourceKey) return;
-    setLoadingCategories(true);
-    setCategoryError(null);
-    try {
-      const res = await fetch(
-        `/api/source-browser/categories?source=${encodeURIComponent(sourceKey)}`,
-      );
-      if (!res.ok) throw new Error('获取分类失败');
-      const data = await res.json();
-      const list: Category[] = data.categories || [];
-      setCategories(list);
-      if (list.length > 0) {
-        setActiveCategory(list[0].type_id);
-      } else {
+  const fetchCategories = useCallback(
+    async (sourceKey: string) => {
+      if (!sourceKey) return;
+      setLoadingCategories(true);
+      setCategoryError(null);
+      try {
+        const res = await fetch(
+          `/api/source-browser/categories?source=${encodeURIComponent(sourceKey)}`,
+        );
+        if (!res.ok) throw new Error('获取分类失败');
+        const data = await res.json();
+        const list: Category[] = data.categories || [];
+        setCategories(list);
+        if (list.length > 0) {
+          // 黄果模块默认选中「AI短剧」分类
+          const preferred = isAdultModule
+            ? list.find((c) => c.type_name === 'AI短剧')
+            : undefined;
+          setActiveCategory(preferred ? preferred.type_id : list[0].type_id);
+        } else {
+          setActiveCategory('');
+        }
+      } catch (e: unknown) {
+        setCategoryError(toErrorMessage(e, '获取分类失败'));
+        setCategories([]);
         setActiveCategory('');
+      } finally {
+        setLoadingCategories(false);
       }
-    } catch (e: unknown) {
-      setCategoryError(toErrorMessage(e, '获取分类失败'));
-      setCategories([]);
-      setActiveCategory('');
-    } finally {
-      setLoadingCategories(false);
-    }
-  }, []);
+    },
+    [isAdultModule],
+  );
 
   const fetchItems = useCallback(
     async (
@@ -612,97 +631,103 @@ export default function SourceBrowserPage() {
   };
 
   return (
-    <PageLayout activePath='/source-browser'>
+    <PageLayout
+      activePath={
+        isAdultModule ? '/source-browser?group=adult' : '/source-browser'
+      }
+    >
       <div className='max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-5 space-y-5'>
-        {/* 来源站选择条：横向滚动 + 过滤 */}
-        <section>
-          <div className='flex items-center justify-between gap-3 mb-2.5'>
-            <div className='flex items-center gap-2 text-sm font-semibold text-[#111111] dark:text-[#f5f5f5]'>
-              <Server className='w-4 h-4 text-[#00a304] dark:text-[#1acd50]' />
-              选择来源站
-              {!loadingSources && sources.length > 0 && (
-                <span className='text-xs px-2 py-0.5 rounded-full bg-[#00be06]/10 dark:bg-[#00be06]/15 text-[#00a304] dark:text-[#1acd50] font-medium'>
-                  {sources.length}
-                </span>
-              )}
-            </div>
-            {!loadingSources && sources.length > 10 && (
-              <div className='relative w-44 sm:w-56 shrink-0'>
-                <input
-                  type='text'
-                  value={sourceFilter}
-                  onChange={(e) => setSourceFilter(e.target.value)}
-                  placeholder='筛选来源站...'
-                  className='w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-[#111111] dark:text-[#f5f5f5] placeholder:text-[#8f8f8f] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 outline-none transition-colors'
-                />
-                <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8f8f8f] pointer-events-none' />
-              </div>
-            )}
-          </div>
-
-          {loadingSources ? (
-            <div className='flex items-center gap-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-3'>
-              <div className='w-4 h-4 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
-              加载中...
-            </div>
-          ) : sourceError ? (
-            <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
-              {sourceError}
-            </div>
-          ) : sources.length === 0 ? (
-            <div className='text-center py-8'>
-              <div className='w-14 h-14 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
-                <Server className='w-6 h-6 text-[#8f8f8f]' />
-              </div>
-              <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
-                暂无可用来源
-              </p>
-            </div>
-          ) : (
-            <div className='relative'>
-              <div className='flex flex-wrap gap-2 pb-1.5'>
-                {filteredSources.map((s) => (
-                  <button
-                    key={s.key}
-                    onClick={() => {
-                      // 📊 分析埋点：源切换
-                      trackAnalyticsSafely(() =>
-                        analytics.handleSourceClick(
-                          {
-                            id: s.key,
-                            name: s.name,
-                            url: s.api,
-                            type: 'api',
-                            status: 'active',
-                            lastChecked: new Date(),
-                            itemCount: 0,
-                            category: 'unknown',
-                            language: 'unknown',
-                          },
-                          filteredSources.findIndex((x) => x.key === s.key),
-                          'all',
-                        ),
-                      );
-                      setActiveSourceKey(s.key);
-                    }}
-                    className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
-                      activeSourceKey === s.key
-                        ? 'bg-[#00be06] border-[#00be06] text-white'
-                        : 'bg-transparent border-[#d9d9d9] dark:border-[#3a3a3a] text-[#5f5f5f] dark:text-[#a8a8a8] hover:border-[#00be06] hover:text-[#00a304] dark:hover:text-[#1acd50]'
-                    }`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-                {filteredSources.length === 0 && sourceFilter && (
-                  <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1.5 px-1'>
-                    未找到匹配 &quot;{sourceFilter}&quot; 的来源
-                  </div>
+        {/* 来源站选择条：横向滚动 + 过滤；黄果模块单源，隐藏选择条 */}
+        {!isAdultModule && (
+          <section>
+            <div className='flex items-center justify-between gap-3 mb-2.5'>
+              <div className='flex items-center gap-2 text-sm font-semibold text-[#111111] dark:text-[#f5f5f5]'>
+                <Server className='w-4 h-4 text-[#00a304] dark:text-[#1acd50]' />
+                选择来源站
+                {!loadingSources && sources.length > 0 && (
+                  <span className='text-xs px-2 py-0.5 rounded-full bg-[#00be06]/10 dark:bg-[#00be06]/15 text-[#00a304] dark:text-[#1acd50] font-medium'>
+                    {sources.length}
+                  </span>
                 )}
               </div>
+              {!loadingSources && sources.length > 10 && (
+                <div className='relative w-44 sm:w-56 shrink-0'>
+                  <input
+                    type='text'
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    placeholder='筛选来源站...'
+                    className='w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[#e8e8e8] dark:border-[#3a3a3a] bg-white dark:bg-[#2a2a2a] text-[#111111] dark:text-[#f5f5f5] placeholder:text-[#8f8f8f] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 outline-none transition-colors'
+                  />
+                  <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8f8f8f] pointer-events-none' />
+                </div>
+              )}
             </div>
-          )}
-        </section>
+
+            {loadingSources ? (
+              <div className='flex items-center gap-2 text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-3'>
+                <div className='w-4 h-4 border-2 border-[#00be06] border-t-transparent rounded-full animate-spin'></div>
+                加载中...
+              </div>
+            ) : sourceError ? (
+              <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
+                {sourceError}
+              </div>
+            ) : sources.length === 0 ? (
+              <div className='text-center py-8'>
+                <div className='w-14 h-14 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
+                  <Server className='w-6 h-6 text-[#8f8f8f]' />
+                </div>
+                <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                  暂无可用来源
+                </p>
+              </div>
+            ) : (
+              <div className='relative'>
+                <div className='flex flex-wrap gap-2 pb-1.5'>
+                  {filteredSources.map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={() => {
+                        // 📊 分析埋点：源切换
+                        trackAnalyticsSafely(() =>
+                          analytics.handleSourceClick(
+                            {
+                              id: s.key,
+                              name: s.name,
+                              url: s.api,
+                              type: 'api',
+                              status: 'active',
+                              lastChecked: new Date(),
+                              itemCount: 0,
+                              category: 'unknown',
+                              language: 'unknown',
+                            },
+                            filteredSources.findIndex((x) => x.key === s.key),
+                            'all',
+                          ),
+                        );
+                        setActiveSourceKey(s.key);
+                      }}
+                      className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
+                        activeSourceKey === s.key
+                          ? 'bg-[#00be06] border-[#00be06] text-white'
+                          : 'bg-transparent border-[#d9d9d9] dark:border-[#3a3a3a] text-[#5f5f5f] dark:text-[#a8a8a8] hover:border-[#00be06] hover:text-[#00a304] dark:hover:text-[#1acd50]'
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                  {filteredSources.length === 0 && sourceFilter && (
+                    <div className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8] py-1.5 px-1'>
+                      未找到匹配 &quot;{sourceFilter}&quot; 的来源
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 工具栏：搜索 + 排序/筛选 */}
         {activeSource && (
@@ -1267,5 +1292,13 @@ export default function SourceBrowserPage() {
         )}
       </div>
     </PageLayout>
+  );
+}
+
+export default function SourceBrowserPage() {
+  return (
+    <Suspense>
+      <SourceBrowserPageClient />
+    </Suspense>
   );
 }

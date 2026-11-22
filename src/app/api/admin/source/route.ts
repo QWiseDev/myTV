@@ -64,11 +64,12 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'add': {
-        const { key, name, api, detail } = body as {
+        const { key, name, api, detail, adult } = body as {
           key?: string;
           name?: string;
           api?: string;
           detail?: string;
+          adult?: boolean;
         };
         if (!key || !name || !api) {
           return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
           detail,
           from: 'custom',
           disabled: false,
+          adult: Boolean(adult),
         });
         break;
       }

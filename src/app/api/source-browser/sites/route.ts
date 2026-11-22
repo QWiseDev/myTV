@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveRequestUser } from '@/lib/auth';
-import { getAvailableApiSites } from '@/lib/config';
+import { getAdultApiSites, getAvailableApiSites } from '@/lib/config';
 import { checkGuestRateLimit, getGuestSource } from '@/lib/guest-source';
 
 export const runtime = 'nodejs';
@@ -28,7 +28,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ sources });
     }
 
-    const availableSites = await getAvailableApiSites(user.username);
+    // 黄果模块：group=adult 时仅返回成人源（登录用户可用，访客已在上方拦截）
+    const group = request.nextUrl.searchParams.get('group');
+    const availableSites =
+      group === 'adult'
+        ? await getAdultApiSites(user.username)
+        : await getAvailableApiSites(user.username);
     const sources = availableSites
       .filter((s) => Boolean(s.api?.trim()))
       .map((s) => ({ key: s.key, name: s.name, api: s.api }));

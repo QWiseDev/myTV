@@ -3,11 +3,13 @@
  */
 
 const mockGetAvailableApiSites = jest.fn();
+const mockGetAdultApiSites = jest.fn();
 
 jest.mock('@/lib/config', () => ({
   // 惰性引用：jest.mock 工厂在模块初始化阶段执行，须等测试体运行时才能拿到 mock 实例
   getAvailableApiSites: (...args: unknown[]) =>
     mockGetAvailableApiSites(...args),
+  getAdultApiSites: (...args: unknown[]) => mockGetAdultApiSites(...args),
 }));
 
 import {
@@ -26,6 +28,11 @@ const OTHER_SITE = {
   name: '其他源',
   api: 'https://other.example.com',
 };
+const ADULT_SITE = {
+  key: 'jp98.vip',
+  name: '黄果',
+  api: 'https://jp98.vip/api.php/provide/vod/',
+};
 
 const makeRequest = (ip = '1.2.3.4') =>
   ({
@@ -35,6 +42,8 @@ const makeRequest = (ip = '1.2.3.4') =>
 describe('guest-source', () => {
   beforeEach(() => {
     mockGetAvailableApiSites.mockReset();
+    mockGetAdultApiSites.mockReset();
+    mockGetAdultApiSites.mockResolvedValue([]);
   });
 
   describe('getGuestSource', () => {
@@ -80,6 +89,19 @@ describe('guest-source', () => {
       ).resolves.toBeNull();
       await expect(
         isSourceAllowedForRequest('bob', GUEST_SITE.key),
+      ).resolves.toBeNull();
+    });
+
+    it('allows logged-in users to access adult sources but blocks guests', async () => {
+      mockGetAvailableApiSites.mockResolvedValue([OTHER_SITE, GUEST_SITE]);
+      mockGetAdultApiSites.mockResolvedValue([ADULT_SITE]);
+
+      await expect(
+        isSourceAllowedForRequest('alice', ADULT_SITE.key),
+      ).resolves.toEqual(ADULT_SITE);
+
+      await expect(
+        isSourceAllowedForRequest(null, ADULT_SITE.key),
       ).resolves.toBeNull();
     });
   });

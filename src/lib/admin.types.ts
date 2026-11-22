@@ -58,6 +58,8 @@ export interface AdminConfig {
     detail?: string;
     from: 'config' | 'custom';
     disabled?: boolean;
+    /** 成人源：仅黄果模块（登录用户可见）使用，全局搜索/换源/默认片源库均不包含 */
+    adult?: boolean;
   }[];
   CustomCategories: {
     name?: string;

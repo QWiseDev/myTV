@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { type ApiSite, getAvailableApiSites } from '@/lib/config';
+import {
+  type ApiSite,
+  getAdultApiSites,
+  getAvailableApiSites,
+} from '@/lib/config';
 
 import { consumeRateLimit, getClientIp } from './rate-limit';
 
@@ -19,7 +23,8 @@ export async function getGuestSource(): Promise<ApiSite | null> {
 
 /**
  * 判断请求中的 source 是否允许被该用户访问：
- * 登录用户走原有 getAvailableApiSites(username) 过滤；访客仅限访客源。
+ * 登录用户走原有 getAvailableApiSites(username) 过滤，成人源（黄果模块）对登录用户
+ * 同样开放；访客仅限访客源。
  */
 export async function isSourceAllowedForRequest(
   username: string | null,
@@ -29,7 +34,12 @@ export async function isSourceAllowedForRequest(
 
   if (username) {
     const sites = await getAvailableApiSites(username);
-    return sites.find((site) => site.key === sourceKey) || null;
+    const site = sites.find((s) => s.key === sourceKey);
+    if (site) return site;
+
+    // 常规源未命中时，登录用户可访问成人源（黄果模块）
+    const adultSites = await getAdultApiSites(username);
+    return adultSites.find((s) => s.key === sourceKey) || null;
   }
 
   const guestSource = await getGuestSource();
