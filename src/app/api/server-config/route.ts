@@ -19,21 +19,9 @@ export async function GET(_request: NextRequest) {
     DoubanImageProxy: config.SiteConfig.DoubanImageProxy,
     DisableYellowFilter: config.SiteConfig.DisableYellowFilter,
     FluidSearch: config.SiteConfig.FluidSearch,
-    StorageType: process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage',
+    StorageType: process.env.NEXT_PUBLIC_STORAGE_TYPE || 'redis',
     Version: CURRENT_VERSION,
   };
-
-  // 添加 Telegram 登录配置（仅公开必要信息）
-  if (config.TelegramAuthConfig?.enabled) {
-    result.TelegramAuthConfig = {
-      enabled: true,
-      botUsername: config.TelegramAuthConfig.botUsername,
-      buttonSize: config.TelegramAuthConfig.buttonSize || 'large',
-      showAvatar: config.TelegramAuthConfig.showAvatar ?? true,
-      requestWriteAccess: config.TelegramAuthConfig.requestWriteAccess ?? false,
-      // 注意：不返回 botToken，保护敏感信息
-    };
-  }
 
   return NextResponse.json(result);
 }

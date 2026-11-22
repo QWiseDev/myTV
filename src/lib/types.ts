@@ -82,6 +82,7 @@ export interface IStorage {
   clearAllPlayRecords(userName: string): Promise<void>;
 
   // 收藏相关
+  clearAllFavorites(userName: string): Promise<void>;
   getFavorite(userName: string, key: string): Promise<Favorite | null>;
   setFavorite(userName: string, key: string, favorite: Favorite): Promise<void>;
   getAllFavorites(userName: string): Promise<{ [key: string]: Favorite }>;
@@ -177,6 +178,9 @@ export interface IStorage {
 
   // 播放统计相关
   getPlayStats(): Promise<PlayStatsResult>;
+  getUserPlayStatWithRecords(
+    userName: string,
+  ): Promise<{ stat: UserPlayStat; records: PlayRecord[] }>;
   getUserPlayStat(userName: string): Promise<UserPlayStat>;
   getContentStats(limit?: number): Promise<ContentStat[]>;
   updatePlayStatistics(

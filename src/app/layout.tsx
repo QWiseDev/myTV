@@ -57,12 +57,9 @@ export default async function RootLayout({
     query: string;
   }[] = [];
 
-  // 注意：只有在 storageType 为 'localstorage' 时才使用环境变量配置
-  // 其他配置会在客户端通过 API 动态获取
-
   // 将运行时配置注入到全局 window 对象，供客户端在运行时读取
   const runtimeConfig = {
-    STORAGE_TYPE: process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage',
+    STORAGE_TYPE: process.env.NEXT_PUBLIC_STORAGE_TYPE || 'redis',
     DOUBAN_PROXY_TYPE: doubanProxyType,
     DOUBAN_PROXY: doubanProxy,
     DOUBAN_IMAGE_PROXY_TYPE: doubanImageProxyType,

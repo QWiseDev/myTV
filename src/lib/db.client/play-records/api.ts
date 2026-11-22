@@ -23,7 +23,6 @@ import {
   fetchFromApi,
   fetchWithAuth,
   invalidateWatchingUpdatesClientCache,
-  STORAGE_TYPE,
   triggerGlobalError,
 } from '../core';
 import { findCrossKeySameShowRecords } from '../../play-record-merge';
@@ -38,9 +37,6 @@ import type {
   PlayRecordsPageOptions,
 } from '../../types';
 import { shouldInvalidateWatchingUpdates } from '../../watching-updates-invalidation';
-
-// ---- 常量 ----
-const PLAY_RECORDS_KEY = 'moontv_play_records';
 
 /**
  * 检查是否应该更新原始集数
@@ -128,16 +124,10 @@ function preparePlayRecordForSave(
 
 /**
  * 内部权威读取：直接、可抛错（禁止把 public API 降级返回的 {} 当作服务器确认空数据）。
- * localStorage 模式的权威数据源是 localStorage 本身，失败不请求服务器。
  */
-async function fetchAuthoritativePlayRecords(
-  username: string | null,
-): Promise<Record<string, PlayRecord>> {
-  if (STORAGE_TYPE === 'localstorage') {
-    const raw = localStorage.getItem(PLAY_RECORDS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, PlayRecord>) : {};
-  }
-  void username;
+async function fetchAuthoritativePlayRecords(): Promise<
+  Record<string, PlayRecord>
+> {
   return fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`);
 }
 
@@ -155,7 +145,7 @@ async function reconcilePlayRecordsWithinTask(
 
   let data: Record<string, PlayRecord>;
   try {
-    data = await fetchAuthoritativePlayRecords(username);
+    data = await fetchAuthoritativePlayRecords();
   } catch (error) {
     // 补偿读取失败必须使缓存失效，不能继续把乐观快照当有效结果
     invalidatePlayRecordsSnapshot(username);
@@ -230,7 +220,7 @@ function scheduleBackgroundPlayRecordsSync(username: string | null): void {
 // ---- API ----
 /**
  * 读取全部播放记录。
- * 非本地存储模式下使用完整快照策略：优先返回有效快照，无 pending 写时后台异步同步最新数据。
+ * 使用完整快照策略：优先返回有效快照，无 pending 写时后台异步同步最新数据。
  * 在服务端渲染阶段 (window === undefined) 时返回空对象，避免报错。
  */
 export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
@@ -239,57 +229,42 @@ export async function getAllPlayRecords(): Promise<Record<string, PlayRecord>> {
     return {};
   }
 
-  // 数据库存储模式：使用完整快照策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    const username = getCurrentPlayRecordsUsername();
-    const validSnapshot = getValidPlayRecordsSnapshot(username);
+  const username = getCurrentPlayRecordsUsername();
+  const validSnapshot = getValidPlayRecordsSnapshot(username);
 
-    if (validSnapshot) {
-      // 有 pending 写时不再触发后台刷新，完整快照可供乐观展示（方案 4.3）
+  if (validSnapshot) {
+    // 有 pending 写时不再触发后台刷新，完整快照可供乐观展示（方案 4.3）
+    if (getPlayRecordsPendingMutations(username) === 0) {
+      scheduleBackgroundPlayRecordsSync(username);
+    }
+    return validSnapshot.data;
+  }
+
+  // cold 且存在 pending 写：等待已排队写完成后重新判断，避免读取越过写队列
+  if (getPlayRecordsPendingMutations(username) > 0) {
+    await getPlayRecordsQueueTail(username);
+    const settledSnapshot = getValidPlayRecordsSnapshot(username);
+    if (settledSnapshot) {
       if (getPlayRecordsPendingMutations(username) === 0) {
         scheduleBackgroundPlayRecordsSync(username);
       }
-      return validSnapshot.data;
-    }
-
-    // cold 且存在 pending 写：等待已排队写完成后重新判断，避免读取越过写队列
-    if (getPlayRecordsPendingMutations(username) > 0) {
-      await getPlayRecordsQueueTail(username);
-      const settledSnapshot = getValidPlayRecordsSnapshot(username);
-      if (settledSnapshot) {
-        if (getPlayRecordsPendingMutations(username) === 0) {
-          scheduleBackgroundPlayRecordsSync(username);
-        }
-        return settledSnapshot.data;
-      }
-    }
-
-    // 缓存为空，使用去重机制从 API 获取并缓存
-    try {
-      const { data, revision } = await getOrCreatePlayRecordsRead(
-        username,
-        () => fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`),
-      );
-      const result = commitExternalPlayRecordsRead(username, revision, data);
-      if (result === 'stale') {
-        return getValidPlayRecordsSnapshot(username)?.data ?? {};
-      }
-      return data;
-    } catch (err) {
-      console.error('获取播放记录失败:', err);
-      triggerGlobalError('获取播放记录失败');
-      return {};
+      return settledSnapshot.data;
     }
   }
 
-  // localstorage 模式
+  // 缓存为空，使用去重机制从 API 获取并缓存
   try {
-    const raw = localStorage.getItem(PLAY_RECORDS_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, PlayRecord>;
+    const { data, revision } = await getOrCreatePlayRecordsRead(username, () =>
+      fetchFromApi<Record<string, PlayRecord>>(`/api/playrecords`),
+    );
+    const result = commitExternalPlayRecordsRead(username, revision, data);
+    if (result === 'stale') {
+      return getValidPlayRecordsSnapshot(username)?.data ?? {};
+    }
+    return data;
   } catch (err) {
-    console.error('读取播放记录失败:', err);
-    triggerGlobalError('读取播放记录失败');
+    console.error('获取播放记录失败:', err);
+    triggerGlobalError('获取播放记录失败');
     return {};
   }
 }
@@ -301,44 +276,32 @@ export async function getPlayRecordsPage(
     return paginatePlayRecords({}, options);
   }
 
-  if (STORAGE_TYPE !== 'localstorage') {
-    try {
-      const params = new URLSearchParams();
-      if (options.cursor) {
-        params.set('cursor', options.cursor);
-      }
-      options.includeKeys?.forEach((key) => {
-        params.append('includeKey', key);
-      });
-      params.set(
-        'pageSize',
-        String(options.pageSize || DEFAULT_PLAY_RECORDS_PAGE_SIZE),
-      );
-
-      return await fetchFromApi<PlayRecordsPage>(
-        `/api/playrecords?${params.toString()}`,
-      );
-    } catch (err) {
-      console.warn('分页获取播放记录失败:', err);
-      triggerGlobalError('分页获取播放记录失败');
-      throw err;
-    }
-  }
-
   try {
-    const raw = localStorage.getItem(PLAY_RECORDS_KEY);
-    const records = raw ? (JSON.parse(raw) as Record<string, PlayRecord>) : {};
-    return paginatePlayRecords(records, options);
+    const params = new URLSearchParams();
+    if (options.cursor) {
+      params.set('cursor', options.cursor);
+    }
+    options.includeKeys?.forEach((key) => {
+      params.append('includeKey', key);
+    });
+    params.set(
+      'pageSize',
+      String(options.pageSize || DEFAULT_PLAY_RECORDS_PAGE_SIZE),
+    );
+
+    return await fetchFromApi<PlayRecordsPage>(
+      `/api/playrecords?${params.toString()}`,
+    );
   } catch (err) {
-    console.error('分页读取播放记录失败:', err);
-    triggerGlobalError('分页读取播放记录失败');
+    console.warn('分页获取播放记录失败:', err);
+    triggerGlobalError('分页获取播放记录失败');
     throw err;
   }
 }
 
 /**
  * 保存播放记录。
- * 数据库存储模式下使用乐观更新策略：先更新完整快照（立即生效），再异步同步到数据库。
+ * 使用乐观更新策略：先更新完整快照（立即生效），再异步同步到数据库。
  * @param existingRecords 可选参数：已有的播放记录，用于避免重复GET请求（部分数据不会写入缓存）
  */
 export async function savePlayRecord(
@@ -350,138 +313,91 @@ export async function savePlayRecord(
   const key = generateStorageKey(source, id);
   const username = getCurrentPlayRecordsUsername();
 
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    return enqueuePlayRecordsMutation(username, async () => {
-      assertSameUser(username, '保存');
-
-      try {
-        const cachedRecords = getValidPlayRecordsSnapshot(username);
-        let existingRecord: PlayRecord | undefined;
-        if (cachedRecords) {
-          existingRecord = cachedRecords.data[key];
-        } else if (existingRecords) {
-          existingRecord = existingRecords[key];
-        } else {
-          // 内部预读：直接、可抛错的权威读取，禁止等待自身所在队列；
-          // 预读失败同样视为本次保存失败并走统一补偿（禁止把失败读取降级为“记录不存在”）
-          existingRecord = (await fetchAuthoritativePlayRecords(username))[key];
-        }
-
-        assertSameUser(username, '保存');
-
-        const invalidatesWatchingUpdates = preparePlayRecordForSave(
-          existingRecord,
-          record,
-        );
-
-        const applied = applyOptimisticPlayRecordsMutation(
-          username,
-          (records) => {
-            records[key] = record;
-            // 镜像服务端跨源同名合并：乐观快照里同步移除旧源记录，避免界面残留
-            for (const target of findCrossKeySameShowRecords(
-              record,
-              key,
-              records,
-            )) {
-              delete records[target.key];
-            }
-          },
-        );
-        if (applied) {
-          dispatchPlayRecordsUpdated(applied.next.data, username);
-        }
-
-        const response = await fetchWithAuth('/api/playrecords', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ key, record }),
-        });
-        const result = (await response.json()) as { ignored?: boolean };
-
-        if (result.ignored) {
-          if (applied) {
-            restorePlayRecordsSnapshot(username, applied.previous);
-            dispatchPlayRecordsUpdated(applied.previous.data, username);
-          }
-          try {
-            await reconcilePlayRecordsWithinTask(username);
-          } catch (reconcileError) {
-            console.error('刷新被忽略保存后的播放记录失败:', reconcileError);
-            triggerGlobalError('刷新播放记录缓存失败');
-          }
-        }
-
-        if (
-          (invalidatesWatchingUpdates || result.ignored) &&
-          getCurrentPlayRecordsUsername() === username
-        ) {
-          await invalidateWatchingUpdatesClientCache();
-        }
-      } catch (err) {
-        const reconciliation = await compensatePlayRecords(username);
-        triggerGlobalError('保存播放记录失败');
-        throw new PlayRecordsMutationError(
-          toMutationErrorMessage(err),
-          reconciliation,
-          err,
-        );
-      }
-    });
-  }
-
-  // localstorage 模式（经同一写队列串行，避免并发 read-modify-write 丢更新）
+  // 乐观更新策略
   return enqueuePlayRecordsMutation(username, async () => {
-    const existingRecord = existingRecords
-      ? existingRecords[key]
-      : (await getAllPlayRecords())[key];
-    const invalidatesWatchingUpdates = preparePlayRecordForSave(
-      existingRecord,
-      record,
-    );
-
-    if (typeof window === 'undefined') {
-      console.warn('无法在服务端保存播放记录到 localStorage');
-      return;
-    }
+    assertSameUser(username, '保存');
 
     try {
-      const allRecords = await getAllPlayRecords();
-      allRecords[key] = record;
-      // 跨源同名合并：同名只留最新一条（与服务端保存链路同一规则）
-      for (const target of findCrossKeySameShowRecords(
-        record,
-        key,
-        allRecords,
-      )) {
-        delete allRecords[target.key];
+      const cachedRecords = getValidPlayRecordsSnapshot(username);
+      let existingRecord: PlayRecord | undefined;
+      if (cachedRecords) {
+        existingRecord = cachedRecords.data[key];
+      } else if (existingRecords) {
+        existingRecord = existingRecords[key];
+      } else {
+        // 内部预读：直接、可抛错的权威读取，禁止等待自身所在队列；
+        // 预读失败同样视为本次保存失败并走统一补偿（禁止把失败读取降级为“记录不存在”）
+        existingRecord = (await fetchAuthoritativePlayRecords())[key];
       }
-      localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
-      window.dispatchEvent(
-        new CustomEvent('playRecordsUpdated', {
-          detail: allRecords,
-        }),
+
+      assertSameUser(username, '保存');
+
+      const invalidatesWatchingUpdates = preparePlayRecordForSave(
+        existingRecord,
+        record,
       );
 
-      if (invalidatesWatchingUpdates) {
-        await invalidateWatchingUpdatesClientCache();
+      const applied = applyOptimisticPlayRecordsMutation(
+        username,
+        (records) => {
+          records[key] = record;
+          // 镜像服务端跨源同名合并：乐观快照里同步移除旧源记录，避免界面残留
+          for (const target of findCrossKeySameShowRecords(
+            record,
+            key,
+            records,
+          )) {
+            delete records[target.key];
+          }
+        },
+      );
+      if (applied) {
+        dispatchPlayRecordsUpdated(applied.next.data, username);
       }
 
-      // 播放记录保存已经包含了统计更新逻辑，无需单独调用
+      const response = await fetchWithAuth('/api/playrecords', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key, record }),
+      });
+      const result = (await response.json()) as { ignored?: boolean };
+
+      if (result.ignored) {
+        if (applied) {
+          restorePlayRecordsSnapshot(username, applied.previous);
+          dispatchPlayRecordsUpdated(applied.previous.data, username);
+        }
+        try {
+          await reconcilePlayRecordsWithinTask(username);
+        } catch (reconcileError) {
+          console.error('刷新被忽略保存后的播放记录失败:', reconcileError);
+          triggerGlobalError('刷新播放记录缓存失败');
+        }
+      }
+
+      if (
+        (invalidatesWatchingUpdates || result.ignored) &&
+        getCurrentPlayRecordsUsername() === username
+      ) {
+        await invalidateWatchingUpdatesClientCache();
+      }
     } catch (err) {
-      console.error('保存播放记录失败:', err);
+      const reconciliation = await compensatePlayRecords(username);
       triggerGlobalError('保存播放记录失败');
-      throw err;
+      throw new PlayRecordsMutationError(
+        toMutationErrorMessage(err),
+        reconciliation,
+        err,
+      );
     }
   });
 }
 
 /**
  * 删除播放记录。
- * 数据库存储模式下使用乐观更新策略：先更新完整快照，再异步同步到数据库；
+ * 使用乐观更新策略：先更新完整快照，再异步同步到数据库；
  * 失败时在队列内执行一次权威补偿读取（结果附着在 PlayRecordsMutationError 上），并仍然 reject。
  */
 export async function deletePlayRecord(
@@ -491,111 +407,68 @@ export async function deletePlayRecord(
   const key = generateStorageKey(source, id);
   const username = getCurrentPlayRecordsUsername();
 
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    return enqueuePlayRecordsMutation(username, async () => {
-      assertSameUser(username, '删除');
-
-      const applied = applyOptimisticPlayRecordsMutation(
-        username,
-        (records) => {
-          delete records[key];
-        },
-      );
-      if (applied) {
-        dispatchPlayRecordsUpdated(applied.next.data, username);
-      }
-
-      try {
-        await fetchWithAuth(`/api/playrecords?key=${encodeURIComponent(key)}`, {
-          method: 'DELETE',
-        });
-        if (getCurrentPlayRecordsUsername() === username) {
-          await invalidateWatchingUpdatesClientCache();
-        }
-      } catch (err) {
-        const reconciliation = await compensatePlayRecords(username);
-        triggerGlobalError('删除播放记录失败');
-        throw new PlayRecordsMutationError(
-          toMutationErrorMessage(err),
-          reconciliation,
-          err,
-        );
-      }
-    });
-  }
-
-  // localstorage 模式（经同一写队列串行）
+  // 乐观更新策略
   return enqueuePlayRecordsMutation(username, async () => {
-    if (typeof window === 'undefined') {
-      console.warn('无法在服务端删除播放记录到 localStorage');
-      return;
+    assertSameUser(username, '删除');
+
+    const applied = applyOptimisticPlayRecordsMutation(username, (records) => {
+      delete records[key];
+    });
+    if (applied) {
+      dispatchPlayRecordsUpdated(applied.next.data, username);
     }
 
     try {
-      const allRecords = await getAllPlayRecords();
-      delete allRecords[key];
-      localStorage.setItem(PLAY_RECORDS_KEY, JSON.stringify(allRecords));
-      window.dispatchEvent(
-        new CustomEvent('playRecordsUpdated', {
-          detail: allRecords,
-        }),
-      );
-      await invalidateWatchingUpdatesClientCache();
+      await fetchWithAuth(`/api/playrecords?key=${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      });
+      if (getCurrentPlayRecordsUsername() === username) {
+        await invalidateWatchingUpdatesClientCache();
+      }
     } catch (err) {
-      console.error('删除播放记录失败:', err);
+      const reconciliation = await compensatePlayRecords(username);
       triggerGlobalError('删除播放记录失败');
-      throw err;
+      throw new PlayRecordsMutationError(
+        toMutationErrorMessage(err),
+        reconciliation,
+        err,
+      );
     }
   });
 }
 
 /**
  * 清空全部播放记录
- * 数据库存储模式下使用乐观更新策略：先更新完整快照，再异步同步到数据库；
+ * 使用乐观更新策略：先更新完整快照，再异步同步到数据库；
  * 失败时在队列内执行一次权威补偿读取（结果附着在 PlayRecordsMutationError 上），并仍然 reject。
  */
 export async function clearAllPlayRecords(): Promise<void> {
   const username = getCurrentPlayRecordsUsername();
 
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    return enqueuePlayRecordsMutation(username, async () => {
-      assertSameUser(username, '清空');
-
-      commitOptimisticPlayRecordsClear(username);
-      dispatchPlayRecordsUpdated({}, username);
-
-      try {
-        await fetchWithAuth(`/api/playrecords`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (getCurrentPlayRecordsUsername() === username) {
-          await invalidateWatchingUpdatesClientCache();
-        }
-      } catch (err) {
-        const reconciliation = await compensatePlayRecords(username);
-        triggerGlobalError('清空播放记录失败');
-        throw new PlayRecordsMutationError(
-          toMutationErrorMessage(err),
-          reconciliation,
-          err,
-        );
-      }
-    });
-  }
-
-  // localStorage 模式（经同一写队列串行）
+  // 乐观更新策略
   return enqueuePlayRecordsMutation(username, async () => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(PLAY_RECORDS_KEY);
-    window.dispatchEvent(
-      new CustomEvent('playRecordsUpdated', {
-        detail: {},
-      }),
-    );
-    await invalidateWatchingUpdatesClientCache();
+    assertSameUser(username, '清空');
+
+    commitOptimisticPlayRecordsClear(username);
+    dispatchPlayRecordsUpdated({}, username);
+
+    try {
+      await fetchWithAuth(`/api/playrecords`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (getCurrentPlayRecordsUsername() === username) {
+        await invalidateWatchingUpdatesClientCache();
+      }
+    } catch (err) {
+      const reconciliation = await compensatePlayRecords(username);
+      triggerGlobalError('清空播放记录失败');
+      throw new PlayRecordsMutationError(
+        toMutationErrorMessage(err),
+        reconciliation,
+        err,
+      );
+    }
   });
 }
 
@@ -609,7 +482,7 @@ export type PlayRecordsAuthoritativeSnapshot = {
 
 /**
  * 手工 retry 使用的权威读取：排到写队列之后执行，不重复发送写请求。
- * 抛错（含用户切换取消）由调用方消费；localStorage 模式的权威数据源是 localStorage 本身。
+ * 抛错（含用户切换取消）由调用方消费。
  */
 export async function reconcilePlayRecordsAuthoritative(): Promise<PlayRecordsAuthoritativeSnapshot> {
   const username = getCurrentPlayRecordsUsername();
@@ -621,7 +494,7 @@ export async function reconcilePlayRecordsAuthoritative(): Promise<PlayRecordsAu
       });
     }
 
-    const records = await fetchAuthoritativePlayRecords(username);
+    const records = await fetchAuthoritativePlayRecords();
     const result = commitAuthoritativePlayRecords(username, records);
     if (result === 'committed') {
       dispatchPlayRecordsUpdated(records, username);

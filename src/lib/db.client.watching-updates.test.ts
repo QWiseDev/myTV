@@ -128,16 +128,8 @@ describe('play record watching-updates invalidation', () => {
     expect(mockForceClearWatchingUpdatesCache).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the client snapshot after deleting a local record', async () => {
-    (
-      window as typeof window & {
-        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
-      }
-    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    localStorage.setItem(
-      'moontv_play_records',
-      JSON.stringify({ 'source+id': createRecord() }),
-    );
+  it('clears the client snapshot after deleting a remote record succeeds', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     const { deletePlayRecord } = await import('./db.client');
 
     await deletePlayRecord('source', 'id');

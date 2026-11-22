@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // 从cookie获取认证信息 (服务端使用)
 export function getAuthInfoFromCookie(request: NextRequest): {
-  password?: string;
   username?: string;
   signature?: string;
   timestamp?: number;
@@ -26,7 +25,6 @@ export function getAuthInfoFromCookie(request: NextRequest): {
 }
 
 export interface AuthInfoWithUsername {
-  password?: string;
   username: string;
   signature?: string;
   timestamp?: number;
@@ -54,7 +52,6 @@ export function requireUser(request: NextRequest): RequireUserResult {
 
 // 从cookie获取认证信息 (客户端使用)
 export function getAuthInfoFromBrowserCookie(): {
-  password?: string;
   username?: string;
   signature?: string;
   timestamp?: number;

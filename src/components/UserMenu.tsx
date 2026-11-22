@@ -69,9 +69,9 @@ export const UserMenu: React.FC = () => {
   const [storageType] = useState<string>(() => {
     // 🔧 优化：直接从 RUNTIME_CONFIG 读取初始值，避免默认值导致的多次渲染
     if (typeof window !== 'undefined') {
-      return window.RUNTIME_CONFIG?.STORAGE_TYPE || 'localstorage';
+      return window.RUNTIME_CONFIG?.STORAGE_TYPE || 'redis';
     }
-    return 'localstorage';
+    return 'redis';
   });
   const [mounted, setMounted] = useState(false);
 
@@ -158,7 +158,6 @@ export const UserMenu: React.FC = () => {
   const { hasUnreadUpdates, markWatchingUpdatesViewed, watchingUpdatesState } =
     useUserMenuWatchingUpdates({
       authInfo,
-      storageType,
     });
   const { playRecords } = useUserMenuContinueWatching({
     authInfo,
@@ -166,12 +165,10 @@ export const UserMenu: React.FC = () => {
     isOpen: isContinueWatchingOpen,
     maxProgress: continueWatchingMaxProgress,
     minProgress: continueWatchingMinProgress,
-    storageType,
   });
   const { favorites } = useUserMenuFavorites({
     authInfo,
     isOpen: isFavoritesOpen,
-    storageType,
   });
 
   // 点击外部区域关闭下拉框
@@ -193,7 +190,7 @@ export const UserMenu: React.FC = () => {
     // 🚀 优化：打开菜单时不主动检查追番更新
     // 只从缓存获取数据，避免对所有播放记录调用 /api/detail
     // 追番更新检查只在首页进行
-    if (willOpen && authInfo?.username && storageType !== 'localstorage') {
+    if (willOpen && authInfo?.username) {
       debug.log('打开菜单：不主动检查追番更新，只从缓存获取');
       // 不主动调用 executeUpdateCheck，让追番更新检查只在首页进行
     }
@@ -348,15 +345,13 @@ export const UserMenu: React.FC = () => {
   const showSourceTest = isAdminUser;
 
   // 检查是否显示修改密码按钮
-  const showChangePassword =
-    authInfo?.role !== 'owner' && storageType !== 'localstorage';
+  const showChangePassword = authInfo?.role !== 'owner';
 
-  // 检查是否显示播放统计按钮（所有登录用户，且非localstorage存储）
-  const showPlayStats = authInfo?.username && storageType !== 'localstorage';
+  // 检查是否显示播放统计按钮（所有登录用户）
+  const showPlayStats = authInfo?.username;
 
-  // 检查是否显示更新提醒按钮（登录用户且非localstorage存储就显示）
-  const showWatchingUpdates =
-    authInfo?.username && storageType !== 'localstorage';
+  // 检查是否显示更新提醒按钮（登录用户就显示）
+  const showWatchingUpdates = authInfo?.username;
 
   // 计算更新数量（只统计新剧集更新）
   const totalUpdates = watchingUpdatesState.totalUpdates;

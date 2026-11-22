@@ -21,7 +21,6 @@ const record: PlayRecord = {
 
 const LAST_PROGRESS_KEY = 'last_progress_源+剧-2024+1';
 const LAST_UPDATE_TIME_KEY = 'last_update_time_源+剧-2024+1';
-const USER_STATS_KEY = 'moontv_user_stats';
 
 function listen(name: string) {
   const events: unknown[] = [];
@@ -252,56 +251,5 @@ describe('db.client user-stats（redis 模式）', () => {
       totalPlays: 0,
       totalMovies: 0,
     });
-  });
-});
-
-describe('db.client user-stats（localStorage 模式）', () => {
-  const originalFetch = global.fetch;
-  const originalRuntimeConfig = (window as RuntimeWindow).RUNTIME_CONFIG;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-    document.cookie =
-      'user_auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-    localStorage.clear();
-    (window as RuntimeWindow).RUNTIME_CONFIG = originalRuntimeConfig;
-    jest.restoreAllMocks();
-    jest.resetModules();
-  });
-
-  it('updateUserStats 本地累计观看时间并写入统计与进度', async () => {
-    (window as RuntimeWindow).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    document.cookie = `user_auth=${encodeURIComponent(
-      JSON.stringify({ username: 'test-user' }),
-    )}; path=/`;
-    const fetchMock = jest.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
-    const updates = listen('userStatsUpdated');
-    const { updateUserStats } = await import('./db.client');
-
-    await updateUserStats(record);
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    const stored = JSON.parse(localStorage.getItem(USER_STATS_KEY) || '{}') as {
-      totalWatchTime: number;
-      totalMovies: number;
-    };
-    expect(stored.totalWatchTime).toBe(50);
-    expect(stored.totalMovies).toBe(0);
-    expect(localStorage.getItem(LAST_PROGRESS_KEY)).toBe('50');
-    expect(updates).toHaveLength(1);
-  });
-
-  it('updateUserStats 10 秒内无进度变化时跳过更新', async () => {
-    (window as RuntimeWindow).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    document.cookie = `user_auth=${encodeURIComponent(
-      JSON.stringify({ username: 'test-user' }),
-    )}; path=/`;
-    localStorage.setItem(LAST_PROGRESS_KEY, '50');
-    localStorage.setItem(LAST_UPDATE_TIME_KEY, String(Date.now()));
-    const { updateUserStats } = await import('./db.client');
-
-    await updateUserStats(record);
-    expect(localStorage.getItem(USER_STATS_KEY)).toBeNull();
   });
 });

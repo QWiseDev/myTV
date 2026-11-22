@@ -5,7 +5,6 @@ import {
   type Favorite,
   type UserStats,
   fetchFromApi,
-  STORAGE_TYPE,
   triggerGlobalError,
 } from './core';
 import { dispatchPlayRecordsUpdated } from './play-records/events';
@@ -43,7 +42,7 @@ const CACHE_EXPIRE_TIME = 60 * 60 * 1000; // 一小时缓存过期
 
 // 注意：豆瓣缓存配置已迁移到 douban.client.ts
 
-// ---- 内存缓存（用于 Kvrocks/Upstash 模式）----
+// ---- 用户级内存缓存 ----
 const memoryCache: Map<string, UserCacheStore> = new Map();
 
 // ---- 缓存管理器 ----
@@ -97,90 +96,16 @@ class HybridCacheManager {
    * 获取用户缓存数据
    */
   private getUserCache(username: string): UserCacheStore {
-    if (typeof window === 'undefined') return {};
-
-    // 🔧 优化：Kvrocks/Upstash 模式使用内存缓存
-    if (STORAGE_TYPE !== 'localstorage') {
-      const cacheKey = this.getUserCacheKey(username);
-      return memoryCache.get(cacheKey) || {};
-    }
-
-    try {
-      const cacheKey = this.getUserCacheKey(username);
-      const cached = localStorage.getItem(cacheKey);
-      return cached ? JSON.parse(cached) : {};
-    } catch (error) {
-      console.warn('获取用户缓存失败:', error);
-      return {};
-    }
+    const cacheKey = this.getUserCacheKey(username);
+    return memoryCache.get(cacheKey) || {};
   }
 
   /**
    * 保存用户缓存数据
    */
   private saveUserCache(username: string, cache: UserCacheStore): void {
-    if (typeof window === 'undefined') return;
-
-    // 🔧 优化：Kvrocks/Upstash 模式使用内存缓存（不占用 localStorage，避免 QuotaExceededError）
-    if (STORAGE_TYPE !== 'localstorage') {
-      const cacheKey = this.getUserCacheKey(username);
-      memoryCache.set(cacheKey, cache);
-      return;
-    }
-
-    try {
-      // 检查缓存大小，超过15MB时清理旧数据
-      const cacheSize = JSON.stringify(cache).length;
-      if (cacheSize > 15 * 1024 * 1024) {
-        console.warn('缓存过大，清理旧数据');
-        this.cleanOldCache(cache);
-      }
-
-      const cacheKey = this.getUserCacheKey(username);
-      localStorage.setItem(cacheKey, JSON.stringify(cache));
-    } catch (error) {
-      console.warn('保存用户缓存失败:', error);
-      // 存储空间不足时清理缓存后重试
-      if (
-        error instanceof DOMException &&
-        error.name === 'QuotaExceededError'
-      ) {
-        this.clearAllCache();
-        try {
-          const cacheKey = this.getUserCacheKey(username);
-          localStorage.setItem(cacheKey, JSON.stringify(cache));
-        } catch (retryError) {
-          console.error('重试保存缓存仍然失败:', retryError);
-        }
-      }
-    }
-  }
-
-  /**
-   * 清理过期缓存
-   */
-  private cleanOldCache(cache: UserCacheStore): void {
-    const now = Date.now();
-    const maxAge = 60 * 24 * 60 * 60 * 1000; // 两个月
-
-    // 清理过期的收藏缓存
-    if (cache.favorites && now - cache.favorites.timestamp > maxAge) {
-      delete cache.favorites;
-    }
-
-    // 注意：豆瓣缓存已迁移到统一存储，不再在这里处理
-  }
-
-  /**
-   * 清理所有缓存
-   */
-  private clearAllCache(): void {
-    const keys = Object.keys(localStorage);
-    keys.forEach((key) => {
-      if (key.startsWith('moontv_cache_')) {
-        localStorage.removeItem(key);
-      }
-    });
+    const cacheKey = this.getUserCacheKey(username);
+    memoryCache.set(cacheKey, cache);
   }
 
   /**
@@ -330,61 +255,12 @@ class HybridCacheManager {
     if (!targetUsername) return;
 
     dropPlayRecordsSnapshot(targetUsername);
-
-    try {
-      const cacheKey = this.getUserCacheKey(targetUsername);
-      localStorage.removeItem(cacheKey);
-    } catch (error) {
-      console.warn('清除用户缓存失败:', error);
-    }
-  }
-
-  /**
-   * 清除所有过期缓存
-   */
-  clearExpiredCaches(): void {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const keysToRemove: string[] = [];
-
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith(CACHE_PREFIX)) {
-          try {
-            const cache = JSON.parse(localStorage.getItem(key) || '{}');
-            // 检查是否有任何缓存数据过期
-            let hasValidData = false;
-            for (const [, cacheData] of Object.entries(cache)) {
-              if (cacheData && this.isCacheValid(cacheData as CacheData<any>)) {
-                hasValidData = true;
-                break;
-              }
-            }
-            if (!hasValidData) {
-              keysToRemove.push(key);
-            }
-          } catch {
-            // 解析失败的缓存也删除
-            keysToRemove.push(key);
-          }
-        }
-      }
-
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-    } catch (error) {
-      console.warn('清除过期缓存失败:', error);
-    }
+    memoryCache.delete(this.getUserCacheKey(targetUsername));
   }
 }
 
 // 获取缓存管理器实例
 export const cacheManager = HybridCacheManager.getInstance();
-
-// 页面加载时清理过期缓存
-if (typeof window !== 'undefined') {
-  setTimeout(() => cacheManager.clearExpiredCaches(), 1000);
-}
 
 // ---------------- 混合缓存辅助函数 ----------------
 
@@ -393,9 +269,7 @@ if (typeof window !== 'undefined') {
  * 用于用户登出时清理缓存
  */
 export function clearUserCache(): void {
-  if (STORAGE_TYPE !== 'localstorage') {
-    cacheManager.clearUserCache();
-  }
+  cacheManager.clearUserCache();
 }
 
 /**
@@ -411,8 +285,6 @@ export function forceRefreshPlayRecordsCache(): void {
  * 强制从服务器重新获取数据并更新缓存
  */
 export async function refreshAllCache(): Promise<void> {
-  if (STORAGE_TYPE === 'localstorage') return;
-
   try {
     const username = cacheManager.getCurrentUsername();
     const playRecordsRevision = getPlayRecordsStoreRevision(username);
@@ -479,17 +351,6 @@ export function getCacheStatus(): {
   hasUserStats: boolean;
   username: string | null;
 } {
-  if (STORAGE_TYPE === 'localstorage') {
-    return {
-      hasPlayRecords: false,
-      hasFavorites: false,
-      hasSearchHistory: false,
-      hasSkipConfigs: false,
-      hasUserStats: false,
-      username: null,
-    };
-  }
-
   const authInfo = getAuthInfoFromBrowserCookie();
   return {
     hasPlayRecords: hasValidPlayRecordsSnapshot(authInfo?.username || null),
@@ -545,8 +406,6 @@ export function subscribeToDataUpdates<T>(
  * 适合在应用启动时调用，提升后续访问速度
  */
 export async function preloadUserData(): Promise<void> {
-  if (STORAGE_TYPE === 'localstorage') return;
-
   // 检查是否已有有效缓存，避免重复请求
   const status = getCacheStatus();
   if (

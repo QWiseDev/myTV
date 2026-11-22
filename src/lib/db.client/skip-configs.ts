@@ -2,7 +2,7 @@
 'use client';
 
 import { cacheManager } from './cache-manager';
-import { fetchFromApi, STORAGE_TYPE, triggerGlobalError } from './core';
+import { fetchFromApi, triggerGlobalError } from './core';
 import { readThroughCache } from './read-through-cache';
 import { getAuthInfoFromBrowserCookie } from '../auth';
 import { generateStorageKey } from '../storage-key';
@@ -12,7 +12,7 @@ import type { EpisodeSkipConfig } from '../types';
 
 /**
  * 获取跳过片头片尾配置。
- * 数据库存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
+ * 使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  */
 export async function getSkipConfig(
   source: string,
@@ -26,54 +26,46 @@ export async function getSkipConfig(
 
     const key = generateStorageKey(source, id);
 
-    if (STORAGE_TYPE === 'localstorage') {
-      // localStorage 模式
-      const raw = localStorage.getItem('moontv_skip_configs');
-      if (!raw) return null;
-      const allConfigs = JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
-      return allConfigs[key] || null;
-    } else {
-      // 数据库模式：先查缓存
-      const cachedConfigs = cacheManager.getCachedSkipConfigs();
+    // 先查缓存
+    const cachedConfigs = cacheManager.getCachedSkipConfigs();
 
-      if (cachedConfigs && cachedConfigs[key]) {
-        return cachedConfigs[key];
-      }
-
-      // 缓存未命中，从服务器获取
-      const authInfo = getAuthInfoFromBrowserCookie();
-      if (!authInfo?.username) {
-        return null;
-      }
-
-      const response = await fetch('/api/skipconfigs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'get',
-          key,
-          username: authInfo.username,
-        }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
-      const config = data.config;
-
-      // 更新缓存
-      if (config) {
-        const allConfigs = cachedConfigs || {};
-        allConfigs[key] = config;
-        cacheManager.cacheSkipConfigs(allConfigs);
-      }
-
-      return config;
+    if (cachedConfigs && cachedConfigs[key]) {
+      return cachedConfigs[key];
     }
+
+    // 缓存未命中，从服务器获取
+    const authInfo = getAuthInfoFromBrowserCookie();
+    if (!authInfo?.username) {
+      return null;
+    }
+
+    const response = await fetch('/api/skipconfigs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'get',
+        key,
+        username: authInfo.username,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const config = data.config;
+
+    // 更新缓存
+    if (config) {
+      const allConfigs = cachedConfigs || {};
+      allConfigs[key] = config;
+      cacheManager.cacheSkipConfigs(allConfigs);
+    }
+
+    return config;
   } catch (err) {
     console.error('获取跳过配置失败:', err);
     return null;
@@ -82,7 +74,7 @@ export async function getSkipConfig(
 
 /**
  * 保存跳过片头片尾配置。
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function saveSkipConfig(
   source: string,
@@ -92,57 +84,38 @@ export async function saveSkipConfig(
   try {
     const key = generateStorageKey(source, id);
 
-    if (STORAGE_TYPE === 'localstorage') {
-      // localStorage 模式
-      if (typeof window === 'undefined') {
-        console.warn('无法在服务端保存跳过配置到 localStorage');
-        return;
-      }
-      const raw = localStorage.getItem('moontv_skip_configs');
-      const configs = raw
-        ? (JSON.parse(raw) as Record<string, EpisodeSkipConfig>)
-        : {};
-      configs[key] = config;
-      localStorage.setItem('moontv_skip_configs', JSON.stringify(configs));
-      window.dispatchEvent(
-        new CustomEvent('skipConfigsUpdated', {
-          detail: configs,
-        }),
-      );
-    } else {
-      // 数据库模式：乐观更新策略
-      const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
-      cachedConfigs[key] = config;
-      cacheManager.cacheSkipConfigs(cachedConfigs);
+    // 乐观更新策略
+    const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
+    cachedConfigs[key] = config;
+    cacheManager.cacheSkipConfigs(cachedConfigs);
 
-      window.dispatchEvent(
-        new CustomEvent('skipConfigsUpdated', {
-          detail: cachedConfigs,
-        }),
-      );
+    window.dispatchEvent(
+      new CustomEvent('skipConfigsUpdated', {
+        detail: cachedConfigs,
+      }),
+    );
 
-      // 异步同步到数据库
-      const authInfo = getAuthInfoFromBrowserCookie();
-      if (!authInfo?.username) {
-        throw new Error('未登录');
-      }
+    // 异步同步到数据库
+    const authInfo = getAuthInfoFromBrowserCookie();
+    if (!authInfo?.username) {
+      throw new Error('未登录');
+    }
 
-      const response = await fetch('/api/skipconfigs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'set',
-          key,
-          config,
-          username: authInfo.username,
-        }),
-      });
+    const response = await fetch('/api/skipconfigs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'set',
+        key,
+        config,
+        username: authInfo.username,
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error('保存跳过配置失败');
-      }
+    if (!response.ok) {
+      throw new Error('保存跳过配置失败');
     }
   } catch (err) {
     console.error('保存跳过配置失败:', err);
@@ -153,7 +126,7 @@ export async function saveSkipConfig(
 
 /**
  * 获取所有跳过片头片尾配置。
- * 数据库存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
+ * 使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  */
 export async function getAllSkipConfigs(): Promise<
   Record<string, EpisodeSkipConfig>
@@ -163,53 +136,39 @@ export async function getAllSkipConfigs(): Promise<
     return {};
   }
 
-  // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    try {
-      // 注意：与 favorites / search-history 不同，此处的后台同步与初始拉取
-      // 不经过 getOrCreateRequest 去重，保持直接请求的现状
-      return await readThroughCache<Record<string, EpisodeSkipConfig>>({
-        readCache: () => cacheManager.getCachedSkipConfigs(),
-        writeCache: (data) => cacheManager.cacheSkipConfigs(data),
-        fetchFromServer: () =>
-          fetchFromApi<Record<string, EpisodeSkipConfig>>(`/api/skipconfigs`),
-        backgroundSyncKey: null,
-        initialFetchKey: null,
-        dispatchUpdated: (data) =>
-          window.dispatchEvent(
-            new CustomEvent('skipConfigsUpdated', {
-              detail: data,
-            }),
-          ),
-        warnSyncFailure: (err) => {
-          console.warn('后台同步跳过片头片尾配置失败:', err);
-          triggerGlobalError('后台同步跳过片头片尾配置失败');
-        },
-        handleFetchFailure: (err) => {
-          console.error('获取跳过片头片尾配置失败:', err);
-          triggerGlobalError('获取跳过片头片尾配置失败');
-        },
-      });
-    } catch {
-      return {};
-    }
-  }
-
-  // localStorage 模式
   try {
-    const raw = localStorage.getItem('moontv_skip_configs');
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
-  } catch (err) {
-    console.error('读取跳过片头片尾配置失败:', err);
-    triggerGlobalError('读取跳过片头片尾配置失败');
+    // 注意：与 favorites / search-history 不同，此处的后台同步与初始拉取
+    // 不经过 getOrCreateRequest 去重，保持直接请求的现状
+    return await readThroughCache<Record<string, EpisodeSkipConfig>>({
+      readCache: () => cacheManager.getCachedSkipConfigs(),
+      writeCache: (data) => cacheManager.cacheSkipConfigs(data),
+      fetchFromServer: () =>
+        fetchFromApi<Record<string, EpisodeSkipConfig>>(`/api/skipconfigs`),
+      backgroundSyncKey: null,
+      initialFetchKey: null,
+      dispatchUpdated: (data) =>
+        window.dispatchEvent(
+          new CustomEvent('skipConfigsUpdated', {
+            detail: data,
+          }),
+        ),
+      warnSyncFailure: (err) => {
+        console.warn('后台同步跳过片头片尾配置失败:', err);
+        triggerGlobalError('后台同步跳过片头片尾配置失败');
+      },
+      handleFetchFailure: (err) => {
+        console.error('获取跳过片头片尾配置失败:', err);
+        triggerGlobalError('获取跳过片头片尾配置失败');
+      },
+    });
+  } catch {
     return {};
   }
 }
 
 /**
  * 删除跳过片头片尾配置。
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function deleteSkipConfig(
   source: string,
@@ -218,56 +177,37 @@ export async function deleteSkipConfig(
   try {
     const key = generateStorageKey(source, id);
 
-    if (STORAGE_TYPE === 'localstorage') {
-      // localStorage 模式
-      if (typeof window === 'undefined') {
-        console.warn('无法在服务端删除跳过配置');
-        return;
-      }
-      const raw = localStorage.getItem('moontv_skip_configs');
-      if (raw) {
-        const configs = JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
-        delete configs[key];
-        localStorage.setItem('moontv_skip_configs', JSON.stringify(configs));
-        window.dispatchEvent(
-          new CustomEvent('skipConfigsUpdated', {
-            detail: configs,
-          }),
-        );
-      }
-    } else {
-      // 数据库模式：乐观更新策略
-      const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
-      delete cachedConfigs[key];
-      cacheManager.cacheSkipConfigs(cachedConfigs);
+    // 乐观更新策略
+    const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
+    delete cachedConfigs[key];
+    cacheManager.cacheSkipConfigs(cachedConfigs);
 
-      window.dispatchEvent(
-        new CustomEvent('skipConfigsUpdated', {
-          detail: cachedConfigs,
-        }),
-      );
+    window.dispatchEvent(
+      new CustomEvent('skipConfigsUpdated', {
+        detail: cachedConfigs,
+      }),
+    );
 
-      // 异步同步到数据库
-      const authInfo = getAuthInfoFromBrowserCookie();
-      if (!authInfo?.username) {
-        throw new Error('未登录');
-      }
+    // 异步同步到数据库
+    const authInfo = getAuthInfoFromBrowserCookie();
+    if (!authInfo?.username) {
+      throw new Error('未登录');
+    }
 
-      const response = await fetch('/api/skipconfigs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'delete',
-          key,
-          username: authInfo.username,
-        }),
-      });
+    const response = await fetch('/api/skipconfigs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'delete',
+        key,
+        username: authInfo.username,
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error('删除跳过配置失败');
-      }
+    if (!response.ok) {
+      throw new Error('删除跳过配置失败');
     }
   } catch (err) {
     console.error('删除跳过片头片尾配置失败:', err);

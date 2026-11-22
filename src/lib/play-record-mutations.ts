@@ -54,7 +54,10 @@ export async function savePlayRecordMutation(
       typeof record.save_time === 'number' && Number.isFinite(record.save_time)
         ? record.save_time
         : Date.now();
-    const existingRecord = await db.getPlayRecord(username, source, id);
+    // 单次全量读取即可同时覆盖"当前记录"与"跨源同名合并"两个用途
+    //（原实现 getPlayRecord + getAllPlayRecords 对同一 Hash 双读）
+    const allRecords = await db.getAllPlayRecords(username);
+    const existingRecord = allRecords[generateStorageKey(source, id)] ?? null;
 
     if (options.requireExisting && !existingRecord) {
       return { ignored: true };
@@ -76,7 +79,6 @@ export async function savePlayRecordMutation(
     }
 
     // 跨源同名合并：同一部作品只保留最新的播放记录
-    const allRecords = await db.getAllPlayRecords(username);
     const mergeTargets = findCrossKeySameShowRecords(
       record,
       generateStorageKey(source, id),

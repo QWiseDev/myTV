@@ -122,6 +122,19 @@ export function slotRankKey(type: string) {
 
 export const SEARCH_HISTORY_LIMIT = 20;
 
+/**
+ * 从访问日志键解析用户名。
+ * 键格式：al:{date}:{username}:{ts}（带用户名）或 al:{date}:{ts}（无用户名）。
+ * 返回 null 表示无用户名的全局日志。用户名中不允许出现 ':'（注册侧已约束）。
+ */
+export function parseLogKeyUsername(logKey: string): string | null {
+  const parts = logKey.split(':');
+  if (parts.length < 4) {
+    return null;
+  }
+  return parts[2];
+}
+
 export const EMPTY_PLAY_STATS: PlayStatsResult = {
   totalUsers: 0,
   totalWatchTime: 0,

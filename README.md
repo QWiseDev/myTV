@@ -71,7 +71,7 @@
 | TVBox 接入 | TVBox 配置接口、Token 认证、IP 白名单、普通用户访问              |
 | 管理后台   | 配置文件、视频源、直播源、分类、缓存、数据迁移、日志查看         |
 | 多端使用   | Web、Selene 手机端、OrionTV 大屏端                               |
-| 存储支持   | Kvrocks、Redis、Upstash、localStorage                            |
+| 存储支持   | Kvrocks、Redis、Upstash                                          |
 
 ---
 

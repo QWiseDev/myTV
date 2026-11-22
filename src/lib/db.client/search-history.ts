@@ -6,7 +6,6 @@ import {
   fetchFromApi,
   fetchWithAuth,
   handleDatabaseOperationFailure,
-  STORAGE_TYPE,
   triggerGlobalError,
 } from './core';
 import { readThroughCache } from './read-through-cache';
@@ -15,13 +14,11 @@ import { readThroughCache } from './read-through-cache';
 // 搜索历史最大保存条数
 const SEARCH_HISTORY_LIMIT = 20;
 
-const SEARCH_HISTORY_KEY = 'moontv_search_history';
-
 /* ---------------- 搜索历史相关 API ---------------- */
 
 /**
  * 获取搜索历史。
- * 数据库存储模式下使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
+ * 使用混合缓存策略：优先返回缓存数据，后台异步同步最新数据。
  */
 export async function getSearchHistory(): Promise<string[]> {
   // 服务器端渲染阶段直接返回空
@@ -29,200 +26,125 @@ export async function getSearchHistory(): Promise<string[]> {
     return [];
   }
 
-  // 数据库存储模式：使用混合缓存策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    try {
-      return await readThroughCache<string[]>({
-        readCache: () => cacheManager.getCachedSearchHistory(),
-        writeCache: (data) => cacheManager.cacheSearchHistory(data),
-        fetchFromServer: () => fetchFromApi<string[]>(`/api/searchhistory`),
-        backgroundSyncKey: 'searchhistory-background-sync',
-        initialFetchKey: 'searchhistory-initial-fetch',
-        dispatchUpdated: (data) =>
-          window.dispatchEvent(
-            new CustomEvent('searchHistoryUpdated', {
-              detail: data,
-            }),
-          ),
-        warnSyncFailure: (err) => {
-          console.warn('后台同步搜索历史失败:', err);
-          triggerGlobalError('后台同步搜索历史失败');
-        },
-        handleFetchFailure: (err) => {
-          console.error('获取搜索历史失败:', err);
-          triggerGlobalError('获取搜索历史失败');
-        },
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  // localStorage 模式
   try {
-    const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as string[];
-    // 仅返回字符串数组
-    return Array.isArray(arr) ? arr : [];
-  } catch (err) {
-    console.error('读取搜索历史失败:', err);
-    triggerGlobalError('读取搜索历史失败');
+    return await readThroughCache<string[]>({
+      readCache: () => cacheManager.getCachedSearchHistory(),
+      writeCache: (data) => cacheManager.cacheSearchHistory(data),
+      fetchFromServer: () => fetchFromApi<string[]>(`/api/searchhistory`),
+      backgroundSyncKey: 'searchhistory-background-sync',
+      initialFetchKey: 'searchhistory-initial-fetch',
+      dispatchUpdated: (data) =>
+        window.dispatchEvent(
+          new CustomEvent('searchHistoryUpdated', {
+            detail: data,
+          }),
+        ),
+      warnSyncFailure: (err) => {
+        console.warn('后台同步搜索历史失败:', err);
+        triggerGlobalError('后台同步搜索历史失败');
+      },
+      handleFetchFailure: (err) => {
+        console.error('获取搜索历史失败:', err);
+        triggerGlobalError('获取搜索历史失败');
+      },
+    });
+  } catch {
     return [];
   }
 }
 
 /**
  * 将关键字添加到搜索历史。
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function addSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
 
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    // 立即更新缓存
-    const cachedHistory = cacheManager.getCachedSearchHistory() || [];
-    const newHistory = [trimmed, ...cachedHistory.filter((k) => k !== trimmed)];
-    // 限制长度
-    if (newHistory.length > SEARCH_HISTORY_LIMIT) {
-      newHistory.length = SEARCH_HISTORY_LIMIT;
-    }
-    cacheManager.cacheSearchHistory(newHistory);
-
-    // 触发立即更新事件
-    window.dispatchEvent(
-      new CustomEvent('searchHistoryUpdated', {
-        detail: newHistory,
-      }),
-    );
-
-    // 异步同步到数据库
-    try {
-      await fetchWithAuth('/api/searchhistory', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ keyword: trimmed }),
-      });
-    } catch (err) {
-      await handleDatabaseOperationFailure('searchHistory', err);
-    }
-    return;
+  // 立即更新缓存
+  const cachedHistory = cacheManager.getCachedSearchHistory() || [];
+  const newHistory = [trimmed, ...cachedHistory.filter((k) => k !== trimmed)];
+  // 限制长度
+  if (newHistory.length > SEARCH_HISTORY_LIMIT) {
+    newHistory.length = SEARCH_HISTORY_LIMIT;
   }
+  cacheManager.cacheSearchHistory(newHistory);
 
-  // localStorage 模式
-  if (typeof window === 'undefined') return;
+  // 触发立即更新事件
+  window.dispatchEvent(
+    new CustomEvent('searchHistoryUpdated', {
+      detail: newHistory,
+    }),
+  );
 
+  // 异步同步到数据库
   try {
-    const history = await getSearchHistory();
-    const newHistory = [trimmed, ...history.filter((k) => k !== trimmed)];
-    // 限制长度
-    if (newHistory.length > SEARCH_HISTORY_LIMIT) {
-      newHistory.length = SEARCH_HISTORY_LIMIT;
-    }
-    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
-    window.dispatchEvent(
-      new CustomEvent('searchHistoryUpdated', {
-        detail: newHistory,
-      }),
-    );
+    await fetchWithAuth('/api/searchhistory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ keyword: trimmed }),
+    });
   } catch (err) {
-    console.error('保存搜索历史失败:', err);
-    triggerGlobalError('保存搜索历史失败');
+    await handleDatabaseOperationFailure('searchHistory', err);
   }
 }
 
 /**
  * 清空搜索历史。
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function clearSearchHistory(): Promise<void> {
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    // 立即更新缓存
-    cacheManager.cacheSearchHistory([]);
+  // 立即更新缓存
+  cacheManager.cacheSearchHistory([]);
 
-    // 触发立即更新事件
-    window.dispatchEvent(
-      new CustomEvent('searchHistoryUpdated', {
-        detail: [],
-      }),
-    );
-
-    // 异步同步到数据库
-    try {
-      await fetchWithAuth(`/api/searchhistory`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      await handleDatabaseOperationFailure('searchHistory', err);
-    }
-    return;
-  }
-
-  // localStorage 模式
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(SEARCH_HISTORY_KEY);
+  // 触发立即更新事件
   window.dispatchEvent(
     new CustomEvent('searchHistoryUpdated', {
       detail: [],
     }),
   );
+
+  // 异步同步到数据库
+  try {
+    await fetchWithAuth(`/api/searchhistory`, {
+      method: 'DELETE',
+    });
+  } catch (err) {
+    await handleDatabaseOperationFailure('searchHistory', err);
+  }
 }
 
 /**
  * 删除单条搜索历史。
- * 数据库存储模式下使用乐观更新：先更新缓存，再异步同步到数据库。
+ * 使用乐观更新：先更新缓存，再异步同步到数据库。
  */
 export async function deleteSearchHistory(keyword: string): Promise<void> {
   const trimmed = keyword.trim();
   if (!trimmed) return;
 
-  // 数据库存储模式：乐观更新策略（包括 redis 和 upstash）
-  if (STORAGE_TYPE !== 'localstorage') {
-    // 立即更新缓存
-    const cachedHistory = cacheManager.getCachedSearchHistory() || [];
-    const newHistory = cachedHistory.filter((k) => k !== trimmed);
-    cacheManager.cacheSearchHistory(newHistory);
+  // 立即更新缓存
+  const cachedHistory = cacheManager.getCachedSearchHistory() || [];
+  const newHistory = cachedHistory.filter((k) => k !== trimmed);
+  cacheManager.cacheSearchHistory(newHistory);
 
-    // 触发立即更新事件
-    window.dispatchEvent(
-      new CustomEvent('searchHistoryUpdated', {
-        detail: newHistory,
-      }),
-    );
+  // 触发立即更新事件
+  window.dispatchEvent(
+    new CustomEvent('searchHistoryUpdated', {
+      detail: newHistory,
+    }),
+  );
 
-    // 异步同步到数据库
-    try {
-      await fetchWithAuth(
-        `/api/searchhistory?keyword=${encodeURIComponent(trimmed)}`,
-        {
-          method: 'DELETE',
-        },
-      );
-    } catch (err) {
-      await handleDatabaseOperationFailure('searchHistory', err);
-    }
-    return;
-  }
-
-  // localStorage 模式
-  if (typeof window === 'undefined') return;
-
+  // 异步同步到数据库
   try {
-    const history = await getSearchHistory();
-    const newHistory = history.filter((k) => k !== trimmed);
-    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
-    window.dispatchEvent(
-      new CustomEvent('searchHistoryUpdated', {
-        detail: newHistory,
-      }),
+    await fetchWithAuth(
+      `/api/searchhistory?keyword=${encodeURIComponent(trimmed)}`,
+      {
+        method: 'DELETE',
+      },
     );
   } catch (err) {
-    console.error('删除搜索历史失败:', err);
-    triggerGlobalError('删除搜索历史失败');
+    await handleDatabaseOperationFailure('searchHistory', err);
   }
 }

@@ -15,12 +15,10 @@ interface UserMenuIdentity {
 
 interface UseUserMenuWatchingUpdatesOptions {
   authInfo: UserMenuIdentity | null;
-  storageType: string;
 }
 
 export function useUserMenuWatchingUpdates({
   authInfo,
-  storageType,
 }: UseUserMenuWatchingUpdatesOptions) {
   const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
     null,
@@ -28,21 +26,13 @@ export function useUserMenuWatchingUpdates({
   const [hasUnreadUpdates, setHasUnreadUpdates] = useState(false);
 
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage'
-    ) {
+    if (typeof window === 'undefined' || !authInfo?.username) {
       debug.log('watching-updates 条件不满足，跳过加载');
     }
-  }, [authInfo?.username, storageType]);
+  }, [authInfo?.username]);
 
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage'
-    ) {
+    if (typeof window === 'undefined' || !authInfo?.username) {
       return undefined;
     }
 
@@ -86,21 +76,19 @@ export function useUserMenuWatchingUpdates({
     return () => {
       unsubscribe();
     };
-  }, [authInfo, storageType]);
+  }, [authInfo]);
 
   const watchingUpdatesState = useMemo(
     () => buildUserMenuWatchingUpdatesState(watchingUpdates),
     [watchingUpdates],
   );
 
-  const showWatchingUpdates =
-    authInfo?.username && storageType !== 'localstorage';
+  const showWatchingUpdates = Boolean(authInfo?.username);
   const debugLoggedRef = useRef<string>('');
 
   useEffect(() => {
     const currentState = JSON.stringify({
       username: authInfo?.username,
-      storageType,
       showWatchingUpdates,
       hasActualUpdates: watchingUpdatesState.hasActualUpdates,
       totalUpdates: watchingUpdatesState.totalUpdates,
@@ -113,7 +101,6 @@ export function useUserMenuWatchingUpdates({
       debugLoggedRef.current = currentState;
       debug.log('UserMenu 更新提醒调试:', {
         username: authInfo?.username,
-        storageType,
         showWatchingUpdates,
         hasActualUpdates: watchingUpdatesState.hasActualUpdates,
         totalUpdates: watchingUpdatesState.totalUpdates,
@@ -124,7 +111,6 @@ export function useUserMenuWatchingUpdates({
     }
   }, [
     authInfo?.username,
-    storageType,
     showWatchingUpdates,
     watchingUpdatesState.hasActualUpdates,
     watchingUpdatesState.totalUpdates,

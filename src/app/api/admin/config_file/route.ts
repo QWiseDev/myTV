@@ -10,16 +10,6 @@ export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-  if (storageType === 'localstorage') {
-    return NextResponse.json(
-      {
-        error: '不支持本地存储进行管理员配置',
-      },
-      { status: 400 },
-    );
-  }
-
   const auth = requireUser(request);
   if (!auth.authInfo) return auth.response;
   const authInfo = auth.authInfo;

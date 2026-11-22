@@ -40,14 +40,6 @@ const PersonalStatsPanel = dynamic(
   },
 );
 
-const LocalStorageNotice = dynamic(
-  () => import('./_components/LocalStorageNotice'),
-  {
-    loading: () => <SectionSkeleton />,
-    ssr: false,
-  },
-);
-
 const PlayStatsPage = () => {
   const router = useRouter();
   const [statsData, setStatsData] = useState<PlayStatsResult | null>(null);
@@ -268,10 +260,6 @@ const PlayStatsPage = () => {
     router.push('/release-calendar');
   }, [router]);
 
-  const storageType =
-    (typeof window !== 'undefined' && window.RUNTIME_CONFIG?.STORAGE_TYPE) ||
-    'localstorage';
-
   useEffect(() => {
     const auth = getAuthInfoFromBrowserCookie();
     if (!auth || !auth.username) {
@@ -281,7 +269,7 @@ const PlayStatsPage = () => {
 
     setAuthInfo(auth);
     setIsAdmin(auth.role === 'admin' || auth.role === 'owner');
-  }, [router, storageType]);
+  }, [router]);
 
   useEffect(() => {
     if (authInfo) {
@@ -371,14 +359,6 @@ const PlayStatsPage = () => {
             <span>正在加载{isAdmin ? '播放统计' : '个人统计'}...</span>
           </div>
         </div>
-      </PageLayout>
-    );
-  }
-
-  if (storageType === 'localstorage') {
-    return (
-      <PageLayout activePath='/play-stats'>
-        <LocalStorageNotice isAdmin={isAdmin} />
       </PageLayout>
     );
   }

@@ -159,16 +159,8 @@ export async function DELETE(request: NextRequest) {
       }
       await db.deleteFavorite(username, parsedKey.source, parsedKey.id);
     } else {
-      // 清空全部
-      const all = await db.getAllFavorites(username);
-      await Promise.all(
-        Object.keys(all).map(async (k) => {
-          const parsedKey = parseStorageKey(k);
-          if (parsedKey) {
-            await db.deleteFavorite(username, parsedKey.source, parsedKey.id);
-          }
-        }),
-      );
+      // 清空全部（整 Hash 一次删除，替代 HGETALL + 逐条 HDEL）
+      await db.clearAllFavorites(username);
     }
 
     return NextResponse.json({ success: true }, { status: 200 });

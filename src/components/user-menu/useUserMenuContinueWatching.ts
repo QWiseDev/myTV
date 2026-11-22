@@ -22,7 +22,6 @@ interface UseUserMenuContinueWatchingOptions {
   isOpen: boolean;
   maxProgress: number;
   minProgress: number;
-  storageType: string;
 }
 
 export function useUserMenuContinueWatching({
@@ -31,19 +30,13 @@ export function useUserMenuContinueWatching({
   isOpen,
   maxProgress,
   minProgress,
-  storageType,
 }: UseUserMenuContinueWatchingOptions) {
   const [playRecords, setPlayRecords] = useState<
     UserMenuContinueWatchingRecord[]
   >([]);
 
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage' ||
-      !isOpen
-    ) {
+    if (typeof window === 'undefined' || !authInfo?.username || !isOpen) {
       return undefined;
     }
 
@@ -117,14 +110,7 @@ export function useUserMenuContinueWatching({
       window.removeEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
       unsubscribeWatchingUpdates();
     };
-  }, [
-    authInfo,
-    storageType,
-    enableProgressFilter,
-    minProgress,
-    maxProgress,
-    isOpen,
-  ]);
+  }, [authInfo, enableProgressFilter, minProgress, maxProgress, isOpen]);
 
   return { playRecords };
 }

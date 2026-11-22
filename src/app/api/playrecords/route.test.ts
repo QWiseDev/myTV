@@ -9,7 +9,6 @@ const mockEnsureUserAccessOrResponse = jest.fn();
 const mockClearAllPlayRecords = jest.fn();
 const mockDeletePlayRecord = jest.fn();
 const mockGetAllPlayRecords = jest.fn();
-const mockGetPlayRecord = jest.fn();
 const mockInvalidateWatchingUpdatesForUser = jest.fn();
 const mockSavePlayRecord = jest.fn();
 
@@ -40,7 +39,6 @@ jest.mock('@/lib/db', () => ({
     clearAllPlayRecords: mockClearAllPlayRecords,
     deletePlayRecord: mockDeletePlayRecord,
     getAllPlayRecords: mockGetAllPlayRecords,
-    getPlayRecord: mockGetPlayRecord,
     savePlayRecord: mockSavePlayRecord,
   },
 }));
@@ -130,7 +128,9 @@ describe('POST /api/playrecords', () => {
   }
 
   test('ignores a stale write that arrives after a newer record', async () => {
-    mockGetPlayRecord.mockResolvedValue(createRecord({ save_time: 2000 }));
+    mockGetAllPlayRecords.mockResolvedValue({
+      'source-a+id-a': createRecord({ save_time: 2000 }),
+    });
 
     const response = await POST(
       createRequest(createRecord({ play_time: 50, save_time: 1000 })),
@@ -145,9 +145,9 @@ describe('POST /api/playrecords', () => {
   });
 
   test('saves a record newer than the stored value', async () => {
-    mockGetPlayRecord.mockResolvedValue(
-      createRecord({ original_episodes: 10, save_time: 1000 }),
-    );
+    mockGetAllPlayRecords.mockResolvedValue({
+      'source-a+id-a': createRecord({ original_episodes: 10, save_time: 1000 }),
+    });
     const incomingRecord = createRecord({
       play_time: 250,
       save_time: 2000,
@@ -169,7 +169,9 @@ describe('POST /api/playrecords', () => {
   });
 
   test('invalidates watching updates when episode progress changes', async () => {
-    mockGetPlayRecord.mockResolvedValue(createRecord({ index: 1 }));
+    mockGetAllPlayRecords.mockResolvedValue({
+      'source-a+id-a': createRecord({ index: 1 }),
+    });
 
     const response = await POST(
       createRequest(createRecord({ index: 2, save_time: 2000 })),
@@ -182,7 +184,9 @@ describe('POST /api/playrecords', () => {
   test('serializes concurrent writes for the same user and record key', async () => {
     const newerSaveGate = createDeferred<void>();
     let storedRecord = createRecord({ save_time: 500 });
-    mockGetPlayRecord.mockImplementation(async () => storedRecord);
+    mockGetAllPlayRecords.mockImplementation(async () => ({
+      'source-a+id-a': storedRecord,
+    }));
     mockSavePlayRecord.mockImplementation(
       async (
         _username: string,
@@ -201,7 +205,7 @@ describe('POST /api/playrecords', () => {
       createRequest(createRecord({ play_time: 250, save_time: 2000 })),
     );
     await flushAsyncWork();
-    expect(mockGetPlayRecord).toHaveBeenCalledTimes(1);
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(1);
     expect(mockSavePlayRecord).toHaveBeenCalledTimes(1);
 
     const olderResponsePromise = POST(
@@ -210,7 +214,7 @@ describe('POST /api/playrecords', () => {
     await flushAsyncWork();
 
     // 较旧请求必须等较新请求完成保存后，才能重新读取并比较。
-    expect(mockGetPlayRecord).toHaveBeenCalledTimes(1);
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(1);
 
     newerSaveGate.resolve();
     const [newerResponse, olderResponse] = await Promise.all([
@@ -224,7 +228,7 @@ describe('POST /api/playrecords', () => {
       success: true,
       ignored: true,
     });
-    expect(mockGetPlayRecord).toHaveBeenCalledTimes(2);
+    expect(mockGetAllPlayRecords).toHaveBeenCalledTimes(2);
     expect(mockSavePlayRecord).toHaveBeenCalledTimes(1);
     expect(storedRecord.save_time).toBe(2000);
   });
@@ -232,7 +236,9 @@ describe('POST /api/playrecords', () => {
   test('orders delete after an in-flight save', async () => {
     const saveGate = createDeferred<void>();
     let storedRecord: PlayRecord | null = createRecord({ save_time: 500 });
-    mockGetPlayRecord.mockImplementation(async () => storedRecord);
+    mockGetAllPlayRecords.mockImplementation(async () => ({
+      'source-a+id-a': storedRecord,
+    }));
     mockSavePlayRecord.mockImplementation(
       async (
         _username: string,

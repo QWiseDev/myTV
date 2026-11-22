@@ -81,23 +81,4 @@ describe('getPlayRecordsPage', () => {
     ]);
     expect(requestUrl.searchParams.get('pageSize')).toBe('12');
   });
-
-  it('rethrows invalid local pagination data after emitting the global error', async () => {
-    const globalErrorListener = jest.fn();
-    (
-      window as typeof window & {
-        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
-      }
-    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    localStorage.setItem('moontv_play_records', '{invalid-json');
-    window.addEventListener('globalError', globalErrorListener, { once: true });
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    const { getPlayRecordsPage } = await import('./db.client');
-
-    await expect(getPlayRecordsPage({ pageSize: 12 })).rejects.toBeInstanceOf(
-      SyntaxError,
-    );
-    expect(globalErrorListener).toHaveBeenCalledTimes(1);
-  });
 });

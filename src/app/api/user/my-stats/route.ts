@@ -42,18 +42,6 @@ export async function GET(request: NextRequest) {
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    // 检查存储类型是否支持统计功能
-    if (!db.isStatsSupported()) {
-      return NextResponse.json(
-        {
-          error:
-            '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
-          supportedTypes: ['redis', 'upstash', 'kvrocks'],
-        },
-        { status: 400 },
-      );
-    }
-
     const guardResult = await ensureUserAccessOrResponse(authInfo.username);
     if ('response' in guardResult) {
       return guardResult.response;
@@ -120,18 +108,6 @@ export async function POST(request: NextRequest) {
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    // 检查存储类型是否支持统计功能
-    if (!db.isStatsSupported()) {
-      return NextResponse.json(
-        {
-          error:
-            '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
-          supportedTypes: ['redis', 'upstash', 'kvrocks'],
-        },
-        { status: 400 },
-      );
-    }
-
     const guardResult = await ensureUserAccessOrResponse(authInfo.username);
     if ('response' in guardResult) {
       return guardResult.response;
@@ -192,18 +168,6 @@ export async function PUT(request: NextRequest) {
     const auth = requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
-
-    // 检查存储类型是否支持统计功能
-    if (!db.isStatsSupported()) {
-      return NextResponse.json(
-        {
-          error:
-            '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
-          supportedTypes: ['redis', 'upstash', 'kvrocks'],
-        },
-        { status: 400 },
-      );
-    }
 
     const config = await getConfig();
     const username = process.env.USERNAME;
@@ -287,18 +251,6 @@ export async function DELETE(request: NextRequest) {
     const auth = requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
-
-    // 检查存储类型是否支持统计功能
-    if (!db.isStatsSupported()) {
-      return NextResponse.json(
-        {
-          error:
-            '当前存储类型不支持播放统计功能，请使用 Redis、Upstash 或 Kvrocks',
-          supportedTypes: ['redis', 'upstash', 'kvrocks'],
-        },
-        { status: 400 },
-      );
-    }
 
     const guardResult = await ensureUserAccessOrResponse(authInfo.username);
     if ('response' in guardResult) {

@@ -15,16 +15,6 @@ export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-  if (storageType === 'localstorage') {
-    return NextResponse.json(
-      {
-        error: '不支持本地存储进行播放统计查看',
-      },
-      { status: 400 },
-    );
-  }
-
   const auth = requireUser(request);
   if (!auth.authInfo) return auth.response;
   const authInfo = auth.authInfo;
@@ -82,7 +72,7 @@ export async function GET(request: NextRequest) {
     // 计算近7天的日期范围
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // 分批并行收集每个用户的统计数据（串行逐用户 2 次 RTT，在隧道环境下代价极高）
+    // 分批并行收集每个用户的统计数据与全量播放记录（组合读取，每用户 1 次 RTT）
     const USER_DATA_BATCH_SIZE = 8;
     const userDatas: Array<{
       user: (typeof allUsers)[0];
@@ -93,20 +83,14 @@ export async function GET(request: NextRequest) {
       const batch = allUsers.slice(i, i + USER_DATA_BATCH_SIZE);
       const rows = await Promise.all(
         batch.map(async (user) => {
-          let userPlayStat: UserPlayStat | null = null;
           try {
-            userPlayStat = await storage.getUserPlayStat(user.username);
+            const { stat, records } = await storage.getUserPlayStatWithRecords(
+              user.username,
+            );
+            return { user, userPlayStat: stat, records };
           } catch {
-            userPlayStat = null;
+            return { user, userPlayStat: null, records: [] as PlayRecord[] };
           }
-          const userPlayRecords = await storage.getAllPlayRecords(
-            user.username,
-          );
-          return {
-            user,
-            userPlayStat,
-            records: Object.values(userPlayRecords) as PlayRecord[],
-          };
         }),
       );
       userDatas.push(...rows);

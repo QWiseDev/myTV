@@ -1,5 +1,5 @@
 import {
-  type WatchingUpdatesCache,
+  type WatchingUpdate,
   checkWatchingUpdates,
   forceClearWatchingUpdatesCache,
   getCachedWatchingUpdates,
@@ -7,12 +7,7 @@ import {
   markUpdatesAsViewed,
 } from './watching-updates';
 
-const WATCHING_UPDATES_CACHE_KEY = 'moontv_watching_updates';
-const LAST_CHECK_TIME_KEY = 'moontv_last_update_check';
-
-function createCache(
-  overrides: Partial<WatchingUpdatesCache> = {},
-): WatchingUpdatesCache {
+function createUpdate(overrides: Partial<WatchingUpdate> = {}): WatchingUpdate {
   return {
     continueWatchingCount: 0,
     hasUpdates: true,
@@ -37,51 +32,54 @@ function createCache(
   };
 }
 
-function writeCache(cache: WatchingUpdatesCache) {
-  localStorage.setItem(WATCHING_UPDATES_CACHE_KEY, JSON.stringify(cache));
+function mockFetchWith(payload: WatchingUpdate) {
+  global.fetch = jest.fn().mockResolvedValue({
+    json: async () => payload,
+    ok: true,
+    status: 200,
+  });
 }
 
 describe('watching updates cache helpers', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    localStorage.clear();
-    global.fetch = jest.fn().mockResolvedValue({
-      json: async () => [],
-      ok: true,
-    });
+    // 重置模块级内存缓存
+    forceClearWatchingUpdatesCache();
+    mockFetchWith(createUpdate());
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    localStorage.clear();
+    forceClearWatchingUpdatesCache();
   });
 
-  it('reads fresh cached watching updates', () => {
-    const cache = createCache();
-    writeCache(cache);
+  it('reads fresh cached watching updates', async () => {
+    const update = createUpdate();
+    mockFetchWith(update);
+    await checkWatchingUpdates(true);
 
     expect(getCachedWatchingUpdates()).toBe(true);
-    expect(getDetailedWatchingUpdates()).toEqual(cache);
+    expect(getDetailedWatchingUpdates()).toEqual(update);
   });
 
-  it('ignores expired cached watching updates', () => {
-    writeCache(
-      createCache({
-        timestamp: Date.now() - 31 * 60 * 1000,
-      }),
-    );
+  it('ignores expired cached watching updates', async () => {
+    await checkWatchingUpdates(true);
 
-    expect(getCachedWatchingUpdates()).toBe(false);
-    expect(getDetailedWatchingUpdates()).toBeNull();
+    const dateNowSpy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.now() + 4 * 60 * 60 * 1000);
+    try {
+      expect(getCachedWatchingUpdates()).toBe(false);
+      expect(getDetailedWatchingUpdates()).toBeNull();
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
-  it('marks cached updates as viewed without deleting continue-watching data', () => {
-    writeCache(
-      createCache({
-        continueWatchingCount: 2,
-      }),
-    );
+  it('marks cached updates as viewed without deleting continue-watching data', async () => {
+    mockFetchWith(createUpdate({ continueWatchingCount: 2 }));
+    await checkWatchingUpdates(true);
 
     markUpdatesAsViewed();
 
@@ -100,9 +98,9 @@ describe('watching updates cache helpers', () => {
     );
   });
 
-  it('force clears cached updates and last check time', () => {
-    writeCache(createCache());
-    localStorage.setItem(LAST_CHECK_TIME_KEY, String(Date.now()));
+  it('force clears cached updates', async () => {
+    await checkWatchingUpdates(true);
+
     const eventListener = jest.fn();
     window.addEventListener('watchingUpdatesChanged', eventListener, {
       once: true,
@@ -110,8 +108,7 @@ describe('watching updates cache helpers', () => {
 
     forceClearWatchingUpdatesCache();
 
-    expect(localStorage.getItem(WATCHING_UPDATES_CACHE_KEY)).toBeNull();
-    expect(localStorage.getItem(LAST_CHECK_TIME_KEY)).toBeNull();
+    expect(getDetailedWatchingUpdates()).toBeNull();
     expect(eventListener).toHaveBeenCalledWith(
       expect.objectContaining({
         detail: {
@@ -126,6 +123,16 @@ describe('watching updates cache helpers', () => {
   it('publishes a normal empty result after an invalidated empty record set is checked', async () => {
     const eventListener = jest.fn();
     window.addEventListener('watchingUpdatesChanged', eventListener);
+
+    mockFetchWith(
+      createUpdate({
+        hasUpdates: false,
+        timestamp: Date.now(),
+        updatedCount: 0,
+        continueWatchingCount: 0,
+        updatedSeries: [],
+      }),
+    );
 
     forceClearWatchingUpdatesCache();
     await checkWatchingUpdates(true);
@@ -150,11 +157,10 @@ describe('watching updates cache helpers', () => {
   });
 
   it('reuses the in-flight non-forced check', async () => {
-    const nextCheckTime = Date.now() + 6 * 60 * 1000;
-    const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(nextCheckTime);
     let resolveFetch!: (value: {
-      json: () => Promise<never[]>;
+      json: () => Promise<WatchingUpdate>;
       ok: boolean;
+      status: number;
     }) => void;
     global.fetch = jest.fn().mockImplementation(
       () =>
@@ -171,8 +177,9 @@ describe('watching updates cache helpers', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
 
     resolveFetch({
-      json: async () => [],
+      json: async () => createUpdate(),
       ok: true,
+      status: 200,
     });
     await Promise.all([firstCheck, secondCheck]);
 
@@ -180,6 +187,5 @@ describe('watching updates cache helpers', () => {
     expect(eventListener).toHaveBeenCalledTimes(1);
 
     window.removeEventListener('watchingUpdatesChanged', eventListener);
-    dateNowSpy.mockRestore();
   });
 });

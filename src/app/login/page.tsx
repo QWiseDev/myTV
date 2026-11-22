@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 
 import { useSite } from '@/components/SiteProvider';
 
@@ -24,13 +24,6 @@ function LoginPageClient() {
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [shouldAskUsername, setShouldAskUsername] = useState(false);
-
-  // Telegram Magic Link 状态
-  const [telegramLoading, setTelegramLoading] = useState(false);
-  const [telegramDeepLink, setTelegramDeepLink] = useState('');
-  const [telegramEnabled, setTelegramEnabled] = useState(false);
-  const [telegramUsername, setTelegramUsername] = useState('');
 
   // 留言功能状态
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -41,48 +34,18 @@ function LoginPageClient() {
 
   const { siteName } = useSite();
 
-  // 在客户端挂载后设置配置
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storageType = window.RUNTIME_CONFIG?.STORAGE_TYPE;
-      setShouldAskUsername(
-        Boolean(storageType && storageType !== 'localstorage'),
-      );
-    }
-  }, []);
-
-  // 获取 Telegram Magic Link 配置
-  useEffect(() => {
-    const fetchTelegramConfig = async () => {
-      try {
-        const response = await fetch('/api/server-config');
-        const data = await response.json();
-        if (data.TelegramAuthConfig?.enabled) {
-          setTelegramEnabled(true);
-        }
-      } catch (error) {
-        /* 忽略错误 */
-      }
-    };
-
-    fetchTelegramConfig();
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    if (!password || (shouldAskUsername && !username)) return;
+    if (!password || !username) return;
 
     try {
       setLoading(true);
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          password,
-          ...(shouldAskUsername ? { username } : {}),
-        }),
+        body: JSON.stringify({ password, username }),
       });
 
       if (res.ok) {
@@ -110,42 +73,6 @@ function LoginPageClient() {
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // 生成 Telegram 登录链接
-  const handleTelegramLogin = async () => {
-    setError(null);
-
-    // 验证 Telegram 用户名
-    if (!telegramUsername || telegramUsername.trim() === '') {
-      setError('请输入您的 Telegram 用户名');
-      return;
-    }
-
-    setTelegramLoading(true);
-
-    try {
-      const res = await fetch('/api/telegram/send-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramUsername: telegramUsername.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.deepLink) {
-        setTelegramDeepLink(data.deepLink);
-        // 自动打开 Telegram
-        window.open(data.deepLink, '_blank');
-      } else {
-        setError(data.error || '生成链接失败，请重试');
-      }
-    } catch (error) {
-      console.error('[Frontend] Error:', error);
-      setError('网络错误，请稍后重试');
-    } finally {
-      setTelegramLoading(false);
     }
   };
 
@@ -199,30 +126,28 @@ function LoginPageClient() {
         </div>
 
         <form onSubmit={handleSubmit} className='space-y-5'>
-          {shouldAskUsername && (
-            <div className='group'>
-              <label
-                htmlFor='username'
-                className='block text-sm font-medium text-[#d9d9d9] mb-2'
-              >
-                用户名
-              </label>
-              <div className='relative'>
-                <div className='absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none'>
-                  <User className='h-5 w-5 text-[#8c8c8c] transition-colors group-focus-within:text-[#00be06]' />
-                </div>
-                <input
-                  id='username'
-                  type='text'
-                  autoComplete='username'
-                  className='block w-full rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] py-3.5 pl-12 pr-4 text-[#f5f5f5] outline-none transition-colors duration-200 placeholder:text-[#8c8c8c] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 sm:text-base'
-                  placeholder='请输入用户名'
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
+          <div className='group'>
+            <label
+              htmlFor='username'
+              className='block text-sm font-medium text-[#d9d9d9] mb-2'
+            >
+              用户名
+            </label>
+            <div className='relative'>
+              <div className='absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none'>
+                <User className='h-5 w-5 text-[#8c8c8c] transition-colors group-focus-within:text-[#00be06]' />
               </div>
+              <input
+                id='username'
+                type='text'
+                autoComplete='username'
+                className='block w-full rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] py-3.5 pl-12 pr-4 text-[#f5f5f5] outline-none transition-colors duration-200 placeholder:text-[#8c8c8c] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 sm:text-base'
+                placeholder='请输入用户名'
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
             </div>
-          )}
+          </div>
 
           <div className='group'>
             <label
@@ -240,7 +165,7 @@ function LoginPageClient() {
                 type='password'
                 autoComplete='current-password'
                 className='block w-full rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] py-3.5 pl-12 pr-4 text-[#f5f5f5] outline-none transition-colors duration-200 placeholder:text-[#8c8c8c] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20 sm:text-base'
-                placeholder='请输入访问密码'
+                placeholder='请输入密码'
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -257,92 +182,30 @@ function LoginPageClient() {
           {/* 登录按钮 */}
           <button
             type='submit'
-            disabled={!password || loading || (shouldAskUsername && !username)}
+            disabled={!password || loading || !username}
             className='inline-flex w-full justify-center items-center gap-2 rounded-lg bg-[#00be06] py-3.5 text-base font-semibold text-white transition-colors duration-200 hover:bg-[#00a304] disabled:cursor-not-allowed disabled:opacity-50'
           >
             <Lock className='h-5 w-5' />
             {loading ? '登录中...' : '立即登录'}
           </button>
 
-          {/* 注册链接 - 仅在非 localStorage 模式下显示 */}
-          {shouldAskUsername && (
-            <div className='pt-5 border-t border-[#2e2e2e]'>
-              <p className='text-center text-[#a8a8a8] text-sm mb-3'>
-                还没有账户？
-              </p>
-              <a
-                href='/register'
-                className='group flex items-center justify-center gap-2 w-full px-6 py-2.5 rounded-lg border border-[#3a3a3a] text-[#f5f5f5] text-sm font-medium hover:border-[#00be06] hover:text-[#00be06] transition-colors'
-              >
-                <UserPlus className='w-4 h-4' />
-                <span>立即注册</span>
-                <span className='inline-block transition-transform group-hover:translate-x-1'>
-                  →
-                </span>
-              </a>
-            </div>
-          )}
-        </form>
-
-        {/* Telegram Magic Link 登录 */}
-        {telegramEnabled && (
-          <div className='mt-6 pt-6 border-t border-[#2e2e2e]'>
-            <p className='text-center text-[#a8a8a8] text-sm mb-4'>
-              或使用 Telegram 登录
+          {/* 注册链接 */}
+          <div className='pt-5 border-t border-[#2e2e2e]'>
+            <p className='text-center text-[#a8a8a8] text-sm mb-3'>
+              还没有账户？
             </p>
-
-            {/* Telegram 用户名输入 */}
-            <div className='mb-4'>
-              <label className='block text-sm font-medium text-[#d9d9d9] mb-2'>
-                Telegram 用户名
-              </label>
-              <div className='relative'>
-                <div className='absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'>
-                  <Send className='h-5 w-5 text-[#8c8c8c]' />
-                </div>
-                <input
-                  type='text'
-                  value={telegramUsername}
-                  onChange={(e) => setTelegramUsername(e.target.value)}
-                  placeholder='输入您的 Telegram 用户名'
-                  className='block w-full rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] py-3 pl-10 pr-3 text-[#f5f5f5] outline-none transition-colors placeholder:text-[#8c8c8c] focus:border-[#00be06] focus:ring-2 focus:ring-[#00be06]/20'
-                  disabled={telegramLoading}
-                />
-              </div>
-              <p className='mt-2 text-xs text-[#a8a8a8]'>
-                输入您的 Telegram 用户名（不含 @）
-              </p>
-            </div>
-
-            <button
-              onClick={handleTelegramLogin}
-              disabled={telegramLoading || !telegramUsername.trim()}
-              className='inline-flex w-full justify-center items-center gap-2 rounded-lg border border-[#3a3a3a] bg-[#2a2a2a] py-3.5 text-base font-semibold text-[#f5f5f5] transition-colors duration-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50'
+            <a
+              href='/register'
+              className='group flex items-center justify-center gap-2 w-full px-6 py-2.5 rounded-lg border border-[#3a3a3a] text-[#f5f5f5] text-sm font-medium hover:border-[#00be06] hover:text-[#00be06] transition-colors'
             >
-              <Send className='h-5 w-5' />
-              {telegramLoading ? '正在打开 Telegram...' : '通过 Telegram 登录'}
-            </button>
-
-            {telegramDeepLink && (
-              <div className='mt-4 p-4 rounded-lg bg-[#2a2a2a] border border-[#3a3a3a]'>
-                <p className='text-sm text-[#d9d9d9] mb-2'>
-                  已在新标签页打开 Telegram
-                </p>
-                <p className='text-xs text-[#a8a8a8]'>
-                  如果没有自动打开，请点击{' '}
-                  <a
-                    href={telegramDeepLink}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='underline font-semibold text-[#00be06]'
-                  >
-                    这里
-                  </a>
-                </p>
-              </div>
-            )}
+              <UserPlus className='w-4 h-4' />
+              <span>立即注册</span>
+              <span className='inline-block transition-transform group-hover:translate-x-1'>
+                →
+              </span>
+            </a>
           </div>
-        )}
+        </form>
       </div>
 
       {/* 留言按钮 */}

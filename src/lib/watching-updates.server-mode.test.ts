@@ -1,16 +1,4 @@
-const mockGetAllPlayRecords = jest.fn();
-
-jest.mock('./db.client', () => ({
-  generateStorageKey: (source: string, id: string) => `${source}+${id}`,
-  getAllPlayRecords: mockGetAllPlayRecords,
-  parseStorageKey: jest.fn(),
-}));
-
 export {};
-
-type RuntimeConfigWindow = Window & {
-  RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
-};
 
 function createServerResponse() {
   return {
@@ -37,21 +25,15 @@ function createServerResponse() {
 
 describe('watching updates server mode', () => {
   const originalFetch = global.fetch;
-  const originalRuntimeConfig = (window as RuntimeConfigWindow).RUNTIME_CONFIG;
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.resetModules();
-    mockGetAllPlayRecords.mockReset();
-    (window as RuntimeConfigWindow).RUNTIME_CONFIG = {
-      STORAGE_TYPE: 'redis',
-    };
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    (window as RuntimeConfigWindow).RUNTIME_CONFIG = originalRuntimeConfig;
     consoleErrorSpy.mockRestore();
     jest.resetModules();
   });

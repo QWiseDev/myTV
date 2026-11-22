@@ -29,11 +29,6 @@ const FavoritesSection = lazy(() => import('@/components/FavoritesSection'));
 const SlotMachineFloatButton = lazy(
   () => import('@/components/SlotMachineFloatButton'),
 );
-const TelegramWelcomeModal = lazy(() =>
-  import('@/components/TelegramWelcomeModal').then((mod) => ({
-    default: mod.TelegramWelcomeModal,
-  })),
-);
 
 type HomeTab = 'home' | 'favorites';
 
@@ -119,10 +114,6 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
   return (
     <PageLayout>
-      <Suspense fallback={null}>
-        <TelegramWelcomeModal />
-      </Suspense>
-
       {/* 布局容器交给 PageLayout，避免多层 padding 叠加 */}
       <div className='overflow-visible'>
         {aiEnabled && (

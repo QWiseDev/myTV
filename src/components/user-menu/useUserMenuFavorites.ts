@@ -14,23 +14,16 @@ interface UserMenuIdentity {
 interface UseUserMenuFavoritesOptions {
   authInfo: UserMenuIdentity | null;
   isOpen: boolean;
-  storageType: string;
 }
 
 export function useUserMenuFavorites({
   authInfo,
   isOpen,
-  storageType,
 }: UseUserMenuFavoritesOptions) {
   const [favorites, setFavorites] = useState<UserMenuFavoriteRecord[]>([]);
 
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !authInfo?.username ||
-      storageType === 'localstorage' ||
-      !isOpen
-    ) {
+    if (typeof window === 'undefined' || !authInfo?.username || !isOpen) {
       return undefined;
     }
 
@@ -66,7 +59,7 @@ export function useUserMenuFavorites({
       isActive = false;
       window.removeEventListener('favoritesUpdated', handleFavoritesUpdate);
     };
-  }, [authInfo, storageType, isOpen]);
+  }, [authInfo, isOpen]);
 
   return { favorites };
 }

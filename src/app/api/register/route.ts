@@ -9,14 +9,6 @@ import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-// 读取存储类型环境变量，默认 localstorage
-const STORAGE_TYPE =
-  (process.env.NEXT_PUBLIC_STORAGE_TYPE as
-    | 'localstorage'
-    | 'redis'
-    | 'upstash'
-    | 'kvrocks'
-    | undefined) || 'localstorage';
 
 const DEFAULT_USER_GROUP = (
   process.env.NEXT_PUBLIC_DEFAULT_USER_GROUP ||
@@ -51,19 +43,12 @@ async function generateSignature(
     .join('');
 }
 
-// 生成认证Cookie（带签名）
+// 生成认证Cookie（带签名，仅含身份与签名，不含密码）
 async function generateAuthCookie(
   username?: string,
-  password?: string,
   role?: 'owner' | 'admin' | 'user',
-  includePassword = false,
 ): Promise<string> {
   const authData: any = { role: role || 'user' };
-
-  // 只在需要时包含 password
-  if (includePassword && password) {
-    authData.password = password;
-  }
 
   if (username && process.env.PASSWORD) {
     authData.username = username;
@@ -94,14 +79,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // localStorage 模式不支持注册
-    if (STORAGE_TYPE === 'localstorage') {
-      return NextResponse.json(
-        { error: 'localStorage 模式不支持用户注册' },
-        { status: 400 },
-      );
-    }
-
     const { username, password, confirmPassword } = await req.json();
 
     // 先检查配置中是否允许注册（在验证输入之前）
@@ -210,12 +187,7 @@ export async function POST(req: NextRequest) {
         message: '注册成功，已自动登录',
       });
 
-      const cookieValue = await generateAuthCookie(
-        username,
-        password,
-        'user',
-        false,
-      );
+      const cookieValue = await generateAuthCookie(username, 'user');
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 

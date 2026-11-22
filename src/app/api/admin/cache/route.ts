@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // 添加调试信息
 
     // 检查存储类型
-    const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
+    const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'redis';
 
     const stats = await getCacheStats();
     return NextResponse.json({
@@ -182,17 +182,6 @@ async function clearDoubanCache(): Promise<number> {
   const dbCleared = await DatabaseCacheManager.clearCacheByType('douban');
   clearedCount += dbCleared;
 
-  // 清理localStorage中的豆瓣缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('douban-') || key.startsWith('bangumi-'),
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
-
   return clearedCount;
 }
 
@@ -203,17 +192,6 @@ async function clearTmdbCache(): Promise<number> {
   // 清理数据库中的TMDB缓存
   const dbCleared = await DatabaseCacheManager.clearCacheByType('tmdb');
   clearedCount += dbCleared;
-
-  // 清理localStorage中的TMDB缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('tmdb-'),
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
 
   return clearedCount;
 }
@@ -226,17 +204,6 @@ async function clearDanmuCache(): Promise<number> {
   const dbCleared = await DatabaseCacheManager.clearCacheByType('danmu');
   clearedCount += dbCleared;
 
-  // 清理localStorage中的弹幕缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache',
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
-
   return clearedCount;
 }
 
@@ -248,17 +215,6 @@ async function clearYouTubeCache(): Promise<number> {
   const dbCleared = await DatabaseCacheManager.clearCacheByType('youtube');
   clearedCount += dbCleared;
 
-  // 清理localStorage中的YouTube缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('youtube-search'),
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
-
   return clearedCount;
 }
 
@@ -269,17 +225,6 @@ async function clearNetdiskCache(): Promise<number> {
   // 清理数据库中的网盘缓存
   const dbCleared = await DatabaseCacheManager.clearCacheByType('netdisk');
   clearedCount += dbCleared;
-
-  // 清理localStorage中的网盘缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('netdisk-search'),
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
 
   return clearedCount;
 }
@@ -297,17 +242,6 @@ async function clearSearchCache(): Promise<number> {
     console.error('清理搜索缓存失败:', error);
   }
 
-  // 清理localStorage中的搜索缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter(
-      (key) => key.startsWith('search-') || key.startsWith('cache-'),
-    );
-    keys.forEach((key) => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-  }
-
   return clearedCount;
 }
 
@@ -318,37 +252,6 @@ async function clearExpiredCache(): Promise<number> {
   // 清理数据库中的过期缓存
   const dbCleared = await DatabaseCacheManager.clearExpiredCache();
   clearedCount += dbCleared;
-
-  // 清理localStorage中的过期缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage);
-    const now = Date.now();
-
-    keys.forEach((key) => {
-      try {
-        const data = localStorage.getItem(key);
-        if (!data) return;
-
-        const parsed = JSON.parse(data);
-
-        // 检查是否有过期时间字段
-        if (parsed.expire && now > parsed.expire) {
-          localStorage.removeItem(key);
-          clearedCount++;
-        } else if (parsed.timestamp && parsed.expireSeconds) {
-          const expireTime = parsed.timestamp + parsed.expireSeconds * 1000;
-          if (now > expireTime) {
-            localStorage.removeItem(key);
-            clearedCount++;
-          }
-        }
-      } catch (error) {
-        // 数据格式错误，清理掉
-        localStorage.removeItem(key);
-        clearedCount++;
-      }
-    });
-  }
 
   return clearedCount;
 }

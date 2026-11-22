@@ -203,18 +203,6 @@ describe('UserMenu', () => {
     expect(screen.queryByText('当前用户')).not.toBeInTheDocument();
   });
 
-  it('hides server-only entries in localstorage mode', async () => {
-    await renderMenu({ role: 'user', storageType: 'localstorage' });
-
-    await openMenu();
-
-    expect(screen.queryByText('更新提醒')).not.toBeInTheDocument();
-    expect(screen.queryByText('继续观看')).not.toBeInTheDocument();
-    expect(screen.queryByText('我的收藏')).not.toBeInTheDocument();
-    expect(screen.queryByText('个人统计')).not.toBeInTheDocument();
-    expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
-  });
-
   it('navigates from the menu and closes the portal', async () => {
     await renderMenu();
     await openMenu();

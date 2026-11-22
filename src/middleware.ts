@@ -12,8 +12,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-
   if (!process.env.PASSWORD) {
     // 如果没有设置密码，重定向到警告页面
     const warningUrl = new URL('/warning', request.url);
@@ -28,16 +26,7 @@ export async function middleware(request: NextRequest) {
     return handleAuthFailure(request, pathname);
   }
 
-  // localstorage模式：在middleware中完成验证
-  if (storageType === 'localstorage') {
-    if (!authInfo.password || authInfo.password !== process.env.PASSWORD) {
-      return handleAuthFailure(request, pathname);
-    }
-    return NextResponse.next();
-  }
-
-  // 其他模式：只验证签名
-  // 检查是否有用户名（非localStorage模式下密码不存储在cookie中）
+  // 检查是否有用户名（密码不存储在cookie中）
   if (!authInfo.username || !authInfo.signature) {
     return handleAuthFailure(request, pathname);
   }
@@ -139,7 +128,6 @@ function shouldSkipAuth(pathname: string): boolean {
     '/logo.svg',
     '/screenshot.png',
     '/api/image-proxy',
-    '/api/telegram/', // Telegram API 端点
     '/slot-symbols/', // 老虎机符号图片
     '/sounds/', // 音频文件
   ];
@@ -150,6 +138,6 @@ function shouldSkipAuth(pathname: string): boolean {
 // 配置middleware匹配规则
 export const config = {
   matcher: [
-    '/((?!_next/static|favicon.ico|login|register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/image-proxy|api/proxy/spider.jar|api/telegram/|api/feedback).*)',
+    '/((?!_next/static|favicon.ico|login|register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/image-proxy|api/proxy/spider.jar|api/feedback).*)',
   ],
 };

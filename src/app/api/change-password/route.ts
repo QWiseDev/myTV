@@ -9,18 +9,6 @@ export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-
-  // 不支持 localstorage 模式
-  if (storageType === 'localstorage') {
-    return NextResponse.json(
-      {
-        error: '不支持本地存储模式修改密码',
-      },
-      { status: 400 },
-    );
-  }
-
   try {
     const body = await request.json();
     const { newPassword } = body;

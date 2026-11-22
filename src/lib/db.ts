@@ -5,7 +5,6 @@ import { KvrocksStorage } from './kvrocks.db';
 import { paginatePlayRecords } from './play-records-pagination';
 import { RedisStorage } from './redis.db';
 import { generateStorageKey } from './storage-key';
-import { EMPTY_PLAY_STATS, emptyUserPlayStat } from './storage-shared';
 import {
   AccessLog,
   ContentStat,
@@ -24,14 +23,12 @@ export { generateStorageKey, parseStorageKey } from './storage-key';
 
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
-    | 'localstorage'
     | 'redis'
     | 'upstash'
     | 'kvrocks'
-    | undefined) || 'localstorage';
+    | undefined) || 'redis';
 
 let storageInstance: IStorage | null = null;
-let useLocalStorage = false;
 
 async function createStorage(): Promise<IStorage> {
   switch (STORAGE_TYPE) {
@@ -41,18 +38,12 @@ async function createStorage(): Promise<IStorage> {
       return new UpstashRedisStorage();
     case 'kvrocks':
       return new KvrocksStorage();
-    case 'localstorage':
     default:
-      useLocalStorage = true;
-      return null as unknown as IStorage;
+      throw new Error(`不支持的存储类型: ${STORAGE_TYPE}`);
   }
 }
 
 async function getStorage(): Promise<IStorage> {
-  if (useLocalStorage) {
-    return null as unknown as IStorage;
-  }
-
   if (!storageInstance) {
     storageInstance = await createStorage();
   }
@@ -113,9 +104,12 @@ export class DbManager {
 
   async clearAllPlayRecords(userName: string): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.clearAllPlayRecords(userName);
-    }
+    await storage.clearAllPlayRecords(userName);
+  }
+
+  async clearAllFavorites(userName: string): Promise<void> {
+    const storage = await this.getStorage();
+    await storage.clearAllFavorites(userName);
   }
 
   async deletePlayRecord(
@@ -217,19 +211,17 @@ export class DbManager {
 
   async getAllUsers(): Promise<string[]> {
     const storage = await this.getStorage();
-    return storage ? storage.getAllUsers() : [];
+    return storage.getAllUsers();
   }
 
   async getAdminConfig(): Promise<AdminConfig | null> {
     const storage = await this.getStorage();
-    return storage ? storage.getAdminConfig() : null;
+    return storage.getAdminConfig();
   }
 
   async saveAdminConfig(config: AdminConfig): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.setAdminConfig(config);
-    }
+    await storage.setAdminConfig(config);
   }
 
   async getSkipConfig(
@@ -238,7 +230,7 @@ export class DbManager {
     id: string,
   ): Promise<EpisodeSkipConfig | null> {
     const storage = await this.getStorage();
-    return storage ? storage.getSkipConfig(userName, source, id) : null;
+    return storage.getSkipConfig(userName, source, id);
   }
 
   async setSkipConfig(
@@ -248,9 +240,7 @@ export class DbManager {
     config: EpisodeSkipConfig,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.setSkipConfig(userName, source, id, config);
-    }
+    await storage.setSkipConfig(userName, source, id, config);
   }
 
   async deleteSkipConfig(
@@ -259,16 +249,14 @@ export class DbManager {
     id: string,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.deleteSkipConfig(userName, source, id);
-    }
+    await storage.deleteSkipConfig(userName, source, id);
   }
 
   async getAllSkipConfigs(
     userName: string,
   ): Promise<{ [key: string]: EpisodeSkipConfig }> {
     const storage = await this.getStorage();
-    return storage ? storage.getAllSkipConfigs(userName) : {};
+    return storage.getAllSkipConfigs(userName);
   }
 
   async getEpisodeSkipConfig(
@@ -277,7 +265,7 @@ export class DbManager {
     id: string,
   ): Promise<EpisodeSkipConfig | null> {
     const storage = await this.getStorage();
-    return storage ? storage.getEpisodeSkipConfig(userName, source, id) : null;
+    return storage.getEpisodeSkipConfig(userName, source, id);
   }
 
   async saveEpisodeSkipConfig(
@@ -287,9 +275,7 @@ export class DbManager {
     config: EpisodeSkipConfig,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.saveEpisodeSkipConfig(userName, source, id, config);
-    }
+    await storage.saveEpisodeSkipConfig(userName, source, id, config);
   }
 
   async deleteEpisodeSkipConfig(
@@ -298,30 +284,24 @@ export class DbManager {
     id: string,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.deleteEpisodeSkipConfig(userName, source, id);
-    }
+    await storage.deleteEpisodeSkipConfig(userName, source, id);
   }
 
   async getAllEpisodeSkipConfigs(
     userName: string,
   ): Promise<{ [key: string]: EpisodeSkipConfig }> {
     const storage = await this.getStorage();
-    return storage ? storage.getAllEpisodeSkipConfigs(userName) : {};
+    return storage.getAllEpisodeSkipConfigs(userName);
   }
 
   async clearAllData(): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.clearAllData();
-    } else {
-      throw new Error('存储类型不支持清空数据操作');
-    }
+    await storage.clearAllData();
   }
 
   async getCache(key: string): Promise<any | null> {
     const storage = await this.getStorage();
-    return storage ? storage.getCache(key) : null;
+    return storage.getCache(key);
   }
 
   async setCache(
@@ -330,33 +310,27 @@ export class DbManager {
     expireSeconds?: number,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.setCache(key, data, expireSeconds);
-    }
+    await storage.setCache(key, data, expireSeconds);
   }
 
   async keys(pattern: string): Promise<string[]> {
     const storage = await this.getStorage();
-    return storage ? storage.keys(pattern) : [];
+    return storage.keys(pattern);
   }
 
   async deleteCache(key: string): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.deleteCache(key);
-    }
+    await storage.deleteCache(key);
   }
 
   async clearExpiredCache(prefix?: string): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.clearExpiredCache(prefix);
-    }
+    await storage.clearExpiredCache(prefix);
   }
 
   async getSlotUserData(userName: string): Promise<any | null> {
     const storage = await this.getStorage();
-    return storage ? storage.getSlotUserData(userName) : null;
+    return storage.getSlotUserData(userName);
   }
 
   async setSlotUserData(
@@ -365,22 +339,17 @@ export class DbManager {
     expireSeconds = 86400 * 30,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (!storage) {
-      throw new Error(
-        `当前存储类型 ${STORAGE_TYPE} 不支持 slot:user Hash 写入`,
-      );
-    }
     await storage.setSlotUserData(userName, data, expireSeconds);
   }
 
   async listSlotUsers(): Promise<Array<any & { username: string }>> {
     const storage = await this.getStorage();
-    return storage ? storage.listSlotUsers() : [];
+    return storage.listSlotUsers();
   }
 
   async getSlotLeaderboard(type = 'coins', limit = 10): Promise<any[]> {
     const storage = await this.getStorage();
-    return storage ? storage.getSlotLeaderboard(type, limit) : [];
+    return storage.getSlotLeaderboard(type, limit);
   }
 
   async incrementRateLimit(
@@ -388,24 +357,29 @@ export class DbManager {
     expireSeconds: number,
   ): Promise<number | null> {
     const storage = await this.getStorage();
-    return storage ? storage.incrementRateLimit(key, expireSeconds) : null;
+    return storage.incrementRateLimit(key, expireSeconds);
   }
 
   async getPlayStats(): Promise<PlayStatsResult> {
     const storage = await this.getStorage();
-    return storage ? storage.getPlayStats() : EMPTY_PLAY_STATS;
+    return storage.getPlayStats();
   }
 
   async getUserPlayStat(userName: string): Promise<UserPlayStat> {
     const storage = await this.getStorage();
-    return storage
-      ? storage.getUserPlayStat(userName)
-      : emptyUserPlayStat(userName);
+    return storage.getUserPlayStat(userName);
+  }
+
+  async getUserPlayStatWithRecords(
+    userName: string,
+  ): Promise<{ stat: UserPlayStat; records: PlayRecord[] }> {
+    const storage = await this.getStorage();
+    return storage.getUserPlayStatWithRecords(userName);
   }
 
   async getContentStats(limit = 10): Promise<ContentStat[]> {
     const storage = await this.getStorage();
-    return storage ? storage.getContentStats(limit) : [];
+    return storage.getContentStats(limit);
   }
 
   async updatePlayStatistics(
@@ -415,9 +389,7 @@ export class DbManager {
     watchTime: number,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.updatePlayStatistics(userName, source, id, watchTime);
-    }
+    await storage.updatePlayStatistics(userName, source, id, watchTime);
   }
 
   async updateUserLoginStats(
@@ -426,22 +398,12 @@ export class DbManager {
     isFirstLogin?: boolean,
   ): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.updateUserLoginStats(userName, loginTime, isFirstLogin);
-    }
-  }
-
-  isStatsSupported(): boolean {
-    return STORAGE_TYPE !== 'localstorage';
+    await storage.updateUserLoginStats(userName, loginTime, isFirstLogin);
   }
 
   async saveAccessLog(accessLog: AccessLog): Promise<void> {
     const storage = await this.getStorage();
-    if (storage) {
-      await storage.saveAccessLog(accessLog);
-    } else {
-      console.warn('[DbManager] 后端存储不支持访问日志');
-    }
+    await storage.saveAccessLog(accessLog);
   }
 
   async getAccessLogs(
@@ -450,20 +412,12 @@ export class DbManager {
     offset = 0,
   ): Promise<AccessLog[]> {
     const storage = await this.getStorage();
-    if (storage) {
-      return storage.getAccessLogs(filters, limit, offset);
-    }
-    console.warn('[DbManager] 后端存储不支持访问日志查询');
-    return [];
+    return storage.getAccessLogs(filters, limit, offset);
   }
 
   async deleteAccessLogs(username?: string): Promise<number> {
     const storage = await this.getStorage();
-    if (storage) {
-      return storage.deleteAccessLogs(username);
-    }
-    console.warn('[DbManager] 后端存储不支持访问日志删除');
-    return 0;
+    return storage.deleteAccessLogs(username);
   }
 }
 

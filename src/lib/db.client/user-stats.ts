@@ -2,18 +2,10 @@
 'use client';
 
 import { cacheManager } from './cache-manager';
-import {
-  type UserStats,
-  fetchFromApi,
-  fetchWithAuth,
-  STORAGE_TYPE,
-} from './core';
+import { type UserStats, fetchFromApi, fetchWithAuth } from './core';
 import { getAllPlayRecords } from './play-records';
 import { getAuthInfoFromBrowserCookie } from '../auth';
 import type { PlayRecord } from '../types';
-
-// ---- 常量 ----
-const USER_STATS_KEY = 'moontv_user_stats'; // 添加用户统计数据存储键
 
 // ---------------- 用户统计相关 API ----------------
 
@@ -60,51 +52,46 @@ export async function getUserStats(forceRefresh = false): Promise<UserStats> {
       }
     }
 
-    // 数据库存储模式：使用混合缓存策略
-    if (STORAGE_TYPE !== 'localstorage') {
-      // 先尝试从缓存获取
-      const cached = cacheManager.getCachedUserStats();
-      if (cached && !forceRefresh) {
-        // 后台异步更新
-        fetchFromApi<UserStats>('/api/user/my-stats')
-          .then((freshData) => {
-            if (JSON.stringify(cached) !== JSON.stringify(freshData)) {
-              cacheManager.cacheUserStats(freshData);
-              window.dispatchEvent(
-                new CustomEvent('userStatsUpdated', {
-                  detail: freshData,
-                }),
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('后台同步用户统计数据失败:', err);
-          });
+    // 使用混合缓存策略
+    // 先尝试从缓存获取
+    const cached = cacheManager.getCachedUserStats();
+    if (cached && !forceRefresh) {
+      // 后台异步更新
+      fetchFromApi<UserStats>('/api/user/my-stats')
+        .then((freshData) => {
+          if (JSON.stringify(cached) !== JSON.stringify(freshData)) {
+            cacheManager.cacheUserStats(freshData);
+            window.dispatchEvent(
+              new CustomEvent('userStatsUpdated', {
+                detail: freshData,
+              }),
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn('后台同步用户统计数据失败:', err);
+        });
 
-        return cached;
-      }
-
-      // 缓存为空或强制刷新，从服务器获取
-      try {
-        const freshData = await fetchFromApi<UserStats>('/api/user/my-stats');
-        cacheManager.cacheUserStats(freshData);
-        return freshData;
-      } catch (error) {
-        console.error('获取用户统计数据失败:', error);
-
-        // 如果服务器请求失败，检查是否有缓存的统计数据
-        const cachedStats = cacheManager.getCachedUserStats();
-        if (cachedStats) {
-          return cachedStats;
-        }
-
-        // 基于本地观看记录计算统计数据
-        return await calculateStatsFromLocalData();
-      }
+      return cached;
     }
 
-    // localStorage 模式
-    return await calculateStatsFromLocalData();
+    // 缓存为空或强制刷新，从服务器获取
+    try {
+      const freshData = await fetchFromApi<UserStats>('/api/user/my-stats');
+      cacheManager.cacheUserStats(freshData);
+      return freshData;
+    } catch (error) {
+      console.error('获取用户统计数据失败:', error);
+
+      // 如果服务器请求失败，检查是否有缓存的统计数据
+      const cachedStats = cacheManager.getCachedUserStats();
+      if (cachedStats) {
+        return cachedStats;
+      }
+
+      // 基于本地观看记录计算统计数据
+      return await calculateStatsFromLocalData();
+    }
   } catch (error) {
     console.error('获取用户统计数据失败:', error);
     return await calculateStatsFromLocalData();
@@ -179,9 +166,7 @@ async function calculateStatsFromLocalData(): Promise<UserStats> {
     };
 
     // 缓存计算结果
-    if (STORAGE_TYPE !== 'localstorage') {
-      cacheManager.cacheUserStats(stats);
-    }
+    cacheManager.cacheUserStats(stats);
 
     return stats;
   } catch (error) {
@@ -269,86 +254,49 @@ export async function updateUserStats(record: PlayRecord): Promise<void> {
 
     // 只要有观看时间增量就更新统计数据
     if (watchTimeIncrement > 0) {
-      // 数据库存储模式：发送到服务器更新
-      if (STORAGE_TYPE !== 'localstorage') {
-        try {
-          const response = await fetchWithAuth('/api/user/my-stats', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              watchTime: watchTimeIncrement,
-              movieKey: movieKey,
-              timestamp: currentTime,
-            }),
-          });
+      // 发送到服务器更新
+      try {
+        const response = await fetchWithAuth('/api/user/my-stats', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            watchTime: watchTimeIncrement,
+            movieKey: movieKey,
+            timestamp: currentTime,
+          }),
+        });
 
-          if (response.ok) {
-            const responseData = await response.json();
+        if (response.ok) {
+          const responseData = await response.json();
 
-            // 更新localStorage中的上次播放进度和更新时间
-            localStorage.setItem(lastProgressKey, record.play_time.toString());
-            localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
+          // 更新localStorage中的上次播放进度和更新时间
+          localStorage.setItem(lastProgressKey, record.play_time.toString());
+          localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
 
-            // 立即更新缓存中的用户统计数据
-            if (responseData.userStats) {
-              cacheManager.cacheUserStats(responseData.userStats);
+          // 立即更新缓存中的用户统计数据
+          if (responseData.userStats) {
+            cacheManager.cacheUserStats(responseData.userStats);
 
-              // 触发用户统计数据更新事件
-              window.dispatchEvent(
-                new CustomEvent('userStatsUpdated', {
-                  detail: responseData.userStats,
-                }),
-              );
-            }
-          } else {
-            console.error(`更新用户统计数据失败: ${response.status}`);
-            // API调用失败时，仍然更新本地进度记录
-            localStorage.setItem(lastProgressKey, record.play_time.toString());
-            localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
+            // 触发用户统计数据更新事件
+            window.dispatchEvent(
+              new CustomEvent('userStatsUpdated', {
+                detail: responseData.userStats,
+              }),
+            );
           }
-        } catch (error) {
-          console.error('统计数据更新请求异常:', error);
-          // 即使API请求失败，也要更新本地进度记录
+        } else {
+          console.error(`更新用户统计数据失败: ${response.status}`);
+          // API调用失败时，仍然更新本地进度记录
           localStorage.setItem(lastProgressKey, record.play_time.toString());
           localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
         }
-      } else {
-        // localStorage 模式：本地更新统计数据
-        try {
-          const currentStats = await getUserStats();
-          const updatedStats: UserStats = {
-            ...currentStats,
-            totalWatchTime: currentStats.totalWatchTime + watchTimeIncrement,
-            lastUpdateTime: currentTime,
-          };
-
-          // 检查是否有新的影片
-          const playRecords = await getAllPlayRecords();
-          const uniqueMovies = new Set(
-            Object.values(playRecords).map(
-              (r) => `${r.title}_${r.source_name}_${r.year}`,
-            ),
-          );
-          updatedStats.totalMovies = uniqueMovies.size;
-
-          // 保存到localStorage
-          localStorage.setItem(USER_STATS_KEY, JSON.stringify(updatedStats));
-
-          // 更新进度记录
-          localStorage.setItem(lastProgressKey, record.play_time.toString());
-          localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
-
-          // 触发更新事件
-          window.dispatchEvent(
-            new CustomEvent('userStatsUpdated', {
-              detail: updatedStats,
-            }),
-          );
-        } catch (error) {
-          console.error('本地统计数据更新失败:', error);
-        }
+      } catch (error) {
+        console.error('统计数据更新请求异常:', error);
+        // 即使API请求失败，也要更新本地进度记录
+        localStorage.setItem(lastProgressKey, record.play_time.toString());
+        localStorage.setItem(lastUpdateTimeKey, currentTime.toString());
       }
     } else {
       // 即使没有增量，也要更新时间戳和进度
@@ -366,20 +314,15 @@ export async function updateUserStats(record: PlayRecord): Promise<void> {
  */
 export async function clearUserStats(): Promise<void> {
   try {
-    if (STORAGE_TYPE !== 'localstorage') {
-      // 从服务器清除
-      await fetchWithAuth('/api/user/my-stats', {
-        method: 'DELETE',
-      });
+    // 从服务器清除
+    await fetchWithAuth('/api/user/my-stats', {
+      method: 'DELETE',
+    });
 
-      // 清除本地缓存
-      const authInfo = getAuthInfoFromBrowserCookie();
-      if (authInfo?.username) {
-        cacheManager.clearUserCache(authInfo.username);
-      }
-    } else {
-      // localStorage 模式
-      localStorage.removeItem(USER_STATS_KEY);
+    // 清除本地缓存
+    const authInfo = getAuthInfoFromBrowserCookie();
+    if (authInfo?.username) {
+      cacheManager.clearUserCache(authInfo.username);
     }
 
     // 触发统计数据清除事件

@@ -30,19 +30,6 @@ export interface Favorite {
   origin?: 'vod' | 'live';
 }
 
-// ---- 环境变量 ----
-export const STORAGE_TYPE = (() => {
-  const raw =
-    (typeof window !== 'undefined' && window.RUNTIME_CONFIG?.STORAGE_TYPE) ||
-    (process.env.STORAGE_TYPE as
-      | 'localstorage'
-      | 'redis'
-      | 'upstash'
-      | undefined) ||
-    'localstorage';
-  return raw;
-})();
-
 // ---- 工具函数 ----
 /**
  * 通用的 fetch 函数，处理 401 状态码自动跳转登录

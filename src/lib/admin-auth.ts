@@ -30,16 +30,6 @@ export async function getAdminRoleFromRequest(
     return null;
   }
 
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-
-  if (storageType === 'localstorage') {
-    const password = authInfo.password;
-    if (password && password === process.env.PASSWORD) {
-      return 'owner';
-    }
-    return null;
-  }
-
   const username = authInfo.username;
   if (!username) {
     return null;

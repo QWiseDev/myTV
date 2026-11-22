@@ -876,55 +876,6 @@ describe('play record cache races', () => {
     ).toHaveLength(2);
   });
 
-  it('D11: localStorage 模式并发写经队列串行不丢记录', async () => {
-    (
-      window as typeof window & {
-        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
-      }
-    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    localStorage.setItem(
-      'moontv_play_records',
-      JSON.stringify({
-        'src+a': createRecord({ title: 'A' }),
-        'src+b': createRecord({ title: 'B' }),
-      }),
-    );
-    const fetchMock = jest.fn();
-    global.fetch = fetchMock;
-    const { deletePlayRecord, getAllPlayRecords, savePlayRecord } =
-      await import('./db.client');
-
-    await Promise.all([
-      deletePlayRecord('src', 'a'),
-      savePlayRecord('src', 'c', createRecord({ title: 'C' })),
-    ]);
-
-    await expect(getAllPlayRecords()).resolves.toEqual({
-      'src+b': createRecord({ title: 'B' }),
-      'src+c': createRecord({ title: 'C', original_episodes: 12 }),
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('D11: localStorage 读取失败返回空且不发服务端请求', async () => {
-    (
-      window as typeof window & {
-        RUNTIME_CONFIG?: { STORAGE_TYPE?: string };
-      }
-    ).RUNTIME_CONFIG = { STORAGE_TYPE: 'localstorage' };
-    localStorage.setItem('moontv_play_records', '{corrupt');
-    const fetchMock = jest.fn();
-    global.fetch = fetchMock;
-    const globalErrorListener = jest.fn();
-    window.addEventListener('globalError', globalErrorListener, { once: true });
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    const { getAllPlayRecords } = await import('./db.client');
-
-    await expect(getAllPlayRecords()).resolves.toEqual({});
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(globalErrorListener).toHaveBeenCalledTimes(1);
-  });
-
   it('D13: 冷读取等待已排队写完成后再发全量 GET', async () => {
     const deleteRequest = createDeferred<Response>();
     const requestOrder: string[] = [];

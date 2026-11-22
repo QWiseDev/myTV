@@ -93,6 +93,19 @@ export class UpstashRedisStorage implements IStorage {
     return keys;
   }
 
+  /**
+   * 批量执行一组相互独立的命令（Upstash pipeline 合并为一次 HTTP 往返）。
+   * 任一命令失败时整条 pipeline 抛错（默认 keepErrors=false），由 withRetry 统一重试。
+   * 返回值按入队顺序排列。
+   */
+  protected async withPipeline<T = unknown>(
+    queue: (pipeline: ReturnType<Redis['pipeline']>) => void,
+  ): Promise<T[]> {
+    const pipeline = this.client.pipeline();
+    queue(pipeline);
+    return (await withRetry(() => pipeline.exec())) as T[];
+  }
+
   private parseStoredObject<T>(value: unknown): T | null {
     if (!value) {
       return null;
@@ -105,13 +118,6 @@ export class UpstashRedisStorage implements IStorage {
 
   private loginStatsKey(userName: string) {
     return `user_login_stats:${userName}`;
-  }
-
-  private async getLoginStats(userName: string): Promise<LoginStats> {
-    const stored = await withRetry(() =>
-      this.client.hgetall<Partial<LoginStats>>(this.loginStatsKey(userName)),
-    );
-    return normalizeLoginStats(stored);
   }
 
   // ---------- 播放记录 ----------
@@ -136,6 +142,7 @@ export class UpstashRedisStorage implements IStorage {
     const hashKey = this.prHashKey(userName);
 
     await withRetry(() => this.client.hset(hashKey, { [key]: record }));
+    this.userStatsCache.delete(userName);
   }
 
   async getAllPlayRecords(
@@ -150,15 +157,21 @@ export class UpstashRedisStorage implements IStorage {
 
   async deletePlayRecord(userName: string, key: string): Promise<void> {
     await withRetry(() => this.client.hdel(this.prHashKey(userName), key));
+    this.userStatsCache.delete(userName);
   }
 
   async clearAllPlayRecords(userName: string): Promise<void> {
     await withRetry(() => this.client.del(this.prHashKey(userName)));
+    this.userStatsCache.delete(userName);
   }
 
   // ---------- 收藏 ----------
   private favHashKey(user: string) {
     return `u:${user}:favh`;
+  }
+
+  async clearAllFavorites(userName: string): Promise<void> {
+    await withRetry(() => this.client.del(this.favHashKey(userName)));
   }
 
   async getFavorite(userName: string, key: string): Promise<Favorite | null> {
@@ -198,7 +211,11 @@ export class UpstashRedisStorage implements IStorage {
 
   async registerUser(userName: string, password: string): Promise<void> {
     // 简单存储明文密码，生产环境应加密
-    await withRetry(() => this.client.set(this.userPwdKey(userName), password));
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .set(this.userPwdKey(userName), password)
+        .sadd(this.usersSetKey(), userName);
+    });
   }
 
   async verifyUser(userName: string, password: string): Promise<boolean> {
@@ -221,22 +238,46 @@ export class UpstashRedisStorage implements IStorage {
 
   // 修改用户密码
   async changePassword(userName: string, newPassword: string): Promise<void> {
-    // 简单存储明文密码，生产环境应加密
-    await withRetry(() =>
-      this.client.set(this.userPwdKey(userName), newPassword),
-    );
+    // 简单存储明文密码，生产环境应加密；顺带补进用户索引以防索引漂移
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .set(this.userPwdKey(userName), newPassword)
+        .sadd(this.usersSetKey(), userName);
+    });
+  }
+
+  // 用户名索引 SET：getAllUsers 的 O(1) 读取路径（见 getAllUsers 的惰性回填说明）
+  private usersSetKey() {
+    return 'users';
   }
 
   // 删除用户及其所有数据
   async deleteUser(userName: string): Promise<void> {
-    await Promise.all([
-      withRetry(() => this.client.del(this.userPwdKey(userName))),
-      withRetry(() => this.client.del(this.shKey(userName))),
-      this.clearAllPlayRecords(userName),
-      withRetry(() => this.client.del(this.favHashKey(userName))),
-      this.clearAllSkipConfigs(userName),
-      withRetry(() => this.client.del(this.loginStatsKey(userName))),
-    ]);
+    // episodeskip 为一剧一 key，需要 SCAN 后一并删除；其余均为整键删除
+    const episodeSkipKeys = await this.scanKeys(`u:${userName}:episodeskip:*`);
+
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .del(
+          this.userPwdKey(userName),
+          this.shKey(userName),
+          this.prHashKey(userName),
+          this.favHashKey(userName),
+          this.skipHashKey(userName),
+          this.loginStatsKey(userName),
+          // 老虎机数据（此前 deleteUser 不会清理，排行榜与用户集合会残留）
+          slotUserKey(userName),
+        )
+        .srem(slotUsersKey(), userName)
+        .srem(this.usersSetKey(), userName);
+      for (const rankType of SLOT_RANK_TYPES) {
+        pipeline.zrem(slotRankKey(rankType), userName);
+      }
+      for (const key of episodeSkipKeys) {
+        pipeline.del(key);
+      }
+    });
+    this.userStatsCache.delete(userName);
   }
 
   // ---------- 搜索历史 ----------
@@ -254,12 +295,13 @@ export class UpstashRedisStorage implements IStorage {
 
   async addSearchHistory(userName: string, keyword: string): Promise<void> {
     const key = this.shKey(userName);
-    // 先去重
-    await withRetry(() => this.client.lrem(key, 0, ensureString(keyword)));
-    // 插入到最前
-    await withRetry(() => this.client.lpush(key, ensureString(keyword)));
-    // 限制最大长度
-    await withRetry(() => this.client.ltrim(key, 0, SEARCH_HISTORY_LIMIT - 1));
+    // 去重 → 插入到最前 → 限制最大长度，合并为一次 pipeline 往返
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .lrem(key, 0, ensureString(keyword))
+        .lpush(key, ensureString(keyword))
+        .ltrim(key, 0, SEARCH_HISTORY_LIMIT - 1);
+    });
   }
 
   async deleteSearchHistory(userName: string, keyword?: string): Promise<void> {
@@ -273,13 +315,27 @@ export class UpstashRedisStorage implements IStorage {
 
   // ---------- 获取全部用户 ----------
   async getAllUsers(): Promise<string[]> {
+    // 优先走用户索引 SET（SMEMBERS 1 次往返）。
+    // 索引为空时惰性回填一次（兼容存量部署）：SCAN u:*:pwd 重建并持久化。
+    const members = await withRetry(() =>
+      this.client.smembers<string[]>(this.usersSetKey()),
+    );
+    if (members && members.length > 0) {
+      return members.map(ensureString);
+    }
+
     const keys = await this.scanKeys('u:*:pwd');
-    return keys
+    const users = keys
       .map((k) => {
         const match = k.match(/^u:(.+?):pwd$/);
         return match ? ensureString(match[1]) : undefined;
       })
       .filter((u): u is string => typeof u === 'string');
+
+    if (users.length > 0) {
+      await withRetry(() => this.client.sadd(this.usersSetKey(), users));
+    }
+    return users;
   }
 
   // ---------- 管理员配置 ----------
@@ -424,16 +480,23 @@ export class UpstashRedisStorage implements IStorage {
   // 清空所有数据
   async clearAllData(): Promise<void> {
     try {
-      // 获取所有用户
-      const allUsers = await this.getAllUsers();
+      // SCAN 汇总全部用户相关键（u:* / user_login_stats:* / slot:*），
+      // 再补上用户索引与管理员配置，分批 DEL（语义与原逐用户 deleteUser 等价）
+      const doomedKeys = [
+        ...(await this.scanKeys('u:*')),
+        ...(await this.scanKeys('user_login_stats:*')),
+        ...(await this.scanKeys('slot:*')),
+        this.usersSetKey(),
+        this.adminConfigKey(),
+      ];
 
-      // 删除所有用户及其数据
-      for (const username of allUsers) {
-        await this.deleteUser(username);
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < doomedKeys.length; i += BATCH_SIZE) {
+        await withRetry(() =>
+          this.client.del(...doomedKeys.slice(i, i + BATCH_SIZE)),
+        );
       }
-
-      // 删除管理员配置
-      await withRetry(() => this.client.del(this.adminConfigKey()));
+      this.userStatsCache.clear();
     } catch (error) {
       console.error('清空数据失败:', error);
       throw new Error('清空数据失败');
@@ -509,20 +572,6 @@ export class UpstashRedisStorage implements IStorage {
 
   // ---------- Redis 业务结构化能力 ----------
 
-  private async updateSlotRanks(
-    userName: string,
-    data: SlotUserData,
-  ): Promise<void> {
-    for (const type of SLOT_RANK_TYPES) {
-      await withRetry(() =>
-        this.client.zadd(slotRankKey(type), {
-          score: getSlotRankScore(data, type),
-          member: userName,
-        }),
-      );
-    }
-  }
-
   async getSlotUserData(userName: string): Promise<SlotUserData | null> {
     const hashData = await withRetry(() =>
       this.client.hgetall<Record<string, unknown>>(slotUserKey(userName)),
@@ -538,32 +587,43 @@ export class UpstashRedisStorage implements IStorage {
     data: SlotUserData,
     expireSeconds = 86400 * 30,
   ): Promise<void> {
-    const key = slotUserKey(userName);
-    await withRetry(() => this.client.hset(key, encodeHashObject(data)));
-    await withRetry(() => this.client.expire(key, expireSeconds));
-    await withRetry(() => this.client.sadd(slotUsersKey(), userName));
-    await this.updateSlotRanks(userName, data);
+    // HSET + EXPIRE + SADD + 3×ZADD 合并为一次 pipeline 往返
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .hset(slotUserKey(userName), encodeHashObject(data))
+        .expire(slotUserKey(userName), expireSeconds)
+        .sadd(slotUsersKey(), userName);
+      for (const rankType of SLOT_RANK_TYPES) {
+        pipeline.zadd(slotRankKey(rankType), {
+          score: getSlotRankScore(data, rankType),
+          member: userName,
+        });
+      }
+    });
   }
 
-  // 分批并行拉取成员数据（数量可能较大，分批避免瞬时并发过高）
+  // 分批 pipeline 拉取成员数据（每批一次往返）
   private async getSlotUsersBatched(
     userNames: string[],
   ): Promise<Array<SlotUserData & { username: string }>> {
-    const BATCH_SIZE = 16;
+    const BATCH_SIZE = 64;
     const result: Array<SlotUserData & { username: string }> = [];
     for (let i = 0; i < userNames.length; i += BATCH_SIZE) {
       const batch = userNames.slice(i, i + BATCH_SIZE);
-      const rows = await Promise.all(
-        batch.map(async (userName) => ({
-          userName,
-          data: await this.getSlotUserData(userName),
-        })),
+      const hashDatas = await this.withPipeline<Record<string, unknown>>(
+        (pipeline) => {
+          for (const userName of batch) {
+            pipeline.hgetall<Record<string, unknown>>(slotUserKey(userName));
+          }
+        },
       );
-      for (const { userName, data } of rows) {
-        if (data) {
-          result.push({ username: userName, ...data });
+
+      batch.forEach((userName, index) => {
+        const hashData = hashDatas?.[index];
+        if (hashData && Object.keys(hashData).length > 0) {
+          result.push({ username: userName, ...decodeHashObject(hashData) });
         }
-      }
+      });
     }
     return result;
   }
@@ -596,11 +656,13 @@ export class UpstashRedisStorage implements IStorage {
     key: string,
     expireSeconds: number,
   ): Promise<number> {
-    const count = await withRetry(() => this.client.incr(key));
-    if (count === 1) {
-      await withRetry(() => this.client.expire(key, expireSeconds));
-    }
-    return count;
+    // INCR + EXPIRE NX 合并为一次 pipeline 往返（Upstash 兼容 Redis 7 的 EXPIRE NX）：
+    // NX 仅在 key 无 TTL 时设置，与旧逻辑"仅首次 INCR 设 TTL"的固定窗口语义一致
+    const [count] = await this.withPipeline<number>((pipeline) => {
+      pipeline.incr(key);
+      pipeline.expire(key, expireSeconds, 'NX');
+    });
+    return Number(count);
   }
 
   // ---------- 播放统计相关 ----------
@@ -822,125 +884,33 @@ export class UpstashRedisStorage implements IStorage {
     if (cached && now - cached.timestamp < this.userStatsCacheTTL) {
       return cached.data;
     }
+    return (await this.getUserPlayStatWithRecords(userName)).stat;
+  }
 
+  // 用户统计 + 全量播放记录组合读取：一次 pipeline 拿齐，供 admin 统计页免双读
+  async getUserPlayStatWithRecords(
+    userName: string,
+  ): Promise<{ stat: UserPlayStat; records: PlayRecord[] }> {
     try {
-      // 获取用户的所有播放记录
-      const records = await this.getAllPlayRecords(userName);
-      const playRecords = Object.values(records);
-
-      if (playRecords.length === 0) {
-        // 即使没有播放记录，也要获取登入统计
-        let loginStats = {
-          loginCount: 0,
-          firstLoginTime: 0,
-          lastLoginTime: 0,
-          lastLoginDate: 0,
-        };
-
-        try {
-          loginStats = await this.getLoginStats(userName);
-        } catch (error) {
-          console.error(`获取用户 ${userName} 登入统计失败:`, error);
-        }
-
-        return {
-          username: userName,
-          totalWatchTime: 0,
-          totalPlays: 0,
-          lastPlayTime: 0,
-          recentRecords: [],
-          avgWatchTime: 0,
-          mostWatchedSource: '',
-          // 新增字段
-          totalMovies: 0,
-          firstWatchDate: Date.now(),
-          lastUpdateTime: Date.now(),
-          // 登入统计字段
-          loginCount: loginStats.loginCount,
-          firstLoginTime: loginStats.firstLoginTime,
-          lastLoginTime: loginStats.lastLoginTime,
-          lastLoginDate: loginStats.lastLoginDate,
-        };
-      }
-
-      // 计算统计
-      let totalWatchTime = 0;
-      let lastPlayTime = 0;
-      const sourceCount: Record<string, number> = {};
-
-      playRecords.forEach((record) => {
-        totalWatchTime += record.play_time || 0;
-        if (record.save_time > lastPlayTime) {
-          lastPlayTime = record.save_time;
-        }
-        const sourceName = record.source_name || '未知来源';
-        sourceCount[sourceName] = (sourceCount[sourceName] || 0) + 1;
+      // 一次 pipeline 同时拉取播放记录与登入统计（2 次往返 → 1 次）
+      const [records, loginStatsStored] = await this.withPipeline<
+        Record<string, PlayRecord>
+      >((pipeline) => {
+        pipeline.hgetall<Record<string, PlayRecord>>(this.prHashKey(userName));
+        pipeline.hgetall<Partial<LoginStats>>(this.loginStatsKey(userName));
       });
+      const playRecords = Object.values(records ?? {});
+      const loginStats = normalizeLoginStats(loginStatsStored ?? {});
 
-      // 计算观看影片总数（去重）
-      const totalMovies = new Set(
-        playRecords.map((r) => `${r.title}_${r.source_name}_${r.year}`),
-      ).size;
-
-      // 计算首次观看时间
-      const firstWatchDate = Math.min(
-        ...playRecords.map((r) => r.save_time || Date.now()),
-      );
-
-      // 获取最近播放记录
-      const recentRecords = playRecords
-        .sort((a, b) => (b.save_time || 0) - (a.save_time || 0))
-        .slice(0, 10);
-
-      // 找出最常观看的来源
-      let mostWatchedSource = '';
-      let maxCount = 0;
-      for (const [source, count] of Object.entries(sourceCount)) {
-        if (count > maxCount) {
-          maxCount = count;
-          mostWatchedSource = source;
-        }
-      }
-
-      // 获取登入统计数据
-      let loginStats = {
-        loginCount: 0,
-        firstLoginTime: 0,
-        lastLoginTime: 0,
-        lastLoginDate: 0,
-      };
-
-      try {
-        loginStats = await this.getLoginStats(userName);
-      } catch (error) {
-        console.error(`获取用户 ${userName} 登入统计失败:`, error);
-      }
-
-      const result = {
-        username: userName,
-        totalWatchTime,
-        totalPlays: playRecords.length,
-        lastPlayTime,
-        recentRecords,
-        avgWatchTime:
-          playRecords.length > 0 ? totalWatchTime / playRecords.length : 0,
-        mostWatchedSource,
-        totalMovies,
-        firstWatchDate,
-        lastUpdateTime: Date.now(),
-        loginCount: loginStats.loginCount,
-        firstLoginTime: loginStats.firstLoginTime,
-        lastLoginTime: loginStats.lastLoginTime,
-        lastLoginDate: loginStats.lastLoginDate,
-      };
+      const stat = this.buildUserPlayStat(userName, playRecords, loginStats);
 
       // 存入缓存
       this.userStatsCache.set(userName, {
-        data: result,
+        data: stat,
         timestamp: Date.now(),
       });
 
-      return result;
+      return { stat, records: playRecords };
     } catch (error) {
       console.error(`获取用户 ${userName} 统计失败:`, error);
       const errorResult = emptyUserPlayStat(userName);
@@ -951,8 +921,71 @@ export class UpstashRedisStorage implements IStorage {
         timestamp: Date.now(),
       });
 
-      return errorResult;
+      return { stat: errorResult, records: [] };
     }
+  }
+
+  // 纯内存统计计算，供 getUserPlayStatWithRecords 复用
+  private buildUserPlayStat(
+    userName: string,
+    playRecords: PlayRecord[],
+    loginStats: LoginStats,
+  ): UserPlayStat {
+    let totalWatchTime = 0;
+    let lastPlayTime = 0;
+    const sourceCount: Record<string, number> = {};
+
+    playRecords.forEach((record) => {
+      totalWatchTime += record.play_time || 0;
+      if (record.save_time > lastPlayTime) {
+        lastPlayTime = record.save_time;
+      }
+      const sourceName = record.source_name || '未知来源';
+      sourceCount[sourceName] = (sourceCount[sourceName] || 0) + 1;
+    });
+
+    // 计算观看影片总数（去重）
+    const totalMovies = new Set(
+      playRecords.map((r) => `${r.title}_${r.source_name}_${r.year}`),
+    ).size;
+
+    // 计算首次观看时间
+    const firstWatchDate = playRecords.length
+      ? Math.min(...playRecords.map((r) => r.save_time || Date.now()))
+      : Date.now();
+
+    // 获取最近播放记录
+    const recentRecords = playRecords
+      .sort((a, b) => (b.save_time || 0) - (a.save_time || 0))
+      .slice(0, 10);
+
+    // 找出最常观看的来源
+    let mostWatchedSource = '';
+    let maxCount = 0;
+    for (const [source, count] of Object.entries(sourceCount)) {
+      if (count > maxCount) {
+        maxCount = count;
+        mostWatchedSource = source;
+      }
+    }
+
+    return {
+      username: userName,
+      totalWatchTime,
+      totalPlays: playRecords.length,
+      lastPlayTime,
+      recentRecords,
+      avgWatchTime:
+        playRecords.length > 0 ? totalWatchTime / playRecords.length : 0,
+      mostWatchedSource,
+      totalMovies,
+      firstWatchDate,
+      lastUpdateTime: Date.now(),
+      loginCount: loginStats.loginCount,
+      firstLoginTime: loginStats.firstLoginTime,
+      lastLoginTime: loginStats.lastLoginTime,
+      lastLoginDate: loginStats.lastLoginDate,
+    };
   }
 
   async getContentStats(limit = 10): Promise<ContentStat[]> {
@@ -1069,29 +1102,24 @@ export class UpstashRedisStorage implements IStorage {
   ): Promise<void> {
     try {
       const loginStatsKey = this.loginStatsKey(userName);
-      const currentStats = await this.getLoginStats(userName);
+      const currentStats = normalizeLoginStats(
+        await withRetry(() =>
+          this.client.hgetall<Partial<LoginStats>>(loginStatsKey),
+        ),
+      );
       const firstLoginTime =
         isFirstLogin || !currentStats.firstLoginTime
           ? loginTime
           : currentStats.firstLoginTime;
 
-      const loginCount = await withRetry(() =>
-        this.client.hincrby(loginStatsKey, 'loginCount', 1),
-      );
-      const loginStats = {
-        loginCount,
-        firstLoginTime,
-        lastLoginTime: loginTime,
-        lastLoginDate: loginTime,
-      };
-
-      await withRetry(() =>
-        this.client.hset(loginStatsKey, {
-          firstLoginTime: loginStats.firstLoginTime,
-          lastLoginTime: loginStats.lastLoginTime,
-          lastLoginDate: loginStats.lastLoginDate,
-        }),
-      );
+      // HINCRBY 与 HSET 相互独立，合并为一次 pipeline 往返
+      await this.withPipeline((pipeline) => {
+        pipeline.hincrby(loginStatsKey, 'loginCount', 1).hset(loginStatsKey, {
+          firstLoginTime,
+          lastLoginTime: loginTime,
+          lastLoginDate: loginTime,
+        });
+      });
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
       throw error;

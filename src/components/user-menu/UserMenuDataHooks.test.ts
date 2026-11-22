@@ -34,7 +34,6 @@ let useUserMenuWatchingUpdates: typeof import('./useUserMenuWatchingUpdates').us
 interface HookProps {
   authInfo: { username?: string } | null;
   isOpen: boolean;
-  storageType: string;
 }
 
 type WatchingUpdatesHandler = (
@@ -145,33 +144,29 @@ describe('UserMenu data hooks', () => {
   });
 
   describe('useUserMenuWatchingUpdates', () => {
-    it('does not read or subscribe without an eligible server user', () => {
+    it('does not subscribe without an eligible server user, then reads cache and subscribes once available', () => {
       const { rerender } = renderHook(
-        ({
-          authInfo,
-          storageType,
-        }: Pick<HookProps, 'authInfo' | 'storageType'>) =>
-          useUserMenuWatchingUpdates({ authInfo, storageType }),
+        ({ authInfo }: Pick<HookProps, 'authInfo'>) =>
+          useUserMenuWatchingUpdates({ authInfo }),
         {
           initialProps: {
             authInfo: null as HookProps['authInfo'],
-            storageType: 'redis',
           },
         },
       );
 
-      rerender({ authInfo: AUTH_INFO, storageType: 'localstorage' });
-
-      expect(mockGetCachedWatchingUpdates).not.toHaveBeenCalled();
-      expect(mockGetDetailedWatchingUpdates).not.toHaveBeenCalled();
       expect(mockSubscribeToWatchingUpdatesEvent).not.toHaveBeenCalled();
+
+      rerender({ authInfo: AUTH_INFO });
+
+      expect(mockSubscribeToWatchingUpdatesEvent).toHaveBeenCalledTimes(1);
+      expect(mockGetCachedWatchingUpdates).toHaveBeenCalledTimes(1);
     });
 
     it('subscribes even when the boolean cache gate is false', () => {
       const { result, unmount } = renderHook(() =>
         useUserMenuWatchingUpdates({
           authInfo: AUTH_INFO,
-          storageType: 'redis',
         }),
       );
 
@@ -199,7 +194,6 @@ describe('UserMenu data hooks', () => {
       const { result } = renderHook(() =>
         useUserMenuWatchingUpdates({
           authInfo: AUTH_INFO,
-          storageType: 'redis',
         }),
       );
 
@@ -217,7 +211,6 @@ describe('UserMenu data hooks', () => {
       const { result } = renderHook(() =>
         useUserMenuWatchingUpdates({
           authInfo: AUTH_INFO,
-          storageType: 'redis',
         }),
       );
 
@@ -258,7 +251,6 @@ describe('UserMenu data hooks', () => {
       const { result } = renderHook(() =>
         useUserMenuWatchingUpdates({
           authInfo: AUTH_INFO,
-          storageType: 'redis',
         }),
       );
 
@@ -292,14 +284,13 @@ describe('UserMenu data hooks', () => {
   describe('useUserMenuContinueWatching', () => {
     function renderContinueWatchingHook(initialProps: HookProps) {
       return renderHook(
-        ({ authInfo, isOpen, storageType }: HookProps) =>
+        ({ authInfo, isOpen }: HookProps) =>
           useUserMenuContinueWatching({
             authInfo,
             enableProgressFilter: false,
             isOpen,
             maxProgress: 100,
             minProgress: 5,
-            storageType,
           }),
         { initialProps },
       );
@@ -309,7 +300,6 @@ describe('UserMenu data hooks', () => {
       renderContinueWatchingHook({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
 
       expect(mockGetAllPlayRecords).not.toHaveBeenCalled();
@@ -325,7 +315,6 @@ describe('UserMenu data hooks', () => {
       const { result, rerender } = renderContinueWatchingHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       await act(async () => {
@@ -346,7 +335,6 @@ describe('UserMenu data hooks', () => {
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       window.dispatchEvent(new Event('playRecordsUpdated'));
 
@@ -363,7 +351,6 @@ describe('UserMenu data hooks', () => {
       const { result } = renderContinueWatchingHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       act(() => {
@@ -397,7 +384,6 @@ describe('UserMenu data hooks', () => {
       const { rerender } = renderContinueWatchingHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       await act(async () => {
@@ -429,7 +415,6 @@ describe('UserMenu data hooks', () => {
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       await act(async () => {
         jest.advanceTimersByTime(100);
@@ -446,13 +431,11 @@ describe('UserMenu data hooks', () => {
       const { result, rerender } = renderContinueWatchingHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       await act(async () => {
         pendingRecords.resolve({
@@ -468,8 +451,8 @@ describe('UserMenu data hooks', () => {
   describe('useUserMenuFavorites', () => {
     function renderFavoritesHook(initialProps: HookProps) {
       return renderHook(
-        ({ authInfo, isOpen, storageType }: HookProps) =>
-          useUserMenuFavorites({ authInfo, isOpen, storageType }),
+        ({ authInfo, isOpen }: HookProps) =>
+          useUserMenuFavorites({ authInfo, isOpen }),
         { initialProps },
       );
     }
@@ -478,7 +461,6 @@ describe('UserMenu data hooks', () => {
       renderFavoritesHook({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
 
       expect(mockFetch).not.toHaveBeenCalled();
@@ -499,7 +481,6 @@ describe('UserMenu data hooks', () => {
       const { result, rerender } = renderFavoritesHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       await act(async () => {
@@ -523,7 +504,6 @@ describe('UserMenu data hooks', () => {
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       window.dispatchEvent(new Event('favoritesUpdated'));
 
@@ -545,13 +525,11 @@ describe('UserMenu data hooks', () => {
       const { result, rerender } = renderFavoritesHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       await act(async () => {
         pendingResponse.resolve({ json, ok: true });
@@ -569,7 +547,6 @@ describe('UserMenu data hooks', () => {
       const { result, rerender } = renderFavoritesHook({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
 
       await act(async () => {
@@ -579,7 +556,6 @@ describe('UserMenu data hooks', () => {
       rerender({
         authInfo: AUTH_INFO,
         isOpen: false,
-        storageType: 'redis',
       });
       await act(async () => {
         pendingJson.resolve({ 'source+late': createFavorite() });
@@ -592,7 +568,6 @@ describe('UserMenu data hooks', () => {
       rerender({
         authInfo: AUTH_INFO,
         isOpen: true,
-        storageType: 'redis',
       });
       await act(async () => {
         await flushAsyncWork();

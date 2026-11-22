@@ -6,22 +6,10 @@ const CALENDAR_DATA_KEY = 'calendar:release_calendar_data';
 const CALENDAR_TIME_KEY = 'calendar:release_calendar_time';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24小时缓存
 
-// 获取存储类型
-function getStorageType(): string {
-  return process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-}
-
 // 日历数据库缓存管理器
 export class CalendarCacheManager {
   // 保存日历数据到数据库
   static async saveCalendarData(data: unknown): Promise<boolean> {
-    const storageType = getStorageType();
-
-    // 如果是localStorage模式，跳过数据库缓存
-    if (storageType === 'localstorage') {
-      return false;
-    }
-
     try {
       const timestamp = Date.now().toString();
       const expireSeconds = Math.floor(CACHE_DURATION / 1000);
@@ -38,13 +26,6 @@ export class CalendarCacheManager {
 
   // 从数据库获取日历缓存数据
   static async getCalendarData(): Promise<ReleaseCalendarResult | null> {
-    const storageType = getStorageType();
-
-    // 如果是localStorage模式，跳过数据库缓存
-    if (storageType === 'localstorage') {
-      return null;
-    }
-
     try {
       const dataValue = await db.getCache(CALENDAR_DATA_KEY);
       const timeStr = await db.getCache(CALENDAR_TIME_KEY);
@@ -79,12 +60,6 @@ export class CalendarCacheManager {
 
   // 清除日历缓存
   static async clearCalendarData(): Promise<void> {
-    const storageType = getStorageType();
-
-    if (storageType === 'localstorage') {
-      return;
-    }
-
     try {
       await db.deleteCache(CALENDAR_DATA_KEY);
       await db.deleteCache(CALENDAR_TIME_KEY);
@@ -95,12 +70,6 @@ export class CalendarCacheManager {
 
   // 检查缓存是否有效
   static async isCacheValid(): Promise<boolean> {
-    const storageType = getStorageType();
-
-    if (storageType === 'localstorage') {
-      return false;
-    }
-
     try {
       const timeStr = await db.getCache(CALENDAR_TIME_KEY);
 
