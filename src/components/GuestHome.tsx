@@ -4,6 +4,7 @@ import { Film, Loader, LogIn, Search, Tv } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { openLoginModal } from '@/lib/login-modal';
 import { processImageUrl } from '@/lib/utils';
 
 import PageLayout from '@/components/PageLayout';
@@ -200,13 +201,13 @@ export default function GuestHome() {
               <p className='min-w-0 text-xs text-[#5f5f5f] dark:text-[#a8a8a8]'>
                 当前为访客模式，仅可观看「爱奇艺」片源；登录后可享播放记录、收藏与全部片源
               </p>
-              <a
-                href='/login'
-                className='inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#00a304] hover:underline dark:text-[#57e07a]'
+              <button
+                onClick={openLoginModal}
+                className='inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold text-[#00a304] hover:underline dark:text-[#57e07a]'
               >
                 <LogIn className='h-3.5 w-3.5' />
                 立即登录
-              </a>
+              </button>
             </div>
 
             {/* 分类 chips：单行横向滚动 */}
@@ -368,13 +369,13 @@ export default function GuestHome() {
                   登录后自动同步观看进度，解锁完整功能
                 </p>
               </div>
-              <a
-                href='/login'
-                className='inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#00be06] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] active:scale-95'
+              <button
+                onClick={openLoginModal}
+                className='inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-[#00be06] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00a304] active:scale-95'
               >
                 <LogIn className='h-4 w-4' />
                 立即登录
-              </a>
+              </button>
             </div>
           </>
         )}

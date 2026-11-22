@@ -2,6 +2,7 @@
 'use client';
 
 import { cacheManager } from './cache-manager';
+import { openLoginModal } from '../login-modal';
 import type { UserPlayStat } from '../types';
 
 // 全局错误触发函数
@@ -32,7 +33,7 @@ export interface Favorite {
 
 // ---- 工具函数 ----
 /**
- * 通用的 fetch 函数，处理 401 状态码自动跳转登录
+ * 通用的 fetch 函数，处理 401 状态码自动弹出登录弹窗
  */
 export async function fetchWithAuth(
   url: string,
@@ -40,7 +41,7 @@ export async function fetchWithAuth(
 ): Promise<Response> {
   const res = await fetch(url, options);
   if (!res.ok) {
-    // 如果是 401 未授权，跳转到登录页面
+    // 如果是 401 未授权，清掉本地登录态并弹出登录弹窗（不跳页，爱奇艺式）
     if (res.status === 401) {
       // 调用 logout 接口
       try {
@@ -51,11 +52,10 @@ export async function fetchWithAuth(
       } catch (error) {
         console.error('注销请求失败:', error);
       }
-      const currentUrl = window.location.pathname + window.location.search;
-      const loginUrl = new URL('/login', window.location.origin);
-      loginUrl.searchParams.set('redirect', currentUrl);
-      window.location.href = loginUrl.toString();
-      throw new Error('用户未授权，已跳转到登录页面');
+      openLoginModal();
+      const authError = new Error('登录已失效，请重新登录') as any;
+      authError.isAuthError = true;
+      throw authError;
     }
     throw new Error(`请求 ${url} 失败: ${res.status}`);
   }
@@ -78,6 +78,13 @@ export async function handleDatabaseOperationFailure(
   username?: string | null,
 ): Promise<void> {
   console.error(`数据库操作失败 (${dataType}):`, error);
+
+  // 登录失效引发的失败：登录弹窗本身就是提示，不再叠加全局错误条，
+  // 也不再刷新缓存（刷新请求同样会 401）
+  if (error?.isAuthError) {
+    return;
+  }
+
   triggerGlobalError(`数据库操作失败`);
 
   try {

@@ -7,6 +7,7 @@ import './globals.css';
 import { ClarityTracker } from '@/components/ClarityTracker';
 
 import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
+import LoginModal from '../components/LoginModal';
 import { SessionTracker } from '../components/SessionTracker';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
@@ -112,6 +113,7 @@ export default async function RootLayout({
           <SiteProvider siteName={siteName} announcement={announcement}>
             <SessionTracker />
             {children}
+            <LoginModal />
             <GlobalErrorIndicator />
           </SiteProvider>
         </ThemeProvider>

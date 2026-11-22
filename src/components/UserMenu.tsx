@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { debug } from '@/lib/debug';
+import { openLoginModal } from '@/lib/login-modal';
 
 import { UserMenuChangePasswordPanel } from './user-menu/UserMenuChangePasswordPanel';
 import { UserMenuDropdownPanel } from './user-menu/UserMenuDropdownPanel';
@@ -356,17 +357,17 @@ export const UserMenu: React.FC = () => {
   // 计算更新数量（只统计新剧集更新）
   const totalUpdates = watchingUpdatesState.totalUpdates;
 
-  // 访客：未登录时只渲染登录按钮
+  // 访客：未登录时只渲染登录按钮（爱奇艺式，弹出登录弹窗而非跳转登录页）
   if (mounted && !authInfo?.username) {
     return (
-      <a
-        href='/login'
-        className='flex items-center gap-1.5 rounded-full bg-[#00be06] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#00a304]'
+      <button
+        onClick={openLoginModal}
+        className='flex cursor-pointer items-center gap-1.5 rounded-full bg-[#00be06] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#00a304]'
         aria-label='登录'
       >
         <LogIn className='h-4 w-4' />
         登录
-      </a>
+      </button>
     );
   }
 

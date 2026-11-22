@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { toDateKey } from '@/lib/date-utils';
+import { openLoginModal } from '@/lib/login-modal';
 import { PlayRecord, ReleaseCalendarItem, UserPlayStat } from '@/lib/types';
 import {
   type WatchingUpdate,
@@ -114,7 +115,7 @@ const PlayStatsPage = () => {
       const response = await fetch('/api/admin/play-stats');
 
       if (response.status === 401) {
-        router.push('/login');
+        openLoginModal();
         return;
       }
 
@@ -130,14 +131,14 @@ const PlayStatsPage = () => {
         err instanceof Error ? err.message : '获取播放统计失败';
       setError(errorMessage);
     }
-  }, [router]);
+  }, []);
 
   const fetchUserStats = useCallback(async () => {
     try {
       const response = await fetch('/api/user/my-stats');
 
       if (response.status === 401) {
-        router.push('/login');
+        openLoginModal();
         return;
       }
 
@@ -153,7 +154,7 @@ const PlayStatsPage = () => {
         err instanceof Error ? err.message : '获取个人统计失败';
       setError(errorMessage);
     }
-  }, [router]);
+  }, []);
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -263,13 +264,14 @@ const PlayStatsPage = () => {
   useEffect(() => {
     const auth = getAuthInfoFromBrowserCookie();
     if (!auth || !auth.username) {
-      router.push('/login');
+      // 未登录：弹出登录弹窗（页面停留在权限检查态，登录成功后整页刷新）
+      openLoginModal();
       return;
     }
 
     setAuthInfo(auth);
     setIsAdmin(auth.role === 'admin' || auth.role === 'owner');
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (authInfo) {
