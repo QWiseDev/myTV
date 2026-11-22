@@ -895,25 +895,19 @@ export default function SkipController({
 
   return (
     <div className='skip-controller'>
-      {/* 跳过按钮 - 放在播放器内左上角 */}
+      {/* 跳过按钮 - 爱奇艺式小胶囊，播放器内左上角 */}
       {showSkipButton && currentSkipSegment && (
-        <div className='absolute top-4 left-4 z-[9999] bg-black/80 text-white px-4 py-2 rounded-lg backdrop-blur-sm border border-white/20 shadow-lg animate-fade-in'>
-          <div className='flex items-center space-x-3'>
-            <span className='text-sm'>
-              {currentSkipSegment.type === 'opening'
-                ? '检测到片头'
-                : '检测到片尾'}
-            </span>
-            <button
-              onClick={handleSkip}
-              className='px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors'
-            >
-              {currentSkipSegment.type === 'ending' && onNextEpisode
-                ? '下一集 ▶'
-                : '跳过'}
-            </button>
-          </div>
-        </div>
+        <button
+          onClick={handleSkip}
+          className='absolute top-4 left-4 z-[9999] flex items-center gap-1 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white animate-fade-in'
+        >
+          {currentSkipSegment.type === 'opening'
+            ? '跳过片头'
+            : onNextEpisode
+              ? '下一集'
+              : '跳过片尾'}
+          <span aria-hidden='true'>▸</span>
+        </button>
       )}
 
       {/* 设置模式面板 - 增强版批量设置 */}

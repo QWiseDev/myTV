@@ -60,6 +60,15 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
     const [isHovered, setIsHovered] = useState(false);
     const showOverlay = isCoarsePointer || isHovered;
 
+    // 广告免责提示：仅起播/换集后显示 6 秒淡出，避免常驻遮挡画面
+    const [showAdNotice, setShowAdNotice] = useState(false);
+    useEffect(() => {
+      if (!currentSource || !currentId) return;
+      setShowAdNotice(true);
+      const timer = setTimeout(() => setShowAdNotice(false), 6000);
+      return () => clearTimeout(timer);
+    }, [currentSource, currentId, episodeIndex]);
+
     // 底部进度条跟随悬停：播放中移开鼠标即隐藏，暂停/悬停时显示
     useEffect(() => {
       if (isCoarsePointer) return;
@@ -114,7 +123,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
             className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg'
           ></div>
 
-          {/* 顶部信息栏：悬停时显示 剧集名称 + 集数（爱奇艺式） */}
+          {/* 顶部信息栏：悬停时显示 剧集名称 + 集数 + 广告免责提示（爱奇艺式） */}
           {detailTitle && (
             <div
               className={`absolute top-0 left-0 right-0 z-10 flex items-center bg-gradient-to-b from-black/70 via-black/35 to-transparent px-3 py-2.5 transition-opacity duration-300 pointer-events-none rounded-t-xl ${
@@ -128,8 +137,24 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
                 第{episodeIndex + 1}集
                 {episodeName?.trim() ? ` ${episodeName.trim()}` : ''}
               </span>
+              {/* 广告免责提示：聚合源视频流内常嵌第三方广告水印/贴片 */}
+              <span className='ml-8 hidden text-[10px] text-white/65 lg:inline'>
+                视频内广告均为第三方植入，请勿轻信
+              </span>
             </div>
           )}
+
+          {/* 广告免责提示：聚合源视频流内常嵌第三方广告水印/贴片，
+              起播与换集时显示 6 秒后淡出，避免常驻遮挡画面 */}
+          <div
+            className={`pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 transition-opacity duration-700 ${
+              showAdNotice ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <span className='inline-block rounded-full bg-black/35 px-2.5 py-1 text-[10px] leading-none text-white/55 backdrop-blur-sm md:text-[11px]'>
+              视频内广告均为第三方植入，请勿轻信
+            </span>
+          </div>
 
           {/* 控制按钮组 - 播放器内右上角（悬停播放器时显示） */}
           {currentSource && currentId && (
