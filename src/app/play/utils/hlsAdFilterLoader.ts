@@ -3,12 +3,14 @@ import type { MutableRefObject } from 'react';
 
 import { filterAdsFromM3U8 } from '@/lib/ad-filter';
 
+import { appendSourceFragmentParam } from './fragmentUrlParams';
 import { stripMpegTsPrefix } from './mpegTs';
 
 type HlsConstructor = typeof import('hls.js').default;
 
 type HlsLoaderContext = {
   type?: string;
+  url?: string;
 };
 
 type HlsLoaderResponse = {
@@ -36,6 +38,7 @@ export interface AdFilterHlsLoaderDeps {
 /**
  * 构造带去广告能力的自定义 hls.js loader：
  * - manifest / level 响应按去广告规则重写 m3u8 文本（含自定义规则代码）；
+ * - fragment 请求按源配置追加防盗链参数（如爱奇艺源的 domianurl）；
  * - fragment 响应剥离 mpegts 前缀，保证 ArtPlayer 可正常解码。
  */
 export function createAdFilterHlsLoader(
@@ -80,7 +83,12 @@ export function createAdFilterHlsLoader(
               return onSuccess(response, stats, ctx, null);
             };
           }
-        } else if (context.type === 'fragment') {
+        } else if (context.type === 'media-fragment') {
+          // hls.js 1.5+ 分片请求的 context.type 是 'media-fragment'（非 'fragment'）
+          // 部分 CDN（如爱奇艺源）要求 ts 分片请求携带防盗链参数
+          if (typeof context.url === 'string') {
+            context.url = appendSourceFragmentParam(source, context.url);
+          }
           const onSuccess = callbacks.onSuccess;
           if (typeof onSuccess === 'function') {
             callbacks.onSuccess = function (

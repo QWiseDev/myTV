@@ -47,6 +47,8 @@ interface EpisodeSelectorProps {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 访客（未登录）禁用换源：隐藏换源 Tab，即使单集也只展示选集 */
+  disableSourceSwitch?: boolean;
 }
 
 /** 估算文本显示宽度：全角字符按 1，半角字符按 0.6 */
@@ -73,6 +75,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   onLoadSources,
   sourceSearchLoading = false,
   sourceSearchError = null,
+  disableSourceSwitch = false,
 }) => {
   const router = useRouter();
   const pageCount = Math.ceil(totalEpisodes / episodesPerPage);
@@ -115,9 +118,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   const sourceSearchRequestKeyRef = useRef<string>('');
 
   // 主要的 tab 状态：'episodes' 或 'sources'
-  // 当只有一集时默认展示 "换源"，并隐藏 "选集" 标签
+  // 当只有一集时默认展示 "换源"，并隐藏 "选集" 标签（访客禁用换源时始终展示选集）
   const [activeTab, setActiveTab] = useState<'episodes' | 'sources'>(
-    totalEpisodes > 1 ? 'episodes' : 'sources',
+    totalEpisodes > 1 || disableSourceSwitch ? 'episodes' : 'sources',
   );
 
   // 当前分页索引（0 开始）
@@ -185,6 +188,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
           timeoutMs: 10000,
           signal,
           adFilterType: source.source,
+          sourceKey: source.source,
         });
         writeResult({
           status: 'success',
@@ -472,6 +476,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
               timeoutMs: 10000,
               signal,
               adFilterType: item.source.source,
+              sourceKey: item.source.source,
             }),
           resolveCache: force
             ? undefined
@@ -552,11 +557,12 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
   // 🔥 修复：当totalEpisodes变化时，确保tab状态合理（避免循环依赖）
   useEffect(() => {
+    if (disableSourceSwitch) return;
     if (totalEpisodes <= 1 && activeTab === 'episodes') {
       // 如果只有1集且当前在选集tab，自动切换到换源tab
       setActiveTab('sources');
     }
-  }, [activeTab, totalEpisodes]);
+  }, [activeTab, disableSourceSwitch, totalEpisodes]);
 
   // 全部集数的显示文本（优先提取「第N集/话」中的数字，否则展示完整标题）
   const displayTexts = useMemo(
@@ -764,21 +770,23 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             )}
           </div>
         )}
-        <div
-          onClick={handleSourceTabClick}
-          className={`flex-1 pb-2.5 text-center cursor-pointer text-base font-semibold relative transition-colors duration-200
+        {!disableSourceSwitch && (
+          <div
+            onClick={handleSourceTabClick}
+            className={`flex-1 pb-2.5 text-center cursor-pointer text-base font-semibold relative transition-colors duration-200
             ${
               activeTab === 'sources'
                 ? 'text-gray-900 dark:text-white'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             }
           `.trim()}
-        >
-          换源
-          {activeTab === 'sources' && (
-            <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-green-400'></div>
-          )}
-        </div>
+          >
+            换源
+            {activeTab === 'sources' && (
+              <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-green-400'></div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 选集 Tab 内容 */}

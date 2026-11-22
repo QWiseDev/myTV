@@ -1,11 +1,13 @@
 import type { SearchResult } from '@/lib/types';
 
+import { appendSourceFragmentParam } from './fragmentUrlParams';
 import { filterAdsFromM3U8 } from './helpers';
 
 const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
 
 type HlsLoaderContext = {
   type?: string;
+  url?: string;
 };
 
 type HlsLoaderResponse = {
@@ -316,6 +318,8 @@ export async function measureSegmentLoadSpeed(
     maxBytes?: number;
     /** 被中止时也按已读字节给结论（慢源因此能显示低速而不是「未知」） */
     partialOnAbort?: boolean;
+    /** 源 key：部分 CDN（如爱奇艺源）的分片请求须携带防盗链参数 */
+    sourceKey?: string;
   } = {},
 ): Promise<string> {
   const timeoutMs =
@@ -352,11 +356,14 @@ export async function measureSegmentLoadSpeed(
   };
 
   try {
-    const response = await fetch(segmentUrl, {
-      signal: controller.signal,
-      // 命中浏览器缓存时读到的是本地数据，测出来会是假高速，因此显式绕过缓存
-      cache: 'no-store',
-    });
+    const response = await fetch(
+      appendSourceFragmentParam(options.sourceKey, segmentUrl),
+      {
+        signal: controller.signal,
+        // 命中浏览器缓存时读到的是本地数据，测出来会是假高速，因此显式绕过缓存
+        cache: 'no-store',
+      },
+    );
     if (!response.ok || !response.body) return '未知';
 
     const reader = response.body.getReader();
@@ -439,6 +446,8 @@ export async function probePlayableMediaUrl(
     signal: AbortSignal;
     /** 传给自定义去广告代码的源类型，与主播放器的过滤口径保持一致 */
     adFilterType?: string;
+    /** 源 key：部分 CDN（如爱奇艺源）的分片请求须携带防盗链参数 */
+    sourceKey?: string;
   },
 ): Promise<{
   quality: string;
@@ -695,6 +704,7 @@ export async function probePlayableMediaUrl(
                 signal: speedController.signal,
                 timeoutMs: 6000,
                 partialOnAbort: true,
+                sourceKey: options.sourceKey,
               });
               if (speed !== '未知') {
                 loadSpeed = speed;
@@ -736,6 +746,17 @@ export async function probePlayableMediaUrl(
                 conf: unknown,
                 callbacks: HlsLoaderCallbacks,
               ) => {
+                // 部分 CDN（如爱奇艺源）要求 ts 分片请求携带防盗链参数
+                // （hls.js 1.5+ 分片请求的 context.type 是 'media-fragment'）
+                if (
+                  context.type === 'media-fragment' &&
+                  typeof context.url === 'string'
+                ) {
+                  context.url = appendSourceFragmentParam(
+                    options.sourceKey,
+                    context.url,
+                  );
+                }
                 const originalOnSuccess = callbacks.onSuccess;
                 if (typeof originalOnSuccess === 'function') {
                   callbacks.onSuccess = (
