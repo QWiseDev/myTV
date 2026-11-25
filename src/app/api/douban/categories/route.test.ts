@@ -4,9 +4,18 @@
 
 const mockFetchDoubanData = jest.fn();
 const mockGetCacheTime = jest.fn();
+const mockDbGetCache = jest.fn();
+const mockDbSetCache = jest.fn();
 
 jest.mock('@/lib/config', () => ({
   getCacheTime: mockGetCacheTime,
+}));
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    getCache: (...args: unknown[]) => mockDbGetCache(...args),
+    setCache: (...args: unknown[]) => mockDbSetCache(...args),
+  },
 }));
 
 jest.mock('@/lib/douban', () => ({
@@ -36,6 +45,8 @@ describe('GET /api/douban/categories', () => {
   beforeEach(() => {
     mockFetchDoubanData.mockReset().mockResolvedValue({ items: [] });
     mockGetCacheTime.mockReset().mockResolvedValue(300);
+    mockDbGetCache.mockReset().mockResolvedValue(null);
+    mockDbSetCache.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {

@@ -1,15 +1,70 @@
 import { NextResponse } from 'next/server';
 
 import { getCacheTime } from '@/lib/config';
+import { db } from '@/lib/db';
 import { fetchDoubanData } from '@/lib/douban';
 import {
   type DoubanRecentHotResponse,
   buildDoubanCategoryUrl,
   mapDoubanRecentHotItems,
 } from '@/lib/douban-shared';
+import { withAbortableTimeout } from '@/lib/promise-timeout';
 import { DoubanResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+
+const MEMORY_CACHE_TTL_MS = 60_000;
+const DB_CACHE_READ_TIMEOUT_MS = 600;
+const memoryCategoriesCache = new Map<
+  string,
+  { response: DoubanResult; expireAt: number }
+>();
+
+function buildCacheKey(params: {
+  kind: string;
+  category: string;
+  type: string;
+  pageLimit: number;
+  pageStart: number;
+}): string {
+  return `douban-categories-category=${params.category}&kind=${params.kind}&pageLimit=${params.pageLimit}&pageStart=${params.pageStart}&type=${params.type}`;
+}
+
+async function readCachedCategoryResult(
+  cacheKey: string,
+): Promise<DoubanResult | null> {
+  const mem = memoryCategoriesCache.get(cacheKey);
+  if (mem && Date.now() < mem.expireAt) {
+    return mem.response;
+  }
+  if (mem) {
+    memoryCategoriesCache.delete(cacheKey);
+  }
+
+  try {
+    const dbCached = await withAbortableTimeout(
+      () => db.getCache(cacheKey),
+      DB_CACHE_READ_TIMEOUT_MS,
+    );
+    if (
+      dbCached &&
+      typeof dbCached === 'object' &&
+      (dbCached as DoubanResult).code === 200 &&
+      Array.isArray((dbCached as DoubanResult).list)
+    ) {
+      const result = dbCached as DoubanResult;
+      memoryCategoriesCache.set(cacheKey, {
+        response: result,
+        expireAt: Date.now() + MEMORY_CACHE_TTL_MS,
+      });
+      return result;
+    }
+  } catch {
+    // 缓存读取失败不阻塞主流程
+  }
+
+  return null;
+}
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: Request) {
@@ -51,6 +106,27 @@ export async function GET(request: Request) {
     );
   }
 
+  const cacheKey = buildCacheKey({
+    kind,
+    category,
+    type,
+    pageLimit,
+    pageStart,
+  });
+
+  const cachedResponse = await readCachedCategoryResult(cacheKey);
+  if (cachedResponse) {
+    const cacheTime = await getCacheTime();
+    return NextResponse.json(cachedResponse, {
+      headers: {
+        'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
+        'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
+        'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
+        'Netlify-Vary': 'query',
+      },
+    });
+  }
+
   const target = buildDoubanCategoryUrl({
     kind: kind as 'movie' | 'tv',
     category,
@@ -76,6 +152,14 @@ export async function GET(request: Request) {
     };
 
     const cacheTime = await getCacheTime();
+    if (list.length > 0) {
+      memoryCategoriesCache.set(cacheKey, {
+        response,
+        expireAt: Date.now() + MEMORY_CACHE_TTL_MS,
+      });
+      void db.setCache(cacheKey, response, cacheTime).catch(() => undefined);
+    }
+
     return NextResponse.json(response, {
       headers: {
         'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,

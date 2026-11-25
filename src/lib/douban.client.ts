@@ -99,10 +99,71 @@ async function fetchJsonWithTimeout<T>(
   );
 }
 
-import { getBestDataProxySync } from './douban-proxy-detector';
+import {
+  type DoubanDataProxyType,
+  getBestDataProxySync,
+  markDataProxyFailed,
+} from './douban-proxy-detector';
 
-function getDoubanProxyConfig() {
-  return { proxyType: getBestDataProxySync() };
+const VALID_DATA_PROXY_TYPES: ReadonlySet<string> = new Set([
+  'cmliussss-cdn-ali',
+  'cmliussss-cdn-tencent',
+  'cors-proxy-zwei',
+  'direct',
+]);
+
+function readLocalStorageString(key: string): string {
+  if (typeof localStorage === 'undefined') return '';
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+function readRuntimeConfigString(key: string): string {
+  if (typeof window === 'undefined') return '';
+  const runtimeConfig = (
+    window as Window & { RUNTIME_CONFIG?: Record<string, string> }
+  ).RUNTIME_CONFIG;
+  return runtimeConfig?.[key] || '';
+}
+
+function getDoubanProxyConfig(): {
+  proxyType: DoubanDataProxyType | 'custom';
+  proxyUrl: string;
+} {
+  const localType = readLocalStorageString('doubanDataSource');
+  if (localType === 'custom') {
+    return {
+      proxyType: 'custom',
+      proxyUrl:
+        readLocalStorageString('doubanProxyUrl') ||
+        readRuntimeConfigString('DOUBAN_PROXY'),
+    };
+  }
+  if (VALID_DATA_PROXY_TYPES.has(localType)) {
+    return { proxyType: localType as DoubanDataProxyType, proxyUrl: '' };
+  }
+
+  const runtimeType = readRuntimeConfigString('DOUBAN_PROXY_TYPE');
+  if (runtimeType === 'custom') {
+    return {
+      proxyType: 'custom',
+      proxyUrl:
+        readLocalStorageString('doubanProxyUrl') ||
+        readRuntimeConfigString('DOUBAN_PROXY'),
+    };
+  }
+  if (
+    runtimeType &&
+    runtimeType !== 'direct' &&
+    VALID_DATA_PROXY_TYPES.has(runtimeType)
+  ) {
+    return { proxyType: runtimeType as DoubanDataProxyType, proxyUrl: '' };
+  }
+
+  return { proxyType: getBestDataProxySync(), proxyUrl: '' };
 }
 
 export async function fetchDoubanCategories(
@@ -173,6 +234,21 @@ export async function fetchDoubanCategories(
   }
 }
 
+async function fetchServerDoubanCategories(
+  params: DoubanCategoriesParams,
+  signal?: AbortSignal,
+): Promise<DoubanResult> {
+  const { kind, category, type, pageLimit = 20, pageStart = 0 } = params;
+  const response = await fetch(
+    `/api/douban/categories?kind=${kind}&category=${category}&type=${type}&limit=${pageLimit}&start=${pageStart}`,
+    { signal },
+  );
+  if (response.ok === false) {
+    throw new Error(`HTTP error! Status: ${response.status}`);
+  }
+  return response.json();
+}
+
 /**
  * 统一的豆瓣分类数据获取函数，根据代理设置选择使用服务端 API 或客户端代理获取
  */
@@ -195,33 +271,46 @@ export async function getDoubanCategories(
     return cached;
   }
 
-  const { proxyType } = getDoubanProxyConfig();
+  const { proxyType, proxyUrl } = getDoubanProxyConfig();
   let result: DoubanResult;
 
-  switch (proxyType) {
-    case 'cmliussss-cdn-ali':
-      result = await fetchDoubanCategories(params, '', false, true, signal);
-      break;
-    case 'cmliussss-cdn-tencent':
-      result = await fetchDoubanCategories(params, '', true, false, signal);
-      break;
-    case 'cors-proxy-zwei':
-      result = await fetchDoubanCategories(
-        params,
-        'https://ciao-cors.is-an.org/',
-        false,
-        false,
-        signal,
-      );
-      break;
-    case 'direct':
-    default:
-      const response = await fetch(
-        `/api/douban/categories?kind=${kind}&category=${category}&type=${type}&limit=${pageLimit}&start=${pageStart}`,
-        { signal },
-      );
-      result = await response.json();
-      break;
+  try {
+    switch (proxyType) {
+      case 'cmliussss-cdn-ali':
+        result = await fetchDoubanCategories(params, '', false, true, signal);
+        break;
+      case 'cmliussss-cdn-tencent':
+        result = await fetchDoubanCategories(params, '', true, false, signal);
+        break;
+      case 'cors-proxy-zwei':
+        result = await fetchDoubanCategories(
+          params,
+          'https://ciao-cors.is-an.org/',
+          false,
+          false,
+          signal,
+        );
+        break;
+      case 'custom':
+        result = proxyUrl
+          ? await fetchDoubanCategories(params, proxyUrl, false, false, signal)
+          : await fetchServerDoubanCategories(params, signal);
+        break;
+      case 'direct':
+      default:
+        result = await fetchServerDoubanCategories(params, signal);
+        break;
+    }
+  } catch (error) {
+    if (signal?.aborted || proxyType === 'direct') {
+      throw error;
+    }
+
+    if (proxyType !== 'custom') {
+      markDataProxyFailed(proxyType);
+    }
+    // 第三方代理/CDN 失败时自动回退服务端接口，避免首屏直接报错
+    result = await fetchServerDoubanCategories(params, signal);
   }
 
   // 保存到缓存
@@ -251,7 +340,7 @@ export async function getDoubanList(
     return cached;
   }
 
-  const { proxyType } = getDoubanProxyConfig();
+  const { proxyType, proxyUrl } = getDoubanProxyConfig();
   let result: DoubanResult;
 
   switch (proxyType) {
@@ -264,6 +353,12 @@ export async function getDoubanList(
     case 'cors-proxy-zwei':
       result = await fetchDoubanList(params, 'https://ciao-cors.is-an.org/');
       break;
+    case 'custom':
+      if (proxyUrl) {
+        result = await fetchDoubanList(params, proxyUrl);
+        break;
+      }
+    // fallthrough to direct when custom proxyUrl is empty
     case 'direct':
     default:
       const response = await fetch(
@@ -392,7 +487,7 @@ export async function getDoubanRecommends(
     return cached;
   }
 
-  const { proxyType } = getDoubanProxyConfig();
+  const { proxyType, proxyUrl } = getDoubanProxyConfig();
   let result: DoubanResult;
 
   switch (proxyType) {
@@ -408,6 +503,12 @@ export async function getDoubanRecommends(
         'https://ciao-cors.is-an.org/',
       );
       break;
+    case 'custom':
+      if (proxyUrl) {
+        result = await fetchDoubanRecommends(params, proxyUrl);
+        break;
+      }
+    // fallthrough to direct when custom proxyUrl is empty
     case 'direct':
     default:
       const response = await fetch(

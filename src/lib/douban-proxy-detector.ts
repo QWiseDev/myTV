@@ -102,33 +102,40 @@ function pickBestImageProxy(
 
 /**
  * 探测单个端点的延迟
+ * - corsMode = true 时直接用 GET 校验 response.ok，避免 no-cors 把 403/502 误判为可用，
+ *   且省去 HEAD 失败后再等一轮 GET 的双倍超时。
  */
 async function probeEndpoint(
   url: string,
-  timeout = 5000,
+  options: { timeout?: number; corsMode?: boolean } = {},
 ): Promise<{ latency: number; available: boolean }> {
+  const { timeout = 2500, corsMode = false } = options;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   const startTime = performance.now();
 
   try {
-    await fetch(url, {
-      method: 'HEAD',
-      mode: 'no-cors', // 允许跨域探测
+    const response = await fetch(url, {
+      method: corsMode ? 'GET' : 'HEAD',
+      mode: corsMode ? 'cors' : 'no-cors',
       signal: controller.signal,
       cache: 'no-store',
     });
 
     clearTimeout(timeoutId);
+    if (corsMode && !response.ok) {
+      return { latency: -1, available: false };
+    }
     const latency = Math.round(performance.now() - startTime);
-
-    // no-cors 模式下无法读取 response.ok，但如果没抛错就认为可用
     return { latency, available: true };
-  } catch (error) {
+  } catch {
     clearTimeout(timeoutId);
+    if (corsMode) {
+      return { latency: -1, available: false };
+    }
 
-    // 尝试使用 GET 请求（某些 CDN 不支持 HEAD）
+    // 图片 no-cors 模式下部分 CDN 不支持 HEAD，回退一次 GET
     try {
       const getController = new AbortController();
       const getTimeoutId = setTimeout(() => getController.abort(), timeout);
@@ -213,7 +220,9 @@ export async function probeDataProxies(): Promise<{
 
   // 并行探测所有端点
   const probePromises = DATA_PROXY_ENDPOINTS.map(async (endpoint) => {
-    const { latency, available } = await probeEndpoint(endpoint.testUrl);
+    const { latency, available } = await probeEndpoint(endpoint.testUrl, {
+      corsMode: true,
+    });
     const result: ProbeResult = {
       type: endpoint.type,
       latency,
@@ -296,10 +305,40 @@ export async function probeImageProxies(): Promise<{
   return { best: 'direct', results };
 }
 
-// 单例模式：存储当前最优代理
+// 单例模式：存储当前最优代理（数据探测与图片探测使用独立锁，互不阻塞）
 let currentBestDataProxy: DoubanDataProxyType | null = null;
 let currentBestImageProxy: DoubanImageProxyType | null = null;
-let probeInProgress = false;
+let dataProbeInProgress = false;
+let imageProbeInProgress = false;
+
+/**
+ * 运行期某个数据代理失败时立即降级到下一个可用代理（或 direct），
+ * 避免 30 分钟缓存期内持续把首屏请求发往已失效 CDN。
+ */
+export function markDataProxyFailed(failedType: DoubanDataProxyType): void {
+  if (failedType === 'direct') return;
+
+  const cached = getCachedProbeResult(CACHE_KEY_DATA);
+  if (cached && cached.length > 0) {
+    const updated = cached.map((item) =>
+      item.type === failedType
+        ? { ...item, available: false, latency: -1, timestamp: Date.now() }
+        : item,
+    );
+    setCachedProbeResult(CACHE_KEY_DATA, updated);
+
+    const nextAvailable = updated
+      .filter((r) => r.available)
+      .sort((a, b) => a.latency - b.latency)[0];
+    currentBestDataProxy =
+      (nextAvailable?.type as DoubanDataProxyType | undefined) || 'direct';
+    return;
+  }
+
+  if (currentBestDataProxy === failedType || currentBestDataProxy === null) {
+    currentBestDataProxy = 'direct';
+  }
+}
 
 export function getBestDataProxySync(): DoubanDataProxyType {
   if (currentBestDataProxy) {
@@ -314,16 +353,18 @@ export function getBestDataProxySync(): DoubanDataProxyType {
       currentBestDataProxy = available[0].type as DoubanDataProxyType;
       return currentBestDataProxy;
     }
+    currentBestDataProxy = 'direct';
+    return currentBestDataProxy;
   }
 
-  if (!probeInProgress) {
-    probeInProgress = true;
+  if (!dataProbeInProgress) {
+    dataProbeInProgress = true;
     probeDataProxies()
       .then(({ best }) => {
         currentBestDataProxy = best;
       })
       .finally(() => {
-        probeInProgress = false;
+        dataProbeInProgress = false;
       });
   }
 
@@ -344,16 +385,18 @@ export function getBestImageProxySync(): DoubanImageProxyType {
       );
       return currentBestImageProxy;
     }
+    currentBestImageProxy = 'direct';
+    return currentBestImageProxy;
   }
 
-  if (!probeInProgress) {
-    probeInProgress = true;
+  if (!imageProbeInProgress) {
+    imageProbeInProgress = true;
     probeImageProxies()
       .then(({ best }) => {
         currentBestImageProxy = best;
       })
       .finally(() => {
-        probeInProgress = false;
+        imageProbeInProgress = false;
       });
   }
 

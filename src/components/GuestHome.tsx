@@ -31,6 +31,7 @@ export default function GuestHome() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | number>('');
+  const prefetchedCategoriesRef = useRef<Category[] | null>(null);
 
   const [items, setItems] = useState<Item[]>([]);
   const [page, setPage] = useState(1);
@@ -45,21 +46,35 @@ export default function GuestHome() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastFetchAtRef = useRef(0);
 
-  // 源列表：访客模式下接口只返回访客源
+  // 源列表：访客模式下接口只返回访客源（同时预带首源分类，减少一次串行请求）
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/source-browser/sites', {
-          cache: 'no-store',
-        });
+        const res = await fetch(
+          '/api/source-browser/sites?includeCategories=1',
+          {
+            cache: 'no-store',
+          },
+        );
         if (!res.ok) throw new Error('获取片源失败');
-        const data = await res.json();
+        const data = (await res.json()) as {
+          sources?: Source[];
+          initialCategories?: Category[];
+        };
         const list: Source[] = data.sources || [];
         if (cancelled) return;
         if (list.length === 0) {
           setSourceError('访客片源暂不可用，请登录后使用完整功能');
           return;
+        }
+        if (
+          Array.isArray(data.initialCategories) &&
+          data.initialCategories.length > 0
+        ) {
+          prefetchedCategoriesRef.current = data.initialCategories;
+          setCategories(data.initialCategories);
+          setActiveCategory(data.initialCategories[0]?.type_id ?? '');
         }
         setSource(list[0]);
       } catch (e) {
@@ -73,9 +88,13 @@ export default function GuestHome() {
     };
   }, []);
 
-  // 分类
+  // 分类（若 sites 接口未带回预取分类，则回退请求）
   useEffect(() => {
     if (!source) return;
+    if (prefetchedCategoriesRef.current) {
+      prefetchedCategoriesRef.current = null;
+      return;
+    }
     let cancelled = false;
     setCategories([]);
     setActiveCategory('');

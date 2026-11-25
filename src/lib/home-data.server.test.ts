@@ -6,6 +6,15 @@ import {
 } from './home-data.server';
 
 const mockFetchDoubanData = jest.fn();
+const mockDbGetCache = jest.fn();
+const mockDbSetCache = jest.fn();
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    getCache: (...args: unknown[]) => mockDbGetCache(...args),
+    setCache: (...args: unknown[]) => mockDbSetCache(...args),
+  },
+}));
 
 jest.mock('@/lib/douban', () => ({
   fetchDoubanData: (...args: unknown[]) => mockFetchDoubanData(...args),
@@ -48,11 +57,19 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+async function flushMicrotasks(ticks = 8) {
+  for (let i = 0; i < ticks; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('home data server cache', () => {
   beforeEach(() => {
     clearServerHomeDataMemoryCache();
     mockFetchDoubanData.mockReset();
     mockFetchDoubanData.mockResolvedValue(createDoubanResponse());
+    mockDbGetCache.mockReset().mockResolvedValue(null);
+    mockDbSetCache.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -81,6 +98,7 @@ describe('home data server cache', () => {
     const firstPromise = getServerInitialHomeData();
     const secondPromise = getServerInitialHomeData();
 
+    await flushMicrotasks();
     expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
     deferred.resolve(createDoubanResponse());
 
@@ -132,7 +150,7 @@ describe('home data server cache', () => {
     );
 
     const pending = getServerInitialHomeData();
-    await Promise.resolve();
+    await flushMicrotasks();
     jest.advanceTimersByTime(DATA_FETCH_TIMEOUTS.CRITICAL);
 
     await expect(pending).resolves.toEqual({
@@ -144,6 +162,37 @@ describe('home data server cache', () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
+  it('returns fresh DB cached movies without calling upstream', async () => {
+    mockDbGetCache.mockResolvedValueOnce({
+      data: [movieItem],
+      freshUntil: Date.now() + 60_000,
+    });
+
+    const data = await getServerInitialHomeData();
+
+    expect(data).toEqual(partialHomeData);
+    expect(mockDbGetCache).toHaveBeenCalledTimes(1);
+    expect(mockFetchDoubanData).not.toHaveBeenCalled();
+  });
+
+  it('returns stale DB cached movies immediately and refreshes in background', async () => {
+    mockDbGetCache.mockResolvedValueOnce({
+      data: [movieItem],
+      freshUntil: Date.now() - 1000,
+    });
+    mockFetchDoubanData.mockResolvedValueOnce(
+      createDoubanResponse('后台新电影'),
+    );
+
+    const data = await getServerInitialHomeData();
+    expect(data).toEqual(partialHomeData);
+    expect(mockFetchDoubanData).toHaveBeenCalledTimes(1);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    clearServerHomeDataMemoryCache();
+  });
+
   it('does not let an older request repopulate a cleared cache', async () => {
     const older = createDeferred<ReturnType<typeof createDoubanResponse>>();
     const newer = createDeferred<ReturnType<typeof createDoubanResponse>>();
@@ -152,6 +201,7 @@ describe('home data server cache', () => {
       .mockReturnValueOnce(newer.promise);
 
     const olderRequest = getServerInitialHomeData();
+    await flushMicrotasks();
     clearServerHomeDataMemoryCache();
     const newerRequest = getServerInitialHomeData();
 

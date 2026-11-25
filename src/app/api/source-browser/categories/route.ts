@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveRequestUser } from '@/lib/auth';
-import { API_CONFIG } from '@/lib/config';
 import {
   checkGuestRateLimit,
   isSourceAllowedForRequest,
 } from '@/lib/guest-source';
+import {
+  fetchSourceCategories,
+  SourceUpstreamError,
+} from '@/lib/source-browser.server';
 
 export const runtime = 'nodejs';
 
@@ -36,43 +39,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    const url = `${source.api}?ac=list`;
-    const res = await fetch(url, {
-      headers: API_CONFIG.search.headers,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
+    const categories = await fetchSourceCategories(source);
+
+    return NextResponse.json(
+      { categories },
+      !user
+        ? {
+            headers: {
+              'Cache-Control': 'public, max-age=300, s-maxage=300',
+            },
+          }
+        : undefined,
+    );
+  } catch (error: unknown) {
+    if (error instanceof SourceUpstreamError) {
       return NextResponse.json(
-        { error: `上游返回错误: ${res.status}` },
-        { status: res.status },
+        { error: error.message },
+        { status: error.status },
       );
     }
-    type AppleCMSClass = {
-      type_id?: string | number;
-      typeid?: string | number;
-      id?: string | number;
-      type_name?: string;
-      typename?: string;
-      name?: string;
-    };
-    const data = (await res.json()) as { class?: AppleCMSClass[] };
-    const classes: AppleCMSClass[] = Array.isArray(data.class)
-      ? data.class
-      : [];
-    const categories = classes
-      .map((c) => ({
-        type_id: c.type_id ?? c.typeid ?? c.id,
-        type_name: c.type_name ?? c.typename ?? c.name,
-      }))
-      .filter((c): c is { type_id: string | number; type_name: string } =>
-        Boolean(c.type_id && c.type_name),
-      );
-
-    return NextResponse.json({ categories });
-  } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json({ error: '请求超时' }, { status: 408 });
     }

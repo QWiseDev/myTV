@@ -1,6 +1,7 @@
 const mockCacheGet = jest.fn();
 const mockCacheSet = jest.fn();
 const mockGetBestDataProxySync = jest.fn();
+const mockMarkDataProxyFailed = jest.fn();
 
 jest.mock('./client-cache', () => ({
   ClientCache: {
@@ -11,6 +12,7 @@ jest.mock('./client-cache', () => ({
 
 jest.mock('./douban-proxy-detector', () => ({
   getBestDataProxySync: mockGetBestDataProxySync,
+  markDataProxyFailed: mockMarkDataProxyFailed,
 }));
 
 let getDoubanCategories: typeof import('./douban.client').getDoubanCategories;
@@ -29,6 +31,7 @@ describe('getDoubanCategories abort propagation', () => {
     mockCacheGet.mockReset().mockResolvedValue(null);
     mockCacheSet.mockReset().mockResolvedValue(undefined);
     mockGetBestDataProxySync.mockReset().mockReturnValue('direct');
+    mockMarkDataProxyFailed.mockReset();
   });
 
   afterEach(() => {
@@ -79,6 +82,71 @@ describe('getDoubanCategories abort propagation', () => {
     await rejection;
     expect(requestSignal?.aborted).toBe(true);
     expect(mockCacheSet).not.toHaveBeenCalled();
+  });
+
+  it('prefers valid localStorage cache without querying /api/cache', async () => {
+    const cachedResult = {
+      code: 200,
+      message: '获取成功',
+      list: [
+        { id: '1', title: '缓存片', poster: '', rate: '8.1', year: '2026' },
+      ],
+    };
+    localStorage.setItem(
+      'douban-categories-category=热门&kind=movie&pageLimit=20&pageStart=0&type=全部',
+      JSON.stringify({
+        data: cachedResult,
+        expire: Date.now() + 60_000,
+      }),
+    );
+
+    await expect(
+      getDoubanCategories({ kind: 'movie', category: '热门', type: '全部' }),
+    ).resolves.toEqual(cachedResult);
+
+    expect(mockCacheGet).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('respects explicit doubanDataSource in localStorage over detector', async () => {
+    localStorage.setItem('doubanDataSource', 'direct');
+    mockGetBestDataProxySync.mockReturnValue('cmliussss-cdn-ali');
+    const result = { code: 200, message: '获取成功', list: [] };
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue(result),
+    });
+
+    await expect(
+      getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
+    ).resolves.toEqual(result);
+
+    expect(mockGetBestDataProxySync).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/douban/categories?kind=tv&category=tv&type=tv&limit=20&start=0',
+      { signal: undefined },
+    );
+  });
+
+  it('marks failing CDN proxy failed and falls back to server API', async () => {
+    mockGetBestDataProxySync.mockReturnValue('cmliussss-cdn-ali');
+    const fallbackResult = { code: 200, message: '获取成功', list: [] };
+    (global.fetch as jest.Mock)
+      .mockRejectedValueOnce(new Error('CDN timeout'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue(fallbackResult),
+      });
+
+    await expect(
+      getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
+    ).resolves.toEqual(fallbackResult);
+
+    expect(mockMarkDataProxyFailed).toHaveBeenCalledWith('cmliussss-cdn-ali');
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      '/api/douban/categories?kind=tv&category=show&type=show&limit=20&start=0',
+      { signal: undefined },
+    );
   });
 });
 

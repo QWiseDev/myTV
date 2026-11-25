@@ -38,27 +38,54 @@ export function createPrefixedCache(
     return `${keyPrefix}${prefix}-${sortedParams}`;
   }
 
+  function readLocalCache<T>(key: string): T | null {
+    if (typeof localStorage === 'undefined') return null;
+
+    const localCached = localStorage.getItem(key);
+    if (!localCached) return null;
+
+    try {
+      const { data, expire } = JSON.parse(localCached);
+      if (Date.now() <= expire) {
+        return data as T;
+      }
+      localStorage.removeItem(key);
+    } catch {
+      localStorage.removeItem(key);
+    }
+    return null;
+  }
+
+  function writeLocalCache(
+    key: string,
+    data: unknown,
+    expireSeconds: number,
+  ): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const cacheData = {
+        data,
+        expire: Date.now() + expireSeconds * 1000,
+        created: Date.now(),
+      };
+      localStorage.setItem(key, JSON.stringify(cacheData));
+    } catch {
+      // localStorage可能满了，忽略错误
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 与接口签名保持一致
   async function getCache<T = any>(key: string): Promise<T | null> {
     try {
-      // 优先从统一存储获取
-      const cached = await ClientCache.get<T>(key);
-      if (cached) return cached;
+      // 优先同步命中 localStorage，避免每次刷新页面都要先发一次 /api/cache 网络往返
+      const localCached = readLocalCache<T>(key);
+      if (localCached) return localCached;
 
-      // 兜底：从localStorage获取（兼容性）
-      if (typeof localStorage !== 'undefined') {
-        const localCached = localStorage.getItem(key);
-        if (localCached) {
-          try {
-            const { data, expire } = JSON.parse(localCached);
-            if (Date.now() <= expire) {
-              return data;
-            }
-            localStorage.removeItem(key);
-          } catch (e) {
-            localStorage.removeItem(key);
-          }
-        }
+      // 本地未命中再查询统一存储（服务端 Redis/DB）并回填 localStorage
+      const cached = await ClientCache.get<T>(key);
+      if (cached) {
+        writeLocalCache(key, cached, 30 * 60);
+        return cached;
       }
 
       return null;
@@ -74,22 +101,11 @@ export function createPrefixedCache(
     expireSeconds: number,
   ): Promise<void> {
     try {
+      // 先写本地兜底缓存，保证同步/即时可用
+      writeLocalCache(key, data, expireSeconds);
+
       // 主要存储：统一存储
       await ClientCache.set(key, data, expireSeconds);
-
-      // 兜底存储：localStorage（兼容性，短期缓存）
-      if (typeof localStorage !== 'undefined') {
-        try {
-          const cacheData = {
-            data,
-            expire: Date.now() + expireSeconds * 1000,
-            created: Date.now(),
-          };
-          localStorage.setItem(key, JSON.stringify(cacheData));
-        } catch (e) {
-          // localStorage可能满了，忽略错误
-        }
-      }
     } catch (e) {
       console.warn(`设置${label}缓存失败:`, key, e);
     }
