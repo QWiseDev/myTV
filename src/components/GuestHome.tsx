@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { openLoginModal } from '@/lib/login-modal';
+import {
+  type GuestHomeInitialData,
+  type SourceVideoListResult,
+  pickDefaultSourceCategory,
+} from '@/lib/source-browser-shared';
 import { processImageUrl } from '@/lib/utils';
 
 import PageLayout from '@/components/PageLayout';
@@ -24,18 +29,61 @@ type Item = {
  * 访客版首页：未登录用户可见，仅展示访客源（爱奇艺）的片源目录，
  * 点击直达 /play 播放。登录后由 src/app/page.tsx 切换回常规首页。
  */
-export default function GuestHome() {
+export default function GuestHome({
+  initialData,
+}: {
+  initialData?: GuestHomeInitialData;
+}) {
   const router = useRouter();
-  const [source, setSource] = useState<Source | null>(null);
+  const [source, setSource] = useState<Source | null>(
+    initialData?.source ?? null,
+  );
   const [sourceError, setSourceError] = useState<string | null>(null);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string | number>('');
-  const prefetchedCategoriesRef = useRef<Category[] | null>(null);
+  const [categories, setCategories] = useState<Category[]>(
+    initialData?.categories ?? [],
+  );
+  const [activeCategory, setActiveCategory] = useState<string | number>(
+    initialData?.initialCategory ?? '',
+  );
+  const prefetchedCategoriesRef = useRef<Category[] | null>(
+    initialData && initialData.categories.length > 0
+      ? initialData.categories
+      : null,
+  );
+  const prefetchedListKeyRef = useRef<string | null>(
+    initialData?.source &&
+      initialData.initialCategory !== '' &&
+      initialData.initialList
+      ? `${initialData.source.key}:${String(initialData.initialCategory)}`
+      : null,
+  );
+  const listCacheRef = useRef<Map<string, SourceVideoListResult> | null>(null);
+  if (!listCacheRef.current) {
+    const map = new Map<string, SourceVideoListResult>();
+    if (
+      initialData?.source &&
+      initialData.initialCategory !== '' &&
+      initialData.initialList &&
+      initialData.initialList.items.length > 0
+    ) {
+      map.set(
+        `${initialData.source.key}:${String(initialData.initialCategory)}`,
+        initialData.initialList,
+      );
+    }
+    listCacheRef.current = map;
+  }
 
-  const [items, setItems] = useState<Item[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageCount, setPageCount] = useState(1);
+  const [items, setItems] = useState<Item[]>(
+    initialData?.initialList?.items ?? [],
+  );
+  const [page, setPage] = useState(
+    Number(initialData?.initialList?.meta.page || 1),
+  );
+  const [pageCount, setPageCount] = useState(
+    Number(initialData?.initialList?.meta.pagecount || 1),
+  );
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
@@ -45,14 +93,16 @@ export default function GuestHome() {
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastFetchAtRef = useRef(0);
+  const fetchReqIdRef = useRef(0);
 
-  // 源列表：访客模式下接口只返回访客源（同时预带首源分类，减少一次串行请求）
+  // 源列表：若 SSR 未直出，则用 includeCategories=1&includeList=1 一次拉齐分类与首屏列表
   useEffect(() => {
+    if (initialData?.source) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(
-          '/api/source-browser/sites?includeCategories=1',
+          '/api/source-browser/sites?includeCategories=1&includeList=1',
           {
             cache: 'no-store',
           },
@@ -61,6 +111,8 @@ export default function GuestHome() {
         const data = (await res.json()) as {
           sources?: Source[];
           initialCategories?: Category[];
+          initialCategory?: string | number;
+          initialList?: SourceVideoListResult;
         };
         const list: Source[] = data.sources || [];
         if (cancelled) return;
@@ -68,15 +120,36 @@ export default function GuestHome() {
           setSourceError('访客片源暂不可用，请登录后使用完整功能');
           return;
         }
+        const firstSource = list[0];
         if (
           Array.isArray(data.initialCategories) &&
           data.initialCategories.length > 0
         ) {
           prefetchedCategoriesRef.current = data.initialCategories;
           setCategories(data.initialCategories);
-          setActiveCategory(data.initialCategories[0]?.type_id ?? '');
+          const pickedCategory =
+            data.initialCategory !== undefined
+              ? data.initialCategory
+              : (pickDefaultSourceCategory(data.initialCategories, false)
+                  ?.type_id ?? '');
+          setActiveCategory(pickedCategory);
+
+          if (
+            pickedCategory !== '' &&
+            data.initialList &&
+            Array.isArray(data.initialList.items)
+          ) {
+            const listKey = `${firstSource.key}:${String(pickedCategory)}`;
+            if (data.initialList.items.length > 0) {
+              listCacheRef.current?.set(listKey, data.initialList);
+            }
+            prefetchedListKeyRef.current = listKey;
+            setItems(data.initialList.items);
+            setPage(Number(data.initialList.meta?.page || 1));
+            setPageCount(Number(data.initialList.meta?.pagecount || 1));
+          }
         }
-        setSource(list[0]);
+        setSource(firstSource);
       } catch (e) {
         if (!cancelled) {
           setSourceError(e instanceof Error ? e.message : '获取片源失败');
@@ -86,9 +159,9 @@ export default function GuestHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialData]);
 
-  // 分类（若 sites 接口未带回预取分类，则回退请求）
+  // 分类（若 SSR 或 sites 接口未带回预取分类，则回退请求）
   useEffect(() => {
     if (!source) return;
     if (prefetchedCategoriesRef.current) {
@@ -121,15 +194,41 @@ export default function GuestHome() {
   const fetchPage = useCallback(
     async (p: number, append: boolean) => {
       if (!source) return;
+      const trimmedKeyword = searchKeyword.trim();
+      if (!trimmedKeyword && p === 1 && !append) {
+        if (!activeCategory) {
+          setItems([]);
+          setPageCount(1);
+          return;
+        }
+        const listKey = `${source.key}:${String(activeCategory)}`;
+        if (prefetchedListKeyRef.current === listKey) {
+          prefetchedListKeyRef.current = null;
+          return;
+        }
+        const cached = listCacheRef.current?.get(listKey);
+        if (cached) {
+          fetchReqIdRef.current += 1;
+          setLoadingMore(false);
+          setLoadingItems(false);
+          setItemsError(null);
+          setItems(cached.items);
+          setPage(Number(cached.meta?.page || 1));
+          setPageCount(Number(cached.meta?.pagecount || 1));
+          return;
+        }
+      }
+
+      const reqId = ++fetchReqIdRef.current;
       if (append) setLoadingMore(true);
       else setLoadingItems(true);
       setItemsError(null);
       try {
         let url: string;
-        if (searchKeyword.trim()) {
+        if (trimmedKeyword) {
           url = `/api/source-browser/search?source=${encodeURIComponent(
             source.key,
-          )}&q=${encodeURIComponent(searchKeyword.trim())}&page=${p}`;
+          )}&q=${encodeURIComponent(trimmedKeyword)}&page=${p}`;
         } else {
           if (!activeCategory) {
             setItems([]);
@@ -141,21 +240,29 @@ export default function GuestHome() {
           )}&type_id=${encodeURIComponent(String(activeCategory))}&page=${p}`;
         }
         const res = await fetch(url);
+        if (reqId !== fetchReqIdRef.current) return;
         if (!res.ok) throw new Error('获取列表失败');
-        const data = (await res.json()) as {
-          items?: Item[];
-          meta?: { page?: number; pagecount?: number };
-        };
+        const data = (await res.json()) as SourceVideoListResult;
+        if (reqId !== fetchReqIdRef.current) return;
         const list: Item[] = data.items || [];
+        if (!trimmedKeyword && p === 1 && !append && list.length > 0) {
+          listCacheRef.current?.set(
+            `${source.key}:${String(activeCategory)}`,
+            data,
+          );
+        }
         setItems((prev) => (append ? [...prev, ...list] : list));
         setPage(Number(data.meta?.page || p));
         setPageCount(Number(data.meta?.pagecount || 1));
       } catch (e) {
+        if (reqId !== fetchReqIdRef.current) return;
         setItemsError(e instanceof Error ? e.message : '获取列表失败');
         if (!append) setItems([]);
       } finally {
-        setLoadingMore(false);
-        setLoadingItems(false);
+        if (reqId === fetchReqIdRef.current) {
+          setLoadingMore(false);
+          setLoadingItems(false);
+        }
       }
     },
     [source, activeCategory, searchKeyword],

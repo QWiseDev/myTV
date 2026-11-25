@@ -21,6 +21,8 @@ export interface SourceFetchOptions {
 export interface SourceWarmTarget {
   source: ApiSite;
   isAdult?: boolean;
+  /** 除默认分类外，最多预热前 N 个分类的第 1 页（默认 1） */
+  maxWarmCategories?: number;
 }
 
 type AppleCMSClass = {
@@ -389,7 +391,7 @@ export async function warmSourceBrowserSources(
   });
 
   await Promise.allSettled(
-    uniqueTargets.map(async ({ source, isAdult }) => {
+    uniqueTargets.map(async ({ source, isAdult, maxWarmCategories = 1 }) => {
       const categories = await fetchSourceCategories(source, {
         forceRefresh: true,
       });
@@ -397,10 +399,22 @@ export async function warmSourceBrowserSources(
         categories,
         Boolean(isAdult),
       );
-      if (defaultCategory) {
-        await fetchSourceVideoList(source, String(defaultCategory.type_id), 1, {
-          forceRefresh: true,
-        });
+      if (!defaultCategory) return;
+
+      const limit = Math.max(1, maxWarmCategories);
+      const categoriesToWarm = [
+        defaultCategory,
+        ...categories.filter((c) => c.type_id !== defaultCategory.type_id),
+      ].slice(0, limit);
+
+      for (const category of categoriesToWarm) {
+        try {
+          await fetchSourceVideoList(source, String(category.type_id), 1, {
+            forceRefresh: true,
+          });
+        } catch {
+          // 单分类预热失败不阻塞同源其余分类预热
+        }
       }
     }),
   );

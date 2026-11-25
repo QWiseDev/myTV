@@ -1,5 +1,6 @@
 const mockHeaders = jest.fn();
 const mockGetServerInitialHomeData = jest.fn();
+const mockGetServerInitialGuestHomeData = jest.fn();
 
 jest.mock('next/headers', () => ({
   headers: () => mockHeaders(),
@@ -7,6 +8,10 @@ jest.mock('next/headers', () => ({
 
 jest.mock('@/lib/home-data.server', () => ({
   getServerInitialHomeData: mockGetServerInitialHomeData,
+}));
+
+jest.mock('@/lib/guest-home.server', () => ({
+  getServerInitialGuestHomeData: mockGetServerInitialGuestHomeData,
 }));
 
 jest.mock('@/components/HomeClient', () => ({
@@ -66,15 +71,41 @@ describe('Home page initial data', () => {
   beforeEach(() => {
     mockHeaders.mockReset();
     mockGetServerInitialHomeData.mockReset();
+    mockGetServerInitialGuestHomeData.mockReset().mockResolvedValue(undefined);
   });
 
-  it('renders GuestHome for requests without a cookie', async () => {
+  it('renders GuestHome with SSR preloaded guest data for requests without a cookie', async () => {
+    const guestInitialData = {
+      source: {
+        key: 'iqiyizyapi.com',
+        name: '爱奇艺',
+        api: 'https://iqiyizyapi.com/api.php/provide/vod/',
+      },
+      categories: [{ type_id: 1, type_name: '电影' }],
+      initialCategory: 1,
+      initialList: {
+        items: [
+          {
+            id: 'g1',
+            title: '访客预加载影片',
+            poster: '',
+            year: '2026',
+            type_name: '电影',
+            remarks: 'HD',
+          },
+        ],
+        meta: { page: 1, pagecount: 1, total: 1, limit: 20 },
+      },
+    };
     mockHeaders.mockReturnValue({ get: () => null });
+    mockGetServerInitialGuestHomeData.mockResolvedValueOnce(guestInitialData);
 
     const element = await getRenderedComponents();
 
     expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+    expect(mockGetServerInitialGuestHomeData).toHaveBeenCalledTimes(1);
     expect(element.type).toBe(GuestHome);
+    expect(element.props.initialData).toEqual(guestInitialData);
   });
 
   it('renders GuestHome when the cookie has no username/signature', async () => {
@@ -83,7 +114,27 @@ describe('Home page initial data', () => {
     const element = await getRenderedComponents();
 
     expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+    expect(mockGetServerInitialGuestHomeData).toHaveBeenCalledTimes(1);
     expect(element.type).toBe(GuestHome);
+  });
+
+  it('falls back to undefined initialData when guest server preloading fails', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockHeaders.mockReturnValue({ get: () => null });
+    mockGetServerInitialGuestHomeData.mockRejectedValueOnce(
+      new Error('guest cache failed'),
+    );
+
+    try {
+      const element = await getRenderedComponents();
+
+      expect(element.type).toBe(GuestHome);
+      expect(element.props.initialData).toBeUndefined();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('uses the SSR initial-data reader for authenticated requests', async () => {

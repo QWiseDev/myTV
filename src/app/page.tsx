@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 
+import { getServerInitialGuestHomeData } from '@/lib/guest-home.server';
 import { getServerInitialHomeData } from '@/lib/home-data.server';
 import { EMPTY_HOME_DATA } from '@/lib/home-data-types';
 
@@ -58,12 +59,22 @@ async function loadInitialHomeData() {
   }
 }
 
+async function loadInitialGuestData() {
+  try {
+    return await getServerInitialGuestHomeData();
+  } catch (error) {
+    console.error('访客首页首屏数据预取失败:', error);
+    return undefined;
+  }
+}
+
 export default async function Home() {
   const headerList = await headers();
   const loggedIn = hasLoginCookie(headerList.get('cookie'));
 
   if (!loggedIn) {
-    return <GuestHome />;
+    const initialGuestData = await loadInitialGuestData();
+    return <GuestHome initialData={initialGuestData} />;
   }
 
   const initialHomeData = await loadInitialHomeData();

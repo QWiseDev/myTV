@@ -104,7 +104,11 @@ async function warmSourceBrowserCache() {
     isAdult: true,
   }));
   if (guestSource) {
-    targets.push({ source: guestSource, isAdult: false });
+    targets.push({
+      source: guestSource,
+      isAdult: false,
+      maxWarmCategories: 4,
+    });
   }
   if (targets.length === 0) return;
   await warmSourceBrowserSources(targets);

@@ -268,6 +268,59 @@ describe('source-browser.server cache', () => {
     expect(list.items[0].id).toBe('a1');
     expect(global.fetch).toHaveBeenCalledTimes(3);
   });
+
+  it('warmSourceBrowserSources warms up to maxWarmCategories categories per source', async () => {
+    const guestSource = {
+      key: 'iqiyizyapi.com',
+      name: '爱奇艺',
+      api: 'https://iqiyizyapi.com/api.php/provide/vod/',
+    };
+
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      if (url.includes('ac=list')) {
+        return {
+          ok: true,
+          json: async () => ({
+            class: [
+              { type_id: 1, type_name: '电影' },
+              { type_id: 2, type_name: '连续剧' },
+              { type_id: 3, type_name: '综艺' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('t=2')) {
+        return { ok: false, status: 502 };
+      }
+      if (url.includes('ac=videolist')) {
+        return {
+          ok: true,
+          json: async () => ({
+            list: [{ vod_id: 'v1', vod_name: '片源', vod_pic: '' }],
+          }),
+        };
+      }
+      return { ok: false, status: 500 };
+    });
+
+    await warmSourceBrowserSources([
+      { source: guestSource, isAdult: false, maxWarmCategories: 3 },
+    ]);
+
+    expect(
+      (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0])),
+    ).toEqual([
+      'https://iqiyizyapi.com/api.php/provide/vod/?ac=list',
+      'https://iqiyizyapi.com/api.php/provide/vod/?ac=videolist&t=1&pg=1',
+      'https://iqiyizyapi.com/api.php/provide/vod/?ac=videolist&t=2&pg=1',
+      'https://iqiyizyapi.com/api.php/provide/vod/?ac=videolist&t=3&pg=1',
+    ]);
+
+    // 成功的第 1、3 分类应直接命中内存
+    await fetchSourceVideoList(guestSource, '1', 1);
+    await fetchSourceVideoList(guestSource, '3', 1);
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+  });
 });
 
 export {};

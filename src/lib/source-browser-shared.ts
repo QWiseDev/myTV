@@ -30,6 +30,13 @@ export interface SourceVideoListResult {
   meta: SourceVideoListMeta;
 }
 
+export interface GuestHomeInitialData {
+  source: SourceSiteItem;
+  categories: SourceCategoryItem[];
+  initialCategory: string | number | '';
+  initialList?: SourceVideoListResult;
+}
+
 export const ADULT_DEFAULT_CATEGORY_NAME = 'AI短剧';
 
 /** 选择默认分类：黄果模块优先命中「AI短剧」，否则回退首项 */
