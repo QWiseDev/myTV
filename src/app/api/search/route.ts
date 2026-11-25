@@ -3,7 +3,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
-import { getAvailableApiSites, getCacheTime, getConfig } from '@/lib/config';
+import {
+  BUILT_IN_ADULT_SOURCES,
+  getAdultApiSites,
+  getAvailableApiSites,
+  getCacheTime,
+  getConfig,
+} from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import {
@@ -25,6 +31,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
+  const group = searchParams.get('group');
+  const forSource = searchParams.get('forSource') || '';
 
   if (!query) {
     const cacheTime = await getCacheTime();
@@ -42,7 +50,18 @@ export async function GET(request: NextRequest) {
   }
 
   const config = await getConfig();
-  const apiSites = await getAvailableApiSites(authInfo.username);
+  const isAdultSource = Boolean(
+    forSource &&
+    (config.SourceConfig?.some((s) => s.key === forSource && s.adult) ||
+      BUILT_IN_ADULT_SOURCES.some((s) => s.key === forSource)),
+  );
+  const isAdultSearch = group === 'adult' || isAdultSource;
+  const candidateSites = isAdultSearch
+    ? await getAdultApiSites(authInfo.username)
+    : await getAvailableApiSites(authInfo.username);
+  const apiSites = forSource
+    ? candidateSites.filter((site) => site.key !== forSource)
+    : candidateSites;
 
   // 添加超时控制和错误处理，避免慢接口拖累整体响应；近期连续超时的站点
   // 直接跳过（站点级隔离），防止挂死站点把整体完成时间钉在超时上限
@@ -74,11 +93,17 @@ export async function GET(request: NextRequest) {
       .filter((result) => result.status === 'fulfilled')
       .map((result) => (result as PromiseFulfilledResult<any>).value);
     let flattenedResults = successResults.flat();
-    if (!config.SiteConfig.DisableYellowFilter) {
+    if (!isAdultSearch && !config.SiteConfig.DisableYellowFilter) {
       flattenedResults = flattenedResults.filter((result) => {
         const typeName = result.type_name || '';
         return !yellowWords.some((word: string) => typeName.includes(word));
       });
+    }
+    if (isAdultSearch) {
+      flattenedResults = flattenedResults.map((result) => ({
+        ...result,
+        adult: true,
+      }));
     }
     const cacheTime = await getCacheTime();
 
@@ -87,17 +112,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ results: [] }, { status: 200 });
     }
 
-    return NextResponse.json(
-      { results: flattenedResults },
-      {
-        headers: {
-          'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
-          'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Netlify-Vary': 'query',
-        },
-      },
-    );
+    const headers: Record<string, string> =
+      isAdultSearch || Boolean(forSource)
+        ? { 'Cache-Control': 'private, no-store' }
+        : {
+            'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
+            'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
+            'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
+            'Netlify-Vary': 'query',
+          };
+
+    return NextResponse.json({ results: flattenedResults }, { headers });
   } catch (error) {
     return NextResponse.json({ error: '搜索失败' }, { status: 500 });
   }

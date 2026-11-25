@@ -4,7 +4,7 @@ import { resolveRequestUser } from '@/lib/auth';
 import { getDetailFromApi } from '@/lib/downstream';
 import {
   checkGuestRateLimit,
-  isSourceAllowedForRequest,
+  resolveAllowedSourceForRequest,
 } from '@/lib/guest-source';
 
 // 🔧 新增：基于参数的内存缓存
@@ -12,6 +12,13 @@ const detailCache = new Map<string, { data: unknown; timestamp: number }>();
 const DETAIL_CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
 
 export const runtime = 'nodejs';
+
+function withAdultFlag(data: unknown, isAdult: boolean): unknown {
+  if (!isAdult || !data || typeof data !== 'object') {
+    return data;
+  }
+  return { ...(data as Record<string, unknown>), adult: true };
+}
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
@@ -34,18 +41,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const apiSite = await isSourceAllowedForRequest(
+    const resolvedSource = await resolveAllowedSourceForRequest(
       user?.username ?? null,
       sourceCode,
     );
 
-    if (!apiSite) {
+    if (!resolvedSource) {
       // 访客仅允许访客源，其余来源按 403 拒绝；登录用户保持原 400 语义
       return NextResponse.json(
         { error: user ? '无效的API来源' : '访客仅可访问指定片源' },
         { status: user ? 400 : 403 },
       );
     }
+
+    const { site: apiSite, isAdult } = resolvedSource;
 
     // 🎯 生成缓存键
     const cacheKey = `${sourceCode}:${id}`;
@@ -56,10 +65,12 @@ export async function GET(request: NextRequest) {
     if (cached && now - cached.timestamp < DETAIL_CACHE_DURATION) {
       const remainingTime = DETAIL_CACHE_DURATION - (now - cached.timestamp);
       // 🎯 返回缓存数据，并设置浏览器和CDN缓存头
-      return NextResponse.json(cached.data, {
+      return NextResponse.json(withAdultFlag(cached.data, isAdult), {
         headers: {
-          'Cache-Control': `public, max-age=${Math.floor(remainingTime / 1000)}, s-maxage=${Math.floor(remainingTime / 1000)}`,
-          ETag: `"${cacheKey}-${cached.timestamp}"`,
+          'Cache-Control': isAdult
+            ? 'private, no-store'
+            : `public, max-age=${Math.floor(remainingTime / 1000)}, s-maxage=${Math.floor(remainingTime / 1000)}`,
+          ETag: `"${cacheKey}-${cached.timestamp}${isAdult ? '-adult' : ''}"`,
         },
       });
     }
@@ -83,10 +94,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 🎯 返回新数据，并设置浏览器和CDN缓存头
-    return NextResponse.json(result, {
+    return NextResponse.json(withAdultFlag(result, isAdult), {
       headers: {
-        'Cache-Control': `public, max-age=${DETAIL_CACHE_DURATION / 1000}, s-maxage=${DETAIL_CACHE_DURATION / 1000}`,
-        ETag: `"${cacheKey}-${now}"`,
+        'Cache-Control': isAdult
+          ? 'private, no-store'
+          : `public, max-age=${DETAIL_CACHE_DURATION / 1000}, s-maxage=${DETAIL_CACHE_DURATION / 1000}`,
+        ETag: `"${cacheKey}-${now}${isAdult ? '-adult' : ''}"`,
       },
     });
   } catch (error) {

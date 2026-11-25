@@ -21,29 +21,48 @@ export async function getGuestSource(): Promise<ApiSite | null> {
   return sites.find((site) => site.key === GUEST_SOURCE_KEY) || null;
 }
 
+export interface ResolvedAllowedSource {
+  site: ApiSite;
+  isAdult: boolean;
+}
+
 /**
- * 判断请求中的 source 是否允许被该用户访问：
- * 登录用户走原有 getAvailableApiSites(username) 过滤，成人源（黄果模块）对登录用户
- * 同样开放；访客仅限访客源。
+ * 判断请求中的 source 是否允许被该用户访问，并标明是否属于成人源（黄果模块）：
+ * 登录用户走原有 getAvailableApiSites(username) 过滤，成人源对登录用户同样开放；
+ * 访客仅限访客源。
  */
-export async function isSourceAllowedForRequest(
+export async function resolveAllowedSourceForRequest(
   username: string | null,
   sourceKey: string | undefined,
-): Promise<ApiSite | null> {
+): Promise<ResolvedAllowedSource | null> {
   if (!sourceKey) return null;
 
   if (username) {
     const sites = await getAvailableApiSites(username);
     const site = sites.find((s) => s.key === sourceKey);
-    if (site) return site;
+    if (site) return { site, isAdult: false };
 
     // 常规源未命中时，登录用户可访问成人源（黄果模块）
     const adultSites = await getAdultApiSites(username);
-    return adultSites.find((s) => s.key === sourceKey) || null;
+    const adultSite = adultSites.find((s) => s.key === sourceKey);
+    return adultSite ? { site: adultSite, isAdult: true } : null;
   }
 
   const guestSource = await getGuestSource();
-  return guestSource && guestSource.key === sourceKey ? guestSource : null;
+  return guestSource && guestSource.key === sourceKey
+    ? { site: guestSource, isAdult: false }
+    : null;
+}
+
+/**
+ * 判断请求中的 source 是否允许被该用户访问（仅返回站点信息）。
+ */
+export async function isSourceAllowedForRequest(
+  username: string | null,
+  sourceKey: string | undefined,
+): Promise<ApiSite | null> {
+  const resolved = await resolveAllowedSourceForRequest(username, sourceKey);
+  return resolved?.site || null;
 }
 
 // 访客匿名请求限速：每 IP 每 bucket 每分钟 60 次

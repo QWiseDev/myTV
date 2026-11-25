@@ -35,6 +35,12 @@ export const generateChinesePunctuationVariants = (query: string): string[] => {
     return variants;
   }
 
+  // 去掉书名号（常见于短剧名如《裙下之臣：逃出魔窟》），优先保留核心标点再尝试其他变体
+  const withoutBookMarks = query.replace(/[《》]/g, '').trim();
+  if (withoutBookMarks && withoutBookMarks !== query) {
+    variants.push(withoutBookMarks);
+  }
+
   // 中文冒号变体 (针对"死神来了：血脉诅咒"这种情况)
   if (query.includes('：')) {
     // 优先级1: 替换为空格 (最可能匹配，如"死神来了 血脉诅咒" 能匹配到 "死神来了6：血脉诅咒")
@@ -199,6 +205,10 @@ export const checkAllKeywordsMatch = (
     .replace(/[^\w\s\u4e00-\u9fff]/g, '')
     .split(/\s+/)
     .filter((w) => w.length > 0);
+
+  if (queryWords.length === 0) {
+    return false;
+  }
 
   // 检查结果标题是否包含查询中的所有关键词
   return queryWords.every((word) => resultTitle.includes(word));

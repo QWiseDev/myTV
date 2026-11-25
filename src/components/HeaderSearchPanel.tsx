@@ -202,7 +202,6 @@ export default function HeaderSearchPanel({
     params.set('id', item.id);
     params.set('title', item.title);
     if (item.year) params.set('year', item.year);
-    params.set('prefer', 'true');
     router.push(`/play?${params.toString()}`);
   };
 

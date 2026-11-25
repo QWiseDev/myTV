@@ -203,8 +203,6 @@ export default function TVBoxExplorePage() {
     params.set('id', item.id);
     params.set('title', item.title || '');
     if (item.year) params.set('year', item.year);
-    // 告诉播放页尝试优选
-    params.set('prefer', 'true');
     router.push(`/play?${params.toString()}`);
   };
 

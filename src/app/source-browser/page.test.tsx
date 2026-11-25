@@ -183,4 +183,80 @@ describe('SourceBrowserPage initial bundle & cache', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('navigates directly to the selected adult source without prefer=true when clicking play', async () => {
+    const fetchMock = jest.fn(async (url: string) => {
+      if (url.startsWith('/api/source-browser/sites')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sources: [
+              {
+                key: 'jp98.vip',
+                name: '黄果',
+                api: 'https://jp98.vip/api.php/provide/vod/',
+              },
+            ],
+            initialCategories: [{ type_id: 57, type_name: 'AI短剧' }],
+            initialCategory: 57,
+            initialList: {
+              items: [
+                {
+                  id: '39394',
+                  title: '《裙下之臣：逃出魔窟》',
+                  poster: '',
+                  year: '2026',
+                  type_name: 'AI短剧',
+                  remarks: '完结',
+                },
+              ],
+              meta: { page: 1, pagecount: 1, total: 1, limit: 20 },
+            },
+          }),
+        };
+      }
+      if (url.startsWith('/api/detail')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: '39394',
+            source: 'jp98.vip',
+            source_name: '黄果',
+            title: '《裙下之臣：逃出魔窟》',
+            year: '2026',
+            episodes: ['https://jp98.vip/1.m3u8'],
+            episodes_titles: ['第1集'],
+            adult: true,
+          }),
+        };
+      }
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const SourceBrowserPage = (await import('./page')).default;
+    render(<SourceBrowserPage />);
+
+    const cardTitle = await screen.findByText('《裙下之臣：逃出魔窟》');
+    fireEvent.click(cardTitle);
+
+    const playButton = await screen.findByRole('button', { name: '立即播放' });
+    fireEvent.click(playButton);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const pushedUrl = String(mockPush.mock.calls[0][0]);
+    const parsed = new URL(pushedUrl, 'https://example.com');
+    expect(parsed.pathname).toBe('/play');
+    expect(parsed.searchParams.get('source')).toBe('jp98.vip');
+    expect(parsed.searchParams.get('id')).toBe('39394');
+    expect(parsed.searchParams.get('title')).toBe('《裙下之臣：逃出魔窟》');
+    expect(parsed.searchParams.get('year')).toBe('2026');
+    expect(parsed.searchParams.has('prefer')).toBe(false);
+  });
 });

@@ -11,6 +11,7 @@ import {
   dedupeSources,
   findSourceByIdentity,
   hydrateSourceDetail,
+  isSameSource,
   replaceSourceDetail,
   resolveDoubanId,
 } from '../utils/sourceDetails';
@@ -22,6 +23,7 @@ import {
   fuzzyMatchSources,
   matchesSourceLoosely,
   matchesSourceStrictly,
+  normalizeSearchYear,
   searchSourcesByTitle,
 } from '../utils/sourceSearch';
 
@@ -41,7 +43,7 @@ export interface UseSourceInitializationParams {
   fallbackCover?: string;
   fallbackDoubanId?: number;
   searchType: string;
-  needPreferRef: MutableRefObject<boolean>;
+  needPreferRef?: MutableRefObject<boolean>;
   optimizationEnabled: boolean;
   deviceInfo: DeviceInfo;
   setNeedPrefer: (value: boolean) => void;
@@ -86,7 +88,6 @@ export function useSourceInitialization({
   fallbackCover,
   fallbackDoubanId,
   searchType,
-  needPreferRef,
   optimizationEnabled,
   deviceInfo,
   setNeedPrefer,
@@ -193,18 +194,46 @@ export function useSourceInitialization({
 
     const fetchSourcesData = async (
       query: string,
-      options?: { silent?: boolean },
+      options?: {
+        silent?: boolean;
+        year?: string;
+        referenceTitle?: string;
+        group?: string;
+        forSource?: string;
+        excludeSource?: string;
+      },
     ): Promise<SearchResult[]> => {
       const silent = options?.silent === true;
       try {
-        const referenceTitle = videoTitle || searchTitle || query;
+        const referenceTitle = (
+          options?.referenceTitle ||
+          videoTitle ||
+          searchTitle ||
+          query
+        ).trim();
+        const effectiveYear = normalizeSearchYear(
+          options?.year ?? videoYearRef.current,
+        );
+        const extraSearchParams: Record<string, string> = {};
+        if (options?.group) {
+          extraSearchParams.group = options.group;
+        }
+        if (options?.forSource) {
+          extraSearchParams.forSource = options.forSource;
+        }
         const { allResults, bestResults } = await searchSourcesByTitle({
           query,
           minMatchesToStop: 5,
+          extraSearchParams:
+            Object.keys(extraSearchParams).length > 0
+              ? extraSearchParams
+              : undefined,
           matchResult: (result) =>
+            (!options?.excludeSource ||
+              result.source !== options.excludeSource) &&
             matchesSourceStrictly(result, {
               queryTitle: referenceTitle,
-              year: videoYearRef.current,
+              year: effectiveYear,
               searchType,
             }),
           onVariantError: (variant, error) =>
@@ -217,10 +246,15 @@ export function useSourceInitialization({
         let finalResults = bestResults;
 
         if (bestResults.length === 0) {
-          finalResults = fuzzyMatchSources(
-            allResults,
-            videoTitleRef.current || '',
-          );
+          const filteredCandidates = options?.excludeSource
+            ? allResults.filter(
+                (result) => result.source !== options.excludeSource,
+              )
+            : allResults;
+          finalResults = fuzzyMatchSources(filteredCandidates, referenceTitle, {
+            year: effectiveYear,
+            searchType,
+          });
         }
 
         return finalResults;
@@ -246,14 +280,41 @@ export function useSourceInitialization({
       ).trim();
       if (!query) return;
 
+      const referenceTitle = (
+        currentDetail.title ||
+        videoTitle ||
+        searchTitle ||
+        query
+      ).trim();
+      const effectiveYear = normalizeSearchYear(
+        currentDetail.year || videoYearRef.current,
+      );
+      const isAdultDetail = currentDetail.adult === true;
+
       setSourceSearchLoading(true);
-      const searchedSources = await fetchSourcesData(query, { silent: true });
+      const searchedSources = await fetchSourcesData(query, {
+        silent: true,
+        year: effectiveYear,
+        referenceTitle,
+        ...(isAdultDetail
+          ? {
+              group: 'adult',
+              forSource: currentDetail.source,
+              excludeSource: currentDetail.source,
+            }
+          : {}),
+      });
       if (!isActive() || searchedSources.length === 0) return;
 
-      // 优先源紧跟当前源之后置顶，保持换源面板的排序一致性
+      // 优先源紧跟当前源之后置顶，并跳过同身份源以免覆盖已补全的 currentDetail
+      const otherSources = searchedSources.filter(
+        (source) => !isSameSource(source, currentDetail),
+      );
+      if (otherSources.length === 0) return;
+
       const mergedSources = dedupeSources([
         currentDetail,
-        ...sortSourcesByPriority(searchedSources),
+        ...sortSourcesByPriority(otherSources),
       ]);
       setAvailableSources(mergedSources);
     };
@@ -294,12 +355,12 @@ export function useSourceInitialization({
             : '🔍 正在搜索播放源...',
         );
 
-        const directSourceRequested =
-          Boolean(currentSource && currentId) && !needPreferRef.current;
+        // 链接显式指定了 source + id 时，无论是否携带 prefer=true，都优先直连该源
+        const hasExplicitSource = Boolean(currentSource && currentId);
         let sourcesInfo: SearchResult[] = [];
         let ignoreProvidedSource = false;
 
-        if (directSourceRequested) {
+        if (hasExplicitSource) {
           const providedSourceDetail = await fetchSourceDetail(
             currentSource,
             currentId,
@@ -310,8 +371,11 @@ export function useSourceInitialization({
           );
           if (!isActive()) return;
 
-          if (providedSourceDetail.length > 0) {
-            sourcesInfo = providedSourceDetail;
+          const playableProvided = providedSourceDetail.filter(
+            (item) => Array.isArray(item.episodes) && item.episodes.length > 0,
+          );
+          if (playableProvided.length > 0) {
+            sourcesInfo = playableProvided;
           } else {
             ignoreProvidedSource = true;
             console.warn('提供的 source/id 不可用，退回站内搜索结果', {
@@ -325,39 +389,14 @@ export function useSourceInitialization({
           const query = searchTitle || videoTitle;
           if (query.trim()) {
             setSourceSearchLoading(true);
-            sourcesInfo = await fetchSourcesData(query);
+            sourcesInfo = await fetchSourcesData(query, {
+              forSource: hasExplicitSource ? currentSource : undefined,
+              excludeSource: hasExplicitSource ? currentSource : undefined,
+            });
             // 优先源置顶：测速优选只探测前列源，置顶可提高优质源命中率
             sourcesInfo = sortSourcesByPriority(sourcesInfo);
           }
           if (!isActive()) return;
-
-          if (
-            currentSource &&
-            currentId &&
-            !findSourceByIdentity(sourcesInfo, {
-              source: currentSource,
-              id: currentId,
-            })
-          ) {
-            const providedSourceDetail = await fetchSourceDetail(
-              currentSource,
-              currentId,
-              {
-                silent: true,
-                includeRelatedSources: false,
-              },
-            );
-            if (!isActive()) return;
-            if (providedSourceDetail.length > 0) {
-              sourcesInfo = providedSourceDetail;
-            } else {
-              ignoreProvidedSource = true;
-              console.warn('提供的 source/id 不可用，继续使用站内搜索结果', {
-                source: currentSource,
-                id: currentId,
-              });
-            }
-          }
         }
 
         if (sourcesInfo.length === 0) {
@@ -368,12 +407,7 @@ export function useSourceInitialization({
         setAvailableSources(sourcesInfo);
 
         let detailData: SearchResult = sourcesInfo[0];
-        if (
-          currentSource &&
-          currentId &&
-          !needPreferRef.current &&
-          !ignoreProvidedSource
-        ) {
+        if (hasExplicitSource && !ignoreProvidedSource) {
           const target = findSourceByIdentity(sourcesInfo, {
             source: currentSource,
             id: currentId,
@@ -387,10 +421,7 @@ export function useSourceInitialization({
         }
 
         if (
-          (!currentSource ||
-            !currentId ||
-            needPreferRef.current ||
-            ignoreProvidedSource) &&
+          (!hasExplicitSource || ignoreProvidedSource) &&
           optimizationEnabled
         ) {
           setLoadingStage('preferring');
@@ -459,7 +490,7 @@ export function useSourceInitialization({
         setDetail(resolvedDetail);
         sourceSearchLoaderRef.current = () =>
           enrichAvailableSources(resolvedDetail);
-        if (directSourceRequested) {
+        if (hasExplicitSource && !ignoreProvidedSource) {
           void enrichAvailableSources(resolvedDetail);
         }
         if (currentEpisodeIndexRef.current >= resolvedDetail.episodes.length) {
@@ -514,7 +545,6 @@ export function useSourceInitialization({
     deviceInfo,
     detailRef,
     handleError,
-    needPreferRef,
     optimizationEnabled,
     searchTitle,
     fallbackTitle,

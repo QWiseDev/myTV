@@ -474,6 +474,15 @@ function generateChinesePunctuationVariants(query: string): string[] {
     return variants;
   }
 
+  // 去掉书名号（如《裙下之臣：逃出魔窟》 -> 裙下之臣：逃出魔窟），提高精准匹配率
+  const withoutBookMarks = query.replace(/[《》]/g, '').trim();
+  if (withoutBookMarks && withoutBookMarks !== query) {
+    variants.push(withoutBookMarks);
+    if (withoutBookMarks.includes('：')) {
+      variants.push(withoutBookMarks.replace(/：/g, ' '));
+    }
+  }
+
   // 中文冒号变体 (针对"死神来了：血脉诅咒"这种情况)
   if (query.includes('：')) {
     // 优先级1: 替换为空格 (最可能匹配，如"死神来了 血脉诅咒" 能匹配到 "死神来了6：血脉诅咒")

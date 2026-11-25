@@ -228,6 +228,7 @@ export interface SearchResult {
   douban_id?: number;
   remarks?: string; // 备注信息（如"已完结"、"更新至20集"等）
   failed?: boolean; // 播放失败标记
+  adult?: boolean; // 成人源（黄果模块）标识，禁止与常规源混用或自动换源
   metadata?: {
     author?: string;
     backdrop?: string;

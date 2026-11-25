@@ -270,4 +270,155 @@ describe('useSourceInitialization', () => {
     // 封面仍作为 fallbackCover 生效，但不再写进地址栏
     expect(new URL(window.location.href).searchParams.get('poster')).toBeNull();
   });
+
+  test('prioritizes explicit URL source and id even when prefer=true and optimizationEnabled=true', async () => {
+    const requestedDetail: SearchResult = {
+      ...detail,
+      id: '39394',
+      source: 'site-requested',
+      source_name: '链接指定源',
+    };
+    const otherSource: SearchResult = {
+      ...detail,
+      id: 'other-1',
+      source: 'dyttzyapi.com',
+      source_name: '电影天堂',
+    };
+    mockedCachedGet.mockImplementation(async (url, queryParams) => {
+      if (url === '/api/detail') {
+        expect(queryParams).toEqual({
+          source: 'site-requested',
+          id: '39394',
+        });
+        return mockCachedResult(requestedDetail);
+      }
+      if (url === '/api/search') {
+        return mockCachedResult({ results: [otherSource] });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const params = createParams({
+      currentSource: 'site-requested',
+      currentId: '39394',
+      needPreferRef: { current: true },
+      optimizationEnabled: true,
+    });
+
+    renderHook(() => useSourceInitialization(params));
+
+    await waitFor(() => {
+      expect(params.setDetail).toHaveBeenCalledWith(requestedDetail);
+    });
+    expect(params.setCurrentSource).toHaveBeenCalledWith('site-requested');
+    expect(params.setCurrentId).toHaveBeenCalledWith('39394');
+  });
+
+  test('isolates adult source (jp98.vip) enrichment to adult group and never mixes regular sources', async () => {
+    const adultDetail: SearchResult = {
+      id: '39394',
+      source: 'jp98.vip',
+      source_name: '黄果',
+      title: '《裙下之臣：逃出魔窟》',
+      year: '2026',
+      poster: '',
+      episodes: ['https://jp98.vip/ep1.m3u8'],
+      episodes_titles: ['第 1 集'],
+      type_name: 'AI短剧',
+      douban_id: 123,
+      adult: true,
+    };
+    const regularSimilarDrama: SearchResult = {
+      id: '999',
+      source: 'dyttzyapi.com',
+      source_name: '电影天堂',
+      title: '裙下之臣',
+      year: '2026',
+      poster: '',
+      episodes: ['https://regular.example/1.m3u8'],
+      episodes_titles: ['第 1 集'],
+    };
+    mockedCachedGet.mockImplementation(async (url, queryParams) => {
+      if (url === '/api/detail') {
+        return mockCachedResult(adultDetail);
+      }
+      if (url === '/api/search') {
+        // 成人源仅允许搜索 adult 分组，且排除当前源
+        expect(queryParams).toEqual(
+          expect.objectContaining({
+            group: 'adult',
+            forSource: 'jp98.vip',
+          }),
+        );
+        return mockCachedResult({ results: [] });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const params = createParams({
+      currentSource: 'jp98.vip',
+      currentId: '39394',
+      videoTitle: '《裙下之臣：逃出魔窟》',
+      searchTitle: '',
+      videoTitleRef: { current: '《裙下之臣：逃出魔窟》' },
+      videoYearRef: { current: '2026' },
+      needPreferRef: { current: true },
+    });
+
+    renderHook(() => useSourceInitialization(params));
+
+    await waitFor(() => {
+      expect(params.setDetail).toHaveBeenCalledWith(adultDetail);
+    });
+    await waitFor(() => {
+      expect(mockedCachedGet).toHaveBeenCalledWith(
+        '/api/search',
+        expect.objectContaining({ group: 'adult', forSource: 'jp98.vip' }),
+      );
+    });
+    expect(params.setAvailableSources).toHaveBeenCalledTimes(1);
+    expect(params.setAvailableSources).toHaveBeenCalledWith([adultDetail]);
+    expect(params.setAvailableSources).not.toHaveBeenCalledWith(
+      expect.arrayContaining([regularSimilarDrama]),
+    );
+  });
+
+  test('passes forSource on detail fallback and excludes unrelated similar-named dramas', async () => {
+    const similarWrongDrama: SearchResult = {
+      id: 'wrong-1',
+      source: 'other-site',
+      source_name: '其他源',
+      title: '裙下之臣',
+      year: '2026',
+      poster: '',
+      episodes: ['https://other.example/1.m3u8'],
+      episodes_titles: ['第 1 集'],
+    };
+    mockedCachedGet.mockImplementation(async (url, queryParams) => {
+      if (url === '/api/detail') {
+        throw new Error('upstream failed');
+      }
+      if (url === '/api/search') {
+        expect(queryParams).toEqual(
+          expect.objectContaining({ forSource: 'jp98.vip' }),
+        );
+        return mockCachedResult({ results: [similarWrongDrama] });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const params = createParams({
+      currentSource: 'jp98.vip',
+      currentId: '39394',
+      videoTitle: '《裙下之臣：逃出魔窟》',
+      searchTitle: '',
+      videoTitleRef: { current: '《裙下之臣：逃出魔窟》' },
+      videoYearRef: { current: '2026' },
+      searchType: '',
+    });
+
+    renderHook(() => useSourceInitialization(params));
+
+    await waitFor(() => {
+      expect(params.setError).toHaveBeenCalledWith('未找到匹配结果');
+    });
+    expect(params.setDetail).not.toHaveBeenCalled();
+  });
 });

@@ -16,6 +16,7 @@ import {
   checkGuestRateLimit,
   getGuestSource,
   isSourceAllowedForRequest,
+  resolveAllowedSourceForRequest,
 } from './guest-source';
 
 const GUEST_SITE = {
@@ -102,6 +103,29 @@ describe('guest-source', () => {
 
       await expect(
         isSourceAllowedForRequest(null, ADULT_SITE.key),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('resolveAllowedSourceForRequest', () => {
+    it('distinguishes regular, adult, and guest sources with isAdult flag', async () => {
+      mockGetAvailableApiSites.mockResolvedValue([OTHER_SITE, GUEST_SITE]);
+      mockGetAdultApiSites.mockResolvedValue([ADULT_SITE]);
+
+      await expect(
+        resolveAllowedSourceForRequest('alice', OTHER_SITE.key),
+      ).resolves.toEqual({ site: OTHER_SITE, isAdult: false });
+
+      await expect(
+        resolveAllowedSourceForRequest('alice', ADULT_SITE.key),
+      ).resolves.toEqual({ site: ADULT_SITE, isAdult: true });
+
+      await expect(
+        resolveAllowedSourceForRequest(null, GUEST_SITE.key),
+      ).resolves.toEqual({ site: GUEST_SITE, isAdult: false });
+
+      await expect(
+        resolveAllowedSourceForRequest(null, ADULT_SITE.key),
       ).resolves.toBeNull();
     });
   });
