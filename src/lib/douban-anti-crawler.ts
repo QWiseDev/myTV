@@ -1,6 +1,10 @@
 import * as cheerio from 'cheerio';
 
-import { solvePowNonce } from './douban-challenge';
+import {
+  getSetCookies,
+  solvePowNonce,
+  toCookieHeader,
+} from './douban-challenge';
 
 /**
  * 解析豆瓣验证页面，提取表单数据
@@ -23,96 +27,100 @@ function parseVerificationPage(html: string): {
   return { tok, cha, red };
 }
 
-/**
- * 获取豆瓣访问 cookie（处理反爬验证）
- * @param url 要访问的豆瓣 URL
- * @returns cookie 字符串
- */
-export async function getDoubanCookie(
-  url: string,
+const DEFAULT_DOUBAN_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  Referer: 'https://movie.douban.com/',
+};
+
+const DOUBAN_COOKIE_TTL_MS = 5 * 60_000;
+let cachedDoubanCookie: { value: string; expireAt: number } | null = null;
+let inflightCookiePromise: Promise<string> | null = null;
+
+function readCachedDoubanCookie(): string | null {
+  if (!cachedDoubanCookie || Date.now() >= cachedDoubanCookie.expireAt) {
+    cachedDoubanCookie = null;
+    return null;
+  }
+  return cachedDoubanCookie.value;
+}
+
+function writeCachedDoubanCookie(cookie: string): void {
+  if (!cookie) return;
+  cachedDoubanCookie = {
+    value: cookie,
+    expireAt: Date.now() + DOUBAN_COOKIE_TTL_MS,
+  };
+}
+
+async function solveVerificationByLocation(
+  location: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const headers = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    Referer: 'https://movie.douban.com/',
-  };
+  if (inflightCookiePromise) {
+    return inflightCookiePromise;
+  }
 
-  try {
-    // Step 1: 尝试直接访问
-    const firstResponse = await fetch(url, {
-      headers,
+  const task = (async () => {
+    // Step 2: 获取验证页面
+    const verifyResponse = await fetch(location, {
+      headers: DEFAULT_DOUBAN_HEADERS,
+      signal,
+    });
+    if (!verifyResponse.ok) {
+      throw new Error(
+        `Failed to fetch verification page: ${verifyResponse.status}`,
+      );
+    }
+
+    const verifyHtml = await verifyResponse.text();
+
+    // Step 3: 解析验证页面中的表单数据
+    const formData = parseVerificationPage(verifyHtml);
+    if (!formData) {
+      throw new Error('Failed to parse verification page');
+    }
+
+    // Step 4: 计算工作量证明（复用 douban-challenge 的有上限实现，避免死循环）
+    const sol = solvePowNonce(formData.cha, 4);
+
+    // Step 5: 提交验证表单
+    const formBody = new URLSearchParams({
+      tok: formData.tok,
+      cha: formData.cha,
+      sol: sol.toString(),
+      red: formData.red,
+    });
+
+    const submitResponse = await fetch('https://sec.douban.com/c', {
+      method: 'POST',
+      headers: {
+        ...DEFAULT_DOUBAN_HEADERS,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formBody.toString(),
       redirect: 'manual',
       signal,
     });
 
-    if (firstResponse.status === 200) {
-      // 直接访问成功，返回 cookie
-      const cookies = firstResponse.headers.get('set-cookie');
-      return cookies || '';
+    // Step 6: 提取 cookie（只保留 name=value，避免把 Path/Expires 等属性当成 cookie 回传）
+    const cookie = toCookieHeader(getSetCookies(submitResponse));
+    if (!cookie) {
+      throw new Error('No cookie received after verification');
     }
 
-    if (firstResponse.status === 302) {
-      // 被重定向到验证页面
-      const location = firstResponse.headers.get('location');
-      if (!location || !location.includes('sec.douban.com')) {
-        throw new Error('Unexpected redirect location');
-      }
-
-      // Step 2: 获取验证页面
-      const verifyResponse = await fetch(location, { headers, signal });
-      if (!verifyResponse.ok) {
-        throw new Error(
-          `Failed to fetch verification page: ${verifyResponse.status}`,
-        );
-      }
-
-      const verifyHtml = await verifyResponse.text();
-
-      // Step 3: 解析验证页面中的表单数据
-      const formData = parseVerificationPage(verifyHtml);
-      if (!formData) {
-        throw new Error('Failed to parse verification page');
-      }
-
-      // Step 4: 计算工作量证明（复用 douban-challenge 的有上限实现，避免死循环）
-      const sol = solvePowNonce(formData.cha, 4);
-
-      // Step 5: 提交验证表单
-      const formBody = new URLSearchParams({
-        tok: formData.tok,
-        cha: formData.cha,
-        sol: sol.toString(),
-        red: formData.red,
-      });
-
-      const submitResponse = await fetch('https://sec.douban.com/c', {
-        method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formBody.toString(),
-        redirect: 'manual',
-        signal,
-      });
-
-      // Step 6: 提取 cookie
-      const setCookieHeader = submitResponse.headers.get('set-cookie');
-      if (!setCookieHeader) {
-        throw new Error('No cookie received after verification');
-      }
-
-      return setCookieHeader;
+    writeCachedDoubanCookie(cookie);
+    return cookie;
+  })().finally(() => {
+    if (inflightCookiePromise === task) {
+      inflightCookiePromise = null;
     }
+  });
 
-    throw new Error(`Unexpected response status: ${firstResponse.status}`);
-  } catch (error) {
-    console.error('Failed to get douban cookie:', error);
-    throw error;
-  }
+  inflightCookiePromise = task;
+  return task;
 }
 
 /**
@@ -124,28 +132,30 @@ export async function fetchDoubanWithVerification(
   url: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const headers = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    Referer: 'https://movie.douban.com/',
-    ...options.headers,
+  const cachedCookie = readCachedDoubanCookie();
+  const headers: Record<string, string> = {
+    ...DEFAULT_DOUBAN_HEADERS,
+    ...(options.headers as Record<string, string> | undefined),
+    ...(cachedCookie ? { Cookie: cachedCookie } : {}),
   };
 
   try {
-    // 先尝试直接访问
+    // 先尝试直接访问（如有缓存验证 cookie 则带上）
     let response = await fetch(url, {
       ...options,
       headers,
       redirect: 'manual',
     });
 
-    // 如果被重定向到验证页面
+    // 如果被重定向到验证页面，直接复用已知 location 完成校验，不再重复请求一次 url
     if (response.status === 302) {
       const location = response.headers.get('location');
       if (location && location.includes('sec.douban.com')) {
-        const cookie = await getDoubanCookie(url, options.signal ?? undefined);
+        cachedDoubanCookie = null;
+        const cookie = await solveVerificationByLocation(
+          location,
+          options.signal ?? undefined,
+        );
 
         // 使用 cookie 重新请求
         response = await fetch(url, {

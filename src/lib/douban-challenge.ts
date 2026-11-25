@@ -23,7 +23,7 @@ function extractHiddenValue(html: string, id: string): string | null {
   return match ? match[1] : null;
 }
 
-function getSetCookies(response: Response): string[] {
+export function getSetCookies(response: Response): string[] {
   // Headers.getSetCookie 在旧版 TS lib 中缺失，经 unknown 收窄探测
   const headers = response.headers as unknown as {
     getSetCookie?: () => string[];
@@ -36,10 +36,16 @@ function getSetCookies(response: Response): string[] {
   return single ? [single] : [];
 }
 
-function toCookieHeader(setCookies: string[]): string {
+/**
+ * 把 Set-Cookie 解析为可直接回传的 Cookie 请求头。
+ * 需要兼容两种形态：getSetCookie 返回的多条独立 Cookie，以及被 ", " 合并成一条的旧运行时
+ * （此时按逗号切分，Expires 属性里的逗号因不含 "=" 会被过滤掉）。
+ */
+export function toCookieHeader(setCookies: string[]): string {
   return setCookies
-    .map((cookie) => cookie.split(';')[0])
-    .filter(Boolean)
+    .flatMap((cookie) => cookie.split(','))
+    .map((segment) => segment.split(';')[0].trim())
+    .filter((pair) => pair.includes('='))
     .join('; ');
 }
 
