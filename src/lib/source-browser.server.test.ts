@@ -12,9 +12,25 @@ jest.mock('@/lib/db', () => ({
   },
 }));
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function flushMicrotasks(ticks = 10) {
+  for (let i = 0; i < ticks; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('source-browser.server cache', () => {
+  let clearSourceBrowserMemoryCache: typeof import('./source-browser.server').clearSourceBrowserMemoryCache;
   let fetchSourceCategories: typeof import('./source-browser.server').fetchSourceCategories;
   let fetchSourceVideoList: typeof import('./source-browser.server').fetchSourceVideoList;
+  let warmSourceBrowserSources: typeof import('./source-browser.server').warmSourceBrowserSources;
   let originalFetch: typeof global.fetch;
 
   const sampleSource = {
@@ -25,11 +41,16 @@ describe('source-browser.server cache', () => {
 
   beforeAll(async () => {
     originalFetch = global.fetch;
-    ({ fetchSourceCategories, fetchSourceVideoList } =
-      await import('./source-browser.server'));
+    ({
+      clearSourceBrowserMemoryCache,
+      fetchSourceCategories,
+      fetchSourceVideoList,
+      warmSourceBrowserSources,
+    } = await import('./source-browser.server'));
   });
 
   beforeEach(() => {
+    clearSourceBrowserMemoryCache();
     global.fetch = jest.fn();
     mockDbGetCache.mockReset().mockResolvedValue(null);
     mockDbSetCache.mockReset().mockResolvedValue(undefined);
@@ -56,7 +77,7 @@ describe('source-browser.server cache', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('returns cached video list from DB without hitting upstream', async () => {
+  it('returns legacy unwrapped cached video list from DB without hitting upstream', async () => {
     const dbCachedList = {
       items: [
         {
@@ -76,6 +97,176 @@ describe('source-browser.server cache', () => {
 
     expect(result).toEqual(dbCachedList);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns stale DB cache immediately and triggers one deduplicated background refresh', async () => {
+    const staleList = {
+      items: [
+        {
+          id: 'old-1',
+          title: '旧缓存影片',
+          poster: 'https://img.example/old.jpg',
+          year: '2025',
+          type_name: 'AI短剧',
+          remarks: '更新至01集',
+        },
+      ],
+      meta: { page: 1, pagecount: 1, total: 1, limit: 20 },
+    };
+    mockDbGetCache.mockResolvedValueOnce({
+      data: staleList,
+      freshUntil: Date.now() - 1000,
+    });
+
+    const deferred = createDeferred<{
+      ok: boolean;
+      json: () => Promise<unknown>;
+    }>();
+    (global.fetch as jest.Mock).mockReturnValue(deferred.promise);
+
+    // 两次连续请求都应立即拿到旧缓存，只触发 1 次后台刷新
+    const first = await fetchSourceVideoList(sampleSource, '57', 1);
+    const second = await fetchSourceVideoList(sampleSource, '57', 1);
+
+    expect(first).toEqual(staleList);
+    expect(second).toEqual(staleList);
+    await flushMicrotasks();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    deferred.resolve({
+      ok: true,
+      json: async () => ({
+        list: [
+          {
+            vod_id: 'new-1',
+            vod_name: '新影片',
+            vod_pic: 'https://img.example/new.jpg',
+            vod_year: '2026',
+            type_name: 'AI短剧',
+            vod_remarks: '更新至02集',
+          },
+        ],
+        page: 1,
+        pagecount: 3,
+        total: 50,
+        limit: 20,
+      }),
+    });
+    await flushMicrotasks();
+
+    const third = await fetchSourceVideoList(sampleSource, '57', 1);
+    expect(third.items[0].id).toBe('new-1');
+    expect(mockDbSetCache).toHaveBeenCalledWith(
+      'source-browser-list-v1:test-site:57:1',
+      expect.objectContaining({
+        data: expect.objectContaining({
+          items: [expect.objectContaining({ id: 'new-1', title: '新影片' })],
+        }),
+        freshUntil: expect.any(Number),
+      }),
+      6 * 60 * 60,
+    );
+  });
+
+  it('enforces failure cooldown for stale background refreshes', async () => {
+    const startedAt = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(startedAt);
+
+    const staleCategories = [{ type_id: 57, type_name: 'AI短剧' }];
+    mockDbGetCache.mockResolvedValueOnce({
+      data: staleCategories,
+      freshUntil: startedAt - 1000,
+    });
+
+    (global.fetch as jest.Mock)
+      .mockRejectedValueOnce(new Error('upstream down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          class: [{ type_id: 57, type_name: 'AI短剧' }],
+        }),
+      });
+
+    // 首次命中过期 DB 缓存，后台刷新失败后进入 30s 冷却期
+    const first = await fetchSourceCategories(sampleSource);
+    expect(first).toEqual(staleCategories);
+    await flushMicrotasks();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // 冷却期内再次读取仍返回缓存且不再打上游
+    const cooling = await fetchSourceCategories(sampleSource);
+    expect(cooling).toEqual(staleCategories);
+    await flushMicrotasks();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // 冷却期过后再读触发重新刷新
+    nowSpy.mockReturnValue(startedAt + 35_000);
+    await fetchSourceCategories(sampleSource);
+    await flushMicrotasks();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('warmSourceBrowserSources refreshes categories and adult default AI短剧 page 1', async () => {
+    const adultSource = {
+      key: 'jp98.vip',
+      name: '黄果',
+      api: 'https://jp98.vip/api.php/provide/vod/',
+    };
+    const guestSource = {
+      key: 'iqiyizyapi.com',
+      name: '爱奇艺',
+      api: 'https://iqiyizyapi.com/api.php/provide/vod/',
+    };
+
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      if (url.includes('jp98.vip') && url.includes('ac=list')) {
+        return {
+          ok: true,
+          json: async () => ({
+            class: [
+              { type_id: 20, type_name: '国产' },
+              { type_id: 57, type_name: 'AI短剧' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('jp98.vip') && url.includes('ac=videolist&t=57&pg=1')) {
+        return {
+          ok: true,
+          json: async () => ({
+            list: [{ vod_id: 'a1', vod_name: '短剧1', vod_pic: '' }],
+          }),
+        };
+      }
+      if (url.includes('iqiyizyapi.com') && url.includes('ac=list')) {
+        throw new Error('guest timeout');
+      }
+      return { ok: false, status: 500 };
+    });
+
+    await warmSourceBrowserSources([
+      { source: adultSource, isAdult: true },
+      { source: adultSource, isAdult: true }, // 重复条目应去重
+      { source: guestSource, isAdult: false }, // 单源失败不应影响黄果源预热
+    ]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(
+      (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0])),
+    ).toEqual(
+      expect.arrayContaining([
+        'https://jp98.vip/api.php/provide/vod/?ac=list',
+        'https://jp98.vip/api.php/provide/vod/?ac=videolist&t=57&pg=1',
+        'https://iqiyizyapi.com/api.php/provide/vod/?ac=list',
+      ]),
+    );
+
+    // 预热后直接读取应命中内存，不再发请求
+    const cats = await fetchSourceCategories(adultSource);
+    const list = await fetchSourceVideoList(adultSource, '57', 1);
+    expect(cats).toHaveLength(2);
+    expect(list.items[0].id).toBe('a1');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 });
 

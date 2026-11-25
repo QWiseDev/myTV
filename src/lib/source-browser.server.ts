@@ -1,29 +1,26 @@
 import { type ApiSite, API_CONFIG } from '@/lib/config';
 import { db } from '@/lib/db';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import {
+  type SourceCategoryItem,
+  type SourceVideoListResult,
+  pickDefaultSourceCategory,
+} from '@/lib/source-browser-shared';
 
-export interface SourceCategoryItem {
-  type_id: string | number;
-  type_name: string;
+export type {
+  SourceCategoryItem,
+  SourceVideoItem,
+  SourceVideoListResult,
+} from '@/lib/source-browser-shared';
+
+export interface SourceFetchOptions {
+  /** 跳过现有缓存并直接回源刷新（供 cron 预热等后台任务使用） */
+  forceRefresh?: boolean;
 }
 
-export interface SourceVideoItem {
-  id: string;
-  title: string;
-  poster: string;
-  year: string;
-  type_name: string;
-  remarks: string;
-}
-
-export interface SourceVideoListResult {
-  items: SourceVideoItem[];
-  meta: {
-    page: number;
-    pagecount: number;
-    total: number;
-    limit: number;
-  };
+export interface SourceWarmTarget {
+  source: ApiSite;
+  isAdult?: boolean;
 }
 
 type AppleCMSClass = {
@@ -60,14 +57,32 @@ type AppleCMSVideoListResponse = {
   pageSize?: number | string;
 };
 
-const CATEGORIES_MEMORY_TTL_MS = 5 * 60_000;
-const CATEGORIES_DB_TTL_SECONDS = 30 * 60;
-const LIST_MEMORY_TTL_MS = 2 * 60_000;
-const LIST_DB_TTL_SECONDS = 10 * 60;
-const DB_READ_TIMEOUT_MS = 500;
+type MemoryCacheEntry<T> = {
+  value: T;
+  freshUntil: number;
+  expireAt: number;
+};
 
-const memoryCache = new Map<string, { value: unknown; expireAt: number }>();
-const inflightRequests = new Map<string, Promise<unknown>>();
+type DbCacheEnvelope<T> = {
+  data: T;
+  freshUntil: number;
+};
+
+const CATEGORIES_MEMORY_TTL_MS = 5 * 60_000;
+const CATEGORIES_SOFT_FRESH_MS = 10 * 60_000;
+const CATEGORIES_DB_TTL_SECONDS = 24 * 60 * 60;
+
+const LIST_MEMORY_TTL_MS = 2 * 60_000;
+const LIST_SOFT_FRESH_MS = 5 * 60_000;
+const LIST_DB_TTL_SECONDS = 6 * 60 * 60;
+
+const DB_READ_TIMEOUT_MS = 500;
+const BACKGROUND_REFRESH_COOLDOWN_MS = 30_000;
+
+const memoryCache = new Map<string, MemoryCacheEntry<unknown>>();
+const inflightRefreshes = new Map<string, Promise<unknown>>();
+const backgroundRefreshFailedUntil = new Map<string, number>();
+let cacheGeneration = 0;
 
 export class SourceUpstreamError extends Error {
   status: number;
@@ -79,75 +94,184 @@ export class SourceUpstreamError extends Error {
   }
 }
 
-async function readThroughCache<T>(
-  cacheKey: string,
-  memoryTtlMs: number,
-  dbTtlSeconds: number,
-  loader: () => Promise<T>,
+/** 清理进程内缓存（供单元测试或主动失效场景使用） */
+export function clearSourceBrowserMemoryCache(): void {
+  cacheGeneration += 1;
+  memoryCache.clear();
+  inflightRefreshes.clear();
+  backgroundRefreshFailedUntil.clear();
+}
+
+function parseDbCacheValue<T>(
+  raw: unknown,
   isCacheable: (value: T) => boolean,
-): Promise<T> {
-  const mem = memoryCache.get(cacheKey);
-  if (mem && Date.now() < mem.expireAt) {
-    return mem.value as T;
-  }
-  if (mem) {
-    memoryCache.delete(cacheKey);
+): { value: T; freshUntil: number; isStale: boolean } | null {
+  if (raw === null || raw === undefined) return null;
+
+  if (
+    typeof raw === 'object' &&
+    'data' in raw &&
+    'freshUntil' in raw &&
+    typeof (raw as DbCacheEnvelope<T>).freshUntil === 'number'
+  ) {
+    const envelope = raw as DbCacheEnvelope<T>;
+    if (!isCacheable(envelope.data)) return null;
+    return {
+      value: envelope.data,
+      freshUntil: envelope.freshUntil,
+      isStale: Date.now() >= envelope.freshUntil,
+    };
   }
 
-  try {
-    const dbCached = await withAbortableTimeout(
-      () => db.getCache(cacheKey),
-      DB_READ_TIMEOUT_MS,
-    );
-    if (dbCached !== null && dbCached !== undefined) {
-      memoryCache.set(cacheKey, {
-        value: dbCached,
-        expireAt: Date.now() + memoryTtlMs,
-      });
-      return dbCached as T;
-    }
-  } catch {
-    // 缓存读取失败时继续回源
-  }
+  // 兼容旧版无信封包装的缓存结构，视为新鲜命中，避免无谓二次回源
+  const legacyValue = raw as T;
+  if (!isCacheable(legacyValue)) return null;
+  return {
+    value: legacyValue,
+    freshUntil: Date.now() + 60_000,
+    isStale: false,
+  };
+}
 
-  const inflight = inflightRequests.get(cacheKey);
+interface CacheConfig<T> {
+  cacheKey: string;
+  memoryTtlMs: number;
+  softFreshMs: number;
+  dbTtlSeconds: number;
+  loader: () => Promise<T>;
+  isCacheable: (value: T) => boolean;
+  forceRefresh?: boolean;
+}
+
+function refreshAndCache<T>(config: CacheConfig<T>): Promise<T> {
+  const {
+    cacheKey,
+    memoryTtlMs,
+    softFreshMs,
+    dbTtlSeconds,
+    loader,
+    isCacheable,
+  } = config;
+  const inflight = inflightRefreshes.get(cacheKey);
   if (inflight) {
     return inflight as Promise<T>;
   }
 
+  const generation = cacheGeneration;
   const task = loader()
-    .then((value) => {
+    .then(async (value) => {
       if (isCacheable(value)) {
-        memoryCache.set(cacheKey, {
-          value,
-          expireAt: Date.now() + memoryTtlMs,
-        });
-        void db.setCache(cacheKey, value, dbTtlSeconds).catch(() => undefined);
+        const now = Date.now();
+        const freshUntil = now + softFreshMs;
+        if (generation === cacheGeneration) {
+          memoryCache.set(cacheKey, {
+            value,
+            freshUntil,
+            expireAt: now + memoryTtlMs,
+          });
+          backgroundRefreshFailedUntil.delete(cacheKey);
+        }
+        const envelope: DbCacheEnvelope<T> = { data: value, freshUntil };
+        const writePromise = db
+          .setCache(cacheKey, envelope, dbTtlSeconds)
+          .catch(() => undefined);
+        if (config.forceRefresh) {
+          await writePromise;
+        }
       }
       return value;
     })
     .finally(() => {
-      if (inflightRequests.get(cacheKey) === task) {
-        inflightRequests.delete(cacheKey);
+      if (inflightRefreshes.get(cacheKey) === task) {
+        inflightRefreshes.delete(cacheKey);
       }
     });
 
-  inflightRequests.set(cacheKey, task);
+  inflightRefreshes.set(cacheKey, task);
   return task;
 }
 
+function triggerBackgroundRefresh<T>(config: CacheConfig<T>): void {
+  const failedUntil = backgroundRefreshFailedUntil.get(config.cacheKey) ?? 0;
+  if (Date.now() < failedUntil) {
+    return;
+  }
+
+  const generation = cacheGeneration;
+  void refreshAndCache(config)
+    .then((value) => {
+      if (generation === cacheGeneration && !config.isCacheable(value)) {
+        backgroundRefreshFailedUntil.set(
+          config.cacheKey,
+          Date.now() + BACKGROUND_REFRESH_COOLDOWN_MS,
+        );
+      }
+    })
+    .catch(() => {
+      if (generation === cacheGeneration) {
+        backgroundRefreshFailedUntil.set(
+          config.cacheKey,
+          Date.now() + BACKGROUND_REFRESH_COOLDOWN_MS,
+        );
+      }
+    });
+}
+
+async function readThroughCache<T>(config: CacheConfig<T>): Promise<T> {
+  const { cacheKey, memoryTtlMs, isCacheable, forceRefresh } = config;
+
+  if (!forceRefresh) {
+    const mem = memoryCache.get(cacheKey) as MemoryCacheEntry<T> | undefined;
+    if (mem && Date.now() < mem.expireAt) {
+      if (Date.now() >= mem.freshUntil) {
+        triggerBackgroundRefresh(config);
+      }
+      return mem.value;
+    }
+    if (mem) {
+      memoryCache.delete(cacheKey);
+    }
+
+    try {
+      const dbCached = await withAbortableTimeout(
+        () => db.getCache(cacheKey),
+        DB_READ_TIMEOUT_MS,
+      );
+      const parsed = parseDbCacheValue(dbCached, isCacheable);
+      if (parsed) {
+        memoryCache.set(cacheKey, {
+          value: parsed.value,
+          freshUntil: parsed.freshUntil,
+          expireAt: Date.now() + memoryTtlMs,
+        });
+        if (parsed.isStale) {
+          triggerBackgroundRefresh(config);
+        }
+        return parsed.value;
+      }
+    } catch {
+      // 缓存读取失败时继续回源
+    }
+  }
+
+  return refreshAndCache(config);
+}
+
 /**
- * 获取片源分类列表（带进程内 + DB 缓存与并发请求合并）
+ * 获取片源分类列表（带进程内 + DB SWR 缓存与并发请求合并）
  */
 export async function fetchSourceCategories(
   source: ApiSite,
+  options?: SourceFetchOptions,
 ): Promise<SourceCategoryItem[]> {
   const cacheKey = `source-browser-categories-v1:${source.key}`;
-  return readThroughCache(
+  return readThroughCache({
     cacheKey,
-    CATEGORIES_MEMORY_TTL_MS,
-    CATEGORIES_DB_TTL_SECONDS,
-    async () => {
+    memoryTtlMs: CATEGORIES_MEMORY_TTL_MS,
+    softFreshMs: CATEGORIES_SOFT_FRESH_MS,
+    dbTtlSeconds: CATEGORIES_DB_TTL_SECONDS,
+    forceRefresh: options?.forceRefresh,
+    loader: async () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       try {
@@ -177,24 +301,27 @@ export async function fetchSourceCategories(
         clearTimeout(timeoutId);
       }
     },
-    (categories) => categories.length > 0,
-  );
+    isCacheable: (categories) => categories.length > 0,
+  });
 }
 
 /**
- * 获取片源分类下影片列表（带进程内 + DB 缓存与并发请求合并）
+ * 获取片源分类下影片列表（带进程内 + DB SWR 缓存与并发请求合并）
  */
 export async function fetchSourceVideoList(
   source: ApiSite,
   typeId: string,
   page: number,
+  options?: SourceFetchOptions,
 ): Promise<SourceVideoListResult> {
   const cacheKey = `source-browser-list-v1:${source.key}:${typeId}:${page}`;
-  return readThroughCache(
+  return readThroughCache({
     cacheKey,
-    LIST_MEMORY_TTL_MS,
-    LIST_DB_TTL_SECONDS,
-    async () => {
+    memoryTtlMs: LIST_MEMORY_TTL_MS,
+    softFreshMs: LIST_SOFT_FRESH_MS,
+    dbTtlSeconds: LIST_DB_TTL_SECONDS,
+    forceRefresh: options?.forceRefresh,
+    loader: async () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       try {
@@ -241,6 +368,40 @@ export async function fetchSourceVideoList(
         clearTimeout(timeoutId);
       }
     },
-    (result) => result.items.length > 0,
+    isCacheable: (result) => result.items.length > 0,
+  });
+}
+
+/**
+ * 预热片源分类及默认分类首屏列表（供启动/定时 cron 调用）。
+ * 不同源并发执行，单源失败不影响其余源。
+ */
+export async function warmSourceBrowserSources(
+  targets: SourceWarmTarget[],
+): Promise<void> {
+  const seenKeys = new Set<string>();
+  const uniqueTargets = targets.filter((t) => {
+    if (!t.source.api?.trim() || seenKeys.has(t.source.key)) {
+      return false;
+    }
+    seenKeys.add(t.source.key);
+    return true;
+  });
+
+  await Promise.allSettled(
+    uniqueTargets.map(async ({ source, isAdult }) => {
+      const categories = await fetchSourceCategories(source, {
+        forceRefresh: true,
+      });
+      const defaultCategory = pickDefaultSourceCategory(
+        categories,
+        Boolean(isAdult),
+      );
+      if (defaultCategory) {
+        await fetchSourceVideoList(source, String(defaultCategory.type_id), 1, {
+          forceRefresh: true,
+        });
+      }
+    }),
   );
 }

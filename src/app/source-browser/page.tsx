@@ -14,6 +14,10 @@ import {
 } from 'react';
 
 import { ClientCache } from '@/lib/client-cache';
+import {
+  type SourceVideoListResult,
+  pickDefaultSourceCategory,
+} from '@/lib/source-browser-shared';
 import type {
   DoubanItem,
   SearchResult as GlobalSearchResult,
@@ -21,6 +25,9 @@ import type {
 import { useSourceBrowserAnalytics } from '@/hooks/useSourceBrowserAnalytics';
 
 import PageLayout from '@/components/PageLayout';
+
+import { SourceBrowserContentSkeleton } from './_components/SourceBrowserSkeleton';
+import SourceBrowserLoading from './loading';
 
 type Source = { key: string; name: string; api: string };
 type Category = { type_id: string | number; type_name: string };
@@ -96,6 +103,21 @@ function SourceBrowserPageClient() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastFetchAtRef = useRef(0);
   const autoFillInProgressRef = useRef(false);
+  const isFetchingSourcesRef = useRef(false);
+  const sourcesReqIdRef = useRef(0);
+  const categoriesReqIdRef = useRef(0);
+  const itemsReqIdRef = useRef(0);
+  const prefetchedCategoriesRef = useRef<{
+    sourceKey: string;
+    categories: Category[];
+  } | null>(null);
+  const prefetchedListRef = useRef<{
+    sourceKey: string;
+    typeId: string;
+    result: SourceVideoListResult;
+  } | null>(null);
+  const categoriesCacheRef = useRef(new Map<string, Category[]>());
+  const listCacheRef = useRef(new Map<string, SourceVideoListResult>());
 
   // 搜索与排序
   const [query, setQuery] = useState('');
@@ -143,17 +165,58 @@ function SourceBrowserPageClient() {
   const [previewSearchPick, setPreviewSearchPick] =
     useState<GlobalSearchResult | null>(null);
 
+  const applyListResult = useCallback(
+    (
+      data: {
+        items?: Item[];
+        meta?: { page?: number; pagecount?: number };
+      },
+      p: number,
+      append: boolean,
+    ) => {
+      const list: Item[] = data.items || [];
+      setItems((prev) => (append ? [...prev, ...list] : list));
+      setPage(Number(data.meta?.page || p));
+      setPageCount(Number(data.meta?.pagecount || 1));
+      // 更新可选年份
+      const years = Array.from(
+        new Set(list.map((i) => (i.year || '').trim()).filter(Boolean)),
+      );
+      years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
+      setAvailableYears(years);
+    },
+    [],
+  );
+
   const fetchSources = useCallback(async () => {
+    const reqId = ++sourcesReqIdRef.current;
+    isFetchingSourcesRef.current = true;
+    prefetchedCategoriesRef.current = null;
+    prefetchedListRef.current = null;
     setLoadingSources(true);
     setSourceError(null);
+    setActiveSourceKey('');
+    setCategories([]);
+    setCategoryError(null);
+    setActiveCategory('');
+    setItems([]);
+    setItemsError(null);
+    setPage(1);
+    setPageCount(1);
+    setAvailableYears([]);
+    setQuery('');
+    setMode('category');
     const startTime = Date.now();
     try {
+      const params = new URLSearchParams();
+      if (isAdultModule) params.set('group', 'adult');
+      params.set('includeCategories', '1');
+      params.set('includeList', '1');
       const res = await fetch(
-        isAdultModule
-          ? '/api/source-browser/sites?group=adult'
-          : '/api/source-browser/sites',
+        `/api/source-browser/sites?${params.toString()}`,
         { cache: 'no-store' },
       );
+      if (reqId !== sourcesReqIdRef.current) return;
       if (res.status === 401) {
         throw new Error('登录状态已失效，请重新登录');
       }
@@ -161,7 +224,13 @@ function SourceBrowserPageClient() {
         throw new Error('当前账号暂无可用资源站点');
       }
       if (!res.ok) throw new Error('获取源失败');
-      const data = await res.json();
+      const data = (await res.json()) as {
+        sources?: Source[];
+        initialCategories?: Category[];
+        initialCategory?: string | number;
+        initialList?: SourceVideoListResult;
+      };
+      if (reqId !== sourcesReqIdRef.current) return;
       const list: Source[] = data.sources || [];
       setSources(list);
 
@@ -175,9 +244,43 @@ function SourceBrowserPageClient() {
       );
 
       if (list.length > 0) {
-        setActiveSourceKey(list[0].key);
+        const firstKey = list[0].key;
+        const initialCategories = data.initialCategories;
+        if (Array.isArray(initialCategories) && initialCategories.length > 0) {
+          categoriesCacheRef.current.set(firstKey, initialCategories);
+          prefetchedCategoriesRef.current = {
+            sourceKey: firstKey,
+            categories: initialCategories,
+          };
+          const picked =
+            data.initialCategory !== undefined
+              ? data.initialCategory
+              : (pickDefaultSourceCategory(initialCategories, isAdultModule)
+                  ?.type_id ?? '');
+          setCategories(initialCategories);
+          setActiveCategory(picked);
+
+          if (
+            picked !== '' &&
+            data.initialList &&
+            Array.isArray(data.initialList.items)
+          ) {
+            listCacheRef.current.set(
+              `${firstKey}:${String(picked)}`,
+              data.initialList,
+            );
+            prefetchedListRef.current = {
+              sourceKey: firstKey,
+              typeId: String(picked),
+              result: data.initialList,
+            };
+            applyListResult(data.initialList, 1, false);
+          }
+        }
+        setActiveSourceKey(firstKey);
       }
     } catch (e: unknown) {
+      if (reqId !== sourcesReqIdRef.current) return;
       const errorMessage = toErrorMessage(e, '获取源失败');
       setSourceError(errorMessage);
 
@@ -186,39 +289,53 @@ function SourceBrowserPageClient() {
         analytics.handleSourceError('network', errorMessage, ''),
       );
     } finally {
-      setLoadingSources(false);
+      if (reqId === sourcesReqIdRef.current) {
+        isFetchingSourcesRef.current = false;
+        setLoadingSources(false);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 刻意窄依赖：analytics 为每渲染重建的对象，加入依赖会使 fetchSources 每渲染重建并触发挂载 effect 重复请求；其内部 handler 均为稳定 useCallback
-  }, [isAdultModule]); // isAdultModule 决定源分组；移除 analytics 依赖
+  }, [isAdultModule, applyListResult]); // isAdultModule 决定源分组；移除 analytics 依赖
 
   const fetchCategories = useCallback(
     async (sourceKey: string) => {
       if (!sourceKey) return;
+      const cached = categoriesCacheRef.current.get(sourceKey);
+      if (cached && cached.length > 0) {
+        setCategoryError(null);
+        setCategories(cached);
+        const preferred = pickDefaultSourceCategory(cached, isAdultModule);
+        setActiveCategory(preferred ? preferred.type_id : '');
+        return;
+      }
+
+      const reqId = ++categoriesReqIdRef.current;
       setLoadingCategories(true);
       setCategoryError(null);
       try {
         const res = await fetch(
           `/api/source-browser/categories?source=${encodeURIComponent(sourceKey)}`,
         );
+        if (reqId !== categoriesReqIdRef.current) return;
         if (!res.ok) throw new Error('获取分类失败');
         const data = await res.json();
+        if (reqId !== categoriesReqIdRef.current) return;
         const list: Category[] = data.categories || [];
-        setCategories(list);
         if (list.length > 0) {
-          // 黄果模块默认选中「AI短剧」分类
-          const preferred = isAdultModule
-            ? list.find((c) => c.type_name === 'AI短剧')
-            : undefined;
-          setActiveCategory(preferred ? preferred.type_id : list[0].type_id);
-        } else {
-          setActiveCategory('');
+          categoriesCacheRef.current.set(sourceKey, list);
         }
+        setCategories(list);
+        const preferred = pickDefaultSourceCategory(list, isAdultModule);
+        setActiveCategory(preferred ? preferred.type_id : '');
       } catch (e: unknown) {
+        if (reqId !== categoriesReqIdRef.current) return;
         setCategoryError(toErrorMessage(e, '获取分类失败'));
         setCategories([]);
         setActiveCategory('');
       } finally {
-        setLoadingCategories(false);
+        if (reqId === categoriesReqIdRef.current) {
+          setLoadingCategories(false);
+        }
       }
     },
     [isAdultModule],
@@ -232,6 +349,17 @@ function SourceBrowserPageClient() {
       append = false,
     ) => {
       if (!sourceKey || !typeId) return;
+      const cacheKey = `${sourceKey}:${String(typeId)}`;
+      if (p === 1 && !append) {
+        const cached = listCacheRef.current.get(cacheKey);
+        if (cached) {
+          setItemsError(null);
+          applyListResult(cached, 1, false);
+          return;
+        }
+      }
+
+      const reqId = ++itemsReqIdRef.current;
       if (append) setLoadingMore(true);
       else setLoadingItems(true);
       setItemsError(null);
@@ -241,54 +369,74 @@ function SourceBrowserPageClient() {
             sourceKey,
           )}&type_id=${encodeURIComponent(String(typeId))}&page=${p}`,
         );
+        if (reqId !== itemsReqIdRef.current) return;
         if (!res.ok) throw new Error('获取列表失败');
-        const data = (await res.json()) as {
-          items?: Item[];
-          meta?: { page?: number; pagecount?: number };
-        };
-        const list: Item[] = data.items || [];
-        setItems((prev) => (append ? [...prev, ...list] : list));
-        setPage(Number(data.meta?.page || p));
-        setPageCount(Number(data.meta?.pagecount || 1));
-        // 更新可选年份
-        const years = Array.from(
-          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean)),
-        );
-        years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
-        setAvailableYears(years);
+        const data = (await res.json()) as SourceVideoListResult;
+        if (reqId !== itemsReqIdRef.current) return;
+        if (
+          p === 1 &&
+          !append &&
+          Array.isArray(data.items) &&
+          data.items.length > 0
+        ) {
+          listCacheRef.current.set(cacheKey, data);
+        }
+        applyListResult(data, p, append);
       } catch (e: unknown) {
+        if (reqId !== itemsReqIdRef.current) return;
         setItemsError(toErrorMessage(e, '获取列表失败'));
         if (!append) setItems([]);
         setPage(1);
         setPageCount(1);
         setAvailableYears([]);
       } finally {
-        if (append) setLoadingMore(false);
-        else setLoadingItems(false);
+        if (reqId === itemsReqIdRef.current) {
+          if (append) setLoadingMore(false);
+          else setLoadingItems(false);
+        }
       }
     },
-    [],
+    [applyListResult],
   );
 
   useEffect(() => {
     fetchSources();
   }, [fetchSources]);
   useEffect(() => {
-    if (activeSourceKey) fetchCategories(activeSourceKey);
+    if (isFetchingSourcesRef.current || !activeSourceKey) return;
+    if (prefetchedCategoriesRef.current?.sourceKey === activeSourceKey) {
+      prefetchedCategoriesRef.current = null;
+      return;
+    }
+    fetchCategories(activeSourceKey);
   }, [activeSourceKey, fetchCategories]);
   useEffect(() => {
-    if (activeSourceKey && activeCategory && mode === 'category') {
-      // 重置列表并加载第一页
-      setItems([]);
-      setPage(1);
-      setPageCount(1);
-      fetchItems(activeSourceKey, activeCategory, 1, false);
+    if (
+      isFetchingSourcesRef.current ||
+      !activeSourceKey ||
+      !activeCategory ||
+      mode !== 'category'
+    ) {
+      return;
     }
+    if (
+      prefetchedListRef.current?.sourceKey === activeSourceKey &&
+      prefetchedListRef.current?.typeId === String(activeCategory)
+    ) {
+      prefetchedListRef.current = null;
+      return;
+    }
+    // 重置列表并加载第一页
+    setItems([]);
+    setPage(1);
+    setPageCount(1);
+    fetchItems(activeSourceKey, activeCategory, 1, false);
   }, [activeSourceKey, activeCategory, mode, fetchItems]);
 
   const fetchSearch = useCallback(
     async (sourceKey: string, q: string, p = 1, append = false) => {
       if (!sourceKey || !q) return;
+      const reqId = ++itemsReqIdRef.current;
       if (append) setLoadingMore(true);
       else setLoadingItems(true);
       setItemsError(null);
@@ -298,32 +446,29 @@ function SourceBrowserPageClient() {
             sourceKey,
           )}&q=${encodeURIComponent(q)}&page=${p}`,
         );
+        if (reqId !== itemsReqIdRef.current) return;
         if (!res.ok) throw new Error('搜索失败');
         const data = (await res.json()) as {
           items?: Item[];
           meta?: { page?: number; pagecount?: number };
         };
-        const list: Item[] = data.items || [];
-        setItems((prev) => (append ? [...prev, ...list] : list));
-        setPage(Number(data.meta?.page || p));
-        setPageCount(Number(data.meta?.pagecount || 1));
-        const years = Array.from(
-          new Set(list.map((i) => (i.year || '').trim()).filter(Boolean)),
-        );
-        years.sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0));
-        setAvailableYears(years);
+        if (reqId !== itemsReqIdRef.current) return;
+        applyListResult(data, p, append);
       } catch (e: unknown) {
+        if (reqId !== itemsReqIdRef.current) return;
         setItemsError(toErrorMessage(e, '搜索失败'));
         if (!append) setItems([]);
         setPage(1);
         setPageCount(1);
         setAvailableYears([]);
       } finally {
-        if (append) setLoadingMore(false);
-        else setLoadingItems(false);
+        if (reqId === itemsReqIdRef.current) {
+          if (append) setLoadingMore(false);
+          else setLoadingItems(false);
+        }
       }
     },
-    [],
+    [applyListResult],
   );
 
   useEffect(() => {
@@ -724,6 +869,28 @@ function SourceBrowserPageClient() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 黄果模块首屏加载态：隐藏了来源条，直接展示骨架避免白屏 */}
+        {isAdultModule && !activeSource && (
+          <section className='space-y-4'>
+            {loadingSources ? (
+              <SourceBrowserContentSkeleton />
+            ) : sourceError ? (
+              <div className='px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400'>
+                {sourceError}
+              </div>
+            ) : (
+              <div className='text-center py-12'>
+                <div className='w-14 h-14 mx-auto mb-3 rounded-full bg-[#e8e8e8] dark:bg-[#2a2a2a] flex items-center justify-center'>
+                  <Server className='w-6 h-6 text-[#8f8f8f]' />
+                </div>
+                <p className='text-sm text-[#5f5f5f] dark:text-[#a8a8a8]'>
+                  暂无可用来源
+                </p>
               </div>
             )}
           </section>
@@ -1297,7 +1464,7 @@ function SourceBrowserPageClient() {
 
 export default function SourceBrowserPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<SourceBrowserLoading />}>
       <SourceBrowserPageClient />
     </Suspense>
   );

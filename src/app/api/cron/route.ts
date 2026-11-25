@@ -2,12 +2,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getConfig, refineConfig } from '@/lib/config';
+import { getAdultApiSites, getConfig, refineConfig } from '@/lib/config';
 import { fetchDecodedConfigSubscription } from '@/lib/config-subscription';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { db } from '@/lib/db';
+import { getGuestSource } from '@/lib/guest-source';
 import { refreshEnabledLiveChannels } from '@/lib/live';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import {
+  type SourceWarmTarget,
+  warmSourceBrowserSources,
+} from '@/lib/source-browser.server';
 
 export const runtime = 'nodejs';
 
@@ -74,15 +79,35 @@ async function cronJob() {
     console.error('❌ 配置刷新失败:', err);
   }
 
-  try {
-    await refreshAllLiveChannels();
-  } catch (err) {
-    console.error('❌ 直播频道刷新失败:', err);
-  }
+  // 片源库预热与直播频道测速并行，避免被直播频道批量探测阻塞
+  await Promise.allSettled([
+    warmSourceBrowserCache().catch((err) => {
+      console.error('❌ 片源库缓存预热失败:', err);
+    }),
+    refreshAllLiveChannels().catch((err) => {
+      console.error('❌ 直播频道刷新失败:', err);
+    }),
+  ]);
 
   // 播放记录/收藏/追更提醒的刷新已改为按用户触发：
   // 用户进首页经 /api/watching-updates?force=1 按需刷新（30 分钟节流），
   // 定时全量拉取已移除，避免为不活跃用户空转打源站。
+}
+
+async function warmSourceBrowserCache() {
+  const [adultSites, guestSource] = await Promise.all([
+    getAdultApiSites(),
+    getGuestSource(),
+  ]);
+  const targets: SourceWarmTarget[] = adultSites.map((source) => ({
+    source,
+    isAdult: true,
+  }));
+  if (guestSource) {
+    targets.push({ source: guestSource, isAdult: false });
+  }
+  if (targets.length === 0) return;
+  await warmSourceBrowserSources(targets);
 }
 
 async function refreshAllLiveChannels() {
