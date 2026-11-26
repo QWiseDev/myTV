@@ -253,14 +253,14 @@ export function getOptimizedHlsConfig(
       : 60,
     backBufferLength: isMobile ? (isIOS13 ? 10 : isIOS ? 15 : 20) : 30,
 
-    /* 缓冲大小（字节）上限 - 与秒数上限先到为准，约束高码率流的内存占用 */
+    /* 缓冲大小（字节）上限 - 与秒数上限先到为准，现代桌面放宽至 150MB（运行时由 dynamicBuffer 按源速与配额动态伸缩） */
     maxBufferSize: isMobile
       ? isIOS13
         ? 40 * 1000 * 1000
         : isIOS
           ? 60 * 1000 * 1000
           : 70 * 1000 * 1000
-      : 80 * 1000 * 1000,
+      : 150 * 1000 * 1000,
 
     // 增强的MediaSource配置
     maxAudioBufferSize: 40 * 1000 * 1000,
@@ -270,7 +270,7 @@ export function getOptimizedHlsConfig(
         : isIOS
           ? 60 * 1000 * 1000
           : 70 * 1000 * 1000
-      : 80 * 1000 * 1000,
+      : 150 * 1000 * 1000,
 
     /* 网络加载优化 - 参考 defaultLoadPolicy */
     maxLoadingDelay: isMobile ? (isIOS13 ? 2 : 3) : 4, // iOS13+设备更快超时

@@ -1433,4 +1433,69 @@ describe('usePlayerInitializer', () => {
       consoleError.mockRestore();
     });
   });
+
+  test('syncs dynamic buffer limits when memoryPressure updates without rebuilding player', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    const hlsConfig = {
+      maxBufferLength: 60,
+      maxMaxBufferLength: 180,
+      maxBufferSize: 80 * 1000 * 1000,
+      backBufferLength: 30,
+    };
+    const hlsInstance = {
+      config: hlsConfig,
+      on: jest.fn(),
+      off: jest.fn(),
+      destroy: jest.fn(),
+    };
+    (initAdaptiveHls as jest.Mock).mockImplementation(
+      (video: HTMLVideoElement) => {
+        (video as unknown as { hls?: unknown }).hls = hlsInstance;
+        return hlsInstance;
+      },
+    );
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+    (createArtplayerConfig as jest.Mock).mockImplementation(
+      (options: unknown) => options,
+    );
+
+    const baseParams = createParams('https://example.com/episode-1.m3u8');
+    const { rerender } = renderHook(
+      ({
+        memoryPressure,
+      }: {
+        memoryPressure: 'low' | 'medium' | 'high' | 'critical';
+      }) =>
+        usePlayerInitializer({
+          ...baseParams,
+          memoryPressure,
+        }),
+      { initialProps: { memoryPressure: 'low' } },
+    );
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const playerOptions = (createArtplayerConfig as jest.Mock).mock.calls[0][0];
+    act(() => {
+      playerOptions.customType.m3u8(
+        player.video,
+        'https://example.com/episode-1.m3u8',
+      );
+    });
+
+    expect(hlsConfig.maxBufferLength).toBe(90);
+    expect(hlsConfig.maxBufferSize).toBe(180 * 1000 * 1000);
+
+    rerender({ memoryPressure: 'critical' as const });
+    expect(hlsConfig.maxBufferLength).toBe(2);
+    expect(hlsConfig.maxMaxBufferLength).toBe(10);
+    expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+  });
 });

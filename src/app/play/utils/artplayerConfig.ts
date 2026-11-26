@@ -107,6 +107,7 @@ export function getBaseArtplayerConfig(options: ArtplayerConfigOptions) {
     airplay: isIOS || isSafari,
     moreVideoAttr: {
       crossOrigin: 'anonymous',
+      preload: 'auto',
     },
   };
 }

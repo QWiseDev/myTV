@@ -27,6 +27,10 @@ import {
   resetDanmakuTimeline,
   showDanmakuErrorNotice,
 } from '../utils/danmakuRuntime';
+import {
+  type DynamicBufferController,
+  installDynamicBuffer,
+} from '../utils/dynamicBuffer';
 import { createAdFilterHlsLoader } from '../utils/hlsAdFilterLoader';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
 import {
@@ -192,6 +196,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   // 埋点辅助状态：卡顿起始时间 / 最近一次播放位置
   const bufferStartAtRef = useRef<number>(0);
   const lastPlayTimeRef = useRef<number>(0);
+  const dynamicBufferRef = useRef<DynamicBufferController | null>(null);
 
   const {
     videoUrl,
@@ -200,7 +205,19 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     currentSource: mediaSource,
     currentId: mediaId,
     artRef,
+    memoryPressure: activeMemoryPressure,
   } = params;
+
+  useEffect(() => {
+    dynamicBufferRef.current?.setMemoryPressure(activeMemoryPressure);
+  }, [activeMemoryPressure]);
+
+  useEffect(() => {
+    return () => {
+      dynamicBufferRef.current?.dispose();
+      dynamicBufferRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const generation = ++initializationGenerationRef.current;
@@ -575,6 +592,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             );
             if (hls) {
               ensureVideoSource(video, url);
+              dynamicBufferRef.current?.attachHls(hls);
             }
           },
         };
@@ -633,6 +651,20 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           detail?.episodes_titles?.[currentEpisodeIndex],
         );
         installSuperResolution(artPlayer);
+        dynamicBufferRef.current?.dispose();
+        const dynamicBuffer = installDynamicBuffer(artPlayer, {
+          deviceInfo: { isMobile, isIOS, isIOS13 },
+          getMemoryPressure: () => latestParamsRef.current.memoryPressure,
+        });
+        dynamicBufferRef.current = dynamicBuffer;
+        const originalDestroyForBuffer = artPlayer.destroy;
+        artPlayer.destroy = function (removeHtml?: boolean) {
+          dynamicBuffer.dispose();
+          if (dynamicBufferRef.current === dynamicBuffer) {
+            dynamicBufferRef.current = null;
+          }
+          return originalDestroyForBuffer.call(this, removeHtml);
+        };
         // 播放器实例在换集/换源时会复用；事件监听必须跨 effect generation 保持生效。
         // generation 只约束尚未提交的异步初始化，实例事件只校验当前播放器身份。
         const isActivePlayer = () => artPlayerRef.current === artPlayer;
