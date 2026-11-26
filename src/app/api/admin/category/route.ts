@@ -2,8 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -18,31 +18,17 @@ interface BaseBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+    const adminConfig = admin.config;
+
     const body = (await request.json()) as BaseBody & Record<string, any>;
     const { action } = body;
 
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
-    const username = authInfo.username;
-
     // 基础校验
     const ACTIONS: Action[] = ['add', 'disable', 'enable', 'delete', 'sort'];
-    if (!username || !action || !ACTIONS.includes(action)) {
+    if (!action || !ACTIONS.includes(action)) {
       return NextResponse.json({ error: '参数格式错误' }, { status: 400 });
-    }
-
-    // 获取配置与存储
-    const adminConfig = await getConfig();
-
-    // 权限与身份校验
-    if (username !== process.env.USERNAME) {
-      const userEntry = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username,
-      );
-      if (!userEntry || userEntry.role !== 'admin' || userEntry.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
     }
 
     switch (action) {

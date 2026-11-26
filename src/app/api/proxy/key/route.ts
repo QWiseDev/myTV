@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -14,26 +15,6 @@ const keyCache = new Map<
 >();
 const KEY_CACHE_TTL = 300000; // 5分钟
 const MAX_CACHE_SIZE = 200;
-
-// 连接池管理
-import * as http from 'http';
-import * as https from 'https';
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 30,
-  maxFreeSockets: 10,
-  timeout: 15000,
-  keepAliveMsecs: 30000,
-});
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 30,
-  maxFreeSockets: 10,
-  timeout: 15000,
-  keepAliveMsecs: 30000,
-});
 
 // 性能统计
 const keyStats = {
@@ -81,14 +62,28 @@ export async function GET(request: Request) {
 
   const config = await getConfig();
   const liveSource = config.LiveConfig?.find((s: any) => s.key === source);
-  if (!liveSource) {
+  if (!liveSource || liveSource.disabled) {
     keyStats.errors++;
     return NextResponse.json({ error: 'Source not found' }, { status: 404 });
   }
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
 
-  const decodedUrl = decodeURIComponent(url);
-  const cacheKey = `${source}-${decodedUrl}`;
+  const targetUrl = url.trim();
+  try {
+    await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+  } catch (validationError) {
+    keyStats.errors++;
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : 'Invalid or restricted URL',
+      },
+      { status: 400 },
+    );
+  }
+  const cacheKey = `${source}-${targetUrl}`;
 
   // 检查缓存
   const cached = keyCache.get(cacheKey);
@@ -119,10 +114,7 @@ export async function GET(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
   try {
-    const isHttps = decodedUrl.startsWith('https:');
-    const agent = isHttps ? httpsAgent : httpAgent;
-
-    const response = await fetch(decodedUrl, {
+    const response = await safeFetch(targetUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent': ua,
@@ -130,9 +122,6 @@ export async function GET(request: Request) {
         'Cache-Control': 'no-cache',
         ...(cached?.etag && { 'If-None-Match': cached.etag }),
       },
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore - Node.js specific option
-      agent: typeof window === 'undefined' ? agent : undefined,
     });
 
     clearTimeout(timeoutId);

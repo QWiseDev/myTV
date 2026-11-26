@@ -2,11 +2,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
+
+const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const MIN_PASSWORD_LENGTH = 8;
 
 // 强制动态渲染，避免在构建时预生成
 // 支持的操作类型
@@ -26,12 +29,14 @@ const ACTIONS = [
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
 
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
-    const username = authInfo.username;
+    const username = admin.username;
+    const operatorRole = admin.role;
+    const adminConfig = admin.config;
+
+    const body = await request.json();
 
     const {
       targetUsername, // 目标用户名
@@ -70,23 +75,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取配置与存储
-    const adminConfig = await getConfig();
-
-    // 判定操作者角色
-    let operatorRole: 'owner' | 'admin';
-    if (username === process.env.USERNAME) {
-      operatorRole = 'owner';
-    } else {
-      const userEntry = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username,
-      );
-      if (!userEntry || userEntry.role !== 'admin' || userEntry.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-      operatorRole = 'admin';
-    }
-
     // 查找目标用户条目（用户组操作和批量操作不需要）
     let targetEntry: any = null;
     let isTargetAdmin = false;
@@ -115,23 +103,33 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'add': {
-        if (targetEntry) {
-          return NextResponse.json({ error: '用户已存在' }, { status: 400 });
-        }
-        if (!targetPassword) {
+        if (!targetUsername || !USERNAME_PATTERN.test(targetUsername)) {
           return NextResponse.json(
-            { error: '缺少目标用户密码' },
+            { error: '用户名只能包含3-20位字母、数字或下划线' },
             { status: 400 },
           );
         }
-        await db.registerUser(targetUsername!, targetPassword);
+        if (targetEntry) {
+          return NextResponse.json({ error: '用户已存在' }, { status: 400 });
+        }
+        if (
+          !targetPassword ||
+          typeof targetPassword !== 'string' ||
+          targetPassword.length < MIN_PASSWORD_LENGTH
+        ) {
+          return NextResponse.json(
+            { error: `密码长度不能少于 ${MIN_PASSWORD_LENGTH} 位` },
+            { status: 400 },
+          );
+        }
+        await db.registerUser(targetUsername, targetPassword);
 
         // 获取用户组信息
         const { userGroup } = body as { userGroup?: string };
 
         // 更新配置
         const newUser: any = {
-          username: targetUsername!,
+          username: targetUsername,
           role: 'user',
           createdAt: Date.now(), // 设置创建时间戳
         };
@@ -158,11 +156,12 @@ export async function POST(request: NextRequest) {
           if (operatorRole !== 'owner') {
             return NextResponse.json(
               { error: '仅站长可封禁管理员' },
-              { status: 401 },
+              { status: 403 },
             );
           }
         }
         targetEntry.banned = true;
+        targetEntry.tokenInvalidBefore = Date.now();
         break;
       }
       case 'unban': {
@@ -176,7 +175,7 @@ export async function POST(request: NextRequest) {
           if (operatorRole !== 'owner') {
             return NextResponse.json(
               { error: '仅站长可操作管理员' },
-              { status: 401 },
+              { status: 403 },
             );
           }
         }
@@ -199,7 +198,7 @@ export async function POST(request: NextRequest) {
         if (operatorRole !== 'owner') {
           return NextResponse.json(
             { error: '仅站长可设置管理员' },
-            { status: 401 },
+            { status: 403 },
           );
         }
         targetEntry.role = 'admin';
@@ -221,7 +220,7 @@ export async function POST(request: NextRequest) {
         if (operatorRole !== 'owner') {
           return NextResponse.json(
             { error: '仅站长可取消管理员' },
-            { status: 401 },
+            { status: 403 },
           );
         }
         targetEntry.role = 'user';
@@ -234,15 +233,22 @@ export async function POST(request: NextRequest) {
             { status: 404 },
           );
         }
-        if (!targetPassword) {
-          return NextResponse.json({ error: '缺少新密码' }, { status: 400 });
+        if (
+          !targetPassword ||
+          typeof targetPassword !== 'string' ||
+          targetPassword.length < MIN_PASSWORD_LENGTH
+        ) {
+          return NextResponse.json(
+            { error: `密码长度不能少于 ${MIN_PASSWORD_LENGTH} 位` },
+            { status: 400 },
+          );
         }
 
         // 权限检查：不允许修改站长密码
         if (targetEntry.role === 'owner') {
           return NextResponse.json(
             { error: '无法修改站长密码' },
-            { status: 401 },
+            { status: 403 },
           );
         }
 
@@ -253,11 +259,12 @@ export async function POST(request: NextRequest) {
         ) {
           return NextResponse.json(
             { error: '仅站长可修改其他管理员密码' },
-            { status: 401 },
+            { status: 403 },
           );
         }
 
         await db.changePassword(targetUsername!, targetPassword);
+        targetEntry.tokenInvalidBefore = Date.now();
         break;
       }
       case 'deleteUser': {
@@ -276,7 +283,7 @@ export async function POST(request: NextRequest) {
         if (isTargetAdmin && operatorRole !== 'owner') {
           return NextResponse.json(
             { error: '仅站长可删除管理员' },
-            { status: 401 },
+            { status: 403 },
           );
         }
 
@@ -310,7 +317,7 @@ export async function POST(request: NextRequest) {
         ) {
           return NextResponse.json(
             { error: '仅站长可配置其他管理员的采集源' },
-            { status: 401 },
+            { status: 403 },
           );
         }
 

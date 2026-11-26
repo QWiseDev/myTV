@@ -74,9 +74,11 @@ export const API_CONFIG = {
   },
 };
 
-// 在模块加载时根据环境决定配置来源
+// 在模块加载时根据环境决定配置来源（带 TTL 与单飞合并，避免并发竞态和永久陈旧）
+const CONFIG_CACHE_TTL_MS = 30 * 1000;
 let cachedConfig: AdminConfig | null = null;
-let isLoadingConfig = false;
+let cachedConfigLoadedAt = 0;
+let configLoadPromise: Promise<AdminConfig> | null = null;
 
 // 从配置文件补充管理员配置
 export function refineConfig(adminConfig: AdminConfig): AdminConfig {
@@ -339,67 +341,68 @@ async function getInitConfig(
 }
 
 export async function getConfig(): Promise<AdminConfig> {
-  // 直接使用内存缓存
-  if (cachedConfig) {
+  // 直接使用有效期内内存缓存
+  if (cachedConfig && Date.now() - cachedConfigLoadedAt < CONFIG_CACHE_TTL_MS) {
     return cachedConfig;
   }
 
-  // 如果正在加载，等待加载完成
-  if (isLoadingConfig) {
-    // 简单的轮询等待，最多等待5秒
-    let attempts = 0;
-    while (isLoadingConfig && attempts < 50) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      attempts++;
-    }
-    if (cachedConfig) {
-      return cachedConfig;
-    }
+  // 单飞复用正在进行的加载，防止并发重复读库或死锁
+  if (configLoadPromise) {
+    return configLoadPromise;
   }
 
-  // 设置加载锁
-  isLoadingConfig = true;
+  const loadPromise = (async (): Promise<AdminConfig> => {
+    let adminConfig: AdminConfig | null = null;
+    let isNewConfig = false;
 
-  // 读 db
-  let adminConfig: AdminConfig | null = null;
-  let isNewConfig = false;
+    try {
+      adminConfig = await db.getAdminConfig();
+    } catch (e) {
+      console.error('[CONFIG] 获取管理员配置失败:', e);
+    }
 
+    // 保存原始配置快照，用于后续比较
+    const originalConfigSnapshot = adminConfig
+      ? JSON.stringify(adminConfig)
+      : null;
+
+    // db 中无配置，执行一次初始化
+    if (!adminConfig) {
+      adminConfig = await getInitConfig('');
+      isNewConfig = true;
+    }
+
+    adminConfig = refineConfig(adminConfig);
+    adminConfig = await configSelfCheck(adminConfig);
+
+    cachedConfig = adminConfig;
+    cachedConfigLoadedAt = Date.now();
+
+    // 只在配置真正变化时才保存（新配置或内容有变化）
+    if (isNewConfig || JSON.stringify(adminConfig) !== originalConfigSnapshot) {
+      await db.saveAdminConfig(cachedConfig).catch((e) => {
+        console.error('[CONFIG] 保存规范化配置失败:', e);
+      });
+    }
+
+    return adminConfig;
+  })();
+
+  configLoadPromise = loadPromise;
   try {
-    adminConfig = await db.getAdminConfig();
-  } catch (e) {
-    console.error('[CONFIG] 获取管理员配置失败:', e);
+    return await loadPromise;
+  } finally {
+    if (configLoadPromise === loadPromise) {
+      configLoadPromise = null;
+    }
   }
-
-  // 保存原始配置快照，用于后续比较
-  const originalConfigSnapshot = adminConfig
-    ? JSON.stringify(adminConfig)
-    : null;
-
-  // db 中无配置，执行一次初始化
-  if (!adminConfig) {
-    adminConfig = await getInitConfig('');
-    isNewConfig = true;
-  }
-
-  adminConfig = refineConfig(adminConfig);
-  adminConfig = await configSelfCheck(adminConfig);
-
-  cachedConfig = adminConfig;
-
-  // 只在配置真正变化时才保存（新配置或内容有变化）
-  if (isNewConfig || JSON.stringify(adminConfig) !== originalConfigSnapshot) {
-    db.saveAdminConfig(cachedConfig);
-  }
-
-  // 释放加载锁
-  isLoadingConfig = false;
-  return adminConfig;
 }
 
 // 清除配置缓存，强制重新从数据库读取
 export function clearConfigCache(): void {
   cachedConfig = null;
-  isLoadingConfig = false;
+  cachedConfigLoadedAt = 0;
+  configLoadPromise = null;
 }
 
 export async function configSelfCheck(
@@ -678,6 +681,7 @@ export async function getAdultApiSites(user?: string): Promise<ApiSite[]> {
 
 export async function setCachedConfig(config: AdminConfig) {
   cachedConfig = config;
+  cachedConfigLoadedAt = Date.now();
 }
 
 // 特殊功能权限检查
@@ -745,6 +749,38 @@ export async function hasSpecialFeaturePermission(
   }
 }
 
+const SOURCE_BACKUP_DIR = path.resolve(
+  process.cwd(),
+  '.data',
+  'source-backups',
+);
+
+function resolveSafeBackupPath(backupFile: string): string {
+  const safeName = path.basename(backupFile.trim());
+  if (!safeName || !/^[a-zA-Z0-9._-]+\.json$/.test(safeName)) {
+    throw new Error('非法的备份文件名');
+  }
+
+  const candidateInDir = path.resolve(SOURCE_BACKUP_DIR, safeName);
+  if (
+    candidateInDir.startsWith(`${SOURCE_BACKUP_DIR}${path.sep}`) &&
+    fs.existsSync(candidateInDir)
+  ) {
+    return candidateInDir;
+  }
+
+  const cwdRoot = path.resolve(process.cwd());
+  const legacyInCwd = path.resolve(cwdRoot, safeName);
+  if (
+    legacyInCwd.startsWith(`${cwdRoot}${path.sep}`) &&
+    fs.existsSync(legacyInCwd)
+  ) {
+    return legacyInCwd;
+  }
+
+  throw new Error(`备份文件不存在: ${safeName}`);
+}
+
 /**
  * 🚀 删除所有视频源（仅管理员操作）
  * @returns 返回被删除的视频源数量
@@ -760,9 +796,10 @@ export async function deleteAllVideoSources(): Promise<{
     return { deletedCount: 0, backupFile: '' };
   }
 
-  // 创建备份
+  // 创建备份在受控目录，并返回纯文件名避免路径泄露/拼接
+  fs.mkdirSync(SOURCE_BACKUP_DIR, { recursive: true });
   const backupFile = `sources-backup-${Date.now()}.json`;
-  const backupPath = path.join(process.cwd(), backupFile);
+  const backupPath = path.join(SOURCE_BACKUP_DIR, backupFile);
 
   fs.writeFileSync(
     backupPath,
@@ -774,42 +811,57 @@ export async function deleteAllVideoSources(): Promise<{
   config.SourceConfig = [];
 
   // 清除缓存并保存
-  cachedConfig = config;
+  await setCachedConfig(config);
   await db.saveAdminConfig(config);
 
   return {
     deletedCount: sourcesToDelete.length,
-    backupFile: backupPath,
+    backupFile,
   };
 }
 
 /**
  * 🚀 恢复视频源（仅管理员操作）
- * @param backupPath 备份文件路径
+ * @param backupFile 备份文件名
  * @returns 返回恢复的视频源数量
  */
 export async function restoreVideoSources(
-  backupPath: string,
+  backupFile: string,
 ): Promise<{ restoredCount: number }> {
-  if (!fs.existsSync(backupPath)) {
-    throw new Error(`备份文件不存在: ${backupPath}`);
-  }
-
-  const backupData = JSON.parse(fs.readFileSync(backupPath, 'utf-8'));
+  const safePath = resolveSafeBackupPath(backupFile);
+  const backupData = JSON.parse(fs.readFileSync(safePath, 'utf-8'));
 
   if (!Array.isArray(backupData)) {
     throw new Error('备份文件格式错误: 不是一个有效的数组');
   }
 
+  const validSources = backupData.filter(
+    (item) =>
+      item &&
+      typeof item === 'object' &&
+      typeof item.key === 'string' &&
+      typeof item.name === 'string' &&
+      typeof item.api === 'string',
+  );
+
   const config = await getConfig();
 
-  // 添加到当前配置中
-  config.SourceConfig = [...(config.SourceConfig || []), ...backupData];
+  // 添加到当前配置中（按 key 去重）
+  const existingKeys = new Set((config.SourceConfig || []).map((s) => s.key));
+  const merged = [...(config.SourceConfig || [])];
+  let restoredCount = 0;
+  for (const item of validSources) {
+    if (!existingKeys.has(item.key)) {
+      merged.push(item);
+      existingKeys.add(item.key);
+      restoredCount++;
+    }
+  }
+  config.SourceConfig = merged;
 
-  // 清除缓存并保存
-  cachedConfig = config;
-  configSelfCheck(config);
-  await db.saveAdminConfig(config);
+  const checkedConfig = await configSelfCheck(config);
+  await setCachedConfig(checkedConfig);
+  await db.saveAdminConfig(checkedConfig);
 
-  return { restoredCount: backupData.length };
+  return { restoredCount };
 }

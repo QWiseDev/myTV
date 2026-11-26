@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites, getCacheTime, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -10,9 +11,17 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 // OrionTV 兼容接口
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
   const authInfo = auth.authInfo;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    authInfo.username,
+    authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
@@ -24,10 +33,7 @@ export async function GET(request: NextRequest) {
       { result: null, error: '缺少必要参数: q 或 resourceId' },
       {
         headers: {
-          'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
-          'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Netlify-Vary': 'query',
+          'Cache-Control': `private, max-age=${cacheTime}`,
         },
       },
     );
@@ -72,10 +78,7 @@ export async function GET(request: NextRequest) {
         { results: result },
         {
           headers: {
-            'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
-            'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-            'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-            'Netlify-Vary': 'query',
+            'Cache-Control': `private, max-age=${cacheTime}`,
           },
         },
       );

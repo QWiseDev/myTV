@@ -1,3 +1,5 @@
+import { generateAuthCookie } from '@/lib/auth';
+
 const mockHeaders = jest.fn();
 const mockGetServerInitialHomeData = jest.fn();
 const mockGetServerInitialGuestHomeData = jest.fn();
@@ -46,10 +48,20 @@ const emptyHomeData = {
   bangumiCalendarData: [],
 };
 
-// 构造带 HMAC 签名字段的登录 cookie 头
-const loginCookieHeader = () =>
+// 构造真签名 HMAC 登录 cookie 头
+const createSignedLoginCookieHeader = async () => {
+  const cookieValue = await generateAuthCookie('alice', 'user');
+  return `user_auth=${cookieValue}`;
+};
+
+// 构造被篡改/伪造签名的 cookie 头
+const tamperedLoginCookieHeader = () =>
   `user_auth=${encodeURIComponent(
-    JSON.stringify({ username: 'alice', signature: 'abc' }),
+    JSON.stringify({
+      username: 'alice',
+      signature: 'abc',
+      timestamp: Date.now(),
+    }),
   )}`;
 
 const getRenderedComponents = async () => {
@@ -63,9 +75,20 @@ describe('Home page initial data', () => {
   let GuestHome: typeof import('@/components/GuestHome').default;
   let HomeClient: typeof import('@/components/HomeClient').default;
 
+  const previousPassword = process.env.PASSWORD;
+
   beforeAll(async () => {
+    process.env.PASSWORD = 'test-password';
     GuestHome = (await import('@/components/GuestHome')).default;
     HomeClient = (await import('@/components/HomeClient')).default;
+  });
+
+  afterAll(() => {
+    if (previousPassword === undefined) {
+      delete process.env.PASSWORD;
+    } else {
+      process.env.PASSWORD = previousPassword;
+    }
   });
 
   beforeEach(() => {
@@ -137,8 +160,19 @@ describe('Home page initial data', () => {
     }
   });
 
+  it('renders GuestHome when the cookie signature is invalid or forged', async () => {
+    mockHeaders.mockReturnValue({ get: tamperedLoginCookieHeader });
+
+    const element = await getRenderedComponents();
+
+    expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+    expect(mockGetServerInitialGuestHomeData).toHaveBeenCalledTimes(1);
+    expect(element.type).toBe(GuestHome);
+  });
+
   it('uses the SSR initial-data reader for authenticated requests', async () => {
-    mockHeaders.mockReturnValue({ get: loginCookieHeader });
+    const cookieHeader = await createSignedLoginCookieHeader();
+    mockHeaders.mockReturnValue({ get: () => cookieHeader });
     mockGetServerInitialHomeData.mockResolvedValue(initialHomeData);
 
     const element = await getRenderedComponents();
@@ -152,7 +186,8 @@ describe('Home page initial data', () => {
     const consoleError = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    mockHeaders.mockReturnValue({ get: loginCookieHeader });
+    const cookieHeader = await createSignedLoginCookieHeader();
+    mockHeaders.mockReturnValue({ get: () => cookieHeader });
     mockGetServerInitialHomeData.mockRejectedValue(new Error('cache failed'));
 
     try {

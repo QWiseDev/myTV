@@ -4,6 +4,8 @@ import { createClient, RedisClientType } from 'redis';
 
 import { AdminConfig } from './admin.types';
 import { toDateKey } from './date-utils';
+import { hashPassword, isPasswordHash, verifyPassword } from './password';
+import { aggregatePlayStats, PlayStatsUserInput } from './play-stats-shared';
 import { parseStorageKey } from './storage-key';
 import {
   decodeHashObject,
@@ -317,10 +319,12 @@ export abstract class BaseRedisStorage implements IStorage {
   }
 
   async registerUser(userName: string, password: string): Promise<void> {
-    // 简单存储明文密码，生产环境应加密
+    const storedPassword = isPasswordHash(password)
+      ? password
+      : await hashPassword(password);
     await this.withPipeline((multi) => {
       multi
-        .set(this.userPwdKey(userName), password)
+        .set(this.userPwdKey(userName), storedPassword)
         .sAdd(this.usersSetKey(), userName);
     });
   }
@@ -330,8 +334,14 @@ export abstract class BaseRedisStorage implements IStorage {
       this.client.get(this.userPwdKey(userName)),
     );
     if (stored === null) return false;
-    // 确保比较时都是字符串类型
-    return ensureString(stored) === password;
+    const { valid, needsRehash } = await verifyPassword(
+      password,
+      ensureString(stored),
+    );
+    if (valid && needsRehash) {
+      this.changePassword(userName, password).catch(() => undefined);
+    }
+    return valid;
   }
 
   // 检查用户是否存在
@@ -345,10 +355,34 @@ export abstract class BaseRedisStorage implements IStorage {
 
   // 修改用户密码
   async changePassword(userName: string, newPassword: string): Promise<void> {
-    // 简单存储明文密码，生产环境应加密；顺带补进用户索引以防索引漂移
+    const storedPassword = isPasswordHash(newPassword)
+      ? newPassword
+      : await hashPassword(newPassword);
+    // 顺带补进用户索引以防索引漂移
     await this.withPipeline((multi) => {
       multi
-        .set(this.userPwdKey(userName), newPassword)
+        .set(this.userPwdKey(userName), storedPassword)
+        .sAdd(this.usersSetKey(), userName);
+    });
+  }
+
+  async getUserPasswordHash(userName: string): Promise<string | null> {
+    const stored = await this.withRetry(() =>
+      this.client.get(this.userPwdKey(userName)),
+    );
+    return stored === null ? null : ensureString(stored);
+  }
+
+  async setUserPasswordHash(
+    userName: string,
+    passwordOrHash: string,
+  ): Promise<void> {
+    const storedValue = isPasswordHash(passwordOrHash)
+      ? passwordOrHash
+      : await hashPassword(passwordOrHash);
+    await this.withPipeline((multi) => {
+      multi
+        .set(this.userPwdKey(userName), storedValue)
         .sAdd(this.usersSetKey(), userName);
     });
   }
@@ -933,153 +967,26 @@ export abstract class BaseRedisStorage implements IStorage {
 
       // 重新计算统计数据
       const allUsers = await this.getAllUsers();
-
-      const userStats: Array<{
-        username: string;
-        totalWatchTime: number;
-        totalPlays: number;
-        lastPlayTime: number;
-        recentRecords: PlayRecord[];
-        avgWatchTime: number;
-        mostWatchedSource: string;
-        registrationDays: number;
-        lastLoginTime: number;
-        loginCount: number;
-        createdAt: number;
-      }> = [];
-      let totalWatchTime = 0;
-      let totalPlays = 0;
-
-      // 用户注册统计
-      const now = Date.now();
-      const todayStart = new Date(now).setHours(0, 0, 0, 0);
-      let todayNewUsers = 0;
-      const registrationData: Record<string, number> = {};
-      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-
-      // 分批并行收集所有用户统计（串行逐用户 RTT 在隧道环境下代价高）
       const USER_STATS_BATCH_SIZE = 8;
-      const allUserStats: UserPlayStat[] = [];
+      const inputs: PlayStatsUserInput[] = [];
+
       for (let i = 0; i < allUsers.length; i += USER_STATS_BATCH_SIZE) {
         const batch = allUsers.slice(i, i + USER_STATS_BATCH_SIZE);
-        const batchStats = await Promise.all(
-          batch.map((username) => this.getUserPlayStat(username)),
+        const rows = await Promise.all(
+          batch.map(async (username) => {
+            const { stat, records } =
+              await this.getUserPlayStatWithRecords(username);
+            return {
+              username,
+              records,
+              loginStats: stat,
+            };
+          }),
         );
-        allUserStats.push(...batchStats);
+        inputs.push(...rows);
       }
 
-      // 设置项目开始时间，2025年9月14日
-      const PROJECT_START_DATE = new Date('2025-09-14').getTime();
-
-      for (const userStat of allUserStats) {
-        // 模拟用户创建时间（Redis模式下通常没有这个信息，使用首次播放时间或项目开始时间）
-        const userCreatedAt = userStat.firstWatchDate || PROJECT_START_DATE;
-        const registrationDays =
-          Math.floor((now - userCreatedAt) / (1000 * 60 * 60 * 24)) + 1;
-
-        // 统计今日新增用户
-        if (userCreatedAt >= todayStart) {
-          todayNewUsers++;
-        }
-
-        // 统计注册时间分布（近7天）
-        if (userCreatedAt >= sevenDaysAgo) {
-          const regDate = toDateKey(userCreatedAt);
-          registrationData[regDate] = (registrationData[regDate] || 0) + 1;
-        }
-
-        // 推断最后登录时间（基于最后播放时间）
-        const lastLoginTime = userStat.lastPlayTime || userCreatedAt;
-
-        const enhancedUserStat = {
-          username: userStat.username,
-          totalWatchTime: userStat.totalWatchTime,
-          totalPlays: userStat.totalPlays,
-          lastPlayTime: userStat.lastPlayTime,
-          recentRecords: userStat.recentRecords,
-          avgWatchTime: userStat.avgWatchTime,
-          mostWatchedSource: userStat.mostWatchedSource,
-          registrationDays,
-          lastLoginTime,
-          loginCount: userStat.loginCount || 0, // 添加登入次数字段
-          createdAt: userCreatedAt,
-        };
-
-        userStats.push(enhancedUserStat);
-        totalWatchTime += userStat.totalWatchTime;
-        totalPlays += userStat.totalPlays;
-      }
-
-      // 计算热门来源
-      const sourceMap = new Map<string, number>();
-      for (const user of userStats) {
-        for (const record of user.recentRecords) {
-          const count = sourceMap.get(record.source_name) || 0;
-          sourceMap.set(record.source_name, count + 1);
-        }
-      }
-
-      const topSources = Array.from(sourceMap.entries())
-        .map(([source, count]) => ({ source, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
-      // 生成近7天统计（简化版本）
-      const dailyStats = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        dailyStats.push({
-          date: toDateKey(date),
-          watchTime: Math.floor(totalWatchTime / 7), // 简化计算
-          plays: Math.floor(totalPlays / 7),
-        });
-      }
-
-      // 计算注册趋势
-      const registrationStats = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = toDateKey(date);
-        registrationStats.push({
-          date: dateKey,
-          newUsers: registrationData[dateKey] || 0,
-        });
-      }
-
-      // 计算活跃用户统计
-      const oneDayAgo = now - 24 * 60 * 60 * 1000;
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-
-      const activeUsers = {
-        daily: userStats.filter((user) => user.lastLoginTime >= oneDayAgo)
-          .length,
-        weekly: userStats.filter((user) => user.lastLoginTime >= sevenDaysAgo)
-          .length,
-        monthly: userStats.filter((user) => user.lastLoginTime >= thirtyDaysAgo)
-          .length,
-      };
-
-      const result: PlayStatsResult = {
-        totalUsers: allUsers.length,
-        totalWatchTime,
-        totalPlays,
-        avgWatchTimePerUser:
-          allUsers.length > 0 ? totalWatchTime / allUsers.length : 0,
-        avgPlaysPerUser: allUsers.length > 0 ? totalPlays / allUsers.length : 0,
-        userStats: userStats.sort(
-          (a, b) => b.totalWatchTime - a.totalWatchTime,
-        ),
-        topSources,
-        dailyStats,
-        // 新增：用户注册统计
-        registrationStats: {
-          todayNewUsers,
-          totalRegisteredUsers: allUsers.length,
-          registrationTrend: registrationStats,
-        },
-        // 新增：用户活跃度统计
-        activeUsers,
-      };
+      const result = aggregatePlayStats(inputs);
 
       // 缓存结果30分钟
       await this.setCache('play_stats_summary', result, 1800);
@@ -1377,18 +1284,52 @@ export abstract class BaseRedisStorage implements IStorage {
     offset = 0,
   ): Promise<AccessLog[]> {
     try {
+      const MAX_ACCESS_LOG_DAYS = 90;
       const now = Date.now();
-      const startTime = filters.startTime || now - 7 * 24 * 60 * 60 * 1000; // 默认7天前
-      const endTime = filters.endTime || now;
+      const rawEnd =
+        filters.endTime !== undefined && Number.isFinite(filters.endTime)
+          ? filters.endTime
+          : now;
+      const endTime = Math.min(rawEnd, now + 86400_000);
+      const minAllowedStart =
+        endTime - MAX_ACCESS_LOG_DAYS * 24 * 60 * 60 * 1000;
+      const rawStart =
+        filters.startTime !== undefined && Number.isFinite(filters.startTime)
+          ? filters.startTime
+          : endTime - 7 * 24 * 60 * 60 * 1000;
+      const startTime = Math.max(rawStart, minAllowedStart);
 
-      // 生成日期范围
+      if (startTime > endTime) {
+        return [];
+      }
+
+      const safeLimit = Math.min(
+        Math.max(Number.isFinite(limit) ? Math.floor(limit) : 50, 1),
+        500,
+      );
+      const safeOffset = Math.max(
+        Number.isFinite(offset) ? Math.floor(offset) : 0,
+        0,
+      );
+
+      // 生成日期范围（限制最多遍历 90 天，防止异常时间戳触发死循环）
       const startDate = toDateKey(startTime);
       const endDate = toDateKey(endTime);
       const dates: string[] = [];
       const currentDate = new Date(startDate);
-      while (toDateKey(currentDate) <= endDate) {
+      if (Number.isNaN(currentDate.getTime())) {
+        return [];
+      }
+      while (
+        toDateKey(currentDate) <= endDate &&
+        dates.length < MAX_ACCESS_LOG_DAYS
+      ) {
         dates.push(toDateKey(currentDate));
         currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      if (dates.length === 0) {
+        return [];
       }
 
       // 一次 pipeline 拉取全部日期的索引（原逐天 2×N RTT → 1 RTT）
@@ -1438,7 +1379,7 @@ export abstract class BaseRedisStorage implements IStorage {
       logs.sort((a, b) => b.timestamp - a.timestamp);
 
       // 应用分页
-      return logs.slice(offset, offset + limit);
+      return logs.slice(safeOffset, safeOffset + safeLimit);
     } catch (error) {
       console.error(`[${this.config.clientName}] 获取访问日志失败:`, error);
       return [];

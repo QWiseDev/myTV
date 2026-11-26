@@ -2,8 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 import {
   deleteCachedLiveChannels,
@@ -18,17 +18,10 @@ export const runtime = 'nodejs';
 /** 返回当前生效的分片代理配置（后台配置优先，环境变量回退），供面板预填 */
 export async function GET(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-    const username = authInfo?.username;
-    const config = await getConfig();
-    if (username !== process.env.USERNAME) {
-      const user = config.UserConfig?.Users?.find(
-        (u) => u.username === username,
-      );
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+    const config = admin.config;
+
     const proxy = resolveSegmentProxy(config);
     return NextResponse.json(
       {
@@ -48,17 +41,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // 权限检查
-    const authInfo = getAuthInfoFromCookie(request);
-    const username = authInfo?.username;
-    const config = await getConfig();
-    if (username !== process.env.USERNAME) {
-      // 管理员
-      const user = config.UserConfig.Users.find((u) => u.username === username);
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+    const config = admin.config;
 
     const body = await request.json();
     const {

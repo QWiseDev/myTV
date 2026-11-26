@@ -2,30 +2,22 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { getConfig, refineConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache, refineConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-  const username = authInfo.username;
+  const admin = await requireAdmin(request, {
+    ownerOnly: true,
+    forbiddenMessage: '权限不足，只有站长可以修改配置文件',
+  });
+  if ('response' in admin) return admin.response;
 
   try {
-    // 检查用户权限
-    let adminConfig = await getConfig();
-
-    // 仅站长可以修改配置文件
-    if (username !== process.env.USERNAME) {
-      return NextResponse.json(
-        { error: '权限不足，只有站长可以修改配置文件' },
-        { status: 401 },
-      );
-    }
+    let adminConfig = admin.config;
 
     // 获取请求体
     const body = await request.json();
@@ -69,6 +61,7 @@ export async function POST(request: NextRequest) {
     adminConfig = refineConfig(adminConfig);
     // 更新配置文件
     await db.saveAdminConfig(adminConfig);
+    clearConfigCache();
     return NextResponse.json({
       success: true,
       message: '配置文件更新成功',

@@ -97,4 +97,30 @@ function filterAdsFromM3U8(type: string, m3u8Content: string): string {
       ),
     );
   });
+
+  test('sandboxes custom ad filter execution away from host globals and eval', () => {
+    const manifest = ['#EXTM3U', '#EXTINF:10,', 'main-1.ts'].join('\n');
+    const onCustomError = jest.fn();
+
+    const processAccessResult = filterAdsFromM3U8(manifest, {
+      customCode: `
+function filterAdsFromM3U8(type, m3u8Content) {
+  return String(typeof process) + ':' + JSON.stringify(process.env || {});
+}`,
+      onCustomError,
+    });
+    expect(processAccessResult).toBe(manifest);
+    expect(onCustomError).toHaveBeenCalled();
+
+    onCustomError.mockClear();
+    const fnConstructorEscape = filterAdsFromM3U8(manifest, {
+      customCode: `
+function filterAdsFromM3U8(type, m3u8Content) {
+  return (type.constructor.constructor('return typeof process'))();
+}`,
+      onCustomError,
+    });
+    expect(fnConstructorEscape).toBe(manifest);
+    expect(onCustomError).toHaveBeenCalled();
+  });
 });

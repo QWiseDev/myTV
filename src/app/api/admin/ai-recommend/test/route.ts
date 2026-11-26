@@ -1,34 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-
-  const username = authInfo.username;
+  const admin = await requireAdmin(request);
+  if ('response' in admin) return admin.response;
 
   try {
-    // 权限校验 - 只有站长和管理员可以测试
-    const adminConfig = await getConfig();
-    if (username !== process.env.USERNAME) {
-      const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username,
-      );
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
-
     const { apiUrl, apiKey, model } = await request.json();
 
     // 验证参数
-    if (!apiUrl || !apiKey) {
+    if (!apiUrl || typeof apiUrl !== 'string' || !apiKey) {
       return NextResponse.json(
         {
           error: '请提供API地址和密钥',
@@ -47,23 +33,47 @@ export async function POST(request: NextRequest) {
     ];
 
     // 调用AI API进行测试
-    const testUrl = apiUrl.endsWith('/chat/completions')
-      ? apiUrl
-      : `${apiUrl.replace(/\/$/, '')}/chat/completions`;
+    const trimmedUrl = apiUrl.trim();
+    const testUrl = trimmedUrl.endsWith('/chat/completions')
+      ? trimmedUrl
+      : `${trimmedUrl.replace(/\/$/, '')}/chat/completions`;
 
-    const response = await fetch(testUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model || 'gpt-3.5-turbo',
-        messages: testMessages,
-        max_tokens: 50,
-        temperature: 0.1,
-      }),
-    });
+    try {
+      await resolveAndValidateRemoteUrl(testUrl, { allowHttp: true });
+    } catch (validationError) {
+      return NextResponse.json(
+        {
+          error:
+            validationError instanceof Error
+              ? validationError.message
+              : 'API地址不合法或指向受限网络',
+        },
+        { status: 400 },
+      );
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let response: Response;
+    try {
+      response = await safeFetch(testUrl, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model || 'gpt-3.5-turbo',
+          messages: testMessages,
+          max_tokens: 50,
+          temperature: 0.1,
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

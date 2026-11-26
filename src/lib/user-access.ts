@@ -20,6 +20,13 @@ export class UserBannedError extends Error {
   }
 }
 
+export class SessionRevokedError extends Error {
+  constructor(message = '登录状态已失效，请重新登录') {
+    super(message);
+    this.name = 'SessionRevokedError';
+  }
+}
+
 export interface ResolvedUser {
   role: UserRole;
   config: AdminConfig;
@@ -28,6 +35,7 @@ export interface ResolvedUser {
 
 export async function resolveUserAccess(
   username: string,
+  authTimestamp?: number,
 ): Promise<ResolvedUser> {
   let config = await getConfig();
 
@@ -63,6 +71,14 @@ export async function resolveUserAccess(
     throw new UserBannedError();
   }
 
+  if (
+    typeof authTimestamp === 'number' &&
+    typeof user.tokenInvalidBefore === 'number' &&
+    authTimestamp < user.tokenInvalidBefore
+  ) {
+    throw new SessionRevokedError();
+  }
+
   return { role: (user.role as UserRole) || 'user', config, user };
 }
 
@@ -70,9 +86,10 @@ type GuardResult = { response: NextResponse } | { resolved: ResolvedUser };
 
 export async function ensureUserAccessOrResponse(
   username: string,
+  authTimestamp?: number,
 ): Promise<GuardResult> {
   try {
-    const resolved = await resolveUserAccess(username);
+    const resolved = await resolveUserAccess(username, authTimestamp);
     return { resolved };
   } catch (error) {
     if (error instanceof UserNotFoundError) {
@@ -83,6 +100,14 @@ export async function ensureUserAccessOrResponse(
     if (error instanceof UserBannedError) {
       return {
         response: NextResponse.json({ error: '用户已被封禁' }, { status: 401 }),
+      };
+    }
+    if (error instanceof SessionRevokedError) {
+      return {
+        response: NextResponse.json(
+          { error: '登录状态已失效，请重新登录' },
+          { status: 401 },
+        ),
       };
     }
     console.error('ensureUserAccessOrResponse: 未预期错误', error);

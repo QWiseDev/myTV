@@ -4,6 +4,7 @@ import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import { getCandidates, getSpiderJar } from '@/lib/spiderJar';
+import { isIpInWhitelist, isPrivateOrReservedIp } from '@/lib/url-safety';
 
 // Helper function to get base URL with SITE_BASE env support
 function getBaseUrl(request: NextRequest): string {
@@ -68,15 +69,18 @@ async function checkRateLimit(
   }
 }
 
-// 并发控制器 - 限制同时请求数量（优化分类获取性能）
+// 并发控制器 - 基于队列的 FIFO 信号量（无轮询等待开销）
 class ConcurrencyLimiter {
   private running = 0;
+  private readonly waitQueue: Array<() => void> = [];
 
   constructor(private maxConcurrent: number) {}
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
-    while (this.running >= this.maxConcurrent) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (this.running >= this.maxConcurrent) {
+      await new Promise<void>((resolve) => {
+        this.waitQueue.push(resolve);
+      });
     }
 
     this.running++;
@@ -84,24 +88,22 @@ class ConcurrencyLimiter {
       return await fn();
     } finally {
       this.running--;
+      const next = this.waitQueue.shift();
+      if (next) {
+        next();
+      }
     }
   }
 }
 
 const categoriesLimiter = new ConcurrencyLimiter(10); // 最多同时10个请求
 
-// 私网地址判断
+// 私网地址判断（统一复用 IPv4 / IPv6 保留段校验）
 function isPrivateHost(host: string): boolean {
   if (!host) return true;
-  const lower = host.toLowerCase();
+  const cleaned = host.trim().split(':')[0];
   return (
-    lower.startsWith('localhost') ||
-    lower.startsWith('127.') ||
-    lower.startsWith('0.0.0.0') ||
-    lower.startsWith('10.') ||
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower) ||
-    lower.startsWith('192.168.') ||
-    lower === '::1'
+    cleaned.toLowerCase() === 'localhost' || isPrivateOrReservedIp(cleaned)
   );
 }
 
@@ -189,9 +191,11 @@ export async function GET(request: NextRequest) {
       tvboxEnabledSources?: string[];
     } | null = null;
 
-    // 优先尝试用户专属 Token（支持用户级源限制）
+    // 优先尝试用户专属 Token（禁止已封禁用户）
     if (token) {
-      const user = config.UserConfig.Users.find((u) => u.tvboxToken === token);
+      const user = config.UserConfig.Users.find(
+        (u) => !u.banned && u.tvboxToken === token,
+      );
       if (user) {
         currentUser = {
           username: user.username,
@@ -203,7 +207,7 @@ export async function GET(request: NextRequest) {
     // Token验证（兼容旧的全局 Token 模式）
     if (securityConfig?.enableAuth) {
       const validToken = securityConfig.token;
-      // 如果不是用户专属 Token，则必须是全局 Token
+      // 如果不是有效用户专属 Token，则必须是全局 Token
       if (!currentUser && (!token || token !== validToken)) {
         return NextResponse.json(
           {
@@ -215,37 +219,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // IP白名单检查（从数据库配置读取）
+    // IP白名单检查（从数据库配置读取，支持标准 IPv4/IPv6 与 CIDR）
     if (
       securityConfig?.enableIpWhitelist &&
       securityConfig.allowedIPs.length > 0
     ) {
       const clientIP = getClientIP(request);
-
-      const isAllowed = securityConfig.allowedIPs.some((allowedIP) => {
-        const trimmedIP = allowedIP.trim();
-        if (trimmedIP === '*') return true;
-
-        // 支持CIDR格式检查
-        if (trimmedIP.includes('/')) {
-          // 简单的CIDR匹配（实际生产环境建议使用专门的库）
-          const [network, mask] = trimmedIP.split('/');
-          const networkParts = network.split('.').map(Number);
-          const clientParts = clientIP.split('.').map(Number);
-          const maskBits = parseInt(mask, 10);
-
-          // 简化的子网匹配逻辑
-          if (maskBits >= 24) {
-            const networkPrefix = networkParts.slice(0, 3).join('.');
-            const clientPrefix = clientParts.slice(0, 3).join('.');
-            return networkPrefix === clientPrefix;
-          }
-
-          return clientIP.startsWith(network.split('.').slice(0, 2).join('.'));
-        }
-
-        return clientIP === trimmedIP;
-      });
+      const isAllowed = isIpInWhitelist(clientIP, securityConfig.allowedIPs);
 
       if (!isAllowed) {
         return NextResponse.json(
@@ -314,7 +294,9 @@ export async function GET(request: NextRequest) {
 
       // 影视源配置
       sites: await Promise.all(
-        enabledSources.map(async (source) => {
+        enabledSources.map(async (rawSource) => {
+          // 浅拷贝源对象，避免后续 obj.api 覆盖污染共享缓存
+          const source = { ...rawSource };
           /**
            * 智能 API 类型检测（参考 DecoTV 优化）
            * 0: MacCMS XML格式
@@ -560,7 +542,7 @@ export async function GET(request: NextRequest) {
           url: 'Sequence',
         },
         {
-          name: 'LunaTV内置解析',
+          name: '卡拉米内置解析',
           type: 1,
           url: `${baseUrl}/api/parse?url=`,
           ext: {
@@ -683,11 +665,15 @@ export async function GET(request: NextRequest) {
         }
 
         // 多个源时，创建一个聚合源
+        const mergedUrl =
+          securityConfig?.enableAuth && token
+            ? `${baseUrl}/api/live/merged?token=${encodeURIComponent(token)}`
+            : `${baseUrl}/api/live/merged`;
         return [
           {
-            name: 'LunaTV聚合直播',
+            name: '卡拉米聚合直播',
             type: 0,
-            url: `${baseUrl}/api/live/merged`, // 新的聚合端点
+            url: mergedUrl, // 新的聚合端点
             epg: enabledLives.find((live) => live.epg)?.epg || '',
             logo: '',
           },

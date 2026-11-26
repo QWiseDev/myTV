@@ -1,9 +1,11 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
+import { randomInt } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { checkWin, getRandomSymbol, SLOT_SYMBOLS } from '@/lib/slot-config';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
@@ -30,8 +32,8 @@ const penaltyStore = new Map<
 >();
 const hardBanStore = new Map<string, { endTime: number; reason: string }>(); // 硬封禁存储
 
-// 定期清理过期记录
-setInterval(() => {
+// 定期清理过期记录（unref 防止阻塞测试或进程退出）
+const slotCleanupTimer = setInterval(() => {
   const now = Date.now();
   // 清理过期的速率限制记录
   Array.from(rateLimitStore.entries()).forEach(([key, value]) => {
@@ -59,6 +61,36 @@ setInterval(() => {
     }
   });
 }, CLEANUP_INTERVAL_MS);
+slotCleanupTimer.unref?.();
+
+// 按用户串行化金币读-算-写，防止并发请求双花/覆写
+const userSpinLocks = new Map<string, Promise<void>>();
+
+async function withUserSpinLock<T>(
+  username: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  const previous = userSpinLocks.get(username) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  userSpinLocks.set(username, current);
+
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (userSpinLocks.get(username) === current) {
+      userSpinLocks.delete(username);
+    }
+  }
+}
+
+function secureRandomFloat(): number {
+  return randomInt(0, 1_000_000_000) / 1_000_000_000;
+}
 
 /**
  * 检查是否被硬封禁
@@ -307,10 +339,8 @@ function generateSlotResults(
   for (let i = 0; i < 4; i++) {
     const symbol = getRandomSymbol(SYMBOLS, userData.coins);
     // 5%概率生成特殊符号
-    if (Math.random() < 0.05 && userData.specialSymbols?.length > 0) {
-      const specialIdx = Math.floor(
-        Math.random() * userData.specialSymbols.length,
-      );
+    if (secureRandomFloat() < 0.05 && userData.specialSymbols?.length > 0) {
+      const specialIdx = randomInt(0, userData.specialSymbols.length);
       results.push(userData.specialSymbols[specialIdx]);
     } else {
       results.push(symbol);
@@ -338,7 +368,7 @@ function generateSlotResults(
   );
 
   // 应用惩罚概率调整
-  if (Math.random() < punishmentChance) {
+  if (secureRandomFloat() < punishmentChance) {
     // 强制生成惩罚组合
     const punishments = [
       ['lawyer'], // 1律师函
@@ -347,13 +377,11 @@ function generateSlotResults(
     ];
 
     // 根据投注金额选择惩罚（投注越大，惩罚越重）
-    const selectedPunishment =
-      punishments[
-        Math.floor(
-          Math.random() *
-            Math.min(punishments.length, Math.ceil(betAmount / 50)),
-        )
-      ];
+    const maxPunishCount = Math.min(
+      punishments.length,
+      Math.max(1, Math.ceil(betAmount / 50)),
+    );
+    const selectedPunishment = punishments[randomInt(0, maxPunishCount)];
 
     // 将惩罚符号插入结果
     for (let i = 0; i < selectedPunishment.length && i < 4; i++) {
@@ -386,7 +414,7 @@ function spinLuckyWheel(betAmount: number): {
   ];
 
   const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
-  let random = Math.random() * totalWeight;
+  let random = secureRandomFloat() * totalWeight;
 
   for (const reward of rewards) {
     random -= reward.weight;
@@ -406,19 +434,28 @@ function spinLuckyWheel(betAmount: number): {
 
 // 使用共享的checkWin函数
 
-// 用户认证：复用统一的 cookie 解析（兼容旧 auth cookie 与签名信息）
-function authenticateUser(req: NextRequest): {
+// 用户认证：复用统一签名校验 + 账号封禁/注销状态校验
+async function authenticateUser(req: NextRequest): Promise<{
   username: string | null;
+  status?: number;
   error?: string;
-} {
-  const authInfo = getAuthInfoFromCookie(req);
-  if (!authInfo) {
-    return { username: null, error: '用户未登录' };
+}> {
+  const auth = await requireUser(req);
+  if (!auth.authInfo) {
+    return { username: null, status: 401, error: '用户未登录' };
   }
-  if (!authInfo.username) {
-    return { username: null, error: '无效的用户信息' };
+  const guardResult = await ensureUserAccessOrResponse(
+    auth.authInfo.username,
+    auth.authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return {
+      username: null,
+      status: guardResult.response.status,
+      error: '账号不可用或会话已失效',
+    };
   }
-  return { username: authInfo.username };
+  return { username: auth.authInfo.username };
 }
 
 export async function POST(req: NextRequest) {
@@ -428,7 +465,7 @@ export async function POST(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 },
+        { status: auth.status || 401 },
       );
     }
 
@@ -606,143 +643,146 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 获取用户数据
-    const userData = await getUserSlotData(auth.username);
+    const verifiedUsername = auth.username;
+    return await withUserSpinLock(verifiedUsername, async () => {
+      // 获取用户数据
+      const userData = await getUserSlotData(verifiedUsername);
 
-    // 检查金币余额（使用实际投注金额）
-    if (userData.coins < actualBetAmount) {
+      // 检查金币余额（使用实际投注金额）
+      if (userData.coins < actualBetAmount) {
+        return NextResponse.json(
+          {
+            error: '金币不足，无法进行抽奖',
+            coins: userData.coins,
+            required: actualBetAmount,
+            baseBetAmount: betAmount,
+            multiplier: multiplier,
+          },
+          { status: 400 },
+        );
+      }
+
+      // 检查用户惩罚状态
+      const penaltyStatus = getUserPenaltyStatus(identifier);
+      console.log(`用户 ${identifier} 惩罚状态:`, penaltyStatus);
+
+      // 生成抽奖结果（应用惩罚倍数，使用实际投注金额）
+      const results = generateSlotResults(
+        actualBetAmount,
+        userData,
+        penaltyStatus.multiplier,
+      );
+      const result = checkWin(results);
+
+      // 计算金币变化（基于实际投注金额）
+      let coinChange = 0;
+
+      if (result.type === 'win') {
+        // 中奖：扣除实际投注 + 奖励（奖励基于实际投注）
+        coinChange = -actualBetAmount + result.multiplier * actualBetAmount;
+      } else if (result.type === 'punishment') {
+        // 惩罚：multiplier是负数，表示要扣除的倍数
+        // 例如 multiplier: -1 表示扣除1倍实际投注金额
+        coinChange = -(Math.abs(result.multiplier) * actualBetAmount);
+      } else {
+        // 未中奖：只扣除实际投注
+        coinChange = -actualBetAmount;
+      }
+
+      // 更新用户数据
+      userData.coins = Math.max(0, userData.coins + coinChange);
+
+      // 为了前端显示，计算等效的winAmount
+      let winAmount = 0;
+      if (result.type === 'win') {
+        winAmount = result.multiplier * betAmount;
+      } else if (result.type === 'punishment') {
+        winAmount = 0; // 惩罚时winAmount设为0，实际扣除通过coinChange体现
+      }
+      userData.totalSpins++;
+      userData.lastSpinTime = Date.now();
+
+      // 宝箱系统：每10次旋转获得1个宝箱
+      let chestEarned = 0;
+      if (userData.totalSpins % 10 === 0) {
+        userData.chestCount++;
+        chestEarned = 1;
+      }
+
+      // 幸运轮盘：连续3次未中奖触发
+      let luckyWheelReward = null;
+      if (result.type === 'win') {
+        userData.totalWins++;
+        userData.biggestWin = Math.max(userData.biggestWin, winAmount);
+        userData.loseStreak = 0;
+      } else {
+        userData.loseStreak++;
+        if (userData.loseStreak >= 3) {
+          luckyWheelReward = spinLuckyWheel(actualBetAmount);
+          if (luckyWheelReward.type === 'coins') {
+            userData.coins += luckyWheelReward.value;
+          } else if (luckyWheelReward.type === 'chest') {
+            userData.chestCount += luckyWheelReward.value;
+          }
+          // 返回当前投注金额作为免费奖励
+          if (luckyWheelReward.betRefund) {
+            userData.coins += luckyWheelReward.betRefund;
+          }
+          userData.loseStreak = 0;
+        }
+      }
+
+      // 保存用户数据
+      await saveUserSlotData(verifiedUsername, userData);
+
+      // 返回结果
       return NextResponse.json(
         {
-          error: '金币不足，无法进行抽奖',
-          coins: userData.coins,
-          required: actualBetAmount,
-          baseBetAmount: betAmount,
-          multiplier: multiplier,
+          success: true,
+          results,
+          result: {
+            type: result.type,
+            name: result.name,
+            multiplier: result.multiplier,
+            winAmount: winAmount > 0 ? winAmount : 0,
+            betAmount:
+              result.type === 'punishment'
+                ? Math.abs(coinChange)
+                : actualBetAmount,
+            coinChange: coinChange,
+            baseBetAmount: betAmount,
+            userMultiplier: multiplier, // 用户选择的倍率
+          },
+          user: {
+            coins: userData.coins,
+            totalSpins: userData.totalSpins,
+            totalWins: userData.totalWins,
+            biggestWin: userData.biggestWin,
+            loseStreak: userData.loseStreak,
+            chestCount: userData.chestCount,
+          },
+          luckyWheel: luckyWheelReward,
+          chestEarned,
+          penalty: {
+            isActive: penaltyStatus.isActive,
+            multiplier: penaltyStatus.multiplier,
+            remainingTime: penaltyStatus.remainingTime,
+            violationCount: penaltyStatus.violationCount,
+            message: penaltyStatus.isActive
+              ? `⚠️ 惩罚激活中！律师函概率增加${penaltyStatus.multiplier}倍！剩余时间：${Math.ceil(penaltyStatus.remainingTime / 1000 / 60)}分钟`
+              : null,
+          },
         },
-        { status: 400 },
+        {
+          headers: {
+            ...Object.fromEntries(headers.entries()),
+            'X-Penalty-Active': penaltyStatus.isActive.toString(),
+            'X-Penalty-Multiplier': penaltyStatus.multiplier.toString(),
+            'X-Penalty-Remaining-Time': penaltyStatus.remainingTime.toString(),
+          },
+        },
       );
-    }
-
-    // 检查用户惩罚状态
-    const penaltyStatus = getUserPenaltyStatus(identifier);
-    console.log(`用户 ${identifier} 惩罚状态:`, penaltyStatus);
-
-    // 生成抽奖结果（应用惩罚倍数，使用实际投注金额）
-    const results = generateSlotResults(
-      actualBetAmount,
-      userData,
-      penaltyStatus.multiplier,
-    );
-    const result = checkWin(results);
-
-    // 计算金币变化（基于实际投注金额）
-    let coinChange = 0;
-
-    if (result.type === 'win') {
-      // 中奖：扣除实际投注 + 奖励（奖励基于实际投注）
-      coinChange = -actualBetAmount + result.multiplier * actualBetAmount;
-    } else if (result.type === 'punishment') {
-      // 惩罚：multiplier是负数，表示要扣除的倍数
-      // 例如 multiplier: -1 表示扣除1倍实际投注金额
-      coinChange = -(Math.abs(result.multiplier) * actualBetAmount);
-    } else {
-      // 未中奖：只扣除实际投注
-      coinChange = -actualBetAmount;
-    }
-
-    // 更新用户数据
-    userData.coins = Math.max(0, userData.coins + coinChange);
-
-    // 为了前端显示，计算等效的winAmount
-    let winAmount = 0;
-    if (result.type === 'win') {
-      winAmount = result.multiplier * betAmount;
-    } else if (result.type === 'punishment') {
-      winAmount = 0; // 惩罚时winAmount设为0，实际扣除通过coinChange体现
-    }
-    userData.totalSpins++;
-    userData.lastSpinTime = Date.now();
-
-    // 宝箱系统：每10次旋转获得1个宝箱
-    let chestEarned = 0;
-    if (userData.totalSpins % 10 === 0) {
-      userData.chestCount++;
-      chestEarned = 1;
-    }
-
-    // 幸运轮盘：连续3次未中奖触发
-    let luckyWheelReward = null;
-    if (result.type === 'win') {
-      userData.totalWins++;
-      userData.biggestWin = Math.max(userData.biggestWin, winAmount);
-      userData.loseStreak = 0;
-    } else {
-      userData.loseStreak++;
-      if (userData.loseStreak >= 3) {
-        luckyWheelReward = spinLuckyWheel(actualBetAmount);
-        if (luckyWheelReward.type === 'coins') {
-          userData.coins += luckyWheelReward.value;
-        } else if (luckyWheelReward.type === 'chest') {
-          userData.chestCount += luckyWheelReward.value;
-        }
-        // 返回当前投注金额作为免费奖励
-        if (luckyWheelReward.betRefund) {
-          userData.coins += luckyWheelReward.betRefund;
-        }
-        userData.loseStreak = 0;
-      }
-    }
-
-    // 保存用户数据
-    await saveUserSlotData(auth.username, userData);
-
-    // 返回结果
-    return NextResponse.json(
-      {
-        success: true,
-        results,
-        result: {
-          type: result.type,
-          name: result.name,
-          multiplier: result.multiplier,
-          winAmount: winAmount > 0 ? winAmount : 0,
-          betAmount:
-            result.type === 'punishment'
-              ? Math.abs(coinChange)
-              : actualBetAmount,
-          coinChange: coinChange,
-          baseBetAmount: betAmount,
-          userMultiplier: multiplier, // 用户选择的倍率
-        },
-        user: {
-          coins: userData.coins,
-          totalSpins: userData.totalSpins,
-          totalWins: userData.totalWins,
-          biggestWin: userData.biggestWin,
-          loseStreak: userData.loseStreak,
-          chestCount: userData.chestCount,
-        },
-        luckyWheel: luckyWheelReward,
-        chestEarned,
-        penalty: {
-          isActive: penaltyStatus.isActive,
-          multiplier: penaltyStatus.multiplier,
-          remainingTime: penaltyStatus.remainingTime,
-          violationCount: penaltyStatus.violationCount,
-          message: penaltyStatus.isActive
-            ? `⚠️ 惩罚激活中！律师函概率增加${penaltyStatus.multiplier}倍！剩余时间：${Math.ceil(penaltyStatus.remainingTime / 1000 / 60)}分钟`
-            : null,
-        },
-      },
-      {
-        headers: {
-          ...Object.fromEntries(headers.entries()),
-          'X-Penalty-Active': penaltyStatus.isActive.toString(),
-          'X-Penalty-Multiplier': penaltyStatus.multiplier.toString(),
-          'X-Penalty-Remaining-Time': penaltyStatus.remainingTime.toString(),
-        },
-      },
-    );
+    });
   } catch (error) {
     console.error('老虎机抽奖异常:', error);
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
@@ -757,7 +797,7 @@ export async function GET(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 },
+        { status: auth.status || 401 },
       );
     }
 

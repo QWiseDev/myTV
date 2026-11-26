@@ -82,6 +82,15 @@ export class DbManager {
     await storage.setPlayRecord(userName, key, record);
   }
 
+  async setPlayRecordByKey(
+    userName: string,
+    key: string,
+    record: PlayRecord,
+  ): Promise<void> {
+    const storage = await this.getStorage();
+    await storage.setPlayRecord(userName, key, record);
+  }
+
   async getAllPlayRecords(userName: string): Promise<{
     [key: string]: PlayRecord;
   }> {
@@ -143,6 +152,15 @@ export class DbManager {
     await storage.setFavorite(userName, key, favorite);
   }
 
+  async setFavoriteByKey(
+    userName: string,
+    key: string,
+    favorite: Favorite,
+  ): Promise<void> {
+    const storage = await this.getStorage();
+    await storage.setFavorite(userName, key, favorite);
+  }
+
   async getAllFavorites(
     userName: string,
   ): Promise<{ [key: string]: Favorite }> {
@@ -192,6 +210,26 @@ export class DbManager {
   async deleteUser(userName: string): Promise<void> {
     const storage = await this.getStorage();
     await storage.deleteUser(userName);
+  }
+
+  async getUserPasswordRaw(userName: string): Promise<string | null> {
+    const storage = await this.getStorage();
+    if (typeof storage.getUserPasswordHash === 'function') {
+      return storage.getUserPasswordHash(userName);
+    }
+    return null;
+  }
+
+  async setUserPasswordRaw(
+    userName: string,
+    passwordOrHash: string,
+  ): Promise<void> {
+    const storage = await this.getStorage();
+    if (typeof storage.setUserPasswordHash === 'function') {
+      await storage.setUserPasswordHash(userName, passwordOrHash);
+      return;
+    }
+    await storage.registerUser(userName, passwordOrHash);
   }
 
   async getSearchHistory(userName: string): Promise<string[]> {

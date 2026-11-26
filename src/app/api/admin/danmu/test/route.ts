@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
+  const admin = await requireAdmin(request);
+  if ('response' in admin) return admin.response;
 
   try {
-    const adminConfig = await getConfig();
-    if (authInfo.username !== process.env.USERNAME) {
-      const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === authInfo.username,
-      );
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
-
     const { apiBaseUrl } = await request.json();
     if (typeof apiBaseUrl !== 'string' || !apiBaseUrl.trim()) {
       return NextResponse.json(
@@ -30,11 +19,17 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedBaseUrl = apiBaseUrl.trim().replace(/\/+$/, '');
+    const targetUrl = `${normalizedBaseUrl}/api/config`;
     try {
-      new URL(normalizedBaseUrl);
-    } catch {
+      await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+    } catch (validationError) {
       return NextResponse.json(
-        { error: '弹幕 API 地址格式不正确' },
+        {
+          error:
+            validationError instanceof Error
+              ? validationError.message
+              : '弹幕 API 地址不合法或指向受限网络',
+        },
         { status: 400 },
       );
     }
@@ -43,7 +38,7 @@ export async function POST(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const response = await fetch(`${normalizedBaseUrl}/api/config`, {
+      const response = await safeFetch(targetUrl, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json, text/plain, */*',

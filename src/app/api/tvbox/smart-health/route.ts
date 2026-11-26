@@ -1,6 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
 import { detectNetworkEnvironment } from '@/lib/networkDetection';
 import { getSpiderJar, getSpiderStatus } from '@/lib/spiderJar';
 
@@ -31,7 +32,7 @@ async function testUrlReachability(
       method: 'HEAD',
       signal: controller.signal,
       headers: {
-        'User-Agent': 'LunaTV-HealthCheck/1.0',
+        'User-Agent': 'KLM-HealthCheck/1.0',
         Accept: '*/*',
         'Cache-Control': 'no-cache',
       },
@@ -143,6 +144,9 @@ function generateRecommendations(
 
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+
     const startTime = Date.now();
 
     // 检测网络环境

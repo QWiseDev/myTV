@@ -19,7 +19,7 @@ jest.mock('@/lib/auth', () => {
   return {
     getAuthInfoFromCookie: mockGetAuthInfoFromCookie,
     // 与真实 requireUser 行为一致的轻量替身：由 mockGetAuthInfoFromCookie 决定鉴权结果
-    requireUser: (request: unknown) => {
+    requireUser: async (request: unknown) => {
       const authInfo = mockGetAuthInfoFromCookie(request);
       if (!authInfo || !authInfo.username) {
         return {

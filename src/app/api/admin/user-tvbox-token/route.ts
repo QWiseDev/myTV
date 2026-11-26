@@ -1,53 +1,35 @@
+import { randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
-// 生成随机 Token
-function generateToken(length = 32): string {
-  const chars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+// 使用 CSPRNG 生成随机 Token
+function generateToken(byteLength = 24): string {
+  return randomBytes(byteLength).toString('base64url');
 }
 
 // POST - 为用户生成/更新 TVBox Token 和源权限
 export async function POST(request: NextRequest) {
   try {
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
 
     const body = await request.json();
     const { username, tvboxEnabledSources, regenerateToken } = body;
 
-    if (!username) {
+    if (!username || typeof username !== 'string') {
       return NextResponse.json(
         { error: 'Username is required' },
         { status: 400 },
       );
     }
 
-    // 获取当前配置
-    const config = await getConfig();
-
-    // 检查权限：只有 owner 和 admin 可以管理用户 Token
-    const currentUser = config.UserConfig.Users.find(
-      (u) => u.username === authInfo.username,
-    );
-    if (
-      !currentUser ||
-      (currentUser.role !== 'owner' && currentUser.role !== 'admin')
-    ) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-    }
+    const config = admin.config;
 
     // 查找目标用户
     const targetUser = config.UserConfig.Users.find(
@@ -59,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     // admin 不能修改 owner 和其他 admin 的配置
     if (
-      currentUser.role === 'admin' &&
+      admin.role === 'admin' &&
       (targetUser.role === 'owner' || targetUser.role === 'admin')
     ) {
       return NextResponse.json(
@@ -99,9 +81,8 @@ export async function POST(request: NextRequest) {
 // DELETE - 删除用户的 TVBox Token
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
 
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username');
@@ -113,19 +94,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 获取当前配置
-    const config = await getConfig();
-
-    // 检查权限
-    const currentUser = config.UserConfig.Users.find(
-      (u) => u.username === authInfo.username,
-    );
-    if (
-      !currentUser ||
-      (currentUser.role !== 'owner' && currentUser.role !== 'admin')
-    ) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-    }
+    const config = admin.config;
 
     // 查找目标用户
     const targetUser = config.UserConfig.Users.find(
@@ -137,7 +106,7 @@ export async function DELETE(request: NextRequest) {
 
     // admin 不能修改 owner 和其他 admin 的配置
     if (
-      currentUser.role === 'admin' &&
+      admin.role === 'admin' &&
       (targetUser.role === 'owner' || targetUser.role === 'admin')
     ) {
       return NextResponse.json(

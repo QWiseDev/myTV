@@ -1,67 +1,23 @@
-/* eslint-disable no-console,@typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { AdminConfig } from '@/lib/admin.types';
+import {
+  AUTH_COOKIE_NAME,
+  generateAuthCookie,
+  getAuthCookieOptions,
+} from '@/lib/auth';
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
-// 强制动态渲染，避免在构建时预生成
-
 const DEFAULT_USER_GROUP = (
   process.env.NEXT_PUBLIC_DEFAULT_USER_GROUP ||
   process.env.DEFAULT_USER_GROUP ||
   '普通用户组'
 ).trim();
-
-// 生成签名
-async function generateSignature(
-  data: string,
-  secret: string,
-): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(data);
-
-  // 导入密钥
-  const key = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  // 生成签名
-  const signature = await crypto.subtle.sign('HMAC', key, messageData);
-
-  // 转换为十六进制字符串
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// 生成认证Cookie（带签名，仅含身份与签名，不含密码）
-async function generateAuthCookie(
-  username?: string,
-  role?: 'owner' | 'admin' | 'user',
-): Promise<string> {
-  const authData: any = { role: role || 'user' };
-
-  if (username && process.env.PASSWORD) {
-    authData.username = username;
-    // 使用密码作为密钥对用户名进行签名
-    const signature = await generateSignature(username, process.env.PASSWORD);
-    authData.signature = signature;
-    authData.timestamp = Date.now(); // 添加时间戳防重放攻击
-  }
-
-  // 不再手动 encodeURIComponent：NextResponse.cookies.set 默认会编码一次，
-  // 叠加手动编码会产生双重编码 cookie，服务端单次解码无法解析（Next 15 升级回归）
-  return JSON.stringify(authData);
-}
 
 export async function POST(req: NextRequest) {
   // 注册限速：防止批量注册灌库
@@ -183,23 +139,18 @@ export async function POST(req: NextRequest) {
       // 清除缓存，确保下次获取配置时是最新的
       clearConfigCache();
 
-      // 注册成功后自动登录
+      // 注册成功后自动登录（统一写入 user_auth）
       const response = NextResponse.json({
         ok: true,
         message: '注册成功，已自动登录',
       });
 
       const cookieValue = await generateAuthCookie(username, 'user');
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
-
-      response.cookies.set('auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax',
-        httpOnly: false,
-        secure: false,
-      });
+      response.cookies.set(
+        AUTH_COOKIE_NAME,
+        cookieValue,
+        getAuthCookieOptions(req),
+      );
 
       return response;
     } catch (err) {

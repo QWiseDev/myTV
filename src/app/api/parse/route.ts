@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
+import { assertPublicHttpUrl } from '@/lib/url-safety';
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // 视频解析接口配置
 interface Parser {
   name: string;
@@ -145,8 +157,11 @@ export async function GET(request: NextRequest) {
     const format = searchParams.get('format') || 'json';
     const healthCheck = searchParams.get('health_check') === 'true';
 
-    // 如果是健康检查请求
+    // 如果是健康检查请求（限制仅管理员可触发，防止外部探测扇出放大）
     if (healthCheck) {
+      const admin = await requireAdmin(request);
+      if ('response' in admin) return admin.response;
+
       await updateParsersHealth();
       return NextResponse.json({
         success: true,
@@ -164,6 +179,15 @@ export async function GET(request: NextRequest) {
 
     if (!url) {
       return NextResponse.json({ error: '缺少必需参数: url' }, { status: 400 });
+    }
+
+    try {
+      assertPublicHttpUrl(url, { allowHttp: true });
+    } catch {
+      return NextResponse.json(
+        { error: '非法的目标视频地址' },
+        { status: 400 },
+      );
     }
 
     // 检测视频平台
@@ -212,20 +236,21 @@ export async function GET(request: NextRequest) {
 
       case 'iframe': {
         // 返回可嵌入的iframe HTML
+        const safeParseUrl = escapeHtmlAttr(parseUrl);
         const iframeHtml = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>视频解析 - LunaTV</title>
+    <title>视频解析 - 卡拉米影视</title>
     <style>
         body { margin: 0; padding: 0; background: #000; }
         iframe { width: 100vw; height: 100vh; border: none; }
     </style>
 </head>
 <body>
-    <iframe src="${parseUrl}" allowfullscreen></iframe>
+    <iframe src="${safeParseUrl}" allowfullscreen></iframe>
 </body>
 </html>`;
         return new NextResponse(iframeHtml, {
@@ -265,7 +290,10 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: '视频解析服务异常',
-        details: error instanceof Error ? error.message : String(error),
+        details:
+          process.env.NODE_ENV === 'development' && error instanceof Error
+            ? error.message
+            : undefined,
       },
       { status: 500 },
     );

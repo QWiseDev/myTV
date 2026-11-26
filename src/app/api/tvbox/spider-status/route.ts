@@ -1,6 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
 import { getSpiderJar, getSpiderStatus } from '@/lib/spiderJar';
 
 export const runtime = 'nodejs';
@@ -9,8 +10,11 @@ export const runtime = 'nodejs';
  * Spider JAR 状态检查 API
  * 提供详细的 JAR 获取状态和诊断信息
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const admin = await requireAdmin(req);
+    if ('response' in admin) return admin.response;
+
     const currentStatus = getSpiderStatus();
 
     // 强制刷新获取最新状态
@@ -69,8 +73,11 @@ export async function GET() {
 /**
  * 手动刷新 JAR 缓存
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const admin = await requireAdmin(req);
+    if ('response' in admin) return admin.response;
+
     const refreshedJar = await getSpiderJar(true);
 
     return NextResponse.json({

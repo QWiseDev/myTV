@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-
-  const username = authInfo.username;
+  const admin = await requireAdmin(request);
+  if ('response' in admin) return admin.response;
 
   try {
     const aiRecommendConfig = await request.json();
@@ -80,8 +77,19 @@ export async function POST(request: NextRequest) {
       try {
         const apiUrl = aiRecommendConfig.apiUrl.trim();
 
-        // 验证URL格式
-        new URL(apiUrl);
+        // 验证URL格式与协议
+        const parsedApiUrl = new URL(apiUrl);
+        if (
+          parsedApiUrl.protocol !== 'http:' &&
+          parsedApiUrl.protocol !== 'https:'
+        ) {
+          return NextResponse.json(
+            {
+              error: 'API地址仅支持 HTTP/HTTPS 协议',
+            },
+            { status: 400 },
+          );
+        }
 
         // 智能提示：检查是否可能缺少/v1后缀
         if (
@@ -109,19 +117,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取当前配置
-    const adminConfig = await getConfig();
-
-    // 权限校验
-    if (username !== process.env.USERNAME) {
-      // 管理员
-      const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === username,
-      );
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
+    const adminConfig = admin.config;
 
     // 更新AI推荐配置
     adminConfig.AIRecommendConfig = {

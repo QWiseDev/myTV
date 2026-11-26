@@ -8,8 +8,8 @@ const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 ];
 
-// 请求限制器 - 进一步优化用户体验
-let lastRequestTime = 0;
+// 请求限制器 - 按预约时间戳串行错峰，防止并发穿透限流窗口
+let nextRequestSlotAt = 0;
 const MIN_REQUEST_INTERVAL = 500; // 减少到500ms，更快响应
 
 function getRandomUserAgent(): string {
@@ -74,6 +74,16 @@ function smartRandomDelay(url: string, signal?: AbortSignal): Promise<void> {
   return waitForDelay(delayMs, signal);
 }
 
+async function reserveDoubanRequestSlot(signal?: AbortSignal): Promise<void> {
+  const now = Date.now();
+  const scheduledAt = Math.max(now, nextRequestSlotAt);
+  nextRequestSlotAt = scheduledAt + MIN_REQUEST_INTERVAL;
+  const waitMs = scheduledAt - now;
+  if (waitMs > 0) {
+    await waitForDelay(waitMs, signal);
+  }
+}
+
 /**
  * 通用的豆瓣数据获取函数
  * @param url 请求的URL
@@ -85,13 +95,8 @@ export async function fetchDoubanData<T>(
 ): Promise<T> {
   throwIfAborted(signal);
 
-  // 请求限流：确保请求间隔
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await waitForDelay(MIN_REQUEST_INTERVAL - timeSinceLastRequest, signal);
-  }
-  lastRequestTime = Date.now();
+  // 请求限流：同步预约下一个请求槽位，确保并发调用也严格错峰间隔
+  await reserveDoubanRequestSlot(signal);
 
   // 智能延时：根据API类型调整
   await smartRandomDelay(url, signal);
@@ -129,15 +134,8 @@ export async function fetchDoubanData<T>(
  * @returns Promise<string> 返回HTML字符串
  */
 export async function fetchDoubanHtml(url: string): Promise<string> {
-  // 请求限流：确保请求间隔
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest),
-    );
-  }
-  lastRequestTime = Date.now();
+  // 请求限流：复用统一的预约槽位错峰间隔
+  await reserveDoubanRequestSlot();
 
   // 智能延时：根据API类型调整
   await smartRandomDelay(url);

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { promisify } from 'util';
 import { gzip } from 'zlib';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireAdmin } from '@/lib/admin-auth';
 import { SimpleCrypto } from '@/lib/crypto';
 import { db } from '@/lib/db';
 import { CURRENT_VERSION } from '@/lib/version';
@@ -16,21 +16,11 @@ const gzipAsync = promisify(gzip);
 
 export async function POST(req: NextRequest) {
   try {
-    // 检查存储类型
-
-    // 验证身份和权限
-    const authInfo = getAuthInfoFromCookie(req);
-    if (!authInfo || !authInfo.username) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 });
-    }
-
-    // 检查用户权限（只有站长可以导出数据）
-    if (authInfo.username !== process.env.USERNAME) {
-      return NextResponse.json(
-        { error: '权限不足，只有站长可以导出数据' },
-        { status: 401 },
-      );
-    }
+    const admin = await requireAdmin(req, {
+      ownerOnly: true,
+      forbiddenMessage: '权限不足，只有站长可以导出数据',
+    });
+    if ('response' in admin) return admin.response;
 
     const config = await db.getAdminConfig();
     if (!config) {
@@ -57,8 +47,10 @@ export async function POST(req: NextRequest) {
 
     // 获取所有用户
     let allUsers = await db.getAllUsers();
-    // 添加站长用户
-    allUsers.push(process.env.USERNAME);
+    const ownerUsername = process.env.USERNAME;
+    if (ownerUsername) {
+      allUsers.push(ownerUsername);
+    }
     allUsers = Array.from(new Set(allUsers));
 
     // 为每个用户收集数据
@@ -72,16 +64,15 @@ export async function POST(req: NextRequest) {
         searchHistory: await db.getSearchHistory(username),
         // 跳过片头片尾配置
         skipConfigs: await db.getAllSkipConfigs(username),
-        // 用户密码（通过验证空密码来检查用户是否存在，然后获取密码）
-        password: await getUserPassword(username),
+        // 站长凭据来自环境变量 PASSWORD，不随备份文件明文导出
+        password:
+          username === ownerUsername
+            ? undefined
+            : await db.getUserPasswordRaw(username),
       };
 
       exportData.data.userData[username] = userData;
     }
-
-    // 覆盖站长密码
-    exportData.data.userData[process.env.USERNAME].password =
-      process.env.PASSWORD;
 
     // 将数据转换为JSON字符串
     const jsonData = JSON.stringify(exportData);
@@ -121,22 +112,5 @@ export async function POST(req: NextRequest) {
       { error: error instanceof Error ? error.message : '导出失败' },
       { status: 500 },
     );
-  }
-}
-
-// 辅助函数：获取用户密码（通过数据库直接访问）
-async function getUserPassword(username: string): Promise<string | null> {
-  try {
-    // 使用 Redis 存储的直接访问方法
-    const storage = (db as any).storage;
-    if (storage && typeof storage.client?.get === 'function') {
-      const passwordKey = `u:${username}:pwd`;
-      const password = await storage.client.get(passwordKey);
-      return password;
-    }
-    return null;
-  } catch (error) {
-    console.error(`获取用户 ${username} 密码失败:`, error);
-    return null;
   }
 }

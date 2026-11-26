@@ -1,14 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
+
+export const runtime = 'nodejs';
+
+const ALLOWED_CACHE_PREFIXES = [
+  'bangumi-',
+  'douban-',
+  'tmdb-',
+  'danmu-',
+  'danmaku-',
+] as const;
+
+const MAX_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+function isAllowedCacheKeyOrPrefix(value: string): boolean {
+  if (!value || value.length > 256 || /[\r\n\s*?[\]]/.test(value)) {
+    return false;
+  }
+  return ALLOWED_CACHE_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
 
     if (!key) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 });
+    }
+    if (!isAllowedCacheKeyOrPrefix(key)) {
+      return NextResponse.json({ error: 'Invalid cache key' }, { status: 400 });
     }
 
     // 现在可以安全地调用 db.getCache，Upstash 的 getCache 已经修复
@@ -30,14 +64,34 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+
     const body = await request.json();
     const { key, data, expireSeconds } = body;
 
-    if (!key) {
+    if (!key || typeof key !== 'string') {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 });
     }
+    if (!isAllowedCacheKeyOrPrefix(key)) {
+      return NextResponse.json({ error: 'Invalid cache key' }, { status: 400 });
+    }
 
-    await db.setCache(key, data, expireSeconds);
+    const normalizedTtl =
+      typeof expireSeconds === 'number' &&
+      Number.isFinite(expireSeconds) &&
+      expireSeconds > 0
+        ? Math.min(Math.floor(expireSeconds), MAX_CACHE_TTL_SECONDS)
+        : undefined;
+
+    await db.setCache(key, data, normalizedTtl);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Set cache error:', error);
@@ -47,13 +101,35 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
     const prefix = searchParams.get('prefix');
 
     if (prefix) {
+      if (!isAllowedCacheKeyOrPrefix(prefix)) {
+        return NextResponse.json(
+          { error: 'Invalid cache prefix' },
+          { status: 400 },
+        );
+      }
       await db.clearExpiredCache(prefix);
     } else if (key) {
+      if (!isAllowedCacheKeyOrPrefix(key)) {
+        return NextResponse.json(
+          { error: 'Invalid cache key' },
+          { status: 400 },
+        );
+      }
       await db.deleteCache(key);
     } else {
       return NextResponse.json(

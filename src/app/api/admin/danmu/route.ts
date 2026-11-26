@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
+  const admin = await requireAdmin(request);
+  if ('response' in admin) return admin.response;
 
   try {
     const danmuConfig = await request.json();
@@ -25,7 +24,13 @@ export async function POST(request: NextRequest) {
     const apiBaseUrl = rawApiBaseUrl.trim();
     if (apiBaseUrl) {
       try {
-        new URL(apiBaseUrl);
+        const parsed = new URL(apiBaseUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return NextResponse.json(
+            { error: '弹幕 API 仅支持 HTTP/HTTPS 协议' },
+            { status: 400 },
+          );
+        }
       } catch {
         return NextResponse.json(
           { error: '弹幕 API 地址格式不正确' },
@@ -34,16 +39,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const adminConfig = await getConfig();
-
-    if (authInfo.username !== process.env.USERNAME) {
-      const user = adminConfig.UserConfig.Users.find(
-        (u) => u.username === authInfo.username,
-      );
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
+    const adminConfig = admin.config;
 
     adminConfig.DanmuConfig = {
       apiBaseUrl: apiBaseUrl.replace(/\/+$/, ''),

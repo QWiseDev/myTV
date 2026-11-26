@@ -3,6 +3,7 @@
  */
 
 const mockRequireUser = jest.fn();
+const mockEnsureUserAccessOrResponse = jest.fn();
 const mockGetAvailableApiSites = jest.fn();
 const mockGetAdultApiSites = jest.fn();
 const mockGetCacheTime = jest.fn();
@@ -11,6 +12,10 @@ const mockSearchFromApi = jest.fn();
 
 jest.mock('@/lib/auth', () => ({
   requireUser: mockRequireUser,
+}));
+
+jest.mock('@/lib/user-access', () => ({
+  ensureUserAccessOrResponse: mockEnsureUserAccessOrResponse,
 }));
 
 jest.mock('@/lib/config', () => ({
@@ -84,8 +89,11 @@ describe('GET /api/search 源分组与隔离', () => {
   });
 
   beforeEach(() => {
-    mockRequireUser.mockReset().mockReturnValue({
-      authInfo: { username: 'alice' },
+    mockRequireUser.mockReset().mockResolvedValue({
+      authInfo: { username: 'alice', timestamp: Date.now() },
+    });
+    mockEnsureUserAccessOrResponse.mockReset().mockResolvedValue({
+      user: { username: 'alice' },
     });
     mockGetAvailableApiSites
       .mockReset()

@@ -2,11 +2,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
+import { requireAdmin } from '@/lib/admin-auth';
 import {
   ConfigSubscriptionFetchError,
   fetchDecodedConfigSubscription,
 } from '@/lib/config-subscription';
+import { resolveAndValidateRemoteUrl } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -14,24 +15,33 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     // 权限检查：仅站长可以拉取配置订阅
-    const auth = requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
-
-    if (authInfo.username !== process.env.USERNAME) {
-      return NextResponse.json(
-        { error: '权限不足，只有站长可以拉取配置订阅' },
-        { status: 401 },
-      );
-    }
+    const admin = await requireAdmin(request, {
+      ownerOnly: true,
+      forbiddenMessage: '权限不足，只有站长可以拉取配置订阅',
+    });
+    if ('response' in admin) return admin.response;
 
     const { url } = await request.json();
 
-    if (!url) {
+    if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: '缺少URL参数' }, { status: 400 });
     }
 
-    const decodedContent = await fetchDecodedConfigSubscription(url);
+    try {
+      await resolveAndValidateRemoteUrl(url.trim(), { allowHttp: true });
+    } catch (validationError) {
+      return NextResponse.json(
+        {
+          error:
+            validationError instanceof Error
+              ? validationError.message
+              : '非法的订阅 URL',
+        },
+        { status: 400 },
+      );
+    }
+
+    const decodedContent = await fetchDecodedConfigSubscription(url.trim());
 
     return NextResponse.json({
       success: true,

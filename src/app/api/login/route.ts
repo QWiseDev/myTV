@@ -1,6 +1,12 @@
-/* eslint-disable no-console,@typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
+import {
+  AUTH_COOKIE_NAME,
+  generateAuthCookie,
+  getAuthCookieOptions,
+} from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import {
@@ -24,6 +30,18 @@ if (process.env.PASSWORD && process.env.PASSWORD.length < 8) {
   console.warn(
     '⚠️ 安全警告：环境变量 PASSWORD 长度不足 8 位，存在被暴力破解的风险，请尽快更换为随机强密码',
   );
+}
+
+function safePasswordEqual(input: string, expected?: string): boolean {
+  if (!expected) {
+    return false;
+  }
+  const a = Buffer.from(input);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return timingSafeEqual(a, b);
 }
 
 function loginAttemptKey(ip: string) {
@@ -60,56 +78,6 @@ function clearLoginFailures(ip: string, username?: string) {
     loginFailIpKey(ip),
     username ? loginFailUserKey(username) : null,
   );
-}
-
-// 强制动态渲染，避免在构建时预生成
-
-// 生成签名
-async function generateSignature(
-  data: string,
-  secret: string,
-): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(data);
-
-  // 导入密钥
-  const key = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  // 生成签名
-  const signature = await crypto.subtle.sign('HMAC', key, messageData);
-
-  // 转换为十六进制字符串
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// 生成认证Cookie（带签名，仅含身份与签名，不含密码）
-async function generateAuthCookie(
-  username?: string,
-  role?: 'owner' | 'admin' | 'user',
-): Promise<string> {
-  const authData: any = { role: role || 'user' };
-
-  if (username && process.env.PASSWORD) {
-    authData.username = username;
-    // 使用密码作为密钥对用户名进行签名
-    const signature = await generateSignature(username, process.env.PASSWORD);
-    authData.signature = signature;
-    authData.timestamp = Date.now(); // 添加时间戳防重放攻击
-    authData.loginTime = Date.now(); // 添加登入时间记录
-  }
-
-  // 不再手动 encodeURIComponent：NextResponse.cookies.set 默认会编码一次，
-  // 叠加手动编码会产生双重编码 cookie，服务端单次解码无法解析（Next 15 升级回归）
-  return JSON.stringify(authData);
 }
 
 export async function POST(req: NextRequest) {
@@ -153,28 +121,22 @@ export async function POST(req: NextRequest) {
       return tooManyAttempts(userFailGate.retryAfterSeconds);
     }
 
-    // 可能是站长，直接读环境变量
+    // 站长账号：直接校验环境变量
     if (
+      process.env.USERNAME &&
       username === process.env.USERNAME &&
-      password === process.env.PASSWORD
+      safePasswordEqual(password, process.env.PASSWORD)
     ) {
-      // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
       const cookieValue = await generateAuthCookie(username, 'owner');
       clearLoginFailures(ip, username);
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
-
-      response.cookies.set('user_auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax', // 改为 lax 以支持 PWA
-        httpOnly: false, // PWA 需要客户端可访问
-        secure: false, // 根据协议自动设置
-      });
-
+      response.cookies.set(
+        AUTH_COOKIE_NAME,
+        cookieValue,
+        getAuthCookieOptions(req),
+      );
       return response;
-    } else if (username === process.env.USERNAME) {
+    } else if (process.env.USERNAME && username === process.env.USERNAME) {
       recordLoginFailure(ip, username);
       return NextResponse.json({ error: '用户名或密码错误' }, { status: 401 });
     }
@@ -196,23 +158,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
       const cookieValue = await generateAuthCookie(
         username,
         user?.role || 'user',
       );
       clearLoginFailures(ip, username);
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
-
-      response.cookies.set('user_auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax', // 改为 lax 以支持 PWA
-        httpOnly: false, // PWA 需要客户端可访问
-        secure: false, // 根据协议自动设置
-      });
+      response.cookies.set(
+        AUTH_COOKIE_NAME,
+        cookieValue,
+        getAuthCookieOptions(req),
+      );
 
       return response;
     } catch (err) {

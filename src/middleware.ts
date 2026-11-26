@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie, verifySignature } from '@/lib/auth';
+import { getAuthInfoFromCookie, verifyAuthInfo } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,38 +18,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(warningUrl);
   }
 
-  // 从cookie获取认证信息
-
   const authInfo = getAuthInfoFromCookie(request);
-
-  if (!authInfo) {
-    return handleAuthFailure(request, pathname);
+  const verified = await verifyAuthInfo(authInfo, process.env.PASSWORD);
+  if (verified) {
+    return NextResponse.next();
   }
 
-  // 检查是否有用户名（密码不存储在cookie中）
-  if (!authInfo.username || !authInfo.signature) {
-    return handleAuthFailure(request, pathname);
-  }
-
-  // 验证签名（如果存在）
-  if (authInfo.signature) {
-    const isValidSignature = await verifySignature(
-      authInfo.username,
-      authInfo.signature,
-      process.env.PASSWORD || '',
-    );
-
-    // 签名验证通过即可
-    if (isValidSignature) {
-      return NextResponse.next();
-    }
-  }
-
-  // 签名验证失败或不存在签名
+  // 签名验证失败、缺少字段或会话过期
   return handleAuthFailure(request, pathname);
 }
-
-// 验证签名已移至 src/lib/auth.ts（访客感知路由复用同一实现）
 
 // 处理认证失败的情况
 function handleAuthFailure(
@@ -75,9 +52,12 @@ function handleAuthFailure(
 // 图片优化器会让源站抓取并转码任意外链，必须鉴权，避免被当作开放代理耗尽源站并发
 const IMAGE_OPTIMIZER_PATH = '/_next/image';
 
-// 访客模式放行：未登录可访问的页面与播放所需 API。
-// 页面精确匹配；API 命中后由路由内部做「访客感知」限源（仅访客源）与限速。
-const GUEST_EXACT_PATHS = ['/', '/play'];
+// 访客模式与外部设备对接精确放行路径：
+// - '/', '/play'：访客可访问页面
+// - '/api/tvbox'：TVBox 客户端拉取配置（使用路由内 token / IP 白名单 / 限速校验），
+//   注意不可放行 /api/tvbox-config 与 /api/tvbox/* 诊断端点
+// - '/api/feedback'：POST 允许访客提交反馈，GET/DELETE/PATCH 由路由内 requireAdmin 严校验
+const GUEST_EXACT_PATHS = ['/', '/play', '/api/tvbox', '/api/feedback'];
 const GUEST_PREFIX_PATHS = [
   '/api/detail',
   '/api/source-browser/',
@@ -119,9 +99,9 @@ function shouldSkipAuth(pathname: string): boolean {
   return skipPaths.some((path) => pathname.startsWith(path));
 }
 
-// 配置middleware匹配规则
+// 配置middleware匹配规则（仅排除登录/注册/静态公共端点，避免前缀误放行 /api/tvbox-* 等）
 export const config = {
   matcher: [
-    '/((?!_next/static|favicon.ico|login|register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/image-proxy|api/proxy/spider.jar|api/feedback).*)',
+    '/((?!_next/static|favicon\\.ico|login$|register$|warning$|api/login$|api/register$|api/logout$|api/cron$|api/server-config$|api/live/merged$|api/parse$|api/bing-wallpaper$|api/image-proxy$|api/proxy/spider\\.jar$).*)',
   ],
 };

@@ -4,10 +4,35 @@ import { headers } from 'next/headers';
 import { after, NextRequest, NextResponse } from 'next/server';
 
 import { AccessLog } from '@/lib/access-log';
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireAdmin } from '@/lib/admin-auth';
+import { requireUser, resolveRequestUser } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
+
+const ACCESS_LOG_POST_WINDOW_MS = 60 * 1000;
+const ACCESS_LOG_POST_LIMIT = 120;
+
+function extractClientIpFromHeaders(headersList: Headers): string {
+  const cfConnectingIp = headersList.get('cf-connecting-ip');
+  const xVercelForwardedFor = headersList.get('x-vercel-forwarded-for');
+  const xOriginalFor = headersList.get('x-original-for');
+  const xClientIp = headersList.get('x-client-ip');
+  const forwardedFor = headersList.get('x-forwarded-for');
+  const realIp = headersList.get('x-real-ip');
+
+  return (
+    cfConnectingIp ||
+    xVercelForwardedFor ||
+    xOriginalFor ||
+    xClientIp ||
+    forwardedFor?.split(',')[0]?.trim() ||
+    realIp ||
+    ''
+  );
+}
 
 // 强制动态渲染，避免在构建时预生成
 /**
@@ -16,28 +41,20 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
-    // 获取真实的客户端IP地址（支持CloudFlare CDN和多种代理情况）
     const headersList = await headers();
-    const forwardedFor = headersList.get('x-forwarded-for');
-    const realIp = headersList.get('x-real-ip');
-    const cfConnectingIp = headersList.get('cf-connecting-ip');
-    const xVercelForwardedFor = headersList.get('x-vercel-forwarded-for');
-    const xOriginalFor = headersList.get('x-original-for');
-    const xClientIp = headersList.get('x-client-ip');
+    const remoteAddr = extractClientIpFromHeaders(headersList);
+    const rateKey = `access-log:${remoteAddr || getClientIp(request)}`;
+    const rate = consumeRateLimit(
+      rateKey,
+      ACCESS_LOG_POST_LIMIT,
+      ACCESS_LOG_POST_WINDOW_MS,
+    );
+    if (!rate.allowed) {
+      return NextResponse.json({ error: '请求过于频繁' }, { status: 429 });
+    }
 
-    // 优先级：CloudFlare > Vercel > X-Original-For > X-Client-IP > X-Forwarded-For > X-Real-IP
-    // （Next 15 移除了 request.ip，回退到 X-Forwarded-For/X-Real-IP 头）
-    const remoteAddr =
-      cfConnectingIp ||
-      xVercelForwardedFor ||
-      xOriginalFor ||
-      xClientIp ||
-      forwardedFor?.split(',')[0]?.trim() ||
-      realIp ||
-      '';
-
-    // 从 cookie 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
+    // 使用签名校验后的用户信息，忽略伪造 Cookie
+    const resolvedUser = await resolveRequestUser(request);
 
     const body = await request.json();
 
@@ -49,17 +66,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构建访问日志
+    const rawTimestamp = body.timestamp;
+    const now = Date.now();
+    const validTimestamp =
+      typeof rawTimestamp === 'number' &&
+      Number.isFinite(rawTimestamp) &&
+      Math.abs(now - rawTimestamp) < 24 * 60 * 60 * 1000
+        ? rawTimestamp
+        : now;
+
+    // 构建访问日志（限制字段长度，防止恶意大包膨胀存储）
     const accessLog: AccessLog = {
-      userId: authInfo?.username || undefined,
-      username: authInfo?.username || undefined,
-      action: body.action.trim(),
-      pageUrl: body.pageUrl || request.headers.get('referer') || '',
-      timestamp: body.timestamp || Date.now(),
+      userId: resolvedUser?.username || undefined,
+      username: resolvedUser?.username || undefined,
+      action: body.action.trim().slice(0, 100),
+      pageUrl: String(
+        body.pageUrl || request.headers.get('referer') || '',
+      ).slice(0, 500),
+      timestamp: validTimestamp,
       ipAddress: remoteAddr, // 使用后端获取的IP地址，忽略前端传来的
-      userAgent: body.userAgent || request.headers.get('user-agent') || '',
-      referrer: body.referrer,
-      location: body.location || undefined,
+      userAgent: String(
+        body.userAgent || request.headers.get('user-agent') || '',
+      ).slice(0, 300),
+      referrer:
+        typeof body.referrer === 'string'
+          ? body.referrer.slice(0, 500)
+          : undefined,
+      location:
+        typeof body.location === 'string'
+          ? body.location.slice(0, 200)
+          : undefined,
     };
 
     // 响应先行，日志落库放到响应后执行（Next 15 after()）
@@ -92,9 +128,7 @@ export async function GET(request: NextRequest) {
   if (searchParams.get('ip') === 'true') {
     try {
       const headersList = await headers();
-      const forwardedFor = headersList.get('x-forwarded-for');
-      const realIp = headersList.get('x-real-ip');
-      const ip = forwardedFor?.split(',')[0]?.trim() || realIp || '';
+      const ip = extractClientIpFromHeaders(headersList);
 
       return NextResponse.json({ ip }, { status: 200 });
     } catch (error) {
@@ -105,41 +139,61 @@ export async function GET(request: NextRequest) {
 
   // 访问日志查询（主要功能）
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo?.username) {
-      return NextResponse.json({ error: '未认证' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
     }
 
     // 获取查询参数
     const username = searchParams.get('username');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
-    const startTime = searchParams.get('startTime');
-    const endTime = searchParams.get('endTime');
+    const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
+    const rawOffset = Number.parseInt(searchParams.get('offset') || '0', 10);
+    const limit = Math.min(
+      Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1),
+      200,
+    );
+    const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+    const startTimeParam = searchParams.get('startTime');
+    const endTimeParam = searchParams.get('endTime');
     const action = searchParams.get('action');
 
-    // 权限检查：只能查询自己的记录或管理员查询所有
-    const myUsername = process.env.USERNAME;
-    let queryUsername = authInfo.username;
+    const parsedStartTime = startTimeParam
+      ? Number.parseInt(startTimeParam, 10)
+      : undefined;
+    const parsedEndTime = endTimeParam
+      ? Number.parseInt(endTimeParam, 10)
+      : undefined;
 
-    // 如果请求查询特定用户
-    if (username && username !== authInfo.username) {
-      // 只有管理员（站点所有者）可以查询其他用户
-      if (authInfo.username !== myUsername) {
-        return NextResponse.json(
-          { error: '无权限查询其他用户的访问日志' },
-          { status: 403 },
-        );
-      }
+    // 权限检查：只能查询自己的记录，或站长查询其他用户
+    let queryUsername = auth.authInfo.username;
+
+    if (username && username !== auth.authInfo.username) {
+      const admin = await requireAdmin(request, {
+        ownerOnly: true,
+        forbiddenMessage: '无权限查询其他用户的访问日志',
+      });
+      if ('response' in admin) return admin.response;
       queryUsername = username;
     }
 
     // 构建查询条件
     const filters = {
       username: queryUsername,
-      startTime: startTime ? parseInt(startTime) : undefined,
-      endTime: endTime ? parseInt(endTime) : undefined,
-      action: action ? action.trim() : undefined,
+      startTime:
+        parsedStartTime !== undefined && Number.isFinite(parsedStartTime)
+          ? parsedStartTime
+          : undefined,
+      endTime:
+        parsedEndTime !== undefined && Number.isFinite(parsedEndTime)
+          ? parsedEndTime
+          : undefined,
+      action: action ? action.trim().slice(0, 100) : undefined,
     };
 
     // 从数据库获取访问日志
@@ -154,27 +208,19 @@ export async function GET(request: NextRequest) {
 
 /**
  * 删除访问日志接口（DELETE）
- * 支持删除特定用户的访问日志或清空所有日志（仅管理员）
+ * 支持删除特定用户的访问日志或清空所有日志（仅站长）
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const authInfo = getAuthInfoFromCookie(request);
-    if (!authInfo?.username) {
-      return NextResponse.json({ error: '未认证' }, { status: 401 });
-    }
+    const admin = await requireAdmin(request, {
+      ownerOnly: true,
+      forbiddenMessage: '无权限删除访问日志',
+    });
+    if ('response' in admin) return admin.response;
 
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username');
     const confirmDelete = searchParams.get('confirm');
-
-    // 权限检查：只有管理员可以删除日志
-    const myUsername = process.env.USERNAME;
-    if (authInfo.username !== myUsername) {
-      return NextResponse.json(
-        { error: '无权限删除访问日志' },
-        { status: 403 },
-      );
-    }
 
     // 需要确认删除操作
     if (confirmDelete !== 'true') {
@@ -184,10 +230,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    let targetUsername = authInfo.username;
-    if (username && username !== authInfo.username) {
-      targetUsername = username;
-    }
+    const targetUsername =
+      username && username.trim() ? username.trim() : admin.username;
 
     try {
       const deletedCount = await db.deleteAccessLogs(targetUsername);

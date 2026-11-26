@@ -2,8 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 import { refreshEnabledLiveChannels } from '@/lib/live';
 
@@ -12,20 +12,13 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
   try {
-    // 权限检查
-    const authInfo = getAuthInfoFromCookie(request);
-    const username = authInfo?.username;
-    const config = await getConfig();
-    if (username !== process.env.USERNAME) {
-      // 管理员
-      const user = config.UserConfig.Users.find((u) => u.username === username);
-      if (!user || user.role !== 'admin' || user.banned) {
-        return NextResponse.json({ error: '权限不足' }, { status: 401 });
-      }
-    }
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+    const config = admin.config;
 
     await refreshEnabledLiveChannels(config);
     await db.saveAdminConfig(config);
+    clearConfigCache();
 
     return NextResponse.json({
       success: true,

@@ -3,38 +3,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
-import { requireUser } from '@/lib/auth';
-import { clearConfigCache, getConfig } from '@/lib/config';
+import { requireAdmin } from '@/lib/admin-auth';
+import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-  const username = authInfo.username;
+  const admin = await requireAdmin(request, {
+    forbiddenMessage: '你是管理员吗你就访问？',
+  });
+  if ('response' in admin) return admin.response;
 
   try {
-    const config = await getConfig();
     const result: AdminConfigResult = {
-      Role: 'owner',
-      Config: config,
+      Role: admin.role,
+      Config: admin.config,
     };
-    if (username === process.env.USERNAME) {
-      result.Role = 'owner';
-    } else {
-      const user = config.UserConfig.Users.find((u) => u.username === username);
-      if (user && user.role === 'admin' && !user.banned) {
-        result.Role = 'admin';
-      } else {
-        return NextResponse.json(
-          { error: '你是管理员吗你就访问？' },
-          { status: 401 },
-        );
-      }
-    }
 
     return NextResponse.json(result, {
       headers: {
@@ -54,18 +40,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-  const username = authInfo.username;
-
-  // 只有站长可以修改配置
-  if (username !== process.env.USERNAME) {
-    return NextResponse.json(
-      { error: '只有站长可以修改配置' },
-      { status: 403 },
-    );
-  }
+  const admin = await requireAdmin(request, {
+    ownerOnly: true,
+    forbiddenMessage: '只有站长可以修改配置',
+  });
+  if ('response' in admin) return admin.response;
 
   try {
     const newConfig: AdminConfig = await request.json();

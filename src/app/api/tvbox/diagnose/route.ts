@@ -1,6 +1,8 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
+
 import { GET as getTVBoxConfig } from '../route';
 
 export const runtime = 'nodejs';
@@ -82,6 +84,9 @@ async function checkSpiderHealth(spider: string): Promise<{
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = await requireAdmin(req);
+    if ('response' in admin) return admin.response;
+
     const baseUrl = getBaseUrl(req);
     if (!baseUrl) {
       return NextResponse.json(

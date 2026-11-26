@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
+
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 // Spider jar健康检查端点
 export async function GET(req: NextRequest) {
   try {
+    const admin = await requireAdmin(req);
+    if ('response' in admin) return admin.response;
+
     const { searchParams } = new URL(req.url);
     const jarUrl = searchParams.get('url');
 
@@ -21,12 +27,26 @@ export async function GET(req: NextRequest) {
     // 清理URL（移除MD5部分）
     const cleanUrl = jarUrl.split(';')[0];
 
+    try {
+      await resolveAndValidateRemoteUrl(cleanUrl, { allowHttp: true });
+    } catch (validationError) {
+      return NextResponse.json(
+        {
+          error:
+            validationError instanceof Error
+              ? validationError.message
+              : '非法的目标 URL',
+        },
+        { status: 400 },
+      );
+    }
+
     // 检查jar文件可用性
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const response = await fetch(cleanUrl, {
+      const response = await safeFetch(cleanUrl, {
         method: 'HEAD',
         signal: controller.signal,
         headers: {

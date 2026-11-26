@@ -2,21 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
 // 普通用户也可以访问的 TVBox 配置接口
-// 只返回 TVBox 安全配置，不返回完整的管理配置
+// 对非管理员脱敏全局认证凭据与 IP 白名单
 export async function GET(request: NextRequest) {
   try {
     // 检查用户是否登录
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+
     // 获取配置
     const config = await getConfig();
-    const securityConfig = config.TVBoxSecurityConfig || {
+    const rawSecurityConfig = config.TVBoxSecurityConfig || {
       enableAuth: false,
       token: '',
       enableIpWhitelist: false,
@@ -25,10 +34,22 @@ export async function GET(request: NextRequest) {
       rateLimit: 60,
     };
 
-    // 🔑 获取当前用户的专属配置
+    // 获取当前用户的专属配置
     const currentUser = config.UserConfig.Users.find(
       (u) => u.username === authInfo.username,
     );
+    const isAdmin =
+      authInfo.username === process.env.USERNAME ||
+      currentUser?.role === 'admin';
+
+    const securityConfig = isAdmin
+      ? rawSecurityConfig
+      : {
+          ...rawSecurityConfig,
+          token: '',
+          allowedIPs: [],
+        };
+
     const userTvboxToken = currentUser?.tvboxToken || '';
     const userEnabledSources = currentUser?.tvboxEnabledSources || [];
 
@@ -37,15 +58,21 @@ export async function GET(request: NextRequest) {
       .filter((s) => !s.disabled)
       .map((s) => ({ key: s.key, name: s.name }));
 
-    // 只返回 TVBox 安全配置和站点名称（不返回其他敏感信息）
-    return NextResponse.json({
-      securityConfig: securityConfig,
-      siteName: config.SiteConfig?.SiteName || '卡拉米影视',
-      // 🔑 新增：用户专属信息
-      userToken: userTvboxToken,
-      userEnabledSources: userEnabledSources,
-      allSources: allSources,
-    });
+    // 返回配置（普通用户仅获得非敏感结构与个人专属配置）
+    return NextResponse.json(
+      {
+        securityConfig,
+        siteName: config.SiteConfig?.SiteName || '卡拉米影视',
+        userToken: userTvboxToken,
+        userEnabledSources,
+        allSources,
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, no-store',
+        },
+      },
+    );
   } catch (error) {
     console.error('获取 TVBox 配置失败:', error);
     return NextResponse.json(

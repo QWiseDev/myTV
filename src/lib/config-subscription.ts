@@ -1,4 +1,6 @@
-const CONFIG_SUBSCRIPTION_USER_AGENT = 'LunaTV-ConfigFetcher/1.0';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
+
+const CONFIG_SUBSCRIPTION_USER_AGENT = 'KLM-ConfigFetcher/1.0';
 
 export const CONFIG_SUBSCRIPTION_TIMEOUT_MS = 100000;
 
@@ -24,11 +26,13 @@ export async function fetchDecodedConfigSubscription(
   url: string,
   timeoutMs = CONFIG_SUBSCRIPTION_TIMEOUT_MS,
 ): Promise<string> {
+  await resolveAndValidateRemoteUrl(url, { allowHttp: true });
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': CONFIG_SUBSCRIPTION_USER_AGENT,

@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth';
 import { CalendarCacheManager } from '@/lib/calendar-cache';
 import { getFilters, getReleaseCalendar } from '@/lib/release-calendar-scraper';
 import { ReleaseCalendarResult } from '@/lib/types';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
@@ -14,8 +15,16 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   // 检查用户认证
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    auth.authInfo.username,
+    auth.authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   try {
     const { searchParams } = new URL(request.url);
@@ -41,8 +50,11 @@ export async function GET(request: NextRequest) {
     }
 
     // 移除limit限制，因为实际数据量只有65个项目
-    if (offset < 0) {
-      return NextResponse.json({ error: 'offset 不能为负数' }, { status: 400 });
+    if (!Number.isFinite(offset) || offset < 0) {
+      return NextResponse.json(
+        { error: 'offset 必须是非负整数' },
+        { status: 400 },
+      );
     }
 
     // 🔍 检查数据库缓存（除非强制刷新）
@@ -150,8 +162,16 @@ export async function GET(request: NextRequest) {
 
 // 手动刷新缓存的API
 export async function POST(request: NextRequest) {
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    auth.authInfo.username,
+    auth.authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   try {
     // 清除数据库缓存

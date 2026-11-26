@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
@@ -38,11 +37,14 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }
@@ -104,11 +106,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }
@@ -165,24 +170,16 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const config = await getConfig();
-    const username = process.env.USERNAME;
-
-    // 检查用户权限
-    if (authInfo.username !== username) {
-      const user = config.UserConfig.Users.find(
-        (u) => u.username === authInfo.username,
-      );
-      if (!user) {
-        return NextResponse.json({ error: '用户不存在' }, { status: 401 });
-      }
-      if (user.banned) {
-        return NextResponse.json({ error: '用户已被封禁' }, { status: 401 });
-      }
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
     }
 
     const body = await request.json();
@@ -248,11 +245,14 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }

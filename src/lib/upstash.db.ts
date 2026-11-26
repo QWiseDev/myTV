@@ -3,7 +3,8 @@
 import { Redis } from '@upstash/redis';
 
 import { AdminConfig } from './admin.types';
-import { toDateKey } from './date-utils';
+import { hashPassword, isPasswordHash, verifyPassword } from './password';
+import { aggregatePlayStats, PlayStatsUserInput } from './play-stats-shared';
 import {
   decodeHashObject,
   EMPTY_PLAY_STATS,
@@ -210,10 +211,12 @@ export class UpstashRedisStorage implements IStorage {
   }
 
   async registerUser(userName: string, password: string): Promise<void> {
-    // 简单存储明文密码，生产环境应加密
+    const storedPassword = isPasswordHash(password)
+      ? password
+      : await hashPassword(password);
     await this.withPipeline((pipeline) => {
       pipeline
-        .set(this.userPwdKey(userName), password)
+        .set(this.userPwdKey(userName), storedPassword)
         .sadd(this.usersSetKey(), userName);
     });
   }
@@ -223,8 +226,14 @@ export class UpstashRedisStorage implements IStorage {
       this.client.get(this.userPwdKey(userName)),
     );
     if (stored === null) return false;
-    // 确保比较时都是字符串类型
-    return ensureString(stored) === password;
+    const { valid, needsRehash } = await verifyPassword(
+      password,
+      ensureString(stored),
+    );
+    if (valid && needsRehash) {
+      this.changePassword(userName, password).catch(() => undefined);
+    }
+    return valid;
   }
 
   // 检查用户是否存在
@@ -238,10 +247,34 @@ export class UpstashRedisStorage implements IStorage {
 
   // 修改用户密码
   async changePassword(userName: string, newPassword: string): Promise<void> {
-    // 简单存储明文密码，生产环境应加密；顺带补进用户索引以防索引漂移
+    const storedPassword = isPasswordHash(newPassword)
+      ? newPassword
+      : await hashPassword(newPassword);
+    // 顺带补进用户索引以防索引漂移
     await this.withPipeline((pipeline) => {
       pipeline
-        .set(this.userPwdKey(userName), newPassword)
+        .set(this.userPwdKey(userName), storedPassword)
+        .sadd(this.usersSetKey(), userName);
+    });
+  }
+
+  async getUserPasswordHash(userName: string): Promise<string | null> {
+    const stored = await withRetry(() =>
+      this.client.get(this.userPwdKey(userName)),
+    );
+    return stored === null ? null : ensureString(stored);
+  }
+
+  async setUserPasswordHash(
+    userName: string,
+    passwordOrHash: string,
+  ): Promise<void> {
+    const storedValue = isPasswordHash(passwordOrHash)
+      ? passwordOrHash
+      : await hashPassword(passwordOrHash);
+    await this.withPipeline((pipeline) => {
+      pipeline
+        .set(this.userPwdKey(userName), storedValue)
         .sadd(this.usersSetKey(), userName);
     });
   }
@@ -539,8 +572,14 @@ export class UpstashRedisStorage implements IStorage {
     const cacheKey = this.cacheKey(key);
     const value = JSON.stringify(data);
 
-    if (expireSeconds) {
-      await withRetry(() => this.client.setex(cacheKey, expireSeconds, value));
+    if (expireSeconds !== undefined) {
+      if (expireSeconds <= 0) {
+        throw new Error(
+          `Upstash Invalid TTL: ${expireSeconds} seconds. TTL must be positive.`,
+        );
+      }
+      const ttl = Math.floor(expireSeconds);
+      await withRetry(() => this.client.setex(cacheKey, ttl, value));
     } else {
       await withRetry(() => this.client.set(cacheKey, value));
     }
@@ -674,199 +713,26 @@ export class UpstashRedisStorage implements IStorage {
       }
 
       const allUsers = await this.getAllUsers();
-      const userStats: Array<{
-        username: string;
-        totalWatchTime: number;
-        totalPlays: number;
-        lastPlayTime: number;
-        recentRecords: PlayRecord[];
-        avgWatchTime: number;
-        mostWatchedSource: string;
-        registrationDays: number;
-        lastLoginTime: number;
-        loginCount: number;
-        createdAt: number;
-      }> = [];
-      let totalWatchTime = 0;
-      let totalPlays = 0;
-      const sourceCount: Record<string, number> = {};
-      const dailyData: Record<string, { watchTime: number; plays: number }> =
-        {};
-
-      const now = Date.now();
-      const todayStart = new Date(now).setHours(0, 0, 0, 0);
-      let todayNewUsers = 0;
-      const registrationData: Record<string, number> = {};
-
-      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-      const PROJECT_START_DATE = new Date('2025-09-14').getTime();
-
-      // 分批并行收集所有用户播放记录（串行逐用户 RTT 在隧道环境下代价高）
       const PLAY_RECORDS_BATCH_SIZE = 8;
-      const recordsByUsername: Array<{
-        username: string;
-        records: Record<string, PlayRecord>;
-      }> = [];
+      const inputs: PlayStatsUserInput[] = [];
+
       for (let i = 0; i < allUsers.length; i += PLAY_RECORDS_BATCH_SIZE) {
         const batch = allUsers.slice(i, i + PLAY_RECORDS_BATCH_SIZE);
         const rows = await Promise.all(
-          batch.map(async (username) => ({
-            username,
-            records: await this.getAllPlayRecords(username),
-          })),
+          batch.map(async (username) => {
+            const { stat, records } =
+              await this.getUserPlayStatWithRecords(username);
+            return {
+              username,
+              records,
+              loginStats: stat,
+            };
+          }),
         );
-        recordsByUsername.push(...rows);
+        inputs.push(...rows);
       }
 
-      for (const { username, records } of recordsByUsername) {
-        const playRecords = Object.values(records);
-
-        let userTotalWatchTime = 0;
-        let userLastPlayTime = 0;
-        const userSourceCount: Record<string, number> = {};
-        let firstWatchDate = PROJECT_START_DATE;
-
-        playRecords.forEach((record) => {
-          const watchTime = record.play_time || 0;
-          userTotalWatchTime += watchTime;
-          if (record.save_time > userLastPlayTime) {
-            userLastPlayTime = record.save_time;
-          }
-          if (record.save_time < firstWatchDate) {
-            firstWatchDate = record.save_time;
-          }
-          const sourceName = record.source_name || '未知来源';
-          userSourceCount[sourceName] = (userSourceCount[sourceName] || 0) + 1;
-
-          const recordDate = new Date(record.save_time);
-          if (recordDate.getTime() >= sevenDaysAgo) {
-            const dateKey = toDateKey(recordDate);
-            if (!dailyData[dateKey]) {
-              dailyData[dateKey] = { watchTime: 0, plays: 0 };
-            }
-            dailyData[dateKey].watchTime += watchTime;
-            dailyData[dateKey].plays += 1;
-          }
-        });
-
-        const userCreatedAt = firstWatchDate;
-        const registrationDays =
-          Math.floor((now - userCreatedAt) / (1000 * 60 * 60 * 24)) + 1;
-
-        if (userCreatedAt >= todayStart) {
-          todayNewUsers++;
-        }
-
-        if (userCreatedAt >= sevenDaysAgo) {
-          const regDate = toDateKey(userCreatedAt);
-          registrationData[regDate] = (registrationData[regDate] || 0) + 1;
-        }
-
-        let mostWatchedSource = '';
-        let maxCount = 0;
-        for (const [source, count] of Object.entries(userSourceCount)) {
-          if (count > maxCount) {
-            maxCount = count;
-            mostWatchedSource = source;
-          }
-        }
-
-        const recentRecords = playRecords
-          .sort((a, b) => (b.save_time || 0) - (a.save_time || 0))
-          .slice(0, 10);
-
-        const enhancedUserStat = {
-          username,
-          totalWatchTime: userTotalWatchTime,
-          totalPlays: playRecords.length,
-          lastPlayTime: userLastPlayTime,
-          recentRecords,
-          avgWatchTime:
-            playRecords.length > 0
-              ? userTotalWatchTime / playRecords.length
-              : 0,
-          mostWatchedSource,
-          registrationDays,
-          lastLoginTime: userLastPlayTime,
-          loginCount: 0,
-          createdAt: userCreatedAt,
-        };
-
-        userStats.push(enhancedUserStat);
-        totalWatchTime += userTotalWatchTime;
-        totalPlays += playRecords.length;
-
-        Object.entries(userSourceCount).forEach(([source, count]) => {
-          sourceCount[source] = (sourceCount[source] || 0) + count;
-        });
-      }
-
-      userStats.sort((a, b) => b.totalWatchTime - a.totalWatchTime);
-
-      const topSources = Object.entries(sourceCount)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 5)
-        .map(([source, count]) => ({ source, count }));
-
-      const dailyStats: Array<{
-        date: string;
-        watchTime: number;
-        plays: number;
-      }> = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = toDateKey(date);
-        const data = dailyData[dateKey] || { watchTime: 0, plays: 0 };
-        dailyStats.push({
-          date: dateKey,
-          watchTime: data.watchTime,
-          plays: data.plays,
-        });
-      }
-
-      // 计算注册趋势
-      const registrationStats = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(now - i * 24 * 60 * 60 * 1000);
-        const dateKey = toDateKey(date);
-        registrationStats.push({
-          date: dateKey,
-          newUsers: registrationData[dateKey] || 0,
-        });
-      }
-
-      // 计算活跃用户统计
-      const oneDayAgo = now - 24 * 60 * 60 * 1000;
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-
-      const activeUsers = {
-        daily: userStats.filter((user) => user.lastLoginTime >= oneDayAgo)
-          .length,
-        weekly: userStats.filter((user) => user.lastLoginTime >= sevenDaysAgo)
-          .length,
-        monthly: userStats.filter((user) => user.lastLoginTime >= thirtyDaysAgo)
-          .length,
-      };
-
-      const result: PlayStatsResult = {
-        totalUsers: allUsers.length,
-        totalWatchTime,
-        totalPlays,
-        avgWatchTimePerUser:
-          allUsers.length > 0 ? totalWatchTime / allUsers.length : 0,
-        avgPlaysPerUser: allUsers.length > 0 ? totalPlays / allUsers.length : 0,
-        userStats,
-        topSources,
-        dailyStats,
-        // 新增：用户注册统计
-        registrationStats: {
-          todayNewUsers,
-          totalRegisteredUsers: allUsers.length,
-          registrationTrend: registrationStats,
-        },
-        // 新增：用户活跃度统计
-        activeUsers,
-      };
+      const result = aggregatePlayStats(inputs);
 
       // 缓存结果30分钟
       await this.setCache('play_stats_summary', result, 1800);
@@ -913,15 +779,8 @@ export class UpstashRedisStorage implements IStorage {
       return { stat, records: playRecords };
     } catch (error) {
       console.error(`获取用户 ${userName} 统计失败:`, error);
-      const errorResult = emptyUserPlayStat(userName);
-
-      // 错误时也存入缓存，避免短时间内重复请求
-      this.userStatsCache.set(userName, {
-        data: errorResult,
-        timestamp: Date.now(),
-      });
-
-      return { stat: errorResult, records: [] };
+      // 失败时不写入内存缓存，避免短时间内把临时网络故障固定为空结果
+      return { stat: emptyUserPlayStat(userName), records: [] };
     }
   }
 

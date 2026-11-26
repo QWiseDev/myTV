@@ -9,6 +9,8 @@ const hostGlobal = vm.runInThisContext('globalThis');
 
 for (const key of [
   'structuredClone',
+  'TextEncoder',
+  'TextDecoder',
   'TextEncoderStream',
   'TextDecoderStream',
   'ReadableStream',
@@ -26,6 +28,17 @@ for (const key of [
   ) {
     globalThis[key] = hostGlobal[key];
   }
+}
+
+if (
+  !globalThis.crypto?.subtle &&
+  typeof hostGlobal.crypto?.subtle !== 'undefined'
+) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: hostGlobal.crypto,
+    configurable: true,
+    writable: true,
+  });
 }
 
 // Allow router mocks.

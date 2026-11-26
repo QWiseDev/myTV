@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
 import { toDateKey } from '@/lib/date-utils';
 import { db } from '@/lib/db';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
@@ -23,9 +24,17 @@ interface ChatRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
+
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
 
     const username = authInfo.username;
 
@@ -177,7 +186,7 @@ export async function POST(request: NextRequest) {
       youtubeSearchStatus = '❌ YouTube搜索功能未启用，无法搜索推荐YouTube视频';
     }
 
-    const systemPrompt = `你是LunaTV的智能推荐助手，支持：${capabilities.join(
+    const systemPrompt = `你是卡拉米影视的智能推荐助手，支持：${capabilities.join(
       '、',
     )}。当前日期：${currentDate}
 
@@ -549,9 +558,17 @@ ${
 // 获取AI推荐历史
 export async function GET(request: NextRequest) {
   try {
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
+
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
 
     const username = authInfo.username;
     const historyKey = `ai-recommend-history-${username}`;

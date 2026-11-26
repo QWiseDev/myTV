@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
 import { db } from '@/lib/db';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
@@ -117,9 +118,17 @@ const mockSearchResults = [
 ];
 
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
   const authInfo = auth.authInfo;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    authInfo.username,
+    authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   const username = authInfo.username;
 

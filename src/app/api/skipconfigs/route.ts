@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { parseStorageKey } from '@/lib/storage-key';
 import { EpisodeSkipConfig } from '@/lib/types';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 // 配置 Node.js Runtime
 export const runtime = 'nodejs';
@@ -11,22 +12,24 @@ export const runtime = 'nodejs';
 // 强制动态渲染，避免在构建时预生成
 export async function POST(request: NextRequest) {
   try {
+    // 认证与账号状态校验（仅使用签名校验后的身份，禁止客户端伪造 username）
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+    const finalUsername = auth.authInfo.username;
+
     const body = await request.json();
-    const { action, key, config, username } = body;
+    const { action, key, config } = body;
 
     // 验证请求参数
     if (!action) {
       return NextResponse.json({ error: '缺少操作类型' }, { status: 400 });
-    }
-
-    // 获取认证信息
-    const authInfo = getAuthInfoFromCookie(request);
-
-    // 如果是直接传入的认证信息（客户端模式），使用传入的信息
-    const finalUsername = username || authInfo?.username;
-
-    if (!finalUsername) {
-      return NextResponse.json({ error: '用户未登录' }, { status: 401 });
     }
 
     switch (action) {

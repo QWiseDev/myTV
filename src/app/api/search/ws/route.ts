@@ -13,15 +13,24 @@ import {
   markSiteSearchTimeout,
   SEARCH_SITE_TIMEOUT_MS,
 } from '@/lib/site-health';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
   const authInfo = auth.authInfo;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    authInfo.username,
+    authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
@@ -40,6 +49,12 @@ export async function GET(request: NextRequest) {
 
   // 共享状态
   let streamClosed = false;
+  const abortController = new AbortController();
+  const handleAbort = () => {
+    streamClosed = true;
+    abortController.abort();
+  };
+  request.signal?.addEventListener('abort', handleAbort, { once: true });
 
   // 创建可读流
   const stream = new ReadableStream({
@@ -66,51 +81,79 @@ export async function GET(request: NextRequest) {
         }
       };
 
-      // 发送开始事件
-      const startEvent = `data: ${JSON.stringify({
-        type: 'start',
-        query,
-        totalSources: apiSites.length,
-        timestamp: Date.now(),
-      })}\n\n`;
+      const closeControllerSafely = () => {
+        try {
+          controller.close();
+        } catch (error) {
+          console.warn('Failed to close controller:', error);
+        }
+      };
 
-      if (!safeEnqueue(encoder.encode(startEvent))) {
-        return; // 连接已关闭，提前退出
-      }
+      try {
+        // 发送开始事件
+        const startEvent = `data: ${JSON.stringify({
+          type: 'start',
+          query,
+          totalSources: apiSites.length,
+          timestamp: Date.now(),
+        })}\n\n`;
 
-      // 记录已完成的源数量
-      let completedSources = 0;
-      const allResults: any[] = [];
+        if (!safeEnqueue(encoder.encode(startEvent))) {
+          return; // 连接已关闭，提前退出
+        }
 
-      // 为每个源创建搜索 Promise
-      const searchPromises = apiSites.map(async (site) => {
-        if (isSiteSearchBenched(site.key)) {
-          // 近期连续超时的站点直接跳过，仍推送空结果推进进度
-          completedSources++;
+        // 记录已完成的源数量
+        let completedSources = 0;
+        const allResults: any[] = [];
 
-          if (!streamClosed) {
-            const skippedEvent = `data: ${JSON.stringify({
-              type: 'source_result',
-              source: site.key,
-              sourceName: site.name,
-              results: [],
-              timestamp: Date.now(),
-            })}\n\n`;
-
-            if (!safeEnqueue(encoder.encode(skippedEvent))) {
-              streamClosed = true;
-              return; // 连接已关闭，停止处理
-            }
+        if (apiSites.length === 0) {
+          const completeEvent = `data: ${JSON.stringify({
+            type: 'complete',
+            totalResults: 0,
+            completedSources: 0,
+            timestamp: Date.now(),
+          })}\n\n`;
+          if (safeEnqueue(encoder.encode(completeEvent))) {
+            closeControllerSafely();
           }
-        } else {
+          return;
+        }
+
+        // 为每个源创建搜索 Promise
+        const searchPromises = apiSites.map(async (site) => {
+          if (streamClosed || abortController.signal.aborted) {
+            return;
+          }
+
+          if (isSiteSearchBenched(site.key)) {
+            // 近期连续超时的站点直接跳过，仍推送空结果推进进度
+            completedSources++;
+
+            if (!streamClosed) {
+              const skippedEvent = `data: ${JSON.stringify({
+                type: 'source_result',
+                source: site.key,
+                sourceName: site.name,
+                results: [],
+                timestamp: Date.now(),
+              })}\n\n`;
+
+              if (!safeEnqueue(encoder.encode(skippedEvent))) {
+                streamClosed = true;
+                abortController.abort();
+                return; // 连接已关闭，停止处理
+              }
+            }
+            return;
+          }
+
           try {
-            // 添加超时控制
-            const searchPromise = withAbortableTimeout(
+            // 添加超时控制与客户端断开级联取消
+            const results = (await withAbortableTimeout(
               async () => searchFromApi(site, query),
               SEARCH_SITE_TIMEOUT_MS,
-            );
-
-            const results = (await searchPromise) as any[];
+              abortController.signal,
+            )) as any[];
             markSiteSearchSuccess(site.key);
 
             // 过滤黄色内容
@@ -138,6 +181,7 @@ export async function GET(request: NextRequest) {
 
               if (!safeEnqueue(encoder.encode(sourceEvent))) {
                 streamClosed = true;
+                abortController.abort();
                 return; // 连接已关闭，停止处理
               }
             }
@@ -146,6 +190,9 @@ export async function GET(request: NextRequest) {
               allResults.push(...filteredResults);
             }
           } catch (error) {
+            if (streamClosed || abortController.signal.aborted) {
+              return;
+            }
             console.warn(`搜索失败 ${site.name}:`, error);
 
             if (isSearchTimeoutError(error)) {
@@ -166,54 +213,47 @@ export async function GET(request: NextRequest) {
 
               if (!safeEnqueue(encoder.encode(errorEvent))) {
                 streamClosed = true;
+                abortController.abort();
                 return; // 连接已关闭，停止处理
               }
             }
           }
-        }
+        });
 
-        // 检查是否所有源都已完成
-        if (completedSources === apiSites.length) {
-          if (!streamClosed) {
-            // 发送最终完成事件
-            const completeEvent = `data: ${JSON.stringify({
-              type: 'complete',
-              totalResults: allResults.length,
-              completedSources,
-              timestamp: Date.now(),
-            })}\n\n`;
+        // 等待所有搜索完成
+        await Promise.allSettled(searchPromises);
 
-            if (safeEnqueue(encoder.encode(completeEvent))) {
-              // 只有在成功发送完成事件后才关闭流
-              try {
-                controller.close();
-              } catch (error) {
-                console.warn('Failed to close controller:', error);
-              }
-            }
+        if (!streamClosed) {
+          const completeEvent = `data: ${JSON.stringify({
+            type: 'complete',
+            totalResults: allResults.length,
+            completedSources,
+            timestamp: Date.now(),
+          })}\n\n`;
+
+          if (safeEnqueue(encoder.encode(completeEvent))) {
+            closeControllerSafely();
           }
         }
-      });
-
-      // 等待所有搜索完成
-      await Promise.allSettled(searchPromises);
+      } finally {
+        request.signal?.removeEventListener('abort', handleAbort);
+      }
     },
 
     cancel() {
-      // 客户端断开连接时，标记流已关闭
+      // 客户端断开连接时，标记流已关闭并取消未完成搜索
       streamClosed = true;
+      abortController.abort();
     },
   });
 
   // 返回流式响应
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'X-Accel-Buffering': 'no',
     },
   });
 }

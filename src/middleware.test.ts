@@ -108,12 +108,54 @@ describe('middleware', () => {
 
   it('still rejects unauthenticated requests to login-only APIs', async () => {
     await withPassword(async () => {
-      const paths = ['/api/playrecords', '/api/favorites', '/api/sources'];
+      const paths = [
+        '/api/playrecords',
+        '/api/favorites',
+        '/api/sources',
+        '/api/tvbox-config',
+        '/api/tvbox/health',
+      ];
       for (const path of paths) {
         const request = new NextRequest(`http://localhost${path}`);
         const response = await middleware(request);
         expect(response.status).toBe(401);
       }
+    });
+  });
+
+  it('allows unauthenticated access to exact /api/tvbox and /api/feedback routes', async () => {
+    await withPassword(async () => {
+      for (const path of ['/api/tvbox', '/api/feedback']) {
+        const request = new NextRequest(`http://localhost${path}`);
+        const response = await middleware(request);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('x-middleware-next')).toBe('1');
+      }
+    });
+  });
+
+  it('rejects expired signed auth cookies on protected routes', async () => {
+    await withPassword(async () => {
+      const { generateSignature } = await import('@/lib/auth');
+      const expiredTimestamp = Date.now() - 8 * 24 * 60 * 60 * 1000;
+      const signature = await generateSignature(
+        `alice.${expiredTimestamp}`,
+        'test-password',
+      );
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          username: 'alice',
+          signature,
+          timestamp: expiredTimestamp,
+        }),
+      );
+      const request = new NextRequest('http://localhost/api/sources', {
+        headers: {
+          cookie: `user_auth=${cookieValue}`,
+        },
+      });
+      const response = await middleware(request);
+      expect(response.status).toBe(401);
     });
   });
 });

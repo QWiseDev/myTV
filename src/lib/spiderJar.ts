@@ -124,7 +124,7 @@ async function fetchRemote(
         headers['User-Agent'] =
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'; // 国内源友好
       } else if (url.includes('jsdelivr') || url.includes('fastly')) {
-        headers['User-Agent'] = 'LunaTV/1.0'; // CDN 源简洁标识
+        headers['User-Agent'] = 'KLM-TV/1.0'; // CDN 源简洁标识
       } else {
         headers['User-Agent'] =
           'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';

@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 
+import { getAuthInfoFromCookieHeader, verifyAuthInfo } from '@/lib/auth';
 import { getServerInitialGuestHomeData } from '@/lib/guest-home.server';
 import { getServerInitialHomeData } from '@/lib/home-data.server';
 import { EMPTY_HOME_DATA } from '@/lib/home-data-types';
@@ -10,45 +11,24 @@ import HomeClient from '@/components/HomeClient';
 export const dynamic = 'force-dynamic';
 
 /**
- * SSR 判断登录态：user_auth（或旧名 auth）cookie 含 username + signature 即视为已登录。
- * 未登录渲染访客版首页（仅访客源目录，点击直达播放），不预取任何登录数据。
- * 兼容历史上被双重编码的 cookie：解码一次失败且仍含 % 时再解一次。
+ * SSR 判断登录态：解析 user_auth（或旧名 auth）cookie 后严格验证 HMAC 签名与有效期。
+ * 伪造、篡改或过期的 cookie 一律按访客渲染，防止未经认证进入登录版首屏。
  */
-function hasLoginCookie(cookieHeader: string | null): boolean {
-  if (!cookieHeader) return false;
-  const match = cookieHeader.match(/(?:^|;\s*)(user_auth|auth)=([^;]+)/);
-  if (!match) return false;
-
-  const raw = match[2];
-  if (!raw.includes('%')) return false;
-
-  const tryParse = (decoded: string): boolean => {
-    try {
-      const authData = JSON.parse(decoded) as {
-        username?: string;
-        signature?: string;
-      };
-      return Boolean(authData.username && authData.signature);
-    } catch {
-      return false;
-    }
-  };
-
-  try {
-    const once = decodeURIComponent(raw);
-    if (tryParse(once)) return true;
-    // 双重编码兜底（历史登录签发的 cookie 被 cookies.set 二次编码）
-    if (once.includes('%') && tryParse(decodeURIComponent(once))) return true;
-  } catch {
+async function hasValidLoginCookie(
+  cookieHeader: string | null,
+): Promise<boolean> {
+  const authInfo = getAuthInfoFromCookieHeader(cookieHeader);
+  if (!authInfo) {
     return false;
   }
-  return false;
+
+  const verified = await verifyAuthInfo(authInfo, process.env.PASSWORD);
+  return verified !== null;
 }
 
-async function loadInitialHomeData() {
+async function loadInitialHomeData(cookieHeader: string | null) {
   try {
-    const headerList = await headers();
-    if (!headerList.get('cookie')) {
+    if (!cookieHeader) {
       return EMPTY_HOME_DATA;
     }
 
@@ -70,14 +50,15 @@ async function loadInitialGuestData() {
 
 export default async function Home() {
   const headerList = await headers();
-  const loggedIn = hasLoginCookie(headerList.get('cookie'));
+  const cookieHeader = headerList.get('cookie');
+  const loggedIn = await hasValidLoginCookie(cookieHeader);
 
   if (!loggedIn) {
     const initialGuestData = await loadInitialGuestData();
     return <GuestHome initialData={initialGuestData} />;
   }
 
-  const initialHomeData = await loadInitialHomeData();
+  const initialHomeData = await loadInitialHomeData(cookieHeader);
 
   return <HomeClient initialHomeData={initialHomeData} />;
 }

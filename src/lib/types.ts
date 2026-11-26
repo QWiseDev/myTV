@@ -97,6 +97,9 @@ export interface IStorage {
   changePassword(userName: string, newPassword: string): Promise<void>;
   // 删除用户（包括密码、搜索历史、播放记录、收藏夹）
   deleteUser(userName: string): Promise<void>;
+  // 数据迁移辅助：读写原始密码哈希
+  getUserPasswordHash?(userName: string): Promise<string | null>;
+  setUserPasswordHash?(userName: string, passwordOrHash: string): Promise<void>;
 
   // 搜索历史相关
   getSearchHistory(userName: string): Promise<string[]>;

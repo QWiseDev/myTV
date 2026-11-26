@@ -1,7 +1,10 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getAdminRoleFromRequest, requireAdmin } from '@/lib/admin-auth';
+import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
@@ -69,26 +72,28 @@ async function saveUserSlotData(
   }
 }
 
-// 用户认证中间件
+// 用户认证：复用统一的签名 cookie + 账号状态校验
 async function authenticateUser(
   req: NextRequest,
-): Promise<{ username: string | null; error?: string }> {
-  const authCookie = req.cookies.get('user_auth')?.value;
-
-  if (!authCookie) {
-    return { username: null, error: '用户未登录' };
+): Promise<{ username: string | null; status?: number; error?: string }> {
+  const auth = await requireUser(req);
+  if (!auth.authInfo) {
+    return { username: null, status: 401, error: '用户未登录' };
   }
 
-  try {
-    const authData = JSON.parse(decodeURIComponent(authCookie));
-    if (!authData.username) {
-      return { username: null, error: '无效的用户信息' };
-    }
-    return { username: authData.username };
-  } catch (error) {
-    console.error('解析用户认证信息失败:', error);
-    return { username: null, error: '认证信息格式错误' };
+  const guardResult = await ensureUserAccessOrResponse(
+    auth.authInfo.username,
+    auth.authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return {
+      username: null,
+      status: guardResult.response.status,
+      error: '账号不可用或会话已失效',
+    };
   }
+
+  return { username: auth.authInfo.username };
 }
 
 // 获取用户数据
@@ -99,7 +104,7 @@ export async function GET(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 },
+        { status: auth.status || 401 },
       );
     }
 
@@ -131,35 +136,54 @@ export async function DELETE(req: NextRequest) {
     if (auth.error || !auth.username) {
       return NextResponse.json(
         { error: auth.error || '认证失败' },
-        { status: 401 },
+        { status: auth.status || 401 },
+      );
+    }
+
+    const adminRole = await getAdminRoleFromRequest(req);
+    const isAdmin = adminRole !== null;
+
+    // 防止被封禁账号通过重置清空封禁状态
+    const existingData = await getUserSlotData(auth.username);
+    if (
+      !isAdmin &&
+      existingData.isBanned &&
+      Date.now() < existingData.banEndTime
+    ) {
+      return NextResponse.json(
+        { error: '账号处于老虎机封禁期，无法重置' },
+        { status: 403 },
       );
     }
 
     // 获取请求参数
     const { initialCoins = 1000 } = await req.json().catch(() => ({}));
+    const maxInitialCoins = isAdmin ? 100000 : 1000;
 
     if (
       typeof initialCoins !== 'number' ||
+      !Number.isFinite(initialCoins) ||
       initialCoins < 0 ||
-      initialCoins > 100000
+      initialCoins > maxInitialCoins
     ) {
       return NextResponse.json(
-        { error: '无效的初始金额，范围应为0-100000' },
+        { error: `无效的初始金额，范围应为0-${maxInitialCoins}` },
         { status: 400 },
       );
     }
 
     // 创建新的用户数据
     const now = Date.now();
+    const normalizedCoins = Math.floor(initialCoins);
     const newUserData: SlotUserData = {
-      coins: initialCoins,
+      coins: normalizedCoins,
       totalSpins: 0,
       totalWins: 0,
       biggestWin: 0,
       isBanned: false,
       banEndTime: 0,
       lastSpinTime: 0,
-      initialCoins: initialCoins,
+      initialCoins: normalizedCoins,
       createdTime: now,
     };
 
@@ -177,22 +201,16 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-// 增加金币（管理员功能）
+// 增加金币（严格限制为管理员功能）
 export async function PATCH(req: NextRequest) {
   try {
-    // 用户认证
-    const auth = await authenticateUser(req);
-    if (auth.error || !auth.username) {
-      return NextResponse.json(
-        { error: auth.error || '认证失败' },
-        { status: 401 },
-      );
-    }
+    const admin = await requireAdmin(req);
+    if ('response' in admin) return admin.response;
 
     // 获取请求参数
-    const { coins, reason } = await req.json();
+    const { coins, reason, username } = await req.json();
 
-    if (typeof coins !== 'number' || coins === 0) {
+    if (typeof coins !== 'number' || !Number.isFinite(coins) || coins === 0) {
       return NextResponse.json({ error: '无效的金币数量' }, { status: 400 });
     }
 
@@ -204,25 +222,30 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    const targetUsername =
+      typeof username === 'string' && username.trim()
+        ? username.trim()
+        : admin.username;
+
     // 获取当前用户数据
-    const userData = await getUserSlotData(auth.username);
+    const userData = await getUserSlotData(targetUsername);
 
     // 更新金币数量
-    userData.coins = Math.max(0, userData.coins + coins);
+    userData.coins = Math.max(0, userData.coins + Math.floor(coins));
 
     // 保存数据
-    await saveUserSlotData(auth.username, userData);
+    await saveUserSlotData(targetUsername, userData);
 
-    // 记录操作日志（可选）
+    // 记录操作日志
     console.log(
-      `用户 ${auth.username} ${coins > 0 ? '增加' : '减少'} ${Math.abs(coins)} 金币，原因: ${reason || '管理员操作'}`,
+      `管理员 ${admin.username} 为用户 ${targetUsername} ${coins > 0 ? '增加' : '减少'} ${Math.abs(coins)} 金币，原因: ${reason || '管理员操作'}`,
     );
 
     return NextResponse.json({
       success: true,
-      message: `已${coins > 0 ? '增加' : '减少'} ${Math.abs(coins)} 金币`,
+      message: `已${coins > 0 ? '增加' : '减少'} ${Math.abs(Math.floor(coins))} 金币`,
       coins: userData.coins,
-      changeAmount: coins,
+      changeAmount: Math.floor(coins),
     });
   } catch (error) {
     console.error('修改用户金币异常:', error);

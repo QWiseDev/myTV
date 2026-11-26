@@ -86,12 +86,37 @@ export function runCustomAdFilterCode(
   customCode: string,
 ): string {
   const jsCode = removeTypeAnnotations(customCode);
-  const customFunction = new Function(
-    'type',
-    'm3u8Content',
-    `"use strict";\n${jsCode}\nreturn filterAdsFromM3U8(type, m3u8Content);`,
-  );
-  const result = customFunction(type, m3u8Content);
+  const safeType = String(type);
+  const safeContent = String(m3u8Content);
+
+  let result: unknown;
+  if (
+    typeof process !== 'undefined' &&
+    Boolean(process.versions?.node) &&
+    typeof require === 'function'
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const vm = require('vm') as typeof import('vm');
+    if (vm && typeof vm.createContext === 'function') {
+      const sandbox = Object.create(null) as Record<string, unknown>;
+      sandbox.__type = safeType;
+      sandbox.__content = safeContent;
+      const context = vm.createContext(sandbox, {
+        codeGeneration: { strings: false, wasm: false },
+      });
+      const script = new vm.Script(
+        `"use strict";\n${jsCode}\nfilterAdsFromM3U8(__type, __content);`,
+      );
+      result = script.runInContext(context, { timeout: 50 });
+    }
+  } else {
+    const customFunction = new Function(
+      'type',
+      'm3u8Content',
+      `"use strict";\n${jsCode}\nreturn filterAdsFromM3U8(type, m3u8Content);`,
+    );
+    result = customFunction(safeType, safeContent);
+  }
 
   if (typeof result !== 'string') {
     throw new Error('自定义去广告函数必须返回字符串');

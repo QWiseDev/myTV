@@ -11,6 +11,9 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+const CACHE_STATS_BATCH_SIZE = 20;
+const MAX_INSPECTED_CACHE_KEYS = 2000;
+
 // 数据库缓存统计和管理模块
 export class DatabaseCacheManager {
   // 获取Redis兼容数据库中的缓存统计（支持KVRocks、Upstash、Redis）
@@ -25,22 +28,30 @@ export class DatabaseCacheManager {
     };
 
     try {
-      const allCacheKeys = await db.keys('cache:*');
+      const allCacheKeys = (await db.keys('cache:*')).slice(
+        0,
+        MAX_INSPECTED_CACHE_KEYS,
+      );
 
       if (allCacheKeys.length === 0) {
         return stats;
       }
 
-      const values = await Promise.all(
-        allCacheKeys.map(async (fullKey) => {
-          try {
-            return await db.getCache(fullKey.replace(/^cache:/, ''));
-          } catch (error) {
-            console.warn(`获取缓存键 ${fullKey} 失败:`, error);
-            return null;
-          }
-        }),
-      );
+      const values: unknown[] = [];
+      for (let i = 0; i < allCacheKeys.length; i += CACHE_STATS_BATCH_SIZE) {
+        const batchKeys = allCacheKeys.slice(i, i + CACHE_STATS_BATCH_SIZE);
+        const batchValues = await Promise.all(
+          batchKeys.map(async (fullKey) => {
+            try {
+              return await db.getCache(fullKey.replace(/^cache:/, ''));
+            } catch (error) {
+              console.warn(`获取缓存键 ${fullKey} 失败:`, error);
+              return null;
+            }
+          }),
+        );
+        values.push(...batchValues);
+      }
 
       allCacheKeys.forEach((fullKey: string, idx: number) => {
         const key = fullKey.replace('cache:', ''); // 移除前缀
@@ -202,56 +213,30 @@ export class DatabaseCacheManager {
     let clearedCount = 0;
 
     try {
-      switch (type) {
-        case 'douban':
-          await db.clearExpiredCache('douban-');
-          break;
-        case 'tmdb':
-          await db.clearExpiredCache('tmdb-');
-          // 清理localStorage中的TMDB缓存（兜底）
-          if (typeof localStorage !== 'undefined') {
-            const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('tmdb-'),
-            );
-            keys.forEach((key) => {
-              localStorage.removeItem(key);
-              clearedCount++;
-            });
-          }
-          break;
-        case 'danmu':
-          await db.clearExpiredCache('danmu-cache');
-          break;
-        case 'netdisk':
-          await db.clearExpiredCache('netdisk-search');
-          // 清理localStorage中的网盘缓存（兜底）
-          if (typeof localStorage !== 'undefined') {
-            const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('netdisk-search'),
-            );
-            keys.forEach((key) => {
-              localStorage.removeItem(key);
-              clearedCount++;
-            });
-          }
-          break;
-        case 'youtube':
-          await db.clearExpiredCache('youtube-search');
-          // 清理localStorage中的YouTube缓存（兜底）
-          if (typeof localStorage !== 'undefined') {
-            const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('youtube-search'),
-            );
-            keys.forEach((key) => {
-              localStorage.removeItem(key);
-              clearedCount++;
-            });
-          }
-          break;
-      }
+      const prefixByType: Record<typeof type, string> = {
+        douban: 'douban-',
+        tmdb: 'tmdb-',
+        danmu: 'danmu-cache',
+        netdisk: 'netdisk-search',
+        youtube: 'youtube-search',
+      };
+      const prefix = prefixByType[type];
+      const matchingKeys = await db.keys(`cache:${prefix}*`);
+      await db.clearExpiredCache(prefix);
+      clearedCount += matchingKeys.length;
 
-      // 由于clearExpiredCache不返回数量，我们无法精确统计
-      clearedCount = 1; // 标记操作已执行
+      if (
+        (type === 'tmdb' || type === 'netdisk' || type === 'youtube') &&
+        typeof localStorage !== 'undefined'
+      ) {
+        const keys = Object.keys(localStorage).filter((key) =>
+          key.startsWith(prefix),
+        );
+        keys.forEach((key) => {
+          localStorage.removeItem(key);
+          clearedCount++;
+        });
+      }
     } catch (error) {
       console.error(`清理${type}缓存失败:`, error);
     }
@@ -262,8 +247,9 @@ export class DatabaseCacheManager {
   // 清理所有过期缓存
   static async clearExpiredCache(): Promise<number> {
     try {
+      const existingKeys = await db.keys('cache:*');
       await db.clearExpiredCache();
-      return 1; // 标记操作已执行
+      return existingKeys.length;
     } catch (error) {
       console.error('清理过期缓存失败:', error);
       return 0;

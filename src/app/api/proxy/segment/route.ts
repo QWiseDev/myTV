@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -27,20 +28,34 @@ export async function GET(request: Request) {
 
   const config = await getConfig();
   const liveSource = config.LiveConfig?.find((s: any) => s.key === source);
-  if (!liveSource) {
+  if (!liveSource || liveSource.disabled) {
     segmentStats.errors++;
     return NextResponse.json({ error: 'Source not found' }, { status: 404 });
   }
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
+
+  const targetUrl = url.trim();
+  try {
+    await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+  } catch (validationError) {
+    segmentStats.errors++;
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : 'Invalid or restricted URL',
+      },
+      { status: 400 },
+    );
+  }
 
   const controller = new AbortController();
   // 超时仅覆盖建连与响应头阶段；分片 body 由客户端背压自然调节
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const decodedUrl = decodeURIComponent(url);
-
-    const response = await fetch(decodedUrl, {
+    const response = await safeFetch(targetUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent': ua,

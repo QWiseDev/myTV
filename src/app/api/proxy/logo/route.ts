@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
+import { resolveAndValidateRemoteUrl, safeFetch } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -14,26 +15,14 @@ const logoCache = new Map<
 >();
 const LOGO_CACHE_TTL = 86400000; // 24小时
 const MAX_CACHE_SIZE = 500;
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
-// 连接池管理
-import * as http from 'http';
-import * as https from 'https';
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 30,
-  maxFreeSockets: 10,
-  timeout: 20000,
-  keepAliveMsecs: 30000,
-});
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 30,
-  maxFreeSockets: 10,
-  timeout: 20000,
-  keepAliveMsecs: 30000,
-});
+function applySvgSecurityHeaders(headers: Headers, contentType: string): void {
+  if (contentType.toLowerCase().includes('svg')) {
+    headers.set('Content-Security-Policy', "sandbox; default-src 'none';");
+    headers.set('X-Content-Type-Options', 'nosniff');
+  }
+}
 
 // 性能统计
 const logoStats = {
@@ -111,17 +100,39 @@ export async function GET(request: Request) {
   const imageUrl = searchParams.get('url');
   const source = searchParams.get('source'); // 注意这里是 'source' 不是 'moontv-source'
 
-  if (!imageUrl) {
+  if (!imageUrl || !source) {
     logoStats.errors++;
-    return NextResponse.json({ error: 'Missing image URL' }, { status: 400 });
+    return NextResponse.json(
+      { error: !imageUrl ? 'Missing image URL' : 'Missing source' },
+      { status: 400 },
+    );
   }
 
   const config = await getConfig();
   const liveSource = config.LiveConfig?.find((s: any) => s.key === source);
-  const ua = liveSource?.ua || 'AptvPlayer/1.4.10';
+  if (!liveSource || liveSource.disabled) {
+    logoStats.errors++;
+    return NextResponse.json({ error: 'Source not found' }, { status: 404 });
+  }
+  const ua = liveSource.ua || 'AptvPlayer/1.4.10';
 
-  const decodedUrl = decodeURIComponent(imageUrl);
-  const cacheKey = `${source || 'default'}-${decodedUrl}`;
+  const targetUrl = imageUrl.trim();
+  try {
+    await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+  } catch (validationError) {
+    logoStats.errors++;
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : 'Invalid or restricted image URL',
+      },
+      { status: 400 },
+    );
+  }
+
+  const cacheKey = `${source}-${targetUrl}`;
 
   // 检查缓存
   const cached = logoCache.get(cacheKey);
@@ -133,15 +144,18 @@ export async function GET(request: Request) {
       (logoStats.avgResponseTime * (logoStats.requests - 1) + responseTime) /
       logoStats.requests;
 
+    const hitHeaders = new Headers({
+      'Content-Type': cached.contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=604800, s-maxage=604800, immutable',
+      'X-Cache': 'HIT',
+      'Content-Length': cached.data.byteLength.toString(),
+      ...(cached.etag && { ETag: cached.etag }),
+    });
+    applySvgSecurityHeaders(hitHeaders, cached.contentType);
+
     return new Response(cached.data, {
-      headers: {
-        'Content-Type': cached.contentType,
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=604800, s-maxage=604800, immutable',
-        'X-Cache': 'HIT',
-        'Content-Length': cached.data.byteLength.toString(),
-        ...(cached.etag && { ETag: cached.etag }),
-      },
+      headers: hitHeaders,
     });
   }
 
@@ -149,13 +163,8 @@ export async function GET(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
 
   try {
-    const isHttps = decodedUrl.startsWith('https:');
-    const agent = isHttps ? httpsAgent : httpAgent;
-
-    const imageResponse = await fetch(decodedUrl, {
+    const imageResponse = await safeFetch(targetUrl, {
       cache: 'no-cache',
-      redirect: 'follow',
-      credentials: 'same-origin',
       signal: controller.signal,
       headers: {
         'User-Agent': ua,
@@ -165,9 +174,6 @@ export async function GET(request: Request) {
         'Cache-Control': 'no-cache',
         ...(cached?.etag && { 'If-None-Match': cached.etag }),
       },
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore - Node.js specific option
-      agent: typeof window === 'undefined' ? agent : undefined,
     });
 
     clearTimeout(timeoutId);
@@ -181,14 +187,17 @@ export async function GET(request: Request) {
         (logoStats.avgResponseTime * (logoStats.requests - 1) + responseTime) /
         logoStats.requests;
 
+      const notModifiedHeaders = new Headers({
+        'Content-Type': cached.contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=604800, immutable',
+        'X-Cache': '304-HIT',
+        'Content-Length': cached.data.byteLength.toString(),
+      });
+      applySvgSecurityHeaders(notModifiedHeaders, cached.contentType);
+
       return new Response(cached.data, {
-        headers: {
-          'Content-Type': cached.contentType,
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=604800, immutable',
-          'X-Cache': '304-HIT',
-          'Content-Length': cached.data.byteLength.toString(),
-        },
+        headers: notModifiedHeaders,
       });
     }
 
@@ -225,8 +234,15 @@ export async function GET(request: Request) {
       );
     }
 
-    // 读取图片数据并缓存
+    // 读取图片数据并二次校验实际字节大小（防止缺失 Content-Length 绕过）
     const imageData = await imageResponse.arrayBuffer();
+    if (imageData.byteLength > MAX_LOGO_BYTES) {
+      logoStats.errors++;
+      return NextResponse.json(
+        { error: `Image too large: ${imageData.byteLength} bytes` },
+        { status: 400 },
+      );
+    }
 
     // 缓存图片数据
     logoCache.set(cacheKey, {
@@ -260,12 +276,13 @@ export async function GET(request: Request) {
     headers.set('X-Cache', 'MISS');
     headers.set('Content-Length', imageData.byteLength.toString());
     headers.set('Vary', 'Accept-Encoding');
+    applySvgSecurityHeaders(headers, contentType);
 
     if (etag) {
       headers.set('ETag', etag);
     } else {
       // 生成简单的 ETag
-      const hash = Buffer.from(decodedUrl).toString('base64').slice(0, 16);
+      const hash = Buffer.from(targetUrl).toString('base64').slice(0, 16);
       headers.set('ETag', `"${hash}"`);
     }
 

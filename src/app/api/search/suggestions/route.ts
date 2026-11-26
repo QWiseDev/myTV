@@ -6,15 +6,24 @@ import { AdminConfig } from '@/lib/admin.types';
 import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
+
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
 
     const config = await getConfig();
     const { searchParams } = new URL(request.url);
@@ -38,10 +47,7 @@ export async function GET(request: NextRequest) {
       { suggestions },
       {
         headers: {
-          'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,
-          'CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Vercel-CDN-Cache-Control': `public, s-maxage=${cacheTime}`,
-          'Netlify-Vary': 'query',
+          'Cache-Control': `private, max-age=${cacheTime}`,
         },
       },
     );

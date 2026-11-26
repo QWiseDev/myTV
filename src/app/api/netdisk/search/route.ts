@@ -3,13 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
+  const auth = await requireUser(request);
   if (!auth.authInfo) return auth.response;
+
+  const guardResult = await ensureUserAccessOrResponse(
+    auth.authInfo.username,
+    auth.authInfo.timestamp,
+  );
+  if ('response' in guardResult) {
+    return guardResult.response;
+  }
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
@@ -71,7 +80,7 @@ export async function GET(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'LunaTV/1.0',
+          'User-Agent': 'KLM-TV/1.0',
         },
         signal: controller.signal,
         body: JSON.stringify({

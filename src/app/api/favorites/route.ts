@@ -21,11 +21,14 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }
@@ -69,11 +72,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }
@@ -135,11 +141,14 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // 从 cookie 获取用户信息
-    const auth = requireUser(request);
+    const auth = await requireUser(request);
     if (!auth.authInfo) return auth.response;
     const authInfo = auth.authInfo;
 
-    const guardResult = await ensureUserAccessOrResponse(authInfo.username);
+    const guardResult = await ensureUserAccessOrResponse(
+      authInfo.username,
+      authInfo.timestamp,
+    );
     if ('response' in guardResult) {
       return guardResult.response;
     }

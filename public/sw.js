@@ -171,28 +171,17 @@ define(['./workbox-e9849328'], function (e) {
       'GET',
     ),
     e.registerRoute(
-      ({ url: e }) => {
-        if (!(self.origin === e.origin)) return !1;
-        const s = e.pathname;
-        return (
-          !s.startsWith('/api/auth/') &&
-          !s.startsWith('/api/proxy/') &&
-          !!s.startsWith('/api/')
-        );
-      },
-      new e.NetworkFirst({
-        cacheName: 'apis2',
-        networkTimeoutSeconds: 10,
-        plugins: [
-          new e.ExpirationPlugin({ maxEntries: 16, maxAgeSeconds: 86400 }),
-        ],
-      }),
+      ({ url: e }) =>
+        e.pathname.startsWith('/api/') || e.pathname.startsWith('/seg/'),
+      new e.NetworkOnly(),
       'GET',
     ),
     e.registerRoute(
       ({ url: e }) => {
         if (!(self.origin === e.origin)) return !1;
-        return !e.pathname.startsWith('/api/');
+        return (
+          !e.pathname.startsWith('/api/') && !e.pathname.startsWith('/seg/')
+        );
       },
       new e.NetworkFirst({
         cacheName: 'others',
@@ -203,29 +192,13 @@ define(['./workbox-e9849328'], function (e) {
       }),
       'GET',
     ),
-    e.registerRoute(
-      ({ url: e }) =>
-        e.pathname.startsWith('/seg/') || e.pathname.startsWith('/api/proxy/'),
-      new e.NetworkOnly(),
-      'GET',
-    ),
-    e.registerRoute(
-      ({ url: e }) => !(self.origin === e.origin),
-      new e.NetworkFirst({
-        cacheName: 'cross-origin',
-        networkTimeoutSeconds: 10,
-        plugins: [
-          new e.ExpirationPlugin({ maxEntries: 32, maxAgeSeconds: 3600 }),
-        ],
-      }),
-      'GET',
-    ),
     self.addEventListener('activate', (e) => {
+      const legacyCaches = new Set(['apis', 'apis2', 'cross-origin']);
       e.waitUntil(
         caches
           .keys()
           .then((s) =>
-            Promise.all(s.map((s) => 'apis' === s && caches.delete(s))),
+            Promise.all(s.map((k) => legacyCaches.has(k) && caches.delete(k))),
           ),
       );
     }));

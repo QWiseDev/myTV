@@ -2,21 +2,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireUser } from '@/lib/auth';
+import { requireAdmin } from '@/lib/admin-auth';
 import { resetConfig } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
 export async function GET(request: NextRequest) {
-  const auth = requireUser(request);
-  if (!auth.authInfo) return auth.response;
-  const authInfo = auth.authInfo;
-  const username = authInfo.username;
-
-  if (username !== process.env.USERNAME) {
-    return NextResponse.json({ error: '仅支持站长重置配置' }, { status: 401 });
-  }
+  const admin = await requireAdmin(request, {
+    ownerOnly: true,
+    forbiddenMessage: '仅支持站长重置配置',
+  });
+  if ('response' in admin) return admin.response;
 
   try {
     await resetConfig();

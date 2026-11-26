@@ -25,24 +25,8 @@ const nextConfig = {
     },
   },
 
-  // 🔥 全局强制动态渲染，避免构建时数据库访问问题
-  generateBuildId: async () => {
-    return 'build';
-  },
-
   // 禁用静态优化，强制所有页面动态渲染
   trailingSlash: false,
-
-  // 完全禁用静态生成，强制所有路由动态渲染
-  async rewrites() {
-    return [
-      // 所有API路由都强制动态渲染
-      {
-        source: '/api/:path*',
-        destination: '/api/:path*',
-      },
-    ];
-  },
 
   // 🔥 生产环境移除 console.* 但保留 console.error 和 console.warn
   compiler: isProd
@@ -63,10 +47,6 @@ const nextConfig = {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable', // 1年缓存，资源不可变
           },
-          {
-            key: 'Expires',
-            value: new Date(Date.now() + 31536000000).toUTCString(), // 1年后过期
-          },
         ],
       },
       {
@@ -76,10 +56,6 @@ const nextConfig = {
             key: 'Cache-Control',
             value:
               'public, max-age=31536000, immutable, stale-while-revalidate=86400', // 1年缓存 + 24小时过期宽限期
-          },
-          {
-            key: 'Expires',
-            value: new Date(Date.now() + 31536000000).toUTCString(), // 1年后过期
           },
           {
             key: 'ETag',
@@ -163,6 +139,7 @@ const nextConfig = {
       net: false,
       tls: false,
       crypto: false,
+      vm: false,
     };
 
     return config;

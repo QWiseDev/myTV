@@ -12,6 +12,11 @@ import {
   SegmentProxyConfig,
 } from '@/lib/live-proxy';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import {
+  getRequestOrigin,
+  resolveAndValidateRemoteUrl,
+  safeFetch,
+} from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -39,7 +44,7 @@ export async function GET(request: Request) {
 
   const config = await getConfig();
   const liveSource = config.LiveConfig?.find((s: any) => s.key === source);
-  if (!liveSource) {
+  if (!liveSource || liveSource.disabled) {
     stats.errors++;
     return NextResponse.json({ error: 'Source not found' }, { status: 404 });
   }
@@ -53,7 +58,22 @@ export async function GET(request: Request) {
   let responseUsed = false;
 
   try {
-    const decodedUrl = decodeURIComponent(url);
+    // searchParams.get 已自动完成一次 URL 解码，禁止二次 decodeURIComponent 破坏签名 URL
+    const targetUrl = url.trim();
+    try {
+      await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+    } catch (validationError) {
+      stats.errors++;
+      return NextResponse.json(
+        {
+          error:
+            validationError instanceof Error
+              ? validationError.message
+              : 'Invalid or restricted URL',
+        },
+        { status: 400 },
+      );
+    }
 
     // 参考 hls.js fetch-loader，构建标准headers
     const headers: Record<string, string> = {
@@ -68,12 +88,12 @@ export async function GET(request: Request) {
 
     // 配置了独立分片代理时，播放列表也经其代取（主站与源不通时仍可取到）
     const fetchUrl = segProxy
-      ? buildFetchViaProxyUrl(segProxy, decodedUrl, ua)
-      : decodedUrl;
+      ? buildFetchViaProxyUrl(segProxy, targetUrl, ua)
+      : targetUrl;
 
     response = await withAbortableTimeout(
       (signal) =>
-        fetch(fetchUrl, {
+        (segProxy ? fetch : safeFetch)(fetchUrl, {
           cache: 'no-cache',
           redirect: 'follow',
           credentials: 'same-origin',
@@ -112,7 +132,7 @@ export async function GET(request: Request) {
     const isM3U8 =
       contentType.toLowerCase().includes('mpegurl') ||
       contentType.toLowerCase().includes('octet-stream') ||
-      decodedUrl.includes('.m3u8');
+      targetUrl.includes('.m3u8');
 
     if (isM3U8) {
       // 获取最终的响应URL（处理重定向后的URL）
@@ -169,7 +189,10 @@ export async function GET(request: Request) {
         'Access-Control-Expose-Headers',
         'Content-Length, Content-Range, Content-Type',
       );
-      headers.set('Content-Length', modifiedContent.length.toString());
+      headers.set(
+        'Content-Length',
+        Buffer.byteLength(modifiedContent, 'utf8').toString(),
+      );
 
       // 更新性能统计
       const responseTime = Date.now() - startTime;
@@ -279,20 +302,8 @@ function rewriteM3U8Content(
   ua: string,
   segProxy: SegmentProxyConfig | null,
 ) {
-  // 从 referer 头提取协议信息
-  const referer = req.headers.get('referer');
-  let protocol = 'http';
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      protocol = refererUrl.protocol.replace(':', '');
-    } catch (error) {
-      // ignore
-    }
-  }
-
-  const host = req.headers.get('host');
-  const proxyBase = `${protocol}://${host}/api/proxy`;
+  // 从受信任的反向代理头与请求 URL 自动推断公开 origin，避免缺失 referer 时回退 http 导致混合内容错误
+  const proxyBase = `${getRequestOrigin(req)}/api/proxy`;
 
   const lines = content.split('\n');
   const rewrittenLines: string[] = [];
@@ -326,6 +337,9 @@ function rewriteM3U8Content(
     if (line.startsWith('#EXT-X-MAP:')) {
       line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
         endpoint: 'segment',
+        allowDirect,
+        segProxy,
+        ua,
       });
     }
 
@@ -341,6 +355,9 @@ function rewriteM3U8Content(
       line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
         endpoint: 'm3u8',
         onInvalid: 'strip',
+        allowDirect,
+        segProxy,
+        ua,
       });
     }
 
@@ -348,6 +365,9 @@ function rewriteM3U8Content(
     if (line.startsWith('#EXT-X-PART:')) {
       line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
         endpoint: 'segment',
+        allowDirect,
+        segProxy,
+        ua,
       });
     }
 
@@ -363,6 +383,9 @@ function rewriteM3U8Content(
     if (line.startsWith('#EXT-X-SESSION-DATA:')) {
       line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
         endpoint: 'segment',
+        allowDirect,
+        segProxy,
+        ua,
       });
     }
 
@@ -383,13 +406,12 @@ function rewriteM3U8Content(
         if (nextLine && !nextLine.startsWith('#')) {
           let resolvedUrl = resolveUrl(baseUrl, nextLine);
           resolvedUrl = substituteVariables(resolvedUrl, variables);
-          const proxyUrl = createProxyUrl(
-            proxyBase,
-            'm3u8',
-            resolvedUrl,
-            source,
-          );
-          rewrittenLines.push(proxyUrl);
+          const variantUrl = allowDirect
+            ? resolvedUrl
+            : segProxy
+              ? createProxyUrl(proxyBase, 'm3u8', resolvedUrl, source)
+              : createProxyUrl(proxyBase, 'm3u8', resolvedUrl, source);
+          rewrittenLines.push(variantUrl);
         } else {
           rewrittenLines.push(nextLine);
         }
@@ -406,6 +428,9 @@ function rewriteM3U8Content(
     if (line.startsWith('#EXT-X-PRELOAD-HINT:')) {
       line = rewriteTagUri(line, baseUrl, proxyBase, source, variables, {
         endpoint: 'segment',
+        allowDirect,
+        segProxy,
+        ua,
       });
     }
 
@@ -496,9 +521,19 @@ function rewriteTagUri(
     endpoint: 'm3u8' | 'key' | 'segment';
     /** 无效 URI（如 EXT-X-MEDIA 中的 "nan"）处理：strip 移除属性让 HLS.js 忽略该轨道，keep 保留原行 */
     onInvalid?: 'strip' | 'keep';
+    allowDirect?: boolean;
+    segProxy?: SegmentProxyConfig | null;
+    ua?: string;
   },
 ): string {
-  const { attr = 'URI', endpoint, onInvalid = 'keep' } = options;
+  const {
+    attr = 'URI',
+    endpoint,
+    onInvalid = 'keep',
+    allowDirect = false,
+    segProxy = null,
+    ua = '',
+  } = options;
   const uriMatch = line.match(new RegExp(`${attr}="([^"]+)"`));
   if (!uriMatch) {
     return line;
@@ -520,8 +555,15 @@ function rewriteTagUri(
 
   try {
     const resolvedUrl = resolveUrl(baseUrl, originalUri);
-    const proxyUrl = createProxyUrl(proxyBase, endpoint, resolvedUrl, source);
-    return line.replace(uriMatch[0], `${attr}="${proxyUrl}"`);
+    let targetUri: string;
+    if (allowDirect && endpoint !== 'key') {
+      targetUri = resolvedUrl;
+    } else if (segProxy && endpoint === 'segment') {
+      targetUri = buildExternalSegmentUrl(segProxy, resolvedUrl, ua);
+    } else {
+      targetUri = createProxyUrl(proxyBase, endpoint, resolvedUrl, source);
+    }
+    return line.replace(uriMatch[0], `${attr}="${targetUri}"`);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.warn('解析URI失败:', originalUri, error);

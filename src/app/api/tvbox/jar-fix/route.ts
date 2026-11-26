@@ -1,6 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin-auth';
 import { getUserRegion } from '@/lib/networkDetection';
 
 export const runtime = 'nodejs';
@@ -74,7 +75,7 @@ async function testJarSource(source: any): Promise<{
     const userAgent =
       source.region === 'domestic'
         ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        : 'LunaTV-JarTest/1.0';
+        : 'KLM-JarTest/1.0';
 
     const response = await fetch(source.url, {
       method: 'HEAD',
@@ -205,6 +206,9 @@ function generateFixRecommendations(
 
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if ('response' in admin) return admin.response;
+
     const startTime = Date.now();
 
     // 检测用户网络环境
