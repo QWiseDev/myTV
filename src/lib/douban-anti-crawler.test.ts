@@ -14,6 +14,29 @@ function headerValue(init: RequestInit | undefined, name: string): string {
   return headers[name] ?? '';
 }
 
+// 不用真实 Response：宿主 realm 的 undici 句柄会让 jest worker 无法退出。
+// 这里按被测代码只用到 ok/status/headers/text 的契约造最小桩。
+function mockResponse(init: {
+  status?: number;
+  headers?: Record<string, string>;
+  setCookies?: string[];
+  body?: string;
+}): Response {
+  const status = init.status ?? 200;
+  const headers = init.headers ?? {};
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get: (name: string) => headers[name.toLowerCase()] ?? null,
+      ...(init.setCookies
+        ? { getSetCookie: () => init.setCookies as string[] }
+        : {}),
+    },
+    text: async () => init.body ?? '',
+  } as unknown as Response;
+}
+
 // 真实 cheerio 1.2 会内置加载 undici，jsdom 沙箱缺 TextDecoder/MessagePort，
 // 且桥接宿主 realm 的 MessagePort 会让 jest worker 无法退出；这里只替换 HTML 解析环节
 jest.mock('cheerio', () => ({
@@ -51,19 +74,11 @@ describe('fetchDoubanWithVerification 反爬 cookie 复用', () => {
   function mockVerificationFlow(): void {
     fetchMock
       .mockResolvedValueOnce(
-        new Response(null, {
-          status: 302,
-          headers: { location: VERIFY_URL },
-        }),
+        mockResponse({ status: 302, headers: { location: VERIFY_URL } }),
       )
-      .mockResolvedValueOnce(new Response(VERIFY_PAGE_HTML, { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response('', {
-          status: 200,
-          headers: { 'set-cookie': SET_COOKIE },
-        }),
-      )
-      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+      .mockResolvedValueOnce(mockResponse({ body: VERIFY_PAGE_HTML }))
+      .mockResolvedValueOnce(mockResponse({ setCookies: [SET_COOKIE] }))
+      .mockResolvedValueOnce(mockResponse({ body: 'ok' }));
   }
 
   it('只把 name=value 回传为 Cookie 头，不带 Set-Cookie 属性', async () => {
@@ -87,7 +102,7 @@ describe('fetchDoubanWithVerification 反爬 cookie 复用', () => {
     await fetchDoubanWithVerification(MOVIE_URL);
 
     fetchMock.mockClear();
-    fetchMock.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    fetchMock.mockResolvedValueOnce(mockResponse({ body: 'ok' }));
 
     const response = await fetchDoubanWithVerification(MOVIE_URL);
 
