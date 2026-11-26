@@ -342,6 +342,28 @@ export function useSourceInitialization({
           return;
         }
 
+        // 🩹 修复：用户手动换源后，ref 中的 source/id 已经被
+        // handleSourceChange 更新，但 routeParams（来自 useSearchParams）
+        // 不会感知 replaceState 的变化，仍停留在旧值。
+        // 若此时 effect 因其他依赖变化重新执行，会以旧 routeParams 重新
+        // 初始化，导致"换源后又变回去"。
+        // 检测到 ref 已有有效源且与传入的 routeParams 不同时，说明用户
+        // 已经换过源，跳过重新初始化，仅补充可选源列表。
+        const userHasSwitchedSource =
+          currentSourceRef?.current &&
+          currentIdRef?.current &&
+          currentDetail &&
+          (currentSourceRef.current !== currentSource ||
+            currentIdRef.current !== currentId);
+
+        if (userHasSwitchedSource) {
+          sourceSearchLoaderRef.current = () =>
+            enrichAvailableSources(currentDetail);
+          setLoading(false);
+          void enrichAvailableSources(currentDetail);
+          return;
+        }
+
         if (!currentSource && !currentId && !videoTitle && !searchTitle) {
           failInitialization(new Error('缺少必要参数'));
           return;
