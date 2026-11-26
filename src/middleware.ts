@@ -2,13 +2,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie, verifyAuthInfo } from '@/lib/auth';
+import {
+  clearAuthCookiesOnResponse,
+  getAuthInfoFromCookie,
+  hasAuthCookie,
+  verifyAuthInfo,
+} from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 跳过不需要认证的路径
+  // 跳过不需要认证的路径；对访客页面若携带了失效/过期登录 cookie，主动清除以防前后端登录态分裂
   if (shouldSkipAuth(pathname)) {
+    if (GUEST_PAGE_PATHS.includes(pathname) && hasAuthCookie(request)) {
+      const authInfo = getAuthInfoFromCookie(request);
+      const verified = await verifyAuthInfo(authInfo, process.env.PASSWORD);
+      if (!verified) {
+        return clearAuthCookiesOnResponse(NextResponse.next(), request);
+      }
+    }
     return NextResponse.next();
   }
 
@@ -34,19 +46,22 @@ function handleAuthFailure(
   pathname: string,
 ): NextResponse {
   // API 路由与图片优化器返回 401 状态码（图片请求重定向到登录页没有意义）
-  if (
-    pathname.startsWith('/api') ||
-    pathname.startsWith(IMAGE_OPTIMIZER_PATH)
-  ) {
-    return new NextResponse('Unauthorized', { status: 401 });
+  const response =
+    pathname.startsWith('/api') || pathname.startsWith(IMAGE_OPTIMIZER_PATH)
+      ? new NextResponse('Unauthorized', { status: 401 })
+      : (() => {
+          const loginUrl = new URL('/login', request.url);
+          // 保留完整的URL，包括查询参数
+          const fullUrl = `${pathname}${request.nextUrl.search}`;
+          loginUrl.searchParams.set('redirect', fullUrl);
+          return NextResponse.redirect(loginUrl);
+        })();
+
+  if (hasAuthCookie(request)) {
+    clearAuthCookiesOnResponse(response, request);
   }
 
-  // 否则重定向到登录页面
-  const loginUrl = new URL('/login', request.url);
-  // 保留完整的URL，包括查询参数
-  const fullUrl = `${pathname}${request.nextUrl.search}`;
-  loginUrl.searchParams.set('redirect', fullUrl);
-  return NextResponse.redirect(loginUrl);
+  return response;
 }
 
 // 图片优化器会让源站抓取并转码任意外链，必须鉴权，避免被当作开放代理耗尽源站并发
@@ -57,7 +72,8 @@ const IMAGE_OPTIMIZER_PATH = '/_next/image';
 // - '/api/tvbox'：TVBox 客户端拉取配置（使用路由内 token / IP 白名单 / 限速校验），
 //   注意不可放行 /api/tvbox-config 与 /api/tvbox/* 诊断端点
 // - '/api/feedback'：POST 允许访客提交反馈，GET/DELETE/PATCH 由路由内 requireAdmin 严校验
-const GUEST_EXACT_PATHS = ['/', '/play', '/api/tvbox', '/api/feedback'];
+const GUEST_PAGE_PATHS = ['/', '/play'];
+const GUEST_EXACT_PATHS = [...GUEST_PAGE_PATHS, '/api/tvbox', '/api/feedback'];
 const GUEST_PREFIX_PATHS = [
   '/api/detail',
   '/api/source-browser/',

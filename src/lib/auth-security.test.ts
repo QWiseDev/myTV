@@ -159,6 +159,47 @@ describe('auth, user-access, and admin-auth security', () => {
     const bannedCheck = await requireAdmin(bannedReq);
     expect(bannedCheck.response?.status).toBe(401);
   });
+  test('getAuthInfoFromBrowserCookie rejects expired timestamp payloads', async () => {
+    const { getAuthInfoFromBrowserCookie } = await import('@/lib/auth');
+    const prevWindow = (globalThis as { window?: unknown }).window;
+    const prevDocument = (globalThis as { document?: unknown }).document;
+    try {
+      const expiredTs = Date.now() - 8 * 24 * 60 * 60 * 1000;
+      (globalThis as { window?: unknown }).window = {};
+      (globalThis as { document?: unknown }).document = {
+        cookie: `user_auth=${encodeURIComponent(
+          JSON.stringify({
+            username: 'qiuwei',
+            signature: 'legacy-sig',
+            timestamp: expiredTs,
+          }),
+        )}`,
+      };
+      expect(getAuthInfoFromBrowserCookie()).toBeNull();
+
+      (globalThis as { document?: unknown }).document = {
+        cookie: `user_auth=${encodeURIComponent(
+          JSON.stringify({
+            username: 'qiuwei',
+            signature: 'fresh-sig',
+            timestamp: Date.now(),
+          }),
+        )}`,
+      };
+      expect(getAuthInfoFromBrowserCookie()?.username).toBe('qiuwei');
+    } finally {
+      if (prevWindow === undefined) {
+        delete (globalThis as { window?: unknown }).window;
+      } else {
+        (globalThis as { window?: unknown }).window = prevWindow;
+      }
+      if (prevDocument === undefined) {
+        delete (globalThis as { document?: unknown }).document;
+      } else {
+        (globalThis as { document?: unknown }).document = prevDocument;
+      }
+    }
+  });
 });
 
 export {};

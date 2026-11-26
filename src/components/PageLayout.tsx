@@ -15,6 +15,8 @@ interface PageLayoutProps {
   fullWidth?: boolean;
   /** 剧场模式（播放页/直播页）：内容顶满导航栏，md 及以上锁视口高度不可滚动 */
   theater?: boolean;
+  /** 访客模式：由 SSR 明确判定未登录时强制关闭登录导航，防止残留失效 cookie 导致菜单回流 */
+  guest?: boolean;
 }
 
 const PageLayout = ({
@@ -23,10 +25,11 @@ const PageLayout = ({
   disableMobilePadding = false,
   fullWidth = false,
   theater = false,
+  guest = false,
 }: PageLayoutProps) => {
   // 访客（未登录）：隐藏全部导航入口，只留顶栏 Logo 与登录按钮
   const isLoggedIn = useIsLoggedIn();
-  const showChrome = isLoggedIn;
+  const showChrome = !guest && isLoggedIn;
 
   return (
     <div className='w-full min-h-screen'>
@@ -44,7 +47,7 @@ const PageLayout = ({
         fallback={
           <header
             className={`fixed left-0 right-0 top-0 z-50 border-b border-[#e8e8e8] bg-[#ffffff]/92 backdrop-blur-xl dark:border-[#3a3a3a] dark:bg-[#0d0d0d]/92 ${
-              theater ? '' : 'md:left-44'
+              theater || guest ? '' : 'md:left-44'
             }`}
           >
             <div className='relative h-16 px-3 lg:px-6'>
@@ -62,7 +65,7 @@ const PageLayout = ({
           </header>
         }
       >
-        <Header activePath={activePath} theater={theater} />
+        <Header activePath={activePath} theater={theater} guest={guest} />
       </Suspense>
 
       <main

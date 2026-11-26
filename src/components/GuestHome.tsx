@@ -4,7 +4,11 @@ import { Film, Loader, LogIn, Search, Tv } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { openLoginModal } from '@/lib/login-modal';
+import {
+  clearBrowserAuthCookies,
+  hasBrowserAuthCookie,
+  openLoginModal,
+} from '@/lib/login-modal';
 import {
   type GuestHomeInitialData,
   type SourceVideoListResult,
@@ -94,6 +98,13 @@ export default function GuestHome({
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastFetchAtRef = useRef(0);
   const fetchReqIdRef = useRef(0);
+
+  // SSR 已按访客渲染但浏览器仍残留失效/旧版登录 cookie 时立即清理，避免其他页继续误判为已登录
+  useEffect(() => {
+    if (hasBrowserAuthCookie()) {
+      clearBrowserAuthCookies();
+    }
+  }, []);
 
   // 源列表：若 SSR 未直出，则用 includeCategories=1&includeList=1 一次拉齐分类与首屏列表
   useEffect(() => {
@@ -310,7 +321,7 @@ export default function GuestHome({
   };
 
   return (
-    <PageLayout activePath='/'>
+    <PageLayout activePath='/' guest>
       <div className='mx-auto max-w-[1500px] px-4 pt-2 pb-10 md:px-8'>
         {sourceError ? (
           <div className='mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400'>

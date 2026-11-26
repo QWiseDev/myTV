@@ -2,7 +2,7 @@
 'use client';
 
 import { cacheManager } from './cache-manager';
-import { openLoginModal } from '../login-modal';
+import { clearBrowserAuthCookies, openLoginModal } from '../login-modal';
 import type { UserPlayStat } from '../types';
 
 // 全局错误触发函数
@@ -52,6 +52,7 @@ export async function fetchWithAuth(
       } catch (error) {
         console.error('注销请求失败:', error);
       }
+      clearBrowserAuthCookies();
       openLoginModal();
       const authError = new Error('登录已失效，请重新登录') as any;
       authError.isAuthError = true;

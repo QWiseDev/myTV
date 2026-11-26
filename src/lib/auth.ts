@@ -134,6 +134,23 @@ export function getAuthCookieOptions(
   };
 }
 
+export function hasAuthCookie(request: NextRequest): boolean {
+  return Boolean(
+    request.cookies.get(AUTH_COOKIE_NAME)?.value ||
+    request.cookies.get(LEGACY_AUTH_COOKIE_NAME)?.value,
+  );
+}
+
+export function clearAuthCookiesOnResponse(
+  response: NextResponse,
+  request?: NextRequest,
+): NextResponse {
+  const expiredOptions = getAuthCookieOptions(request, new Date(0));
+  response.cookies.set(AUTH_COOKIE_NAME, '', expiredOptions);
+  response.cookies.set(LEGACY_AUTH_COOKIE_NAME, '', expiredOptions);
+  return response;
+}
+
 // 生成签名（HMAC-SHA256）
 export async function generateSignature(
   data: string,
@@ -306,7 +323,15 @@ export function getAuthInfoFromBrowserCookie(): AuthInfo | null {
   }
 
   try {
-    return getAuthInfoFromCookieHeader(document.cookie);
+    const authInfo = getAuthInfoFromCookieHeader(document.cookie);
+    if (
+      authInfo &&
+      authInfo.timestamp !== undefined &&
+      !isSessionTimestampValid(authInfo.timestamp)
+    ) {
+      return null;
+    }
+    return authInfo;
   } catch {
     return null;
   }

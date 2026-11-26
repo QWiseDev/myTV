@@ -9,8 +9,16 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/components/PageLayout', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid='page-layout'>{children}</div>
+  default: ({
+    children,
+    guest,
+  }: {
+    children: React.ReactNode;
+    guest?: boolean;
+  }) => (
+    <div data-testid='page-layout' data-guest={String(Boolean(guest))}>
+      {children}
+    </div>
   ),
 }));
 
@@ -30,6 +38,9 @@ describe('GuestHome SSR initialData & caching', () => {
   afterEach(() => {
     global.fetch = originalFetch;
     global.IntersectionObserver = originalIntersectionObserver;
+    document.cookie =
+      'user_auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
     jest.restoreAllMocks();
   });
 
@@ -142,5 +153,42 @@ describe('GuestHome SSR initialData & caching', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       '/api/source-browser/sites?includeCategories=1&includeList=1',
     );
+  });
+
+  it('forces guest layout and clears residual auth cookies on mount', async () => {
+    document.cookie = `user_auth=${encodeURIComponent(
+      JSON.stringify({ username: 'qiuwei', role: 'owner' }),
+    )}; path=/`;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sources: [] }),
+    }) as unknown as typeof fetch;
+
+    const GuestHome = (await import('./GuestHome')).default;
+    render(
+      <GuestHome
+        initialData={{
+          source: {
+            key: 'iqiyizyapi.com',
+            name: '爱奇艺',
+            api: 'https://iqiyizyapi.com/api.php/provide/vod/',
+          },
+          categories: [{ type_id: 1, type_name: '电影' }],
+          initialCategory: 1,
+          initialList: {
+            items: [],
+            meta: { page: 1, pagecount: 1, total: 0, limit: 20 },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('page-layout')).toHaveAttribute(
+      'data-guest',
+      'true',
+    );
+    await waitFor(() => {
+      expect(document.cookie).not.toContain('user_auth=');
+    });
   });
 });

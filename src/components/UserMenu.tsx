@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { debug } from '@/lib/debug';
-import { openLoginModal } from '@/lib/login-modal';
+import { AUTH_STATE_CHANGED_EVENT, openLoginModal } from '@/lib/login-modal';
 
 import { UserMenuChangePasswordPanel } from './user-menu/UserMenuChangePasswordPanel';
 import { UserMenuDropdownPanel } from './user-menu/UserMenuDropdownPanel';
@@ -58,7 +58,11 @@ function useCloseDropdownOnOutsideMouseDown(
   }, [dropdownSelector, isOpen, setOpen]);
 }
 
-export const UserMenu: React.FC = () => {
+interface UserMenuProps {
+  guest?: boolean;
+}
+
+export const UserMenu: React.FC<UserMenuProps> = ({ guest = false }) => {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -126,13 +130,23 @@ export const UserMenu: React.FC = () => {
     setMounted(true);
   }, []);
 
-  // 获取认证信息
+  // 获取认证信息，并响应清理失效 cookie 事件
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const auth = getAuthInfoFromBrowserCookie();
-      setAuthInfo(auth);
+    if (guest) {
+      setAuthInfo(null);
+      return;
     }
-  }, []);
+    const syncAuth = () => {
+      if (typeof window !== 'undefined') {
+        setAuthInfo(getAuthInfoFromBrowserCookie());
+      }
+    };
+    syncAuth();
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, syncAuth);
+    return () => {
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, syncAuth);
+    };
+  }, [guest]);
 
   const {
     handleAggregateToggle,
@@ -358,7 +372,7 @@ export const UserMenu: React.FC = () => {
   const totalUpdates = watchingUpdatesState.totalUpdates;
 
   // 访客：未登录时只渲染登录按钮（爱奇艺式，弹出登录弹窗而非跳转登录页）
-  if (mounted && !authInfo?.username) {
+  if (guest || (mounted && !authInfo?.username)) {
     return (
       <button
         onClick={openLoginModal}

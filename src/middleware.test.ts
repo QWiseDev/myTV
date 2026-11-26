@@ -156,6 +156,60 @@ describe('middleware', () => {
       });
       const response = await middleware(request);
       expect(response.status).toBe(401);
+      expect(response.cookies.get('user_auth')?.value).toBe('');
+      expect(response.cookies.get('auth')?.value).toBe('');
+    });
+  });
+
+  it('clears legacy or invalid auth cookies when serving guest pages', async () => {
+    await withPassword(async () => {
+      const { generateSignature } = await import('@/lib/auth');
+      // 旧版仅按 username 签名的 cookie，服务端验签已拒绝
+      const legacySignature = await generateSignature(
+        'qiuwei',
+        'test-password',
+      );
+      const legacyCookie = encodeURIComponent(
+        JSON.stringify({
+          username: 'qiuwei',
+          role: 'owner',
+          signature: legacySignature,
+          timestamp: Date.now(),
+        }),
+      );
+
+      for (const path of ['/', '/play']) {
+        const request = new NextRequest(`http://localhost${path}`, {
+          headers: { cookie: `user_auth=${legacyCookie}` },
+        });
+        const response = await middleware(request);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('x-middleware-next')).toBe('1');
+        expect(response.cookies.get('user_auth')?.value).toBe('');
+        expect(response.cookies.get('auth')?.value).toBe('');
+      }
+    });
+  });
+
+  it('preserves valid auth cookies on guest pages and clears invalid cookies on page redirects', async () => {
+    await withPassword(async () => {
+      const { generateAuthCookie } = await import('@/lib/auth');
+      const validCookie = await generateAuthCookie('alice', 'user');
+      const validReq = new NextRequest('http://localhost/', {
+        headers: { cookie: `user_auth=${encodeURIComponent(validCookie)}` },
+      });
+      const validRes = await middleware(validReq);
+      expect(validRes.status).toBe(200);
+      expect(validRes.cookies.get('user_auth')).toBeUndefined();
+
+      const invalidReq = new NextRequest('http://localhost/source-browser', {
+        headers: { cookie: 'user_auth=broken-cookie' },
+      });
+      const redirectRes = await middleware(invalidReq);
+      expect(redirectRes.status).toBe(307);
+      expect(redirectRes.headers.get('location')).toContain('/login?redirect=');
+      expect(redirectRes.cookies.get('user_auth')?.value).toBe('');
+      expect(redirectRes.cookies.get('auth')?.value).toBe('');
     });
   });
 });

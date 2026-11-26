@@ -17,6 +17,8 @@ interface HeaderProps {
   activePath?: string;
   /** 剧场模式（播放页/直播页）：爱奇艺播放页式顶部横向导航（左侧栏仅用于浏览页） */
   theater?: boolean;
+  /** 访客模式：即使客户端残留失效 cookie 也按未登录态渲染顶栏 */
+  guest?: boolean;
 }
 
 /**
@@ -25,7 +27,11 @@ interface HeaderProps {
  * - 剧场模式（播放/直播页）：顶部横向导航，内容全宽；
  * - 移动端：Logo、搜索入口与汉堡下拉菜单。
  */
-const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
+const Header = ({
+  activePath = '/',
+  theater = false,
+  guest = false,
+}: HeaderProps) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -37,6 +43,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
   const menuItems = useNavMenuItems();
   // 访客（未登录）：隐藏导航、搜索与收藏夹等登录入口，只留 Logo 和登录按钮
   const isLoggedIn = useIsLoggedIn();
+  const effectiveLoggedIn = !guest && isLoggedIn;
 
   // 优先使用传入的 activePath，否则使用当前完整路径（含 query）
   useEffect(() => {
@@ -87,7 +94,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
   return (
     <header
       className={`fixed left-0 right-0 top-0 z-50 border-b border-[#e8e8e8] bg-[#ffffff]/92 shadow-none backdrop-blur-xl transition-all duration-300 dark:border-[#3a3a3a] dark:bg-[#0d0d0d]/92 ${
-        theater ? '' : 'md:left-44'
+        theater || !effectiveLoggedIn ? '' : 'md:left-44'
       }`}
       style={{
         backdropFilter: 'blur(18px) saturate(130%)',
@@ -99,14 +106,14 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
           {/* Logo：剧场模式全尺寸展示，否则桌面端位于左侧 SideNav（访客无侧边栏，顶栏展示 Logo） */}
           <div
             className={`flex-shrink-0 ${
-              theater || !isLoggedIn ? '' : 'md:hidden'
+              theater || !effectiveLoggedIn ? '' : 'md:hidden'
             }`}
           >
             <Logo />
           </div>
 
           {/* 剧场模式：顶部横向导航（爱奇艺播放页式，与旧版顶栏一致） */}
-          {theater && isLoggedIn && (
+          {theater && effectiveLoggedIn && (
             <nav
               className='hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-1 md:flex lg:gap-1'
               style={{
@@ -154,7 +161,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
           )}
 
           {/* 桌面端爱奇艺式搜索框（剧场模式隐藏，为横向导航让位；访客隐藏） */}
-          {isLoggedIn && (
+          {effectiveLoggedIn && (
             <form
               role='search'
               onSubmit={(e) => {
@@ -200,7 +207,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
 
           {/* 右侧功能区 */}
           <div className='ml-auto flex flex-shrink-0 items-center gap-1.5 lg:gap-2'>
-            {isLoggedIn ? (
+            {effectiveLoggedIn ? (
               <>
                 {/* 桌面端显示收藏夹入口和用户菜单 */}
                 <div className='hidden items-center gap-1.5 md:flex lg:gap-2'>
@@ -242,7 +249,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
             ) : (
               /* 访客：仅登录按钮（桌面 + 移动端） */
               <div className='rounded-md border border-[#e8e8e8] bg-[#f2f2f2]/70 p-1 backdrop-blur-sm dark:border-[#3a3a3a] dark:bg-[#2a2a2a]/70'>
-                <UserMenu />
+                <UserMenu guest={guest} />
               </div>
             )}
           </div>
@@ -250,7 +257,7 @@ const Header = ({ activePath = '/', theater = false }: HeaderProps) => {
       </div>
 
       {/* 移动端菜单下拉 */}
-      {isMobileMenuOpen && isLoggedIn && (
+      {isMobileMenuOpen && effectiveLoggedIn && (
         <div
           className='absolute left-0 right-0 top-full border-b border-[#e8e8e8] bg-[#ffffff]/96 shadow-sm backdrop-blur-xl dark:border-[#3a3a3a] dark:bg-[#0d0d0d]/96 md:hidden'
           style={{
