@@ -15,12 +15,28 @@ const ALLOWED_CACHE_PREFIXES = [
 ] as const;
 
 const MAX_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const MAX_CACHE_PAYLOAD_CHARS = 512 * 1024;
+const SHARED_SELECTION_PREFIX = 'danmaku-shared-sel:';
 
 function isAllowedCacheKeyOrPrefix(value: string): boolean {
   if (!value || value.length > 256 || /[\r\n\s*?[\]]/.test(value)) {
     return false;
   }
   return ALLOWED_CACHE_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
+function isValidSharedSelectionPayload(data: unknown): boolean {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return false;
+  }
+  const record = data as Record<string, unknown>;
+  return (
+    typeof record.episodeId === 'string' &&
+    /^[\w-]{1,200}$/.test(record.episodeId) &&
+    typeof record.title === 'string' &&
+    record.title.trim().length > 0 &&
+    record.title.length <= 300
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -82,6 +98,22 @@ export async function POST(request: NextRequest) {
     }
     if (!isAllowedCacheKeyOrPrefix(key)) {
       return NextResponse.json({ error: 'Invalid cache key' }, { status: 400 });
+    }
+    if (
+      key.startsWith(SHARED_SELECTION_PREFIX) &&
+      !isValidSharedSelectionPayload(data)
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid shared danmaku selection' },
+        { status: 400 },
+      );
+    }
+    const serialized = JSON.stringify(data);
+    if (!serialized || serialized.length > MAX_CACHE_PAYLOAD_CHARS) {
+      return NextResponse.json(
+        { error: 'Cache payload too large' },
+        { status: 413 },
+      );
     }
 
     const normalizedTtl =

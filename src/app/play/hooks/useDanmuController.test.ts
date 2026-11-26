@@ -345,4 +345,64 @@ describe('useDanmuController', () => {
       .find((url) => !url.includes('/api/cache'));
     expect(danmuUrl).toContain('action=comment&id=local-1');
   });
+
+  test('游客模式下跳过服务端共享选择，并同步 Artplayer 设置面板状态', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ danmu: [{ text: '直取弹幕' }] }),
+    })) as unknown as jest.Mock;
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const settingUpdate = jest.fn();
+    const artPlayerRef = {
+      current: {
+        setting: { update: settingUpdate },
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useDanmuController({
+        artPlayerRef: artPlayerRef as never,
+        danmuOperationTimeoutRef: { current: null },
+        externalDanmuEnabledRef: { current: true },
+        setExternalDanmuEnabled: jest.fn(),
+        videoTitleRef: { current: '测试剧' },
+        videoYearRef: { current: '2026' },
+        videoDoubanIdRef: { current: 123 },
+        videoUrlRef: { current: 'https://example.com/episode.m3u8' },
+        currentEpisodeIndexRef: { current: 0 },
+        danmuLoadingRef: { current: false },
+        lastDanmuLoadKeyRef: { current: '' },
+        currentSourceRef: { current: 'source-a' },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
+        canUseSharedCacheRef: { current: false },
+      }),
+    );
+
+    await expect(result.current.loadExternalDanmu()).resolves.toEqual([
+      { text: '直取弹幕' },
+    ]);
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes('/api/cache'),
+      ),
+    ).toBe(false);
+
+    act(() => {
+      result.current.handleDanmuOperationOptimized(false);
+    });
+    expect(settingUpdate).toHaveBeenCalledWith({
+      name: 'external-danmu',
+      tooltip: '已关闭',
+    });
+
+    act(() => {
+      result.current.handleDanmuOperationOptimized(true);
+    });
+    expect(settingUpdate).toHaveBeenCalledWith({
+      name: 'external-danmu',
+      tooltip: '已开启',
+    });
+  });
 });

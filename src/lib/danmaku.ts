@@ -85,10 +85,43 @@ export function saveDanmakuSelection(
  * 才把其他用户选中的绑定作为默认弹幕源使用。
  */
 const SHARED_SELECTION_KEY_PREFIX = 'danmaku-shared-sel';
-const SHARED_SELECTION_TTL_SECONDS = 90 * 24 * 60 * 60;
+const SHARED_SELECTION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-function sharedSelectionCacheKey(media: string, episodeIndex: number): string {
-  return `${SHARED_SELECTION_KEY_PREFIX}:${media}:${episodeIndex}`;
+/**
+ * 将任意文本编码为只含安全字符的缓存键片段（规避 /api/cache 的空白、通配符与方括号校验，并控制长度）。
+ */
+export function encodeSafeCacheSegment(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 =
+    typeof btoa === 'function'
+      ? btoa(binary)
+      : Buffer.from(bytes).toString('base64');
+  const encoded = base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  if (encoded.length <= 180) {
+    return encoded;
+  }
+
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  for (let i = 0; i < bytes.length; i += 1) {
+    h1 = Math.imul(h1 ^ bytes[i], 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ bytes[i], 0x85ebca6b) >>> 0;
+  }
+  return `${encoded.slice(0, 160)}_${h1.toString(36)}${h2.toString(36)}`;
+}
+
+export function sharedSelectionCacheKey(
+  media: string,
+  episodeIndex: number,
+): string {
+  return `${SHARED_SELECTION_KEY_PREFIX}:${encodeSafeCacheSegment(media)}:${episodeIndex}`;
 }
 
 function isManualDanmakuSelection(
@@ -188,16 +221,22 @@ export function normalizeDanmakuComments(comments: unknown) {
     .flatMap((item: unknown) => {
       if (!item || typeof item !== 'object') return [];
       const raw = item as Record<string, unknown>;
-      const text = typeof raw.m === 'string' ? raw.m.trim() : '';
+      const rawText =
+        typeof raw.m === 'string'
+          ? raw.m
+          : typeof raw.text === 'string'
+            ? raw.text
+            : '';
+      const text = rawText.trim();
       const parts = typeof raw.p === 'string' ? raw.p.split(',') : [];
-      const time = Number(parts[0]);
-      if (
-        !text ||
-        !parts.length ||
-        !Number.isFinite(time) ||
-        time < 0 ||
-        time > 86400
-      )
+      const rawTime =
+        parts.length > 0 && parts[0] !== ''
+          ? parts[0]
+          : typeof raw.t === 'number'
+            ? raw.t
+            : Number.NaN;
+      const time = Number(rawTime);
+      if (!text || !Number.isFinite(time) || time < 0 || time > 86400)
         return [];
       const sourceMode = Number(parts[1]);
       const mode = sourceMode === 5 ? 1 : sourceMode === 4 ? 2 : 0;

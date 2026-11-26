@@ -1,3 +1,4 @@
+import { MessageSquare } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { MutableRefObject } from 'react';
 import { forwardRef, useEffect, useState } from 'react';
@@ -29,6 +30,7 @@ interface PlayerContainerProps {
   // 样式和控制
   isEpisodeSelectorCollapsed: boolean;
   onToggleEpisodePanel?: () => void;
+  onOpenDanmuModal?: () => void;
 }
 
 const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
@@ -48,6 +50,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
       onNextEpisode,
       isEpisodeSelectorCollapsed,
       onToggleEpisodePanel,
+      onOpenDanmuModal,
     },
     ref,
   ) => {
@@ -157,40 +160,62 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
           </div>
 
           {/* 控制按钮组 - 播放器内右上角（悬停播放器时显示） */}
-          {currentSource && currentId && (
+          {((currentSource && currentId) ||
+            (isEpisodeSelectorCollapsed && onOpenDanmuModal)) && (
             <div
               className={`absolute top-3 right-3 z-10 flex flex-col gap-1.5 transition-opacity duration-300 ${
                 showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              {/* 跳过设置按钮 */}
-              <button
-                onClick={() => onSkipSettingChange(true)}
-                className='group flex items-center justify-center w-8 h-8 bg-white/15 hover:bg-white/25 backdrop-blur-md rounded-lg border border-white/25 hover:border-white/35 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95'
-                title='跳过设置'
-                style={{
-                  backdropFilter: 'blur(16px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                }}
-              >
-                <svg
-                  className='w-3.5 h-3.5 text-white/90 drop-shadow-sm group-hover:rotate-90 transition-all duration-300'
-                  fill='none'
-                  stroke='currentColor'
-                  viewBox='0 0 24 24'
+              {currentSource && currentId && (
+                /* 跳过设置按钮 */
+                <button
+                  onClick={() => onSkipSettingChange(true)}
+                  className='group relative flex items-center justify-center w-8 h-8 bg-white/15 hover:bg-white/25 backdrop-blur-md rounded-lg border border-white/25 hover:border-white/35 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95'
+                  title='跳过设置'
+                  style={{
+                    backdropFilter: 'blur(16px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                  }}
                 >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2.5}
-                    d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4'
-                  />
-                </svg>
-                {/* 悬停时显示文字提示 */}
-                <div className='absolute right-full mr-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-gray-900/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none'>
-                  跳过设置
-                </div>
-              </button>
+                  <svg
+                    className='w-3.5 h-3.5 text-white/90 drop-shadow-sm group-hover:rotate-90 transition-all duration-300'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2.5}
+                      d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4'
+                    />
+                  </svg>
+                  {/* 悬停时显示文字提示 */}
+                  <div className='absolute right-full mr-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-gray-900/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none'>
+                    跳过设置
+                  </div>
+                </button>
+              )}
+
+              {isEpisodeSelectorCollapsed && onOpenDanmuModal && (
+                <button
+                  type='button'
+                  onClick={onOpenDanmuModal}
+                  aria-label='弹幕管理'
+                  className='group relative flex items-center justify-center w-8 h-8 bg-white/15 hover:bg-white/25 backdrop-blur-md rounded-lg border border-white/25 hover:border-white/35 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95'
+                  title='弹幕管理'
+                  style={{
+                    backdropFilter: 'blur(16px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                  }}
+                >
+                  <MessageSquare className='w-3.5 h-3.5 text-white/90 drop-shadow-sm' />
+                  <div className='absolute right-full mr-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-gray-900/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none'>
+                    弹幕管理
+                  </div>
+                </button>
+              )}
             </div>
           )}
 

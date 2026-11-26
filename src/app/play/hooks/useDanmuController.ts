@@ -38,7 +38,8 @@ interface UseDanmuControllerParams {
   danmuLoadingRef: MutableRefObject<boolean>;
   lastDanmuLoadKeyRef: MutableRefObject<string>;
   currentSourceRef: MutableRefObject<string>;
-  danmuEpisodeOffsetRef: MutableRefObject<number>; // 🔧 新增：使用 ref 获取最新偏移
+  danmuEpisodeOffsetRef?: MutableRefObject<number>;
+  canUseSharedCacheRef?: MutableRefObject<boolean>;
 }
 
 export function useDanmuController({
@@ -56,7 +57,8 @@ export function useDanmuController({
   danmuLoadingRef,
   lastDanmuLoadKeyRef,
   currentSourceRef,
-  danmuEpisodeOffsetRef, // 🔧 新增
+  danmuEpisodeOffsetRef,
+  canUseSharedCacheRef,
 }: UseDanmuControllerParams) {
   const loadManagerRef = useRef(createDanmakuLoadManager());
 
@@ -69,22 +71,24 @@ export function useDanmuController({
   const loadExternalDanmu = useCallback(async (): Promise<
     DanmakuItemLike[]
   > => {
+    const canUseSharedCache = canUseSharedCacheRef?.current !== false;
+    const episodeOffset = danmuEpisodeOffsetRef?.current ?? 0;
     // 手动选择解析：本地选择优先；本地没有时采用其他用户的选择作为默认。
     const mediaKey = danmakuMediaKey(
       videoTitleRef.current,
       videoYearRef.current,
       videoDoubanIdRef.current,
     );
-    const selectionEpisode =
-      currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current;
+    const selectionEpisode = currentEpisodeIndexRef.current + episodeOffset;
     const localSelection = readDanmakuSelection(mediaKey, selectionEpisode);
-    const manualSelection = localSelection
-      ? null
-      : await fetchSharedDanmakuSelection(mediaKey, selectionEpisode);
+    const manualSelection =
+      localSelection || !canUseSharedCache
+        ? null
+        : await fetchSharedDanmakuSelection(mediaKey, selectionEpisode);
     const manualEpisodeId =
       localSelection?.episodeId ?? manualSelection?.episodeId;
 
-    if (!localSelection) {
+    if (!localSelection && canUseSharedCache) {
       // 共享选择的请求期间媒体可能已切换（换集/换源），此时丢弃结果，
       // 由切换流程自身的重新加载接管，避免给新集数挂上旧集的选择。
       const mediaNow = danmakuMediaKey(
@@ -93,7 +97,7 @@ export function useDanmuController({
         videoDoubanIdRef.current,
       );
       const episodeNow =
-        currentEpisodeIndexRef.current + danmuEpisodeOffsetRef.current;
+        currentEpisodeIndexRef.current + (danmuEpisodeOffsetRef?.current ?? 0);
       if (mediaNow !== mediaKey || episodeNow !== selectionEpisode) {
         const error = new Error('弹幕请求媒体已变化');
         error.name = 'AbortError';
@@ -109,10 +113,11 @@ export function useDanmuController({
       videoDoubanId: videoDoubanIdRef.current,
       videoUrl: videoUrlRef.current,
       episodeIndex: currentEpisodeIndexRef.current,
-      episodeOffset: danmuEpisodeOffsetRef.current,
+      episodeOffset: danmuEpisodeOffsetRef?.current ?? 0,
       episodeTitle: episodeTitleRef.current,
       variantEpisode: variantEpisodeRef.current,
       source: currentSourceRef.current,
+      allowRemoteCache: canUseSharedCache,
     });
     const requestInput = getCurrentRequestInput();
     const requestIdentity = createDanmakuRequest(requestInput);
@@ -167,6 +172,7 @@ export function useDanmuController({
     currentSourceRef,
     currentEpisodeIndexRef,
     danmuEpisodeOffsetRef,
+    canUseSharedCacheRef,
     episodeTitleRef,
     variantEpisodeRef,
     danmuLoadingRef,
@@ -186,6 +192,14 @@ export function useDanmuController({
 
       externalDanmuEnabledRef.current = nextState;
       setExternalDanmuEnabled(nextState);
+      try {
+        artPlayerRef.current?.setting?.update?.({
+          name: 'external-danmu',
+          tooltip: nextState ? '已开启' : '已关闭',
+        });
+      } catch {
+        /* 设置项未挂载时忽略 */
+      }
 
       writeExternalDanmuPref(nextState);
 

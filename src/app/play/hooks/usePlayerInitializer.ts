@@ -170,9 +170,8 @@ interface UsePlayerInitializerParams {
   isRestoringFromRecordRef: MutableRefObject<boolean>;
   videoErrorHandlerRef: MutableRefObject<((e: Event) => void) | null>;
   cleanupPlayer: () => void;
-  // 🎯 新增：弹幕集数调整
-  danmuEpisodeNum: number;
-  onDanmuEpisodeChange: (offset: number) => void;
+  danmuEpisodeNum?: number;
+  onDanmuEpisodeChange?: (offset: number) => void;
 }
 
 export function usePlayerInitializer(params: UsePlayerInitializerParams) {

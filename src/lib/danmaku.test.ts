@@ -8,6 +8,7 @@ import {
   readDanmakuFilters,
   readDanmakuSelection,
   saveDanmakuSelection,
+  sharedSelectionCacheKey,
   syncSharedDanmakuSelection,
 } from './danmaku';
 
@@ -20,11 +21,13 @@ it('按插件语义转换顶部/底部、保留黑色、过滤非法时间并去
     { p: '2,5,25,0', m: '顶部' },
     { p: '-1,1,25,0', m: '坏数据' },
     { p: 'NaN,1,25,0', m: '坏数据' },
+    { t: 5, text: '备用字段弹幕' },
     { m: '缺少时间' },
   ];
   expect(normalizeDanmakuComments(raw)).toEqual([
     { text: '底部', time: 1, mode: 2, color: '#ffffff' },
     { text: '顶部', time: 2, mode: 1, color: '#000000' },
+    { text: '备用字段弹幕', time: 5, mode: 0, color: '#ffffff' },
   ]);
 });
 
@@ -124,5 +127,15 @@ describe('共享弹幕选择（其他用户的默认选择）', () => {
     await syncSharedDanmakuSelection(media, 2, null);
     expect(calls[1].init?.method).toBe('DELETE');
     expect(calls[1].url).toContain('danmaku-shared-sel');
+  });
+
+  it('生成符合 /api/cache 字符与长度限制的共享选集缓存 key', () => {
+    const mediaWithSpecials = `带空格 [2026]?* ${'长'.repeat(220)}:2026:42`;
+    const key = sharedSelectionCacheKey(mediaWithSpecials, 11);
+
+    expect(key.startsWith('danmaku-shared-sel:')).toBe(true);
+    expect(key.endsWith(':11')).toBe(true);
+    expect(key.length).toBeLessThanOrEqual(256);
+    expect(/[\r\n\s*?[\]]/.test(key)).toBe(false);
   });
 });

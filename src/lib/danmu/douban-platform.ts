@@ -16,7 +16,7 @@ const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 ];
 
-// 请求限制器 - 防止被封IP
+// 请求限制器 - 防止被封IP（预约槽位，避免并发请求同时唤醒）
 let lastDoubanRequestTime = 0;
 const MIN_DOUBAN_REQUEST_INTERVAL = 1000; // 1秒最小间隔
 
@@ -29,28 +29,88 @@ function randomDelay(min = 500, max = 1500): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
+function extractPlayLinkUrl(
+  html: string,
+  playLinkPattern: RegExp,
+  encodedUrlPattern: RegExp,
+  episodeNum: number | null,
+): string | null {
+  const matches = html.match(playLinkPattern);
+  if (!matches || matches.length === 0) return null;
+
+  let selectedMatch: string;
+  if (episodeNum && episodeNum > 1) {
+    // 豆瓣只有单条或不足目标集数时不得回退第 1 集，交由下游集数精确匹配兜底
+    if (episodeNum > matches.length) {
+      return null;
+    }
+    selectedMatch = matches[episodeNum - 1];
+  } else {
+    selectedMatch = matches[0];
+  }
+
+  const urlMatch = selectedMatch.match(encodedUrlPattern);
+  if (!urlMatch) return null;
+  return decodeURIComponent(urlMatch[0]).split('?')[0];
+}
+
+function convertMobileUrlToPc(url: string): string {
+  let convertedUrl = url;
+
+  if (convertedUrl.includes('m.youku.com/alipay_video/id_')) {
+    convertedUrl = convertedUrl.replace(
+      /https:\/\/m\.youku\.com\/alipay_video\/id_([^.]+)\.html/,
+      'https://v.youku.com/v_show/id_$1.html',
+    );
+  }
+  if (convertedUrl.includes('m.iqiyi.com/')) {
+    convertedUrl = convertedUrl.replace('m.iqiyi.com', 'www.iqiyi.com');
+  }
+  if (convertedUrl.includes('m.v.qq.com/')) {
+    convertedUrl = convertedUrl.replace('m.v.qq.com', 'v.qq.com');
+  }
+  if (convertedUrl.includes('m.bilibili.com/')) {
+    convertedUrl = convertedUrl
+      .replace('m.bilibili.com', 'www.bilibili.com')
+      .split('?')[0];
+  }
+  if (convertedUrl.includes('m.mgtv.com/')) {
+    convertedUrl = convertedUrl.replace('m.mgtv.com', 'www.mgtv.com');
+  }
+
+  return convertedUrl;
+}
+
 // 从豆瓣页面提取平台视频链接
 async function extractPlatformUrls(
   doubanId: string,
   episode?: string | null,
 ): Promise<PlatformUrl[]> {
-  if (!doubanId) return [];
+  const normalizedDoubanId = doubanId?.trim();
+  if (!normalizedDoubanId || !/^\d{1,20}$/.test(normalizedDoubanId)) {
+    return [];
+  }
+
+  const parsedEpisode = episode ? Number.parseInt(episode, 10) : Number.NaN;
+  const episodeNum =
+    Number.isFinite(parsedEpisode) && parsedEpisode > 0 ? parsedEpisode : null;
 
   try {
-    // 请求限流：确保请求间隔 - 防止被封IP
+    // 请求限流：先预约时间槽再等待，确保并发请求间隔 >= 1s
     const now = Date.now();
-    const timeSinceLastRequest = now - lastDoubanRequestTime;
-    if (timeSinceLastRequest < MIN_DOUBAN_REQUEST_INTERVAL) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, MIN_DOUBAN_REQUEST_INTERVAL - timeSinceLastRequest),
-      );
+    const scheduledAt = Math.max(
+      now,
+      lastDoubanRequestTime + MIN_DOUBAN_REQUEST_INTERVAL,
+    );
+    lastDoubanRequestTime = scheduledAt;
+    if (scheduledAt > now) {
+      await new Promise((resolve) => setTimeout(resolve, scheduledAt - now));
     }
-    lastDoubanRequestTime = Date.now();
 
     // 添加随机延时 - 防止被封IP
     await randomDelay(300, 1000);
 
-    const target = `https://movie.douban.com/subject/${doubanId}/`;
+    const target = `https://movie.douban.com/subject/${normalizedDoubanId}/`;
     const userAgent = getRandomUserAgent();
     const headers = {
       'User-Agent': userAgent,
@@ -87,186 +147,86 @@ async function extractPlatformUrls(
     }
 
     const urls: PlatformUrl[] = [];
+    const playLinkSpecs: Array<{
+      platform: string;
+      linkRegex: RegExp;
+      urlRegex: RegExp;
+    }> = [
+      {
+        platform: 'tencent',
+        linkRegex: /play_link:\s*"[^"]*v\.qq\.com[^"]*"/g,
+        urlRegex: /https%3A%2F%2Fv\.qq\.com[^"&]*/,
+      },
+      {
+        platform: 'iqiyi',
+        linkRegex: /play_link:\s*"[^"]*iqiyi\.com[^"]*"/g,
+        urlRegex: /https?%3A%2F%2F[^"&]*iqiyi\.com[^"&]*/,
+      },
+      {
+        platform: 'youku',
+        linkRegex: /play_link:\s*"[^"]*youku\.com[^"]*"/g,
+        urlRegex: /https?%3A%2F%2F[^"&]*youku\.com[^"&]*/,
+      },
+      {
+        platform: 'bilibili_douban',
+        linkRegex: /play_link:\s*"[^"]*bilibili\.com[^"]*"/g,
+        urlRegex: /https?%3A%2F%2F[^"&]*bilibili\.com[^"&]*/,
+      },
+      {
+        platform: 'mgtv',
+        linkRegex: /play_link:\s*"[^"]*mgtv\.com[^"]*"/g,
+        urlRegex: /https?%3A%2F%2F[^"&]*mgtv\.com[^"&]*/,
+      },
+    ];
 
-    // 提取豆瓣跳转链接中的各种视频平台URL
-
-    // 腾讯视频
-    const doubanLinkMatches = html.match(
-      /play_link:\s*"[^"]*v\.qq\.com[^"]*"/g,
-    );
-    if (doubanLinkMatches && doubanLinkMatches.length > 0) {
-      // 如果指定了集数，尝试找到对应集数的链接
-      let selectedMatch = doubanLinkMatches[0]; // 默认使用第一个
-      if (episode && doubanLinkMatches.length > 1) {
-        const episodeNum = parseInt(episode);
-        if (episodeNum > 0 && episodeNum <= doubanLinkMatches.length) {
-          selectedMatch = doubanLinkMatches[episodeNum - 1];
-        }
-      }
-
-      const urlMatch = selectedMatch.match(/https%3A%2F%2Fv\.qq\.com[^"&]*/);
-      if (urlMatch) {
-        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
-        urls.push({ platform: 'tencent', url: decodedUrl });
-      }
-    }
-
-    // 爱奇艺
-    const iqiyiMatches = html.match(/play_link:\s*"[^"]*iqiyi\.com[^"]*"/g);
-    if (iqiyiMatches && iqiyiMatches.length > 0) {
-      // 如果指定了集数，尝试找到对应集数的链接
-      let selectedMatch = iqiyiMatches[0]; // 默认使用第一个
-      if (episode && iqiyiMatches.length > 1) {
-        const episodeNum = parseInt(episode);
-        if (episodeNum > 0 && episodeNum <= iqiyiMatches.length) {
-          selectedMatch = iqiyiMatches[episodeNum - 1];
-        }
-      }
-
-      const urlMatch = selectedMatch.match(
-        /https?%3A%2F%2F[^"&]*iqiyi\.com[^"&]*/,
+    for (const spec of playLinkSpecs) {
+      const extracted = extractPlayLinkUrl(
+        html,
+        spec.linkRegex,
+        spec.urlRegex,
+        episodeNum,
       );
-      if (urlMatch) {
-        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
-        urls.push({ platform: 'iqiyi', url: decodedUrl });
+      if (extracted) {
+        urls.push({ platform: spec.platform, url: extracted });
       }
     }
 
-    // 优酷
-    const youkuMatches = html.match(/play_link:\s*"[^"]*youku\.com[^"]*"/g);
-    if (youkuMatches && youkuMatches.length > 0) {
-      // 如果指定了集数，尝试找到对应集数的链接
-      let selectedMatch = youkuMatches[0]; // 默认使用第一个
-      if (episode && youkuMatches.length > 1) {
-        const episodeNum = parseInt(episode);
-        if (episodeNum > 0 && episodeNum <= youkuMatches.length) {
-          selectedMatch = youkuMatches[episodeNum - 1];
+    // 页面直链（仅作单集/首集补充，避免第 N>1 集误拉取首集或相关推荐直链）
+    if (!episodeNum || episodeNum === 1) {
+      const directSpecs: Array<{ platform: string; regex: RegExp }> = [
+        {
+          platform: 'tencent_direct',
+          regex: /https:\/\/v\.qq\.com\/x\/cover\/[^"'\s]+/g,
+        },
+        {
+          platform: 'bilibili',
+          regex: /https:\/\/www\.bilibili\.com\/video\/[^"'\s]+/g,
+        },
+        {
+          platform: 'mgtv_direct',
+          regex: /https:\/\/(?:www|w)\.mgtv\.com\/b\/[^"'\s]+/g,
+        },
+      ];
+      for (const spec of directSpecs) {
+        const matches = html.match(spec.regex);
+        if (matches && matches.length > 0) {
+          urls.push({
+            platform: spec.platform,
+            url: matches[0].split('?')[0],
+          });
         }
       }
-
-      const urlMatch = selectedMatch.match(
-        /https?%3A%2F%2F[^"&]*youku\.com[^"&]*/,
-      );
-      if (urlMatch) {
-        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
-        urls.push({ platform: 'youku', url: decodedUrl });
-      }
     }
 
-    // 直接提取腾讯视频链接
-    const qqMatches = html.match(/https:\/\/v\.qq\.com\/x\/cover\/[^"'\s]+/g);
-    if (qqMatches && qqMatches.length > 0) {
-      urls.push({
-        platform: 'tencent_direct',
-        url: qqMatches[0].split('?')[0],
-      });
-    }
-
-    // B站链接提取（直接链接）
-    const biliMatches = html.match(
-      /https:\/\/www\.bilibili\.com\/video\/[^"'\s]+/g,
-    );
-    if (biliMatches && biliMatches.length > 0) {
-      urls.push({
-        platform: 'bilibili',
-        url: biliMatches[0].split('?')[0],
-      });
-    }
-
-    // B站链接提取（豆瓣跳转链接）
-    const biliDoubanMatches = html.match(
-      /play_link:\s*"[^"]*bilibili\.com[^"]*"/g,
-    );
-    if (biliDoubanMatches && biliDoubanMatches.length > 0) {
-      // 如果指定了集数，尝试找到对应集数的链接
-      let selectedMatch = biliDoubanMatches[0]; // 默认使用第一个
-      if (episode && biliDoubanMatches.length > 1) {
-        const episodeNum = parseInt(episode);
-        if (episodeNum > 0 && episodeNum <= biliDoubanMatches.length) {
-          selectedMatch = biliDoubanMatches[episodeNum - 1];
-        }
-      }
-
-      const urlMatch = selectedMatch.match(
-        /https?%3A%2F%2F[^"&]*bilibili\.com[^"&]*/,
-      );
-      if (urlMatch) {
-        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
-        urls.push({ platform: 'bilibili_douban', url: decodedUrl });
+    const seenUrls = new Set<string>();
+    const convertedUrls: PlatformUrl[] = [];
+    for (const urlObj of urls) {
+      const convertedUrl = convertMobileUrlToPc(urlObj.url);
+      if (!seenUrls.has(convertedUrl)) {
+        seenUrls.add(convertedUrl);
+        convertedUrls.push({ ...urlObj, url: convertedUrl });
       }
     }
-
-    // 芒果TV（豆瓣独播综艺的 play_link 与直链）
-    const mgtvMatches = html.match(/play_link:\s*"[^"]*mgtv\.com[^"]*"/g);
-    if (mgtvMatches && mgtvMatches.length > 0) {
-      // 如果指定了集数，尝试找到对应集数的链接
-      let selectedMatch = mgtvMatches[0]; // 默认使用第一个
-      if (episode && mgtvMatches.length > 1) {
-        const episodeNum = parseInt(episode);
-        if (episodeNum > 0 && episodeNum <= mgtvMatches.length) {
-          selectedMatch = mgtvMatches[episodeNum - 1];
-        }
-      }
-
-      const urlMatch = selectedMatch.match(
-        /https?%3A%2F%2F[^"&]*mgtv\.com[^"&]*/,
-      );
-      if (urlMatch) {
-        const decodedUrl = decodeURIComponent(urlMatch[0]).split('?')[0];
-        urls.push({ platform: 'mgtv', url: decodedUrl });
-      }
-    }
-
-    // 芒果TV链接提取（直接链接）
-    const mgtvDirectMatches = html.match(
-      /https:\/\/(?:www|w)\.mgtv\.com\/b\/[^"'\s]+/g,
-    );
-    if (mgtvDirectMatches && mgtvDirectMatches.length > 0) {
-      urls.push({
-        platform: 'mgtv_direct',
-        url: mgtvDirectMatches[0].split('?')[0],
-      });
-    }
-
-    // 转换移动版链接为PC版链接（弹幕库API需要PC版）
-    const convertedUrls = urls.map((urlObj) => {
-      let convertedUrl = urlObj.url;
-
-      // 优酷移动版转PC版
-      if (convertedUrl.includes('m.youku.com/alipay_video/id_')) {
-        convertedUrl = convertedUrl.replace(
-          /https:\/\/m\.youku\.com\/alipay_video\/id_([^.]+)\.html/,
-          'https://v.youku.com/v_show/id_$1.html',
-        );
-      }
-
-      // 爱奇艺移动版转PC版
-      if (convertedUrl.includes('m.iqiyi.com/')) {
-        convertedUrl = convertedUrl.replace('m.iqiyi.com', 'www.iqiyi.com');
-      }
-
-      // 腾讯视频移动版转PC版
-      if (convertedUrl.includes('m.v.qq.com/')) {
-        convertedUrl = convertedUrl.replace('m.v.qq.com', 'v.qq.com');
-      }
-
-      // B站移动版转PC版
-      if (convertedUrl.includes('m.bilibili.com/')) {
-        convertedUrl = convertedUrl.replace(
-          'm.bilibili.com',
-          'www.bilibili.com',
-        );
-        // 移除豆瓣来源参数
-        convertedUrl = convertedUrl.split('?')[0];
-      }
-
-      // 芒果TV移动版转PC版
-      if (convertedUrl.includes('m.mgtv.com/')) {
-        convertedUrl = convertedUrl.replace('m.mgtv.com', 'www.mgtv.com');
-      }
-
-      return { ...urlObj, url: convertedUrl };
-    });
 
     return convertedUrls;
   } catch (error) {
@@ -274,7 +234,7 @@ async function extractPlatformUrls(
       error instanceof Error &&
       (error.name === 'TimeoutError' || error.name === 'AbortError')
     ) {
-      console.error('❌ 豆瓣请求超时 (10秒):', doubanId);
+      console.error('❌ 豆瓣请求超时 (10秒):', normalizedDoubanId);
     } else {
       console.error('❌ 提取平台链接失败:', error);
     }

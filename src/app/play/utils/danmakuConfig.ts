@@ -29,7 +29,7 @@ interface DanmakuPluginConfig {
   synchronousPlayback: boolean;
   heatmap: boolean;
   filter?: (danmaku: DanmakuItemLike) => boolean;
-  beforeEmit?: (danmaku: DanmakuItemLike) => DanmakuItemLike;
+  beforeEmit?: (danmaku: DanmakuItemLike) => boolean;
 }
 
 interface PerformanceWithMemory extends Performance {
@@ -37,6 +37,9 @@ interface PerformanceWithMemory extends Performance {
     jsHeapSizeLimit?: number;
   };
 }
+
+const MAX_DISPLAY_DANMAKU_LENGTH = 200;
+const MAX_DANMAKU_EMOJI_COUNT = 5;
 
 /**
  * 检测设备性能等级
@@ -46,11 +49,14 @@ export function getDevicePerformance(isMobile: boolean): DevicePerformance {
   const memory =
     (performance as PerformanceWithMemory).memory?.jsHeapSizeLimit || 0;
 
-  // 简单性能评分（0-1）
+  // 非 Chromium 浏览器无 performance.memory，给予中性内存分，避免误判为低端设备
+  const memoryScore =
+    memory > 0 ? Math.min(memory / (1024 * 1024 * 1024), 1) * 0.3 : 0.15;
+
   let score = 0;
-  score += Math.min(hardwareConcurrency / 4, 1) * 0.5; // CPU核心数权重
-  score += Math.min(memory / (1024 * 1024 * 1024), 1) * 0.3; // 内存权重
-  score += (isMobile ? 0.2 : 0.5) * 0.2; // 设备类型权重
+  score += Math.min(hardwareConcurrency / 4, 1) * 0.5;
+  score += memoryScore;
+  score += (isMobile ? 0.2 : 0.5) * 0.2;
 
   const level = score > 0.7 ? 'high' : score > 0.4 ? 'medium' : 'low';
 
@@ -127,16 +133,9 @@ export function saveDanmakuConfigToStorage(option: Record<string, unknown>) {
 export function getOptimizedDanmakuConfig(
   isMobile: boolean,
 ): Partial<DanmakuPluginConfig> {
-  const devicePerformance = getDevicePerformance(isMobile);
+  // 保持性能分级探测函数导出以兼容调用与监测
+  getDevicePerformance(isMobile);
   const storageConfig = loadDanmakuConfigFromStorage();
-
-  // ✅ 优化：根据性能等级调整弹幕密度
-  const maxDanmakuCount =
-    devicePerformance.level === 'high'
-      ? 50
-      : devicePerformance.level === 'medium'
-        ? 30
-        : 20;
 
   return {
     danmaku: [], // 初始为空数组，后续通过load方法加载
@@ -144,41 +143,35 @@ export function getOptimizedDanmakuConfig(
     color: '#FFFFFF',
     mode: 0 as const,
     emitter: false,
-    maxLength: maxDanmakuCount, // ✅ 动态限制弹幕长度
-    lockTime: 0.5, // ✅ 从 1s 降到 0.5s，减少锁定时间
+    maxLength: MAX_DISPLAY_DANMAKU_LENGTH,
+    lockTime: 1, // 插件约束范围 [1, 60]
     theme: 'dark' as const,
     width: 300,
 
-    // 🎯 激进优化配置 - 保持功能完整性
     antiOverlap: storageConfig.antiOverlap,
     synchronousPlayback: storageConfig.synchronousPlayback,
-    heatmap: false, // 关闭热力图，减少DOM计算开销
+    heatmap: false,
 
-    // 🧠 智能过滤器 - 激进性能优化，过滤影响性能的弹幕
+    // 过滤刷屏超长弹幕与密集 emoji，避免正常弹幕被随机/过短阈值误伤
     filter: (danmaku) => {
-      // 过滤超长弹幕（降低阈值）
-      if (danmaku.text && danmaku.text.length > maxDanmakuCount) return false;
+      if (danmaku.text && danmaku.text.length > MAX_DISPLAY_DANMAKU_LENGTH) {
+        return false;
+      }
 
-      // 过滤emoji密集弹幕 - emoji渲染消耗资源
       const emojiRegex = /[\u{1F300}-\u{1F9FF}]/gu;
       const emojiCount = (danmaku.text?.match(emojiRegex) || []).length;
-      if (emojiCount > 2) return false; // ✅ 从 3 降到 2
-
-      // ✅ 新增：随机过滤，在低性能设备上减少弹幕数量
-      if (devicePerformance.level === 'low' && Math.random() > 0.5) {
-        return false; // 低性能设备只显示 50% 的弹幕
-      }
+      if (emojiCount > MAX_DANMAKU_EMOJI_COUNT) return false;
 
       return true;
     },
 
-    // 🔄 发射前处理 - 优化弹幕显示
+    // artplayer-plugin-danmuku 约定 beforeEmit 必须严格返回 true 才允许发射
     beforeEmit: (danmaku) => {
-      // 截断过长文本
-      if (danmaku.text && danmaku.text.length > maxDanmakuCount) {
-        danmaku.text = danmaku.text.substring(0, maxDanmakuCount) + '...';
+      if (danmaku.text && danmaku.text.length > MAX_DISPLAY_DANMAKU_LENGTH) {
+        danmaku.text =
+          danmaku.text.substring(0, MAX_DISPLAY_DANMAKU_LENGTH) + '...';
       }
-      return danmaku;
+      return true;
     },
   };
 }

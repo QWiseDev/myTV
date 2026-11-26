@@ -57,6 +57,7 @@ const EPISODE_VARIANT_PATTERNS: Array<{ key: string; pattern: RegExp }> = [
   { key: '纯享', pattern: /纯享/ },
   { key: '花絮', pattern: /花絮/ },
   { key: '预告', pattern: /预告/ },
+  { key: '解说', pattern: /解说/ },
 ];
 
 /** 版式归类：命中衍生词返回该词，否则为「正片」 */
@@ -67,13 +68,16 @@ export function extractEpisodeVariant(title: string): string {
   return '正片';
 }
 
-/** 上/下拆分方向：「第20261029期上」「第3期上：xxx」「沉浸版上：xxx」→ 上/下；无拆分返回 null */
+/** 上/下拆分方向：「第20261029期上」「第3期上：xxx」「沉浸版上：xxx」「第3集(上)」→ 上/下；无拆分返回 null */
 export function extractEpisodeSplitDirection(
   title: string,
 ): '上' | '下' | null {
   if (!title) return null;
-  const matched = title.match(/(?:期|版)\s*(上|下)(?=[：:）)\s]|$)/);
-  return matched ? (matched[1] as '上' | '下') : null;
+  const matched = title.match(
+    /(?:期|版|集)\s*(上|下)(?=[：:）)\s]|$)|[（(]\s*(上|下)\s*[）)]|(?:^|[\s：:])(上|下)[篇集](?=[：:）)\s]|$)/,
+  );
+  if (!matched) return null;
+  return (matched[1] || matched[2] || matched[3]) as '上' | '下';
 }
 
 /** 上/下拆分标记（同一期拆成两段），不算独立版式 */
@@ -104,7 +108,7 @@ export function extractEpisodeNumber(episodeTitle: string): number | null {
   }
 
   const chinese = episodeTitle.match(
-    /第\s*([零一二三四五六七八九十]{1,7})\s*[集话期]/,
+    /第\s*([零一二三四五六七八九十百]{1,10})\s*[集话期]/,
   );
   if (!chinese) return null;
 
@@ -123,14 +127,17 @@ export function extractEpisodeNumber(episodeTitle: string): number | null {
   const text = chinese[1];
   if (text === '十') return 10;
 
-  // 十X / X十 / X十Y
-  const shiMatch = text.match(
-    /^(?:([一二三四五六七八九])?十)(?:([一二三四五六七八九]))?$/,
+  // 支持 百/十 组合（1~999，如 一百、一百零五、一百二十、二十三）
+  const baiMatch = text.match(
+    /^(?:([一二三四五六七八九])百)?(?:零?([一二三四五六七八九])?十)?(?:零?([一二三四五六七八九]))?$/,
   );
-  if (shiMatch) {
-    const tens = shiMatch[1] ? digits[shiMatch[1]] : 1;
-    const ones = shiMatch[2] ? digits[shiMatch[2]] : 0;
-    return tens * 10 + ones;
+  if (baiMatch && (text.includes('百') || text.includes('十'))) {
+    const hundreds = baiMatch[1] ? digits[baiMatch[1]] * 100 : 0;
+    const hasShi = text.includes('十');
+    const tens = hasShi ? (baiMatch[2] ? digits[baiMatch[2]] : 1) * 10 : 0;
+    const ones = baiMatch[3] ? digits[baiMatch[3]] : 0;
+    const total = hundreds + tens + ones;
+    if (total > 0) return total;
   }
 
   // 纯数字串（如 一二三）
@@ -229,14 +236,16 @@ export function scoreEpisodeCandidate(
     score -= 40;
   }
 
-  // 上/下方向：同一天的同版式常拆成上下两段，方向不一致重罚
+  // 上/下方向：同一天的同版式常拆成上下两段，方向不一致重罚；目标未拆分时优先不带拆分标记的候选
+  const candidateDirection = extractEpisodeSplitDirection(
+    candidate.episodeTitle || '',
+  );
   if (target.splitDirection) {
-    const candidateDirection = extractEpisodeSplitDirection(
-      candidate.episodeTitle || '',
-    );
     if (candidateDirection) {
       score += candidateDirection === target.splitDirection ? 15 : -15;
     }
+  } else if (candidateDirection) {
+    score -= 5;
   }
 
   // 番剧标题与影片标题的包含关系 + 年份命中

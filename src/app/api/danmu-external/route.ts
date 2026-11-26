@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { resolveRequestUser } from '@/lib/auth';
 import { searchFromCaijiAPI } from '@/lib/danmu/caiji';
 import { extractPlatformUrls } from '@/lib/danmu/douban-platform';
 import {
@@ -15,6 +16,7 @@ import type {
   KlmResolvedEpisode,
   PlatformUrl,
 } from '@/lib/danmu/types';
+import { checkGuestRateLimit } from '@/lib/guest-source';
 
 // danmu_api 按「标题+年份+集数」匹配到剧集时的统一响应结构
 function klmEpisodeResponse(result: {
@@ -37,12 +39,22 @@ function klmEpisodeResponse(result: {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await resolveRequestUser(request);
+  if (!user) {
+    const rateLimited = checkGuestRateLimit(request, 'danmu-external');
+    if (rateLimited) return rateLimited;
+  }
+
   const { searchParams } = new URL(request.url);
-  const doubanId = searchParams.get('douban_id');
+  const rawDoubanId = searchParams.get('douban_id')?.trim() || null;
+  const doubanId =
+    rawDoubanId && /^\d{1,20}$/.test(rawDoubanId) ? rawDoubanId : null;
   const title = searchParams.get('title');
   const year = searchParams.get('year');
-  const episode = searchParams.get('episode'); // 新增集数参数
-  const videoUrl = searchParams.get('video_url');
+  const episode = searchParams.get('episode');
+  const rawVideoUrl = searchParams.get('video_url');
+  const videoUrl =
+    rawVideoUrl && rawVideoUrl.length <= 2048 ? rawVideoUrl : null;
   // 本地集名与同版式内序数：综艺智能匹配（日期/版式/序数综合打分）用
   const episodeTitle = searchParams.get('episode_title')?.slice(0, 100) || null;
   const variantEpisodeRaw = Number.parseInt(
@@ -54,6 +66,10 @@ export async function GET(request: NextRequest) {
       ? variantEpisodeRaw
       : null;
   const episodeMeta = episodeTitle ? { episodeTitle, variantEpisode } : null;
+
+  if (rawDoubanId && !doubanId && !title) {
+    return NextResponse.json({ error: 'Invalid douban_id' }, { status: 400 });
+  }
 
   if (!doubanId && !title) {
     return NextResponse.json(
@@ -110,12 +126,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 如果找不到任何链接，直接返回空结果，不使用测试数据
-    // （删除了不合适的fallback测试链接逻辑）
-
-    if (platformUrls.length === 0) {
-      // 豆瓣与 caiji 均未命中平台链接时（如芒果TV独播综艺），
-      // 回退到 danmu_api 按「标题+年份+集数」匹配剧集
+    const fallbackToKlmEpisode = async () => {
       if (title) {
         const fallbackKlmResult = await fetchDanmuFromKlmEpisode(
           title,
@@ -134,6 +145,10 @@ export async function GET(request: NextRequest) {
         total: 0,
         message: `未找到"${title}"的视频平台链接，无法获取弹幕数据`,
       });
+    };
+
+    if (platformUrls.length === 0) {
+      return fallbackToKlmEpisode();
     }
 
     // 并发获取多个平台的弹幕（自建 danmu_api 优先，旧外部源备用）
@@ -176,25 +191,27 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // 若豆瓣/采集链接均未取到弹幕，仍兜底走自建 danmu_api 标题匹配
+    if (allDanmu.length === 0) {
+      return fallbackToKlmEpisode();
+    }
+
     // 按时间排序
     allDanmu.sort((a, b) => a.time - b.time);
 
-    // 🚀 优化去重处理：更精确的重复检测
+    // 去重处理：精确到 0.01s + 文本 + 模式 + 统一大小写颜色
     const uniqueDanmu: DanmuItem[] = [];
     const seenMap = new Map<string, boolean>();
 
-    // 批量处理去重，避免阻塞
     const DEDUP_BATCH_SIZE = 100;
     for (let i = 0; i < allDanmu.length; i += DEDUP_BATCH_SIZE) {
       const batch = allDanmu.slice(i, i + DEDUP_BATCH_SIZE);
 
       batch.forEach((danmu) => {
-        // 创建更精确的唯一标识：时间(保留2位小数) + 文本内容 + 颜色
         const normalizedText = danmu.text.trim().toLowerCase();
-        const timeKey = Math.round(danmu.time * 100) / 100; // 精确到0.01秒
-        const uniqueKey = `${timeKey}_${normalizedText}_${
-          danmu.color || 'default'
-        }`;
+        const timeKey = Math.round(danmu.time * 100) / 100;
+        const normalizedColor = (danmu.color || 'default').toUpperCase();
+        const uniqueKey = `${timeKey}_${normalizedText}_${danmu.mode ?? 0}_${normalizedColor}`;
 
         if (!seenMap.has(uniqueKey)) {
           seenMap.set(uniqueKey, true);
@@ -202,7 +219,6 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      // 让出执行权，避免阻塞
       if (i % (DEDUP_BATCH_SIZE * 5) === 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }

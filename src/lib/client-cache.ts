@@ -38,6 +38,9 @@ export class ClientCache {
   ): Promise<T | null> {
     try {
       const response = await fetch(`/api/cache?key=${encodeURIComponent(key)}`);
+      if (response.status === 401) {
+        return null;
+      }
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

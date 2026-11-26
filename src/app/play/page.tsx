@@ -52,10 +52,9 @@ import {
   useSourceSwitcher,
 } from './hooks/useSourceSwitcher';
 import { preloadArtplayerModules } from './utils/artplayerLoader';
-import {
-  type DanmakuItemLike,
-  type DanmakuPluginLike,
-  terminateDanmakuWorker,
+import type {
+  DanmakuItemLike,
+  DanmakuPluginLike,
 } from './utils/danmakuRuntime';
 import { readExternalDanmuPref } from './utils/danmuPreference';
 import { detectDevice } from './utils/deviceDetection';
@@ -122,8 +121,9 @@ function PlayPageClient() {
 
   // 使用播放数据上下文，避免重复请求
   const { playRecords } = usePlaybackData();
-  // 登录态：访客隐藏换源/收藏/网盘等登录功能
+  // 登录态：访客隐藏换源/收藏/网盘等登录功能，也跳过需登录的共享弹幕缓存请求
   const isLoggedIn = useIsLoggedIn();
+  const isLoggedInRef = useSyncedRef(isLoggedIn);
 
   // 🚀 内存监控 - 集成性能优化
   const { pressure: memoryPressure }: { pressure: MemoryPressure } =
@@ -437,13 +437,6 @@ function PlayPageClient() {
     [detail?.episodes],
   );
 
-  // 🎯 弹幕集数偏移（用户手动调整弹幕对应的集数）
-  const [danmuEpisodeOffset, setDanmuEpisodeOffset] = useState<number>(0);
-  const danmuEpisodeOffsetRef = useRef<number>(0);
-
-  // 🎯 弹幕集数 = 当前集数 + 用户偏移量
-  const danmuEpisodeNum = currentEpisodeIndex + 1 + danmuEpisodeOffset;
-
   // 用于记录是否需要在播放器 ready 后跳转到指定进度
   const resumeTimeRef = useRef<number | null>(null);
   // 上次使用的音量，默认 0.7
@@ -643,8 +636,8 @@ function PlayPageClient() {
       danmuLoadingRef,
       lastDanmuLoadKeyRef,
       currentSourceRef,
-      currentEpisodeIndexRef, // 🔧 传递 ref 确保使用最新集数
-      danmuEpisodeOffsetRef, // 🔧 传递 ref 确保使用最新偏移
+      currentEpisodeIndexRef,
+      canUseSharedCacheRef: isLoggedInRef,
     });
   // 🔥 同步 loadExternalDanmu 到 ref，确保播放器回调中使用最新版本
   loadExternalDanmuRef.current = loadExternalDanmu;
@@ -704,13 +697,12 @@ function PlayPageClient() {
           videoErrorHandlerRef.current = null;
         }
 
-        // 1. 清理弹幕插件的WebWorker，并清空弹幕数据
+        // 1. 重置弹幕插件状态，并由下方 destroy() 触发插件内部 worker 释放
         const danmukuPlugin =
           artPlayerRef.current.plugins?.artplayerPluginDanmuku;
         if (danmukuPlugin && typeof danmukuPlugin.reset === 'function') {
           danmukuPlugin.reset();
         }
-        terminateDanmakuWorker(artPlayerRef.current);
 
         // 2. 销毁HLS实例
         if (artPlayerRef.current.video.hls) {
@@ -833,18 +825,6 @@ function PlayPageClient() {
     isSkipControllerTriggeredRef,
   });
 
-  const handleDanmuEpisodeChange = useCallback((offset: number) => {
-    setDanmuEpisodeOffset((prev) => prev + offset);
-    danmuEpisodeOffsetRef.current = danmuEpisodeOffsetRef.current + offset;
-  }, []);
-
-  // 集数偏移是用户针对当前片调整的：换到另一部片（站内跳转不卸载本组件）
-  // 必须复位，否则沿用上一部的偏移；同片换源标题/douban_id 不变则保留
-  useEffect(() => {
-    setDanmuEpisodeOffset(0);
-    danmuEpisodeOffsetRef.current = 0;
-  }, [videoTitle, videoDoubanId]);
-
   usePlayerInitializer({
     videoUrl,
     loading,
@@ -898,8 +878,6 @@ function PlayPageClient() {
     isRestoringFromRecordRef,
     videoErrorHandlerRef,
     cleanupPlayer,
-    danmuEpisodeNum, // 🎯 新增：弹幕对应的集数
-    onDanmuEpisodeChange: handleDanmuEpisodeChange,
   });
 
   useEffect(() => {
@@ -1017,9 +995,10 @@ function PlayPageClient() {
             danmakuProps={{
               mediaKey: danmakuMediaKey(videoTitle, videoYear, videoDoubanId),
               title: videoTitle,
-              episodeIndex: danmuEpisodeNum - 1,
+              episodeIndex: currentEpisodeIndex,
               enabled: externalDanmuEnabled,
               onToggle: handleDanmuOperationOptimized,
+              canUseSharedCache: isLoggedIn,
             }}
           />
         </div>

@@ -498,4 +498,43 @@ describe('useSourceSwitcher', () => {
     expect(plugin.hide).not.toHaveBeenCalled();
     expect(art.notice.show).toBe('');
   });
+
+  test('skips deferred danmaku load if player instance was rebuilt during switch', async () => {
+    jest.useFakeTimers();
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', { douban_id: 2 });
+    const params = createParams([sourceA, sourceB]);
+    const oldArt = {
+      plugins: {
+        artplayerPluginDanmuku: { reset: jest.fn(), load: jest.fn() },
+      },
+      notice: { show: '' },
+    };
+    const rebuiltArt = {
+      plugins: {
+        artplayerPluginDanmuku: { reset: jest.fn(), load: jest.fn() },
+      },
+      notice: { show: '' },
+    };
+    params.artPlayerRef.current = oldArt;
+    params.externalDanmuEnabledRef.current = true;
+    params.loadExternalDanmu = jest.fn().mockResolvedValue([]);
+
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    await act(async () => {
+      await result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'fallback title',
+      );
+    });
+
+    params.artPlayerRef.current = rebuiltArt;
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(params.loadExternalDanmu).not.toHaveBeenCalled();
+  });
 });

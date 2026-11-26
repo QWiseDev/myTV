@@ -1,6 +1,43 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 
+import { withAbortableTimeout } from '@/lib/promise-timeout';
+
+import { extractEpisodeNumber } from './episode-match';
 import type { PlatformUrl } from './types';
+
+const CAIJI_REQUEST_TIMEOUT_MS = 10000;
+const CAIJI_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+};
+
+function normalizeTitle(text: string): string {
+  return text.replace(/[\s\p{P}]+/gu, '').toLowerCase();
+}
+
+function detectCaijiPlatform(url: string): string {
+  if (url.includes('bilibili.com')) return 'bilibili_caiji';
+  if (url.includes('v.qq.com') || url.includes('qq.com'))
+    return 'tencent_caiji';
+  if (url.includes('iqiyi.com')) return 'iqiyi_caiji';
+  if (url.includes('youku.com') || url.includes('v.youku.com'))
+    return 'youku_caiji';
+  if (url.includes('mgtv.com') || url.includes('w.mgtv.com'))
+    return 'mgtv_caiji';
+  return 'unknown';
+}
+
+function matchesEpisodeEntry(label: string, episodeNum: number): boolean {
+  const parsed = extractEpisodeNumber(label);
+  if (parsed !== null) {
+    return parsed === episodeNum;
+  }
+  const trimmed = label.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10) === episodeNum;
+  }
+  const epMatch = trimmed.match(/^(?:EP?|第)?0*(\d+)$/i);
+  return epMatch ? Number.parseInt(epMatch[1], 10) === episodeNum : false;
+}
 
 // 从caiji.cyou API搜索视频链接
 async function searchFromCaijiAPI(
@@ -8,7 +45,6 @@ async function searchFromCaijiAPI(
   episode?: string | null,
 ): Promise<PlatformUrl[]> {
   try {
-    // 尝试多种标题格式进行搜索
     const searchTitles = [
       title, // 原始标题
       title.replace(/·/g, ''), // 移除中间点
@@ -16,63 +52,68 @@ async function searchFromCaijiAPI(
       title.replace(/·/g, '-'), // 中间点替换为连字符
     ];
 
-    // 去重
     const uniqueTitles = Array.from(new Set(searchTitles));
+    const normalizedQuery = normalizeTitle(title);
 
     for (const searchTitle of uniqueTitles) {
       const searchUrl = `https://www.caiji.cyou/api.php/provide/vod/?wd=${encodeURIComponent(
         searchTitle,
       )}`;
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
+      const response = await withAbortableTimeout(
+        (signal) =>
+          fetch(searchUrl, {
+            signal,
+            headers: CAIJI_HEADERS,
+          }),
+        CAIJI_REQUEST_TIMEOUT_MS,
+      );
 
       if (!response.ok) {
-        continue; // 尝试下一个标题
+        continue;
       }
 
       const data: any = await response.json();
-      if (!data.list || data.list.length === 0) {
-        continue; // 尝试下一个标题
+      if (!data.list || !Array.isArray(data.list) || data.list.length === 0) {
+        continue;
       }
 
-      // 智能选择最佳匹配结果
       let bestMatch: any = null;
       let exactMatch: any = null;
 
       for (const result of data.list) {
-        // 标题完全匹配（优先级最高）
-        if (result.vod_name === searchTitle || result.vod_name === title) {
+        const vodName = String(result?.vod_name || '');
+        if (!vodName) continue;
+
+        if (vodName === searchTitle || vodName === title) {
           exactMatch = result;
           break;
         }
 
-        // 跳过明显不合适的内容
         const isUnwanted =
-          result.vod_name.includes('解说') ||
-          result.vod_name.includes('预告') ||
-          result.vod_name.includes('花絮') ||
-          result.vod_name.includes('动态漫') ||
-          result.vod_name.includes('之精彩');
+          vodName.includes('解说') ||
+          vodName.includes('预告') ||
+          vodName.includes('花絮') ||
+          vodName.includes('动态漫') ||
+          vodName.includes('之精彩');
 
         if (isUnwanted) {
           continue;
         }
 
-        // 选择第一个合适的结果
-        if (!bestMatch) {
+        const normVod = normalizeTitle(vodName);
+        const titleRelated =
+          normalizedQuery &&
+          (normVod.includes(normalizedQuery) ||
+            normalizedQuery.includes(normVod));
+
+        if (!bestMatch && titleRelated) {
           bestMatch = result;
         }
       }
 
-      // 优先使用完全匹配，否则使用最佳匹配
       const selectedResult = exactMatch || bestMatch;
 
       if (selectedResult) {
-        // 找到结果就处理并返回，不再尝试其他标题变体
         return await processSelectedResult(selectedResult, episode);
       }
     }
@@ -90,15 +131,18 @@ async function processSelectedResult(
   episode?: string | null,
 ): Promise<PlatformUrl[]> {
   try {
-    const firstResult: any = selectedResult;
-    const detailUrl = `https://www.caiji.cyou/api.php/provide/vod/?ac=detail&ids=${firstResult.vod_id}`;
+    const detailUrl = `https://www.caiji.cyou/api.php/provide/vod/?ac=detail&ids=${encodeURIComponent(
+      String(selectedResult.vod_id),
+    )}`;
 
-    const detailResponse = await fetch(detailUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    const detailResponse = await withAbortableTimeout(
+      (signal) =>
+        fetch(detailUrl, {
+          signal,
+          headers: CAIJI_HEADERS,
+        }),
+      CAIJI_REQUEST_TIMEOUT_MS,
+    );
 
     if (!detailResponse.ok) return [];
 
@@ -106,70 +150,50 @@ async function processSelectedResult(
     if (!detailData.list || detailData.list.length === 0) return [];
 
     const videoInfo: any = detailData.list[0];
+    if (!videoInfo.vod_play_url) return [];
+
+    const parsedEpisode = episode ? Number.parseInt(episode, 10) : Number.NaN;
+    const episodeNum =
+      Number.isFinite(parsedEpisode) && parsedEpisode > 0
+        ? parsedEpisode
+        : null;
 
     const urls: PlatformUrl[] = [];
+    const seenUrls = new Set<string>();
+    const playGroups = String(videoInfo.vod_play_url).split('$$$');
 
-    // 解析播放链接
-    if (videoInfo.vod_play_url) {
-      const playUrls = videoInfo.vod_play_url.split('#');
+    for (const group of playGroups) {
+      const playUrls = group.split('#').filter(Boolean);
+      if (playUrls.length === 0) continue;
 
-      // 如果指定了集数，尝试找到对应集数的链接
-      let targetUrl = '';
-      if (episode && parseInt(episode) > 0) {
-        const episodeNum = parseInt(episode);
-        // 支持多种集数格式: "20$", "第20集$", "E20$", "EP20$" 等
-        const targetEpisode = playUrls.find((url: string) => {
-          return (
-            url.startsWith(`${episodeNum}$`) ||
-            url.startsWith(`第${episodeNum}集$`) ||
-            url.startsWith(`E${episodeNum}$`) ||
-            url.startsWith(`EP${episodeNum}$`)
-          );
+      let targetEntry: string | undefined;
+      if (episodeNum) {
+        targetEntry = playUrls.find((entry) => {
+          const [label] = entry.split('$');
+          return label ? matchesEpisodeEntry(label, episodeNum) : false;
         });
-        if (targetEpisode) {
-          targetUrl = targetEpisode.split('$')[1];
-        }
+      } else {
+        targetEntry = playUrls[0];
       }
 
-      // 如果没有指定集数或找不到指定集数，使用第一集
-      if (!targetUrl && playUrls.length > 0) {
-        targetUrl = playUrls[0].split('$')[1];
+      if (!targetEntry) continue;
+
+      const dollarIdx = targetEntry.indexOf('$');
+      let targetUrl =
+        dollarIdx >= 0 ? targetEntry.slice(dollarIdx + 1).trim() : '';
+      if (!targetUrl) continue;
+
+      if (targetUrl.endsWith('.htm')) {
+        targetUrl = targetUrl.replace(/\.htm$/, '.html');
       }
 
-      if (targetUrl) {
-        // 根据URL判断平台
-        let platform = 'unknown';
-        if (targetUrl.includes('bilibili.com')) {
-          platform = 'bilibili_caiji';
-        } else if (
-          targetUrl.includes('v.qq.com') ||
-          targetUrl.includes('qq.com')
-        ) {
-          platform = 'tencent_caiji';
-        } else if (targetUrl.includes('iqiyi.com')) {
-          platform = 'iqiyi_caiji';
-        } else if (
-          targetUrl.includes('youku.com') ||
-          targetUrl.includes('v.youku.com')
-        ) {
-          platform = 'youku_caiji';
-        } else if (
-          targetUrl.includes('mgtv.com') ||
-          targetUrl.includes('w.mgtv.com')
-        ) {
-          platform = 'mgtv_caiji';
-        }
-
-        // 统一修复所有平台的链接格式：将.htm转换为.html
-        if (targetUrl.endsWith('.htm')) {
-          targetUrl = targetUrl.replace(/\.htm$/, '.html');
-        }
-
-        urls.push({
-          platform: platform,
-          url: targetUrl,
-        });
+      const platform = detectCaijiPlatform(targetUrl);
+      if (platform === 'unknown' || seenUrls.has(targetUrl)) {
+        continue;
       }
+
+      seenUrls.add(targetUrl);
+      urls.push({ platform, url: targetUrl });
     }
 
     return urls;

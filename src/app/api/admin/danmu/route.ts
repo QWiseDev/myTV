@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
+import { resolveAndValidateRemoteUrl } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 
@@ -21,19 +22,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiBaseUrl = rawApiBaseUrl.trim();
+    const apiBaseUrl = rawApiBaseUrl.trim().replace(/\/+$/, '');
     if (apiBaseUrl) {
       try {
-        const parsed = new URL(apiBaseUrl);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        const parsed = await resolveAndValidateRemoteUrl(apiBaseUrl, {
+          allowHttp: true,
+        });
+        if (parsed.search || parsed.hash) {
           return NextResponse.json(
-            { error: '弹幕 API 仅支持 HTTP/HTTPS 协议' },
+            { error: '弹幕 API 地址不能包含查询参数或锚点' },
             { status: 400 },
           );
         }
-      } catch {
+      } catch (validationError) {
         return NextResponse.json(
-          { error: '弹幕 API 地址格式不正确' },
+          {
+            error:
+              validationError instanceof Error
+                ? validationError.message
+                : '弹幕 API 地址格式不正确',
+          },
           { status: 400 },
         );
       }
@@ -42,7 +50,7 @@ export async function POST(request: NextRequest) {
     const adminConfig = admin.config;
 
     adminConfig.DanmuConfig = {
-      apiBaseUrl: apiBaseUrl.replace(/\/+$/, ''),
+      apiBaseUrl,
     };
 
     await db.saveAdminConfig(adminConfig);

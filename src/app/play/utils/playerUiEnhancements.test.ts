@@ -1,6 +1,7 @@
 import {
   applyAllUiEnhancements,
   fixDanmakuProgressConflict,
+  optimizeDanmukuControlsCSS,
 } from './playerUiEnhancements';
 
 describe('playerUiEnhancements', () => {
@@ -15,7 +16,7 @@ describe('playerUiEnhancements', () => {
     jest.useFakeTimers();
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     document.body.innerHTML = `
-      <div class="artplayer">
+      <div class="art-video-player">
         <div class="art-control-progress"></div>
         <div class="artplayer-plugin-danmuku">
           <button class="apd-config"></button>
@@ -48,8 +49,18 @@ describe('playerUiEnhancements', () => {
     const cleanup = fixDanmakuProgressConflict();
     jest.advanceTimersByTime(1500);
 
+    const playerRoot = document.querySelector(
+      '.art-video-player',
+    ) as HTMLElement;
+    expect(document.getElementById('danmaku-drag-fix')).not.toBeNull();
+    progressControl.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+    expect(playerRoot.getAttribute('data-dragging')).toBe('true');
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    expect(playerRoot.hasAttribute('data-dragging')).toBe(false);
+
     cleanup();
 
+    expect(document.getElementById('danmaku-drag-fix')).toBeNull();
     expect(removeProgressListener).toHaveBeenCalledWith(
       'mousedown',
       expect.any(Function),
@@ -63,6 +74,20 @@ describe('playerUiEnhancements', () => {
       expect.any(Function),
     );
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('injects and cleans up danmaku controls CSS using real Artplayer classes', () => {
+    const cleanup = optimizeDanmukuControlsCSS();
+    const style = document.getElementById('danmuku-controls-optimize');
+
+    expect(style).not.toBeNull();
+    expect(style?.textContent).toContain('.art-video-player.art-fullscreen');
+    expect(style?.textContent).toContain(
+      '.art-video-player.art-fullscreen-web',
+    );
+
+    cleanup();
+    expect(document.getElementById('danmuku-controls-optimize')).toBeNull();
   });
 
   test('returns a single cleanup function for all UI enhancements', () => {

@@ -2,6 +2,7 @@
 
 import { getConfig } from '@/lib/config';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
+import { resolveAndValidateRemoteUrl } from '@/lib/url-safety';
 
 import {
   type EpisodeMatchTarget,
@@ -11,6 +12,7 @@ import {
   extractEpisodeVariant,
   scoreEpisodeCandidate,
 } from './episode-match';
+import { isSupportedDanmuPlatformUrl } from './platform-url';
 import type {
   DanmuItem,
   KlmDanmuComment,
@@ -39,7 +41,9 @@ async function getDanmuApiBase(): Promise<string | null> {
 
 function convertDecimalColor(colorValue: string | undefined): string {
   const colorInt = Number.parseInt(colorValue || '16777215', 10);
-  if (!Number.isFinite(colorInt)) return '#FFFFFF';
+  if (!Number.isInteger(colorInt) || colorInt < 0 || colorInt > 0xffffff) {
+    return '#FFFFFF';
+  }
   return '#' + colorInt.toString(16).padStart(6, '0').toUpperCase();
 }
 
@@ -59,25 +63,11 @@ function parseKlmDanmuComment(comment: KlmDanmuComment): DanmuItem | null {
   if (!Number.isFinite(time) || time < 0 || time > 86400) return null;
 
   return {
-    text,
+    text: text.slice(0, 1000),
     time,
     color: convertDecimalColor(params[3]),
     mode: convertDanmuMode(params[1]),
   };
-}
-
-function isSupportedDanmuPlatformUrl(videoUrl: string): boolean {
-  return [
-    'v.qq.com',
-    'iqiyi.com',
-    'youku.com',
-    'mgtv.com',
-    'bilibili.com',
-    'miguvideo.com',
-    'sohu.com',
-    'le.com',
-    'ixigua.com',
-  ].some((domain) => videoUrl.includes(domain));
 }
 
 async function fetchKlmJson<T>(
@@ -85,6 +75,13 @@ async function fetchKlmJson<T>(
   options: RequestInit = {},
   timeout = 12000,
 ): Promise<T | null> {
+  try {
+    await resolveAndValidateRemoteUrl(apiUrl, { allowHttp: true });
+  } catch (validationError) {
+    console.warn('自建弹幕 API 地址未通过安全校验，跳过请求:', validationError);
+    return null;
+  }
+
   const headers = new Headers(options.headers);
   if (!headers.has('User-Agent')) {
     headers.set(
@@ -102,6 +99,7 @@ async function fetchKlmJson<T>(
         ...options,
         signal,
         headers,
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -238,11 +236,20 @@ async function searchKlmEpisodeCandidates(
 
 function normalizeKlmDanmuResponse(data: KlmDanmuResponse | null): DanmuItem[] {
   const comments = data && Array.isArray(data.comments) ? data.comments : [];
-  return comments
-    .map(parseKlmDanmuComment)
-    .filter((item): item is DanmuItem => Boolean(item))
-    .sort((a, b) => a.time - b.time)
-    .slice(0, 20000);
+  const seen = new Set<string>();
+  const normalized: DanmuItem[] = [];
+
+  for (const comment of comments.slice(0, 50000)) {
+    const item = parseKlmDanmuComment(comment);
+    if (!item) continue;
+    const timeKey = Math.round(item.time * 100) / 100;
+    const dedupeKey = `${timeKey}_${item.text.toLowerCase()}_${item.mode ?? 0}_${item.color || 'default'}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    normalized.push(item);
+  }
+
+  return normalized.sort((a, b) => a.time - b.time).slice(0, 20000);
 }
 
 async function fetchKlmCommentDanmu(
@@ -260,6 +267,10 @@ async function fetchKlmCommentDanmu(
   return normalizeKlmDanmuResponse(data);
 }
 
+function normalizeSearchTitle(text: string): string {
+  return text.replace(/[\s\p{P}]+/gu, '').toLowerCase();
+}
+
 // 第三级兜底：search/anime 找番剧 → bangumi 拿集列表 → 按「第N期/集」选集。
 // 综艺集标题多为「【imgo】 第1期：…」，match 与 search/episodes 接口覆盖不到时仍可命中。
 async function resolveEpisodeViaAnimeSearch(
@@ -267,7 +278,11 @@ async function resolveEpisodeViaAnimeSearch(
   title: string,
   year?: string | null,
   episode?: string | null,
-  options: { softYearFilter?: boolean; allEpisodes?: boolean } = {},
+  options: {
+    softYearFilter?: boolean;
+    allEpisodes?: boolean;
+    preferVariant?: string;
+  } = {},
 ): Promise<KlmEpisodeMatch[]> {
   if (!title.trim()) return [];
 
@@ -281,11 +296,22 @@ async function resolveEpisodeViaAnimeSearch(
   );
   if (!searchData?.success || !Array.isArray(searchData.animes)) return [];
 
-  // 衍生版本（沉浸版/加更/抢鲜等）排后，正片优先；
-  // 打分路径（softYearFilter）不做年份硬过滤——
-  // 「后会友期 沉浸版(2026)」之外还存在不含年份的条目，硬过滤会整条丢弃，
-  // 年份倾向统一交给 scoreEpisodeCandidate 参与排序。
   const derivativePattern = /沉浸版|加更|抢鲜|抢先|花絮|预告|纯享|解说/;
+  const queryNorm = normalizeSearchTitle(title);
+  const scoreAnime = (animeTitle: string): number => {
+    let score = 0;
+    const norm = normalizeSearchTitle(animeTitle);
+    if (queryNorm && norm.includes(queryNorm)) score += 30;
+    if (year && animeTitle.includes(year)) score += 20;
+    const animeVariant = extractEpisodeVariant(animeTitle);
+    if (options.preferVariant && options.preferVariant !== '正片') {
+      score += animeVariant === options.preferVariant ? 40 : -10;
+    } else {
+      score += derivativePattern.test(animeTitle) ? -10 : 10;
+    }
+    return score;
+  };
+
   const animes = searchData.animes
     .filter((anime) => {
       if (!anime.animeId) return false;
@@ -294,9 +320,7 @@ async function resolveEpisodeViaAnimeSearch(
       return anime.animeTitle?.includes(year);
     })
     .sort(
-      (a, b) =>
-        Number(derivativePattern.test(a.animeTitle || '')) -
-        Number(derivativePattern.test(b.animeTitle || '')),
+      (a, b) => scoreAnime(b.animeTitle || '') - scoreAnime(a.animeTitle || ''),
     )
     .slice(0, 4);
 
@@ -344,12 +368,73 @@ async function resolveEpisodeViaAnimeSearch(
   return candidates;
 }
 
+function selectScoringPool(
+  candidates: KlmEpisodeMatch[],
+  target: EpisodeMatchTarget,
+): KlmEpisodeMatch[] {
+  if (target.variant === '正片' && !target.date && target.episodeNum > 0) {
+    const exactOrdinalPool = candidates.filter(
+      (item) =>
+        extractEpisodeNumber(item.episodeTitle || '') === target.episodeNum,
+    );
+    if (exactOrdinalPool.length > 0) {
+      return exactOrdinalPool;
+    }
+
+    // 常规剧集无日期时严禁错绑其他集数；仅当目标为第 1 集/电影且存在无集号条目时允许匹配
+    if (target.episodeNum === 1) {
+      return candidates.filter(
+        (item) => extractEpisodeNumber(item.episodeTitle || '') === null,
+      );
+    }
+    return [];
+  }
+
+  return candidates;
+}
+
+function isConfidentStage1Candidate(
+  candidate: KlmEpisodeMatch,
+  target: EpisodeMatchTarget,
+): boolean {
+  const combined = `${candidate.animeTitle || ''} ${candidate.episodeTitle || ''}`;
+  if (extractEpisodeVariant(combined) !== target.variant) {
+    return false;
+  }
+
+  if (target.date) {
+    const candidateDate =
+      extractEpisodeDate(candidate.episodeTitle || '') ??
+      extractEpisodeDate(candidate.animeTitle || '');
+    if (candidateDate !== target.date) {
+      return false;
+    }
+  }
+
+  if (target.splitDirection) {
+    const candidateDirection = extractEpisodeSplitDirection(
+      candidate.episodeTitle || '',
+    );
+    if (candidateDirection !== target.splitDirection) {
+      return false;
+    }
+  }
+
+  if (!target.date && target.episodeNum > 0) {
+    const num = extractEpisodeNumber(candidate.episodeTitle || '');
+    if (num !== null && num !== target.episodeNum) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * 打分匹配路径：本地集名可解析出日期/版式时启用。
  *
- * 与 legacy 路径的三级候选来源一致（match → search/episodes → search/anime+bangumi），
- * 但不做年份硬过滤，全部候选交给 scoreEpisodeCandidate 排序；
- * 序数能精确对齐时仍在「序数相等」子集内挑最优（硬底线，防错绑）。
+ * 阶段 1 并发拉取 match + search/episodes，若已有高置信度匹配并成功拉到弹幕则直接返回，
+ * 避免串行触发 search/anime + bangumi 导致累计超时；未命中时再补全阶段 2 候选。
  */
 async function resolveEpisodeByScoring(
   apiBaseUrl: string,
@@ -379,6 +464,7 @@ async function resolveEpisodeByScoring(
   };
 
   const candidates: KlmEpisodeMatch[] = [];
+  const triedEpisodeIds = new Set<string>();
   const pushAll = (items: KlmEpisodeMatch[]) => {
     for (const item of items) {
       if (
@@ -390,40 +476,53 @@ async function resolveEpisodeByScoring(
     }
   };
 
-  const matchCandidate = await matchKlmEpisodeByFileName(
-    apiBaseUrl,
-    title,
-    year,
-    String(episodeNum || episode || '1'),
-  );
+  const [matchCandidate, searchCandidates] = await Promise.all([
+    matchKlmEpisodeByFileName(
+      apiBaseUrl,
+      title,
+      year,
+      String(episodeNum || episode || '1'),
+    ),
+    searchKlmEpisodeCandidates(apiBaseUrl, title, null),
+  ]);
   if (matchCandidate) pushAll([matchCandidate]);
-  // 不带 episode 参数：danmu_api 的集数过滤按它自己的编号，衍生版条目
-  // 会被过滤成错位集（线上实测沉浸版第1期被过滤成第3期候选），
-  // 打分路径取全量候选，选择统一交给 scoreEpisodeCandidate
-  pushAll(await searchKlmEpisodeCandidates(apiBaseUrl, title, null));
+  pushAll(searchCandidates);
+
+  const stage1Pool = selectScoringPool(candidates, target).filter((item) =>
+    isConfidentStage1Candidate(item, target),
+  );
+  if (stage1Pool.length > 0) {
+    const rankedStage1 = [...stage1Pool].sort(
+      (a, b) =>
+        scoreEpisodeCandidate(b, target) - scoreEpisodeCandidate(a, target),
+    );
+    for (const candidate of rankedStage1.slice(0, 3)) {
+      const resolved = normalizeKlmEpisode(candidate);
+      if (!resolved) continue;
+      triedEpisodeIds.add(resolved.episodeId);
+      const danmu = await fetchKlmCommentDanmu(apiBaseUrl, resolved.episodeId);
+      if (danmu.length > 0) {
+        return { danmu, resolvedEpisode: resolved };
+      }
+    }
+  }
+
   pushAll(
     await resolveEpisodeViaAnimeSearch(apiBaseUrl, title, year, episode, {
       softYearFilter: true,
       allEpisodes: true,
+      preferVariant: variant,
     }),
   );
   if (candidates.length === 0) {
     return { danmu: [], resolvedEpisode: null };
   }
 
-  // 硬底线仅在「正片且本地集名没有日期信号」时启用：序数完全一致的候选
-  // 存在时只在一致子集内挑，拦截标题相似度错配。
-  // 带日期或衍生版目标时序数不可靠（本地列表混排沉浸版/加更，全局序数
-  // 与 danmu_api 正片编号天然错位，线上实测「第20261029期上」会被序数
-  // 门锁到第6期上），此时交给 scoreEpisodeCandidate 以日期/版式主导。
-  const ordinalPool =
-    variant === '正片' && !date && episodeNum > 0
-      ? candidates.filter(
-          (item) =>
-            extractEpisodeNumber(item.episodeTitle || '') === episodeNum,
-        )
-      : [];
-  const pool = ordinalPool.length > 0 ? ordinalPool : candidates;
+  const pool = selectScoringPool(candidates, target);
+  if (pool.length === 0) {
+    return { danmu: [], resolvedEpisode: null };
+  }
+
   const ranked = [...pool].sort(
     (a, b) =>
       scoreEpisodeCandidate(b, target) - scoreEpisodeCandidate(a, target),
@@ -431,7 +530,8 @@ async function resolveEpisodeByScoring(
 
   for (const candidate of ranked.slice(0, 3)) {
     const resolved = normalizeKlmEpisode(candidate);
-    if (!resolved) continue;
+    if (!resolved || triedEpisodeIds.has(resolved.episodeId)) continue;
+    triedEpisodeIds.add(resolved.episodeId);
     const danmu = await fetchKlmCommentDanmu(apiBaseUrl, resolved.episodeId);
     if (danmu.length > 0) {
       return { danmu, resolvedEpisode: resolved };

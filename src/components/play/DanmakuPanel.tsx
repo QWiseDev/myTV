@@ -28,6 +28,8 @@ interface Props {
   episodeIndex: number;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
+  /** 是否允许读写服务端共享选集（未登录访客传 false，避免无意义的 401 请求） */
+  canUseSharedCache?: boolean;
 }
 
 export default function DanmakuPanel({
@@ -36,6 +38,7 @@ export default function DanmakuPanel({
   episodeIndex,
   enabled,
   onToggle,
+  canUseSharedCache = true,
 }: Props) {
   const [keyword, setKeyword] = useState(title);
   const [expanded, setExpanded] = useState(true);
@@ -61,7 +64,7 @@ export default function DanmakuPanel({
   }, [mediaKey, episodeIndex]);
 
   useEffect(() => {
-    if (selection) {
+    if (selection || !canUseSharedCache) {
       setSharedSelection(null);
       return;
     }
@@ -74,7 +77,7 @@ export default function DanmakuPanel({
     return () => {
       cancelled = true;
     };
-  }, [mediaKey, episodeIndex, selection]);
+  }, [mediaKey, episodeIndex, selection, canUseSharedCache]);
 
   async function query(
     params: Record<string, string>,
@@ -113,13 +116,18 @@ export default function DanmakuPanel({
         }
       : null;
     try {
+      const hadSelection = Boolean(selection || sharedSelection);
       saveDanmakuSelection(mediaKey, episodeIndex, value);
       setSelection(value);
       setError('');
-      onToggle(true);
+      if (value || enabled) {
+        onToggle(true);
+      }
       // 手动选择镜像到服务端：其他用户播放同一内容且未选择时默认采用。
       // 「恢复自动匹配」同样清除共享记录，否则会被默认选择覆盖回原样。
-      void syncSharedDanmakuSelection(mediaKey, episodeIndex, value);
+      if (canUseSharedCache && (value || hadSelection)) {
+        void syncSharedDanmakuSelection(mediaKey, episodeIndex, value);
+      }
     } catch {
       setError('无法保存弹幕选择，请检查浏览器存储权限');
     }
@@ -169,8 +177,9 @@ export default function DanmakuPanel({
             </label>
             <button
               type='button'
+              disabled={!selection && !sharedSelection}
               onClick={() => select(null)}
-              className='flex items-center gap-1 text-green-600'
+              className='flex items-center gap-1 text-green-600 disabled:cursor-not-allowed disabled:opacity-40'
             >
               <RotateCcw size={14} />
               恢复自动匹配

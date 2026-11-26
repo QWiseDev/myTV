@@ -189,6 +189,7 @@ export function useSourceSwitcher({
         }
 
         clearDanmakuDisplay(artPlayerRef.current, { hide: true });
+        const artBeforeSwitch = artPlayerRef.current;
 
         const currentPlayTime = artPlayerRef.current?.currentTime || 0;
 
@@ -304,6 +305,10 @@ export function useSourceSwitcher({
         setTimeout(async () => {
           if (!canCommitOperation()) return;
           const art = artPlayerRef.current;
+          // 换源若已重建新播放器实例，则由新实例的 ready 钩子负责加载弹幕，避免双发竞争
+          if (!artBeforeSwitch || art !== artBeforeSwitch) {
+            return;
+          }
 
           if (
             art?.plugins?.artplayerPluginDanmuku &&

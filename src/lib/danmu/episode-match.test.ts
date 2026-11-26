@@ -37,6 +37,7 @@ describe('episode-match（综艺集名智能匹配）', () => {
       expect(extractEpisodeVariant('第20261022期沉浸版')).toBe('沉浸版');
       expect(extractEpisodeVariant('第20261023期加更')).toBe('加更');
       expect(extractEpisodeVariant('第20261030期抢鲜版')).toBe('抢鲜');
+      expect(extractEpisodeVariant('第1期 解说版')).toBe('解说');
       expect(extractEpisodeVariant('【imgo】 第1期：再见朋友')).toBe('正片');
       expect(extractEpisodeVariant('第20261029期上')).toBe('正片');
     });
@@ -195,6 +196,31 @@ describe('episode-match（综艺集名智能匹配）', () => {
         episodeTitle: '第3期下：这一刻我等了好久 2026-10-29期',
       };
       expect(pickBestEpisodeCandidate([first, q3down, q3up], t)).toEqual(q3up);
+    });
+
+    test('支持集数上下半集方向、百位中文数字及无拆分目标偏好', () => {
+      expect(extractEpisodeSplitDirection('第3集(上)')).toBe('上');
+      expect(extractEpisodeSplitDirection('第3集 上集')).toBe('上');
+      expect(extractEpisodeSplitDirection('第3集（下）')).toBe('下');
+      expect(extractEpisodeNumber('第一百零五集')).toBe(105);
+
+      const t = target({
+        variant: '正片',
+        date: null,
+        episodeNum: 3,
+        splitDirection: null,
+      });
+      const splitCandidate = {
+        animeTitle: '后会友期(2026)',
+        episodeTitle: '第3期上',
+      };
+      const fullCandidate = {
+        animeTitle: '后会友期(2026)',
+        episodeTitle: '第3期',
+      };
+      expect(
+        pickBestEpisodeCandidate([splitCandidate, fullCandidate], t),
+      ).toEqual(fullCandidate);
     });
   });
 });

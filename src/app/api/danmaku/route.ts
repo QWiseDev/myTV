@@ -1,7 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
+import { resolveRequestUser } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { normalizeDanmakuComments } from '@/lib/danmaku';
+import { consumeRateLimit } from '@/lib/rate-limit';
+import { resolveAndValidateRemoteUrl } from '@/lib/url-safety';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,8 +22,38 @@ function identifier(value: unknown) {
     : '';
 }
 
+function extractClientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0].trim();
+    if (first) return first;
+  }
+  return request.headers.get('x-real-ip') || 'unknown';
+}
+
 // 只代理固定的 danmu_api 查询，不接受客户端传入目标地址或任意路径。
 export async function GET(request: Request) {
+  const user =
+    'cookies' in request
+      ? await resolveRequestUser(request as NextRequest)
+      : null;
+  if (!user) {
+    const rate = consumeRateLimit(
+      `guest:danmaku:${extractClientIp(request)}`,
+      60,
+      60_000,
+    );
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后再试' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(rate.retryAfterSeconds) },
+        },
+      );
+    }
+  }
+
   const params = new URL(request.url).searchParams;
   const action = params.get('action');
   const keyword = params.get('keyword')?.trim();
@@ -49,11 +82,9 @@ export async function GET(request: Request) {
         { status: 503 },
       );
     const url = new URL(base + path);
-    if (
-      !['https:', 'http:'].includes(url.protocol) ||
-      url.username ||
-      url.password
-    ) {
+    try {
+      await resolveAndValidateRemoteUrl(url.toString(), { allowHttp: true });
+    } catch {
       return NextResponse.json({ error: '弹幕 API 配置无效' }, { status: 503 });
     }
     if (request.signal?.aborted) controller.abort();

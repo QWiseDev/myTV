@@ -27,6 +27,14 @@ function getArtPlayer(refOrArt: ArtPlayerRefLike): ArtPlayerLike | null {
   return 'current' in refOrArt ? refOrArt.current : refOrArt;
 }
 
+function getPlayerRoot(refOrArt?: ArtPlayerRefLike): HTMLElement | null {
+  const art = getArtPlayer(refOrArt);
+  return (
+    art?.template?.$player ||
+    (document.querySelector('.art-video-player') as HTMLElement | null)
+  );
+}
+
 /**
  * 修复控制栏选择面板（画质/倍速）无法点选的问题。
  *
@@ -98,7 +106,9 @@ export function hideRedundantControlsOnMobile(): Cleanup {
  * 挤出可视区。挂载后把它们移出 .art-controls、锚定到播放器右上角，
  * 随控制栏一起淡入淡出。
  */
-export function relocateCornerControlsOnMobile(): Cleanup {
+export function relocateCornerControlsOnMobile(
+  artPlayerRef?: ArtPlayerRefLike,
+): Cleanup {
   const isMobile =
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent,
@@ -150,7 +160,7 @@ export function relocateCornerControlsOnMobile(): Cleanup {
   const movedButtons: HTMLElement[] = [];
   // 等待 chromecast 插件挂载控制按钮（与其他 UI 增强的延迟策略一致）
   const setupTimer = setTimeout(() => {
-    const player = document.querySelector('.art-video-player');
+    const player = getPlayerRoot(artPlayerRef);
     if (!player) return;
     for (const sel of ['.art-control-chromecast', '.art-control-pip']) {
       const btn = player.querySelector(sel) as HTMLElement | null;
@@ -173,13 +183,14 @@ export function relocateCornerControlsOnMobile(): Cleanup {
  * 隐藏弹幕开关按钮和发射器，优化配置面板显示
  */
 export function optimizeDanmukuControlsCSS(): Cleanup {
-  if (document.getElementById('danmuku-controls-optimize')) return noop;
+  const styleId = 'danmuku-controls-optimize';
+  if (document.getElementById(styleId)) return noop;
 
   const style = document.createElement('style');
-  style.id = 'danmuku-controls-optimize';
+  style.id = styleId;
   style.textContent = `
     /* 隐藏弹幕开关按钮和发射器（移动端也不显示，控制栏空间留给
-       播放/时间/倍速/全屏；弹幕显隐后续如需入口可放设置面板） */
+       播放/时间/倍速/全屏；弹幕显隐入口放设置面板与弹幕管理弹窗） */
     .artplayer-plugin-danmuku .apd-toggle {
       display: none !important;
     }
@@ -194,65 +205,67 @@ export function optimizeDanmukuControlsCSS(): Cleanup {
     }
 
     .artplayer-plugin-danmuku .apd-config-panel {
-      /* 使用绝对定位而不是fixed，让ArtPlayer的动态定位生效 */
       position: absolute !important;
-      /* 保持ArtPlayer原版的默认left: 0，让JS动态覆盖 */
-      /* 保留z-index确保层级正确 */
-      z-index: 2147483647 !important; /* 使用最大z-index确保在全屏模式下也能显示在最顶层 */
-      /* 确保面板可以接收点击事件 */
+      z-index: 2147483647 !important;
       pointer-events: auto !important;
-      /* 添加一些基础样式确保可见性 */
       background: rgba(0, 0, 0, 0.8);
       border-radius: 6px;
       backdrop-filter: blur(10px);
     }
 
-    /* 全屏模式下的特殊优化 */
-    .artplayer[data-fullscreen="true"] .artplayer-plugin-danmuku .apd-config-panel {
-      /* 全屏时使用固定定位并调整位置 */
+    /* 全屏 / 网页全屏模式下的特殊优化（Artplayer 实际使用 .art-fullscreen / .art-fullscreen-web） */
+    .art-video-player.art-fullscreen .artplayer-plugin-danmuku .apd-config-panel,
+    .art-video-player.art-fullscreen-web .artplayer-plugin-danmuku .apd-config-panel {
       position: fixed !important;
       top: auto !important;
-      bottom: 80px !important; /* 距离底部控制栏80px */
-      right: 20px !important; /* 距离右边20px */
+      bottom: 80px !important;
+      right: 20px !important;
       left: auto !important;
       z-index: 2147483647 !important;
     }
 
-    /* 确保全屏模式下弹幕面板内部元素可点击 */
-    .artplayer[data-fullscreen="true"] .artplayer-plugin-danmuku .apd-config-panel * {
+    .art-video-player.art-fullscreen .artplayer-plugin-danmuku .apd-config-panel *,
+    .art-video-player.art-fullscreen-web .artplayer-plugin-danmuku .apd-config-panel * {
       pointer-events: auto !important;
     }
   `;
   document.head.appendChild(style);
-  return noop;
+  return () => {
+    style.remove();
+  };
 }
 
 /**
  * 修复弹幕菜单与进度条拖拽冲突
  * 基于 ArtPlayer 原生拖拽逻辑进行精确控制
  */
-export function fixDanmakuProgressConflict(): Cleanup {
+export function fixDanmakuProgressConflict(
+  artPlayerRef?: ArtPlayerRefLike,
+): Cleanup {
   let isDraggingProgress = false;
   let progressControl: HTMLElement | null = null;
+  let playerRoot: HTMLElement | null = null;
+  let injectedStyle: HTMLStyleElement | null = null;
   let resetInterval: NodeJS.Timeout | null = null;
   let restoreTimer: NodeJS.Timeout | null = null;
+
+  const resolveRoot = () => playerRoot || getPlayerRoot(artPlayerRef);
 
   const handleProgressMouseDown = (event: MouseEvent) => {
     if (event.button === 0) {
       isDraggingProgress = true;
-      const artplayer = document.querySelector('.artplayer') as HTMLElement;
-      artplayer?.setAttribute('data-dragging', 'true');
+      resolveRoot()?.setAttribute('data-dragging', 'true');
     }
   };
 
   const handleDocumentMouseMove = (e: MouseEvent) => {
-    const playerContainer = document.querySelector('.artplayer') as HTMLElement;
+    const playerContainer = resolveRoot();
     if (!playerContainer || !playerContainer.contains(e.target as Node)) {
       return;
     }
 
     if (isDraggingProgress) {
-      const panels = document.querySelectorAll(
+      const panels = playerContainer.querySelectorAll(
         '.artplayer-plugin-danmuku .apd-config-panel, .artplayer-plugin-danmuku .apd-style-panel',
       ) as NodeListOf<HTMLElement>;
       panels.forEach((panel) => {
@@ -268,32 +281,26 @@ export function fixDanmakuProgressConflict(): Cleanup {
     if (!isDraggingProgress) return;
 
     isDraggingProgress = false;
-    const artplayer = document.querySelector('.artplayer') as HTMLElement;
-    artplayer?.removeAttribute('data-dragging');
+    resolveRoot()?.removeAttribute('data-dragging');
   };
 
   const setupTimer = setTimeout(() => {
-    progressControl = document.querySelector(
-      '.art-control-progress',
-    ) as HTMLElement;
+    playerRoot = getPlayerRoot(artPlayerRef);
+    progressControl = (playerRoot?.querySelector('.art-control-progress') ||
+      document.querySelector('.art-control-progress')) as HTMLElement | null;
     if (!progressControl) return;
 
-    // 添加精确的 CSS 控制
     const addPrecisionCSS = () => {
       if (document.getElementById('danmaku-drag-fix')) return;
 
       const style = document.createElement('style');
       style.id = 'danmaku-drag-fix';
       style.textContent = `
-        /* 🔧 修复长时间播放后弹幕菜单hover失效问题 */
-
         /* 确保控制元素本身可以接收鼠标事件，恢复原生hover机制 */
         .artplayer-plugin-danmuku .apd-config,
         .artplayer-plugin-danmuku .apd-style {
           pointer-events: auto !important;
         }
-
-        /* 简化：依赖全局CSS中的hover处理 */
 
         /* 确保进度条层级足够高，避免被弹幕面板遮挡 */
         .art-progress {
@@ -319,35 +326,31 @@ export function fixDanmakuProgressConflict(): Cleanup {
         }
       `;
       document.head.appendChild(style);
+      injectedStyle = style;
     };
 
-    // 绑定事件 - 与 ArtPlayer 使用相同的事件绑定方式
     progressControl.addEventListener('mousedown', handleProgressMouseDown);
     document.addEventListener('mousemove', handleDocumentMouseMove);
     document.addEventListener('mouseup', handleDocumentMouseUp);
 
-    // 应用 CSS
     addPrecisionCSS();
 
-    // 🔄 添加定期重置机制，防止长时间播放后状态污染
     resetInterval = setInterval(() => {
       try {
-        // 重置弹幕控件和面板状态
-        const controls = document.querySelectorAll(
+        const root = resolveRoot() || document;
+        const controls = root.querySelectorAll(
           '.artplayer-plugin-danmuku .apd-config, .artplayer-plugin-danmuku .apd-style',
         ) as NodeListOf<HTMLElement>;
-        const panels = document.querySelectorAll(
+        const panels = root.querySelectorAll(
           '.artplayer-plugin-danmuku .apd-config-panel, .artplayer-plugin-danmuku .apd-style-panel',
         ) as NodeListOf<HTMLElement>;
 
-        // 强制重置控制元素的事件接收能力
         controls.forEach((control) => {
           if (control.style.pointerEvents === 'none') {
             control.style.pointerEvents = 'auto';
           }
         });
 
-        // 重置面板状态，但不影响当前 hover 状态
         panels.forEach((panel) => {
           if (!panel.matches(':hover') && panel.style.opacity === '0') {
             panel.style.opacity = '';
@@ -358,11 +361,11 @@ export function fixDanmakuProgressConflict(): Cleanup {
       } catch (error) {
         console.warn('弹幕状态重置失败:', error);
       }
-    }, 300000); // 每5分钟重置一次
+    }, 300000);
 
-    // 🚀 立即恢复 hover 状态（修复当前可能已存在的问题）
     const immediateRestore = () => {
-      const controls = document.querySelectorAll(
+      const root = resolveRoot() || document;
+      const controls = root.querySelectorAll(
         '.artplayer-plugin-danmuku .apd-config, .artplayer-plugin-danmuku .apd-style',
       ) as NodeListOf<HTMLElement>;
       controls.forEach((control) => {
@@ -370,9 +373,8 @@ export function fixDanmakuProgressConflict(): Cleanup {
       });
     };
 
-    // 立即执行一次恢复
     restoreTimer = setTimeout(immediateRestore, 100);
-  }, 1500); // 等待弹幕插件加载
+  }, 1500);
 
   return () => {
     clearTimeout(setupTimer);
@@ -383,8 +385,8 @@ export function fixDanmakuProgressConflict(): Cleanup {
     document.removeEventListener('mousemove', handleDocumentMouseMove);
     document.removeEventListener('mouseup', handleDocumentMouseUp);
 
-    const artplayer = document.querySelector('.artplayer') as HTMLElement;
-    artplayer?.removeAttribute('data-dragging');
+    resolveRoot()?.removeAttribute('data-dragging');
+    injectedStyle?.remove();
   };
 }
 
@@ -399,13 +401,21 @@ export function addMobileDanmakuToggle(
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent,
     );
+  if (!isMobile) return noop;
+
   let configButton: Element | null = null;
   let configPanel: Element | null = null;
+  let playerRoot: HTMLElement | null = null;
   let isConfigVisible = false;
   let resizeTimer: NodeJS.Timeout | null = null;
 
+  const scheduleAdjust = (delayMs: number) => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(adjustPanelPosition, delayMs);
+  };
+
   const adjustPanelPosition = () => {
-    const player = document.querySelector('.artplayer');
+    const player = playerRoot || getPlayerRoot(artPlayerRef);
     if (!player || !configButton || !configPanel) return;
 
     try {
@@ -427,7 +437,7 @@ export function addMobileDanmakuToggle(
 
     if (isConfigVisible) {
       (configPanel as HTMLElement).style.display = 'block';
-      resizeTimer = setTimeout(adjustPanelPosition, 10);
+      scheduleAdjust(10);
     } else {
       (configPanel as HTMLElement).style.display = 'none';
     }
@@ -435,18 +445,18 @@ export function addMobileDanmakuToggle(
 
   const handleArtResize = () => {
     if (isConfigVisible) {
-      resizeTimer = setTimeout(adjustPanelPosition, 50);
+      scheduleAdjust(50);
     }
   };
 
   const handleOrientationChange = () => {
     if (isConfigVisible) {
-      resizeTimer = setTimeout(adjustPanelPosition, 100);
+      scheduleAdjust(100);
     }
   };
 
   const handleDocumentClick = (e: MouseEvent) => {
-    const playerContainer = document.querySelector('.artplayer');
+    const playerContainer = playerRoot || getPlayerRoot(artPlayerRef);
     if (!playerContainer || !playerContainer.contains(e.target as Node)) {
       return;
     }
@@ -464,39 +474,28 @@ export function addMobileDanmakuToggle(
   };
 
   const setupTimer = setTimeout(() => {
-    configButton = document.querySelector(
-      '.artplayer-plugin-danmuku .apd-config',
-    );
-    configPanel = document.querySelector(
+    playerRoot = getPlayerRoot(artPlayerRef);
+    const scope = playerRoot || document;
+    configButton = scope.querySelector('.artplayer-plugin-danmuku .apd-config');
+    configPanel = scope.querySelector(
       '.artplayer-plugin-danmuku .apd-config-panel',
     );
 
     if (!configButton || !configPanel) {
-      console.warn('弹幕配置按钮或面板未找到');
       return;
     }
 
-    // 桌面端：简化处理，依赖 CSS hover，移除复杂的 JavaScript 事件
-    if (!isMobile) {
-      return;
+    configButton.addEventListener('click', handleConfigClick);
+
+    const art = getArtPlayer(artPlayerRef);
+    if (art?.on) {
+      art.on('resize', handleArtResize);
     }
 
-    if (isMobile) {
-      // 移动端：添加点击切换支持 + 持久位置修正
-
-      configButton.addEventListener('click', handleConfigClick);
-
-      // 监听 ArtPlayer 的 resize 事件
-      const art = getArtPlayer(artPlayerRef);
-      if (art?.on) {
-        art.on('resize', handleArtResize);
-      }
-
-      window.addEventListener('orientationchange', handleOrientationChange);
-      window.addEventListener('resize', handleOrientationChange);
-      document.addEventListener('click', handleDocumentClick);
-    }
-  }, 2000); // 延迟2秒确保弹幕插件完全初始化
+    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('resize', handleOrientationChange);
+    document.addEventListener('click', handleDocumentClick);
+  }, 2000);
 
   return () => {
     clearTimeout(setupTimer);
@@ -564,9 +563,8 @@ export function enablePictureInPictureControl(
   };
 
   const setupTimer = setTimeout(() => {
-    pipControl = document.querySelector(
-      '.art-control-pip',
-    ) as HTMLElement | null;
+    const root = getPlayerRoot(artPlayerRef) || document;
+    pipControl = root.querySelector('.art-control-pip') as HTMLElement | null;
     if (!pipControl) return;
     if (pipControl.dataset.pipEnhanced === 'true') return;
     pipControl.dataset.pipEnhanced = 'true';
@@ -595,9 +593,9 @@ export function applyAllUiEnhancements(
   const cleanups = [
     fixControlSelectorInteraction(),
     hideRedundantControlsOnMobile(),
-    relocateCornerControlsOnMobile(),
+    relocateCornerControlsOnMobile(artPlayerRef),
     optimizeDanmukuControlsCSS(),
-    fixDanmakuProgressConflict(),
+    fixDanmakuProgressConflict(artPlayerRef),
     addMobileDanmakuToggle(artPlayerRef),
     enablePictureInPictureControl(artPlayerRef),
   ];

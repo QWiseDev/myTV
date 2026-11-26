@@ -83,6 +83,7 @@ export class DatabaseCacheManager {
           stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
         } else if (
           key.startsWith('danmu-cache') ||
+          key.startsWith('danmaku-shared-sel:') ||
           key === 'lunatv_danmu_cache'
         ) {
           stats.danmu.count++;
@@ -172,6 +173,7 @@ export class DatabaseCacheManager {
           stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
         } else if (
           key.startsWith('danmu-cache') ||
+          key.startsWith('danmaku-shared-sel:') ||
           key === 'lunatv_danmu_cache'
         ) {
           stats.danmu.count++;
@@ -224,6 +226,20 @@ export class DatabaseCacheManager {
       const matchingKeys = await db.keys(`cache:${prefix}*`);
       await db.clearExpiredCache(prefix);
       clearedCount += matchingKeys.length;
+
+      if (type === 'danmu') {
+        const sharedKeys = await db.keys('cache:danmaku-shared-sel:*');
+        if (sharedKeys.length > 0) {
+          await db.clearExpiredCache('danmaku-shared-sel:');
+          clearedCount += sharedKeys.length;
+        }
+        if (typeof localStorage !== 'undefined') {
+          if (localStorage.getItem('lunatv_danmu_cache') !== null) {
+            localStorage.removeItem('lunatv_danmu_cache');
+            clearedCount++;
+          }
+        }
+      }
 
       if (
         (type === 'tmdb' || type === 'netdisk' || type === 'youtube') &&

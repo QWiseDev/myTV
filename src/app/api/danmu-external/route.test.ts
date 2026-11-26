@@ -659,6 +659,12 @@ describe('GET /api/danmu-external', () => {
   });
 
   it('episode_title 为沉浸版时按版式命中沉浸版条目（日期与正片相同也不错绑）', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/v2/match')) {
@@ -721,6 +727,12 @@ describe('GET /api/danmu-external', () => {
   });
 
   it('episode_title 带日期时在同序数候选中按日期裁决', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/v2/match')) {
@@ -778,6 +790,12 @@ describe('GET /api/danmu-external', () => {
     // 线上实测回归：本地「第20261029期上」全局序数为 6，但 danmu_api 正片
     // 编号是「第3期上」（本地列表混排沉浸版/加更导致序数错位）——
     // 带日期时不能启用序数硬门槛，否则锁死第6期上
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/111/',
+      text: async () => '<html></html>',
+    });
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/v2/match')) {
@@ -1035,5 +1053,295 @@ describe('GET /api/danmu-external', () => {
     } finally {
       NextResponse.json = originalJson;
     }
+  });
+
+  it('拒绝非法 douban_id 且无 title 的请求并返回 400', async () => {
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/danmu-external?douban_id=../etc/passwd',
+        { headers: { 'x-forwarded-for': '203.0.113.201' } },
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid douban_id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('video_url 域名伪造子串不会触发 klm URL 查询', async () => {
+    fetchMock.mockResolvedValue({ ok: false } as Response);
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?title=${encodeURIComponent(
+          '无弹幕剧集',
+        )}&video_url=${encodeURIComponent('http://127.0.0.1/v.qq.com/play.html')}`,
+        { headers: { 'x-forwarded-for': '203.0.113.202' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const calledUrls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(calledUrls.some((url) => url.includes('/api/v2/comment?url='))).toBe(
+      false,
+    );
+  });
+
+  it('平台链接返回 0 条弹幕时仍兜底调用 danmu_api 标题匹配', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/222/',
+      text: async () => DOUBAN_HTML,
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (
+        url.includes('/api/v2/comment?url=') ||
+        url.includes('lyz05.cn') ||
+        url.includes('smone.us') ||
+        url.includes('danmu.icu')
+      ) {
+        return { ok: false } as Response;
+      }
+      if (url.includes('/api/v2/match')) {
+        return jsonResponse({
+          success: true,
+          isMatched: true,
+          matches: [
+            {
+              episodeId: 8801,
+              animeTitle: '测试剧(2026)',
+              episodeTitle: '第1集',
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/comment/8801')) {
+        return jsonResponse({
+          success: true,
+          comments: [{ p: '1.5,1,16777215,16777215', m: '标题匹配兜底弹幕' }],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=222&title=${encodeURIComponent(
+          '测试剧',
+        )}&year=2026&episode=1`,
+        { headers: { 'x-forwarded-for': '203.0.113.203' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.platforms[0].platform).toBe('logvar_episode');
+    expect(data.danmu[0].text).toBe('标题匹配兜底弹幕');
+  });
+
+  it('常规剧集缺失目标集数时不误绑其他已编号集数', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/match')) {
+        return jsonResponse({
+          success: true,
+          isMatched: true,
+          matches: [
+            {
+              episodeId: 9001,
+              animeTitle: '常规剧(2026)',
+              episodeTitle: '第1集',
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/search/episodes')) {
+        return jsonResponse({
+          success: true,
+          animes: [
+            {
+              animeTitle: '常规剧(2026)',
+              episodes: [{ episodeId: 9001, episodeTitle: '第1集' }],
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/v2/search/anime')) {
+        return jsonResponse({
+          success: true,
+          animes: [{ animeId: 900, animeTitle: '常规剧(2026)' }],
+        });
+      }
+      if (url.includes('/api/v2/bangumi/900')) {
+        return jsonResponse({
+          bangumi: {
+            episodes: [{ episodeId: 9001, episodeTitle: '第1集' }],
+          },
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?title=${encodeURIComponent(
+          '常规剧',
+        )}&year=2026&episode=15&episode_title=${encodeURIComponent('第15集')}`,
+        { headers: { 'x-forwarded-for': '203.0.113.204' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.danmu).toEqual([]);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('/api/v2/comment/9001'),
+      ),
+    ).toBe(false);
+  });
+
+  it('豆瓣仅返回首集链接且请求第 3 集时不回退首集，转由采集按 $$$ 分组与零填充集号解析并解码 XML', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/333/',
+      text: async () =>
+        `<html>${DOUBAN_HTML}<a href="https://v.qq.com/x/cover/onlyep1.html">play</a></html>`,
+    });
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('caiji.cyou') && url.includes('wd=')) {
+        return jsonResponse({
+          list: [{ vod_id: 77, vod_name: '采集多源剧' }],
+        });
+      }
+      if (url.includes('caiji.cyou') && url.includes('ac=detail')) {
+        return jsonResponse({
+          list: [
+            {
+              vod_id: 77,
+              vod_play_url:
+                'unknown$https://cdn.example/1.m3u8$$$01$https://v.qq.com/x/cover/ep1.html#EP03$https://www.iqiyi.com/v_ep03.html',
+            },
+          ],
+        });
+      }
+      if (url.includes('fc.lyz05.cn')) {
+        return textResponse(
+          '<d p="12,1,25,0"><![CDATA[A &amp; B &lt;3]]></d><d p="13,1,25,16777215">燃</d>',
+        );
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=333&title=${encodeURIComponent(
+          '采集多源剧',
+        )}&episode=3`,
+        { headers: { 'x-forwarded-for': '203.0.113.205' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.platforms).toEqual([
+      {
+        platform: 'iqiyi_caiji',
+        url: 'https://www.iqiyi.com/v_ep03.html',
+        count: 2,
+      },
+    ]);
+    expect(data.danmu).toEqual([
+      { text: 'A & B <3', time: 12, color: '#000000', mode: 0 },
+      { text: '燃', time: 13, color: '#FFFFFF', mode: 0 },
+    ]);
+  });
+
+  it('采集缺失目标集数时不回退到第 1 集链接', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('caiji.cyou') && url.includes('wd=')) {
+        return jsonResponse({
+          list: [{ vod_id: 88, vod_name: '短剧' }],
+        });
+      }
+      if (url.includes('caiji.cyou') && url.includes('ac=detail')) {
+        return jsonResponse({
+          list: [
+            {
+              vod_id: 88,
+              vod_play_url: '第01集$https://v.qq.com/x/cover/ep1.html',
+            },
+          ],
+        });
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?title=${encodeURIComponent(
+          '短剧',
+        )}&episode=5`,
+        { headers: { 'x-forwarded-for': '203.0.113.206' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.danmu).toEqual([]);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('ep1.html'),
+      ),
+    ).toBe(false);
+  });
+
+  it('danmu.icu 过滤越界时间与非法颜色并保留合法弹幕', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    mockFetchDoubanWithVerification.mockResolvedValue({
+      ok: true,
+      url: 'https://movie.douban.com/subject/444/',
+      text: async () => DOUBAN_HTML,
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('api.danmu.icu')) {
+        return textResponse(
+          JSON.stringify({
+            code: 23,
+            danmuku: [
+              [5, 'top', 'not-a-color', '', '666'],
+              [-2, 'right', '#123456', '', '负时间'],
+              [90000, 'right', '#123456', '', '超大时间'],
+              [8, 'bottom', '#abcdef', '', '有效弹幕'],
+            ],
+          }),
+        );
+      }
+      return { ok: false } as Response;
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/danmu-external?douban_id=444&title=${encodeURIComponent(
+          'JSON源测试剧',
+        )}`,
+        { headers: { 'x-forwarded-for': '203.0.113.207' } },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.danmu).toEqual([
+      { text: '666', time: 5, color: '#FFFFFF', mode: 1 },
+      { text: '有效弹幕', time: 8, color: '#ABCDEF', mode: 2 },
+    ]);
   });
 });

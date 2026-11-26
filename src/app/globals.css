@@ -358,7 +358,9 @@ html:not(.dark)::view-transition-new(root) {
   }
 
   /* 防止进度条拖拽时弹窗干扰 */
-  .artplayer[data-dragging='true'] .artplayer-plugin-danmuku .apd-config-panel {
+  .art-video-player[data-dragging='true']
+    .artplayer-plugin-danmuku
+    .apd-config-panel {
     opacity: 0 !important;
     pointer-events: none !important;
     visibility: hidden !important;

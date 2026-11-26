@@ -1,6 +1,7 @@
 'use client';
 
 import { matchesDanmakuFilters, readDanmakuFilters } from '@/lib/danmaku';
+import { isSupportedDanmuPlatformUrl } from '@/lib/danmu/platform-url';
 
 import {
   DANMU_CACHE_DURATION_SECONDS,
@@ -24,9 +25,6 @@ export type DanmakuPluginLike = {
   show?: () => void;
   hide?: () => void;
   emit?: (danmaku: DanmakuItemLike) => Promise<void> | void;
-  worker?: {
-    terminate?: () => void;
-  };
 };
 
 export type ArtPlayerLike = {
@@ -40,6 +38,9 @@ export type ArtPlayerLike = {
   $video?: HTMLVideoElement;
   notice?: {
     show: string;
+  };
+  setting?: {
+    update?: (option: Record<string, unknown>) => void;
   };
   template?: {
     $player: HTMLElement;
@@ -69,6 +70,7 @@ export type DanmakuRequestInput = {
   /** 本地集名在同版式（沉浸版/加更等）内的序数，从 1 起 */
   variantEpisode?: number;
   source?: string;
+  allowRemoteCache?: boolean;
 };
 
 export type DanmakuRequest = {
@@ -76,6 +78,7 @@ export type DanmakuRequest = {
   episode: number;
   params: URLSearchParams;
   source?: string;
+  allowRemoteCache: boolean;
 };
 
 type InFlightDanmakuLoad = {
@@ -125,11 +128,15 @@ export function createDanmakuRequest(
   if (input.videoYear) {
     params.set('year', input.videoYear);
   }
-  if (input.videoUrl) {
+  const hasSupportedPlatformUrl =
+    Boolean(input.videoUrl) &&
+    isSupportedDanmuPlatformUrl(input.videoUrl || '');
+  if (hasSupportedPlatformUrl && input.videoUrl) {
     params.set('video_url', input.videoUrl);
   }
-  if (input.episodeTitle) {
-    params.set('episode_title', input.episodeTitle.slice(0, 100));
+  const trimmedEpisodeTitle = input.episodeTitle?.trim();
+  if (trimmedEpisodeTitle) {
+    params.set('episode_title', trimmedEpisodeTitle.slice(0, 100));
   }
   if (input.variantEpisode && input.variantEpisode > 0) {
     params.set('variant_episode', String(input.variantEpisode));
@@ -140,22 +147,34 @@ export function createDanmakuRequest(
 
   if (!params.toString()) return null;
 
+  // 仅当未手动选集时保留片名/年份/豆瓣/集名维度的缓存键；
+  // 不把普通播放源 .m3u8 地址编入缓存键，确保换源可复用同片弹幕缓存。
   const keyParts = [
     input.videoTitle || '',
     input.videoYear || '',
     input.videoDoubanId || '',
     episode,
   ];
-  if (input.videoUrl) {
-    keyParts.push(input.videoUrl);
+  if (input.manualEpisodeId) {
+    keyParts.push(`manual:${input.manualEpisodeId}`);
+  } else {
+    if (hasSupportedPlatformUrl && input.videoUrl) {
+      keyParts.push(input.videoUrl);
+    }
+    if (trimmedEpisodeTitle) {
+      keyParts.push(trimmedEpisodeTitle.slice(0, 100));
+    }
+    if (input.variantEpisode && input.variantEpisode > 0) {
+      keyParts.push(`v:${input.variantEpisode}`);
+    }
   }
-  if (input.manualEpisodeId) keyParts.push(`manual:${input.manualEpisodeId}`);
 
   return {
     key: keyParts.join('_'),
     episode,
     params,
     source: input.source,
+    allowRemoteCache: input.allowRemoteCache !== false,
   };
 }
 
@@ -243,7 +262,9 @@ export class DanmakuLoadManager {
     controller: AbortController | null,
   ): Promise<DanmakuItemLike[]> {
     const signal = controller?.signal;
-    const cached = await getDanmuCacheItem(request.key);
+    const cached = await getDanmuCacheItem(request.key, {
+      allowRemote: request.allowRemoteCache,
+    });
     throwIfDanmakuLoadAborted(signal);
     const now = this.now();
 
@@ -312,7 +333,12 @@ export function renderDanmakuList(
     matchesDanmakuFilters(item, filters),
   );
   plugin.reset?.();
-  plugin.load?.(visibleDanmaku.length > 0 ? visibleDanmaku : undefined);
+  // artplayer-plugin-danmuku 仅在无参调用 load()（danmuku === undefined）时清空内部 queue，
+  // 必须先无参清空，再加载新数组，否则旧弹幕和已屏蔽弹幕会持续残留并叠加。
+  plugin.load?.();
+  if (visibleDanmaku.length > 0) {
+    plugin.load?.(visibleDanmaku);
+  }
 
   if (!options.preserveHidden || !wasHidden) {
     plugin.show?.();
@@ -342,18 +368,14 @@ export function showDanmakuErrorNotice(
   art.notice.show = `弹幕加载失败: ${message}`;
 }
 
-export function terminateDanmakuWorker(art: ArtPlayerLike | null | undefined) {
-  const worker = getDanmakuPlugin(art)?.worker;
-  worker?.terminate?.();
-}
-
 export function resetDanmakuTimeline(art: ArtPlayerLike | null | undefined) {
   const plugin = getDanmakuPlugin(art);
   if (!plugin || plugin.isHide) return;
 
   plugin.reset?.();
 
-  if (art?.playing) {
+  // 仅当插件处于停止状态（或状态未知）时重新拉起，避免重复 emit('video:playing') 叠加 rAF 循环
+  if (art?.playing && plugin.isStop !== false) {
     art.emit?.('video:playing');
   }
 }

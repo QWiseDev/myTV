@@ -84,6 +84,7 @@ export default function PlayerAndEpisodeSection({
             {...playerProps}
             isEpisodeSelectorCollapsed={isCollapsed}
             onToggleEpisodePanel={() => setIsCollapsed(!isCollapsed)}
+            onOpenDanmuModal={() => setShowDanmuModal(true)}
           />
         </div>
 

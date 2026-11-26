@@ -77,4 +77,36 @@ it('不将上游业务错误当作空数据或回显敏感信息', async () => {
   expect(await response.text()).not.toContain('secret-token');
 });
 
+it('拒绝指向内网或回环地址的弹幕服务配置', async () => {
+  mockGetConfig.mockResolvedValue({
+    DanmuConfig: { apiBaseUrl: 'http://127.0.0.1:9321' },
+  });
+  const response = await GET(
+    new Request('http://localhost/api/danmaku?action=search&keyword=test', {
+      headers: { 'x-forwarded-for': '203.0.113.10' },
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
+it('游客请求超过每分钟 60 次时返回 429', async () => {
+  const ip = '203.0.113.88';
+  for (let i = 0; i < 60; i++) {
+    const res = await GET(
+      new Request('http://localhost/api/danmaku?action=search&keyword=test', {
+        headers: { 'x-forwarded-for': ip },
+      }),
+    );
+    expect(res.status).toBe(200);
+  }
+  const throttled = await GET(
+    new Request('http://localhost/api/danmaku?action=search&keyword=test', {
+      headers: { 'x-forwarded-for': ip },
+    }),
+  );
+  expect(throttled.status).toBe(429);
+  expect(Number(throttled.headers.get('Retry-After'))).toBeGreaterThan(0);
+});
+
 export {};

@@ -43,6 +43,59 @@ describe('danmakuRuntime', () => {
     );
   });
 
+  test('ignores m3u8 videoUrl in cache key while keeping episode metadata and allowRemoteCache', () => {
+    const reqSourceA = createDanmakuRequest({
+      enabled: true,
+      videoTitle: '综艺A',
+      videoYear: '2026',
+      videoDoubanId: 999,
+      videoUrl: 'https://cdn-a.example/play.m3u8',
+      episodeIndex: 2,
+      episodeOffset: 0,
+      episodeTitle: '第20261022期沉浸版',
+      variantEpisode: 1,
+      allowRemoteCache: false,
+    });
+    const reqSourceB = createDanmakuRequest({
+      enabled: true,
+      videoTitle: '综艺A',
+      videoYear: '2026',
+      videoDoubanId: 999,
+      videoUrl: 'https://cdn-b.example/other.m3u8',
+      episodeIndex: 2,
+      episodeOffset: 0,
+      episodeTitle: '第20261022期沉浸版',
+      variantEpisode: 1,
+    });
+    const reqDifferentVariant = createDanmakuRequest({
+      enabled: true,
+      videoTitle: '综艺A',
+      videoYear: '2026',
+      videoDoubanId: 999,
+      videoUrl: 'https://cdn-b.example/other.m3u8',
+      episodeIndex: 2,
+      episodeOffset: 0,
+      episodeTitle: '第20261022期加更',
+      variantEpisode: 1,
+    });
+    const reqPlatform = createDanmakuRequest({
+      enabled: true,
+      videoTitle: '综艺A',
+      videoUrl: 'https://v.qq.com/x/cover/abc.html',
+      episodeIndex: 0,
+      episodeOffset: 0,
+    });
+
+    expect(reqSourceA?.key).toBe(reqSourceB?.key);
+    expect(reqSourceA?.params.get('video_url')).toBeNull();
+    expect(reqSourceA?.allowRemoteCache).toBe(false);
+    expect(reqSourceB?.allowRemoteCache).toBe(true);
+    expect(reqSourceA?.key).not.toBe(reqDifferentVariant?.key);
+    expect(reqPlatform?.params.get('video_url')).toBe(
+      'https://v.qq.com/x/cover/abc.html',
+    );
+  });
+
   test('does not create a request when external danmaku is disabled', () => {
     const request = createDanmakuRequest({
       enabled: false,
@@ -301,7 +354,8 @@ describe('danmakuRuntime', () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(load).toHaveBeenCalledWith([{ text: 'hello', time: 3 }]);
+    expect(load).toHaveBeenNthCalledWith(1);
+    expect(load).toHaveBeenNthCalledWith(2, [{ text: 'hello', time: 3 }]);
     expect(show).not.toHaveBeenCalled();
     expect(art.notice.show).toBe('已加载 1 条弹幕');
   });
@@ -324,6 +378,27 @@ describe('danmakuRuntime', () => {
 
     expect(reset).toHaveBeenCalledTimes(1);
     expect(emit).toHaveBeenCalledWith('video:playing');
+  });
+
+  test('skips re-emitting video:playing when plugin is already running', () => {
+    const reset = jest.fn();
+    const emit = jest.fn();
+    const art = {
+      playing: true,
+      emit,
+      plugins: {
+        artplayerPluginDanmuku: {
+          isHide: false,
+          isStop: false,
+          reset,
+        },
+      },
+    };
+
+    resetDanmakuTimeline(art);
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalled();
   });
 
   test('does not reset hidden danmaku', () => {

@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 
+import he from 'he';
+
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 
 import type { DanmuItem } from './types';
@@ -9,6 +11,22 @@ interface DanmuApiResponse {
   name: string;
   danum: number;
   danmuku: any[];
+}
+
+function normalizeXmlDanmuText(rawText: string): string {
+  const unwrapped = rawText
+    .replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1')
+    .trim();
+  if (!unwrapped) return '';
+  return he.decode(unwrapped).trim();
+}
+
+function formatDecimalColor(rawColor: unknown): string {
+  const colorInt = Number.parseInt(String(rawColor ?? '16777215'), 10);
+  if (!Number.isInteger(colorInt) || colorInt < 0 || colorInt > 0xffffff) {
+    return '#FFFFFF';
+  }
+  return '#' + colorInt.toString(16).padStart(6, '0').toUpperCase();
 }
 
 // 从XML API获取弹幕数据（支持多个备用URL）
@@ -44,18 +62,14 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
 
       const responseText = await response.text();
 
-      // 使用正则表达式解析XML（Node.js兼容）
-      const danmakuRegex = /<d p="([^"]*)"[^>]*>([^<]*)<\/d>/g;
+      // 使用正则表达式解析XML（Node.js兼容，支持 CDATA 与实体解码）
+      const danmakuRegex = /<d p="([^"]*)"[^>]*>([\s\S]*?)<\/d>/g;
       const danmuList: DanmuItem[] = [];
       let match;
 
-      // 🚀 激进性能优化策略 - 基于ArtPlayer源码深度分析
-      // 核心问题: 大量弹幕导致内存占用和计算密集
-      // 解决方案: 智能分段加载 + 动态密度控制 + 预计算优化
-
       const SEGMENT_DURATION = 300; // 5分钟分段
       const MAX_DANMU_PER_SEGMENT = 500; // 每段最大弹幕数
-      const BATCH_SIZE = 200; // 减小批处理大小，更频繁让出控制权
+      const BATCH_SIZE = 200; // 让出事件循环避免长 XML 阻塞
 
       const timeSegments: { [key: number]: DanmuItem[] } = {};
       let totalProcessed = 0;
@@ -64,74 +78,55 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
       while ((match = danmakuRegex.exec(responseText)) !== null) {
         try {
           const pAttr = match[1];
-          const text = match[2];
+          const rawText = match[2];
 
-          if (!pAttr || !text) continue;
+          if (!pAttr || !rawText) continue;
 
-          // 🔥 激进预过滤: 更严格的质量控制
-          const trimmedText = text.trim();
+          const trimmedText = normalizeXmlDanmuText(rawText);
           if (
             trimmedText.length === 0 ||
-            trimmedText.length > 50 || // 更严格的长度限制
-            trimmedText.length < 2 || // 过短弹幕通常是无意义的
-            /^[^\u4e00-\u9fa5a-zA-Z0-9]+$/.test(trimmedText) || // 纯符号弹幕
-            trimmedText.includes('弹幕正在赶来') ||
-            trimmedText.includes('视频不错') ||
-            trimmedText.includes('666') ||
-            /^\d+$/.test(trimmedText) || // 纯数字弹幕
-            /^[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]+$/.test(trimmedText)
+            trimmedText.length > 200 ||
+            /^[^\u4e00-\u9fa5a-zA-Z0-9]+$/.test(trimmedText) ||
+            trimmedText.includes('弹幕正在赶来')
           ) {
-            // 纯标点符号
             continue;
           }
 
-          // XML格式解析
           const params = pAttr.split(',');
           if (params.length < 4) continue;
 
-          const time = parseFloat(params[0]) || 0;
-          const mode = parseInt(params[1]) || 0;
-          const colorInt = parseInt(params[3]) || 16777215;
+          const time = Number.parseFloat(params[0]);
+          const mode = Number.parseInt(params[1], 10) || 0;
 
-          // 时间范围和有效性检查
-          if (time < 0 || time > 86400 || !Number.isFinite(time)) continue;
+          if (!Number.isFinite(time) || time < 0 || time > 86400) continue;
 
-          // 🎯 智能分段: 按时间分段存储，便于按需加载
+          const item: DanmuItem = {
+            text: trimmedText,
+            time,
+            color: formatDecimalColor(params[3]),
+            mode: mode === 5 ? 1 : mode === 4 ? 2 : 0,
+          };
+
           const segmentIndex = Math.floor(time / SEGMENT_DURATION);
           if (!timeSegments[segmentIndex]) {
             timeSegments[segmentIndex] = [];
           }
 
-          // 🎯 密度控制: 每段限制弹幕数量，优先保留质量高的
           if (timeSegments[segmentIndex].length >= MAX_DANMU_PER_SEGMENT) {
-            // 如果当前段已满，随机替换（保持弹幕多样性）
             if (Math.random() < 0.1) {
-              // 10%概率替换
               const randomIndex = Math.floor(
                 Math.random() * timeSegments[segmentIndex].length,
               );
-              timeSegments[segmentIndex][randomIndex] = {
-                text: trimmedText,
-                time: time,
-                color:
-                  '#' + colorInt.toString(16).padStart(6, '0').toUpperCase(),
-                mode: mode === 5 ? 1 : mode === 4 ? 2 : 0,
-              };
+              timeSegments[segmentIndex][randomIndex] = item;
             }
             continue;
           }
 
-          timeSegments[segmentIndex].push({
-            text: trimmedText,
-            time: time,
-            color: '#' + colorInt.toString(16).padStart(6, '0').toUpperCase(),
-            mode: mode === 5 ? 1 : mode === 4 ? 2 : 0,
-          });
+          timeSegments[segmentIndex].push(item);
 
           totalProcessed++;
           batchCount++;
 
-          // 🔄 更频繁的批量处理控制
           if (batchCount >= BATCH_SIZE) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             batchCount = 0;
@@ -141,30 +136,24 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
         }
       }
 
-      // 🎯 将分段数据重新整合为时间排序的数组
-
       for (const segmentIndex of Object.keys(timeSegments).sort(
-        (a, b) => parseInt(a) - parseInt(b),
+        (a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10),
       )) {
-        const segment = timeSegments[parseInt(segmentIndex)];
-        // 段内按时间排序，提高播放时的查找效率
+        const segment = timeSegments[Number.parseInt(segmentIndex, 10)];
         segment.sort((a, b) => a.time - b.time);
         danmuList.push(...segment);
       }
 
       if (danmuList.length === 0) {
-        continue; // 尝试下一个API
+        continue;
       }
 
-      // 🎯 优化后的最终处理，避免重复操作
-      // 由于上面已经分段排序，这里只需要简单去重和最终验证
       const filteredDanmu = danmuList.filter(
         (item) =>
-          !item.text.includes('官方弹幕库') && !item.text.includes('哔哩哔哩'), // 额外过滤平台相关内容
+          !item.text.includes('官方弹幕库') && !item.text.includes('哔哩哔哩'),
       );
 
-      // 🚀 性能统计和限制
-      const maxAllowedDanmu = 20000; // 设置合理的最大弹幕数量
+      const maxAllowedDanmu = 20000;
       let finalDanmu = filteredDanmu;
 
       if (filteredDanmu.length > maxAllowedDanmu) {
@@ -172,21 +161,20 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
           `⚠️ 弹幕数量过多 (${filteredDanmu.length})，采用智能采样至 ${maxAllowedDanmu} 条`,
         );
 
-        // 🎯 智能采样：保持时间分布均匀
         const sampleRate = maxAllowedDanmu / filteredDanmu.length;
         finalDanmu = filteredDanmu
           .filter((_, index) => {
             return (
-              index === 0 || // 保留第一条
-              index === filteredDanmu.length - 1 || // 保留最后一条
-              Math.random() < sampleRate || // 随机采样
+              index === 0 ||
+              index === filteredDanmu.length - 1 ||
+              Math.random() < sampleRate ||
               index % Math.ceil(1 / sampleRate) === 0
-            ); // 均匀采样
+            );
           })
           .slice(0, maxAllowedDanmu);
       }
 
-      return finalDanmu; // 成功获取优化后的弹幕
+      return finalDanmu;
     } catch (error) {
       if (
         error instanceof Error &&
@@ -196,24 +184,21 @@ async function fetchDanmuFromXMLAPI(videoUrl: string): Promise<DanmuItem[]> {
       } else {
         console.error(`❌ ${apiName}请求失败:`, error);
       }
-      // 继续尝试下一个API
     }
   }
 
-  // 所有API都失败了
   return [];
 }
 
 // 从danmu.icu获取弹幕数据
 async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
-  // 根据平台设置不同的超时时间
-  let timeout = 20000; // 默认20秒
+  let timeout = 20000;
   if (videoUrl.includes('iqiyi.com')) {
-    timeout = 30000; // 爱奇艺30秒
+    timeout = 30000;
   } else if (videoUrl.includes('youku.com')) {
-    timeout = 25000; // 优酷25秒
+    timeout = 25000;
   } else if (videoUrl.includes('mgtv.com') || videoUrl.includes('w.mgtv.com')) {
-    timeout = 25000; // 芒果TV25秒
+    timeout = 25000;
   }
 
   try {
@@ -250,38 +235,44 @@ async function fetchDanmuFromAPI(videoUrl: string): Promise<DanmuItem[]> {
 
     if (!data.danmuku || !Array.isArray(data.danmuku)) return [];
 
-    // 转换为Artplayer格式
-    // API返回格式: [时间, 位置, 颜色, "", 文本, "", "", "字号"]
-
     const danmuList = data.danmuku
-      .map((item: any[]) => {
-        // 正确解析时间 - 第一个元素就是时间(秒)
-        const time = parseFloat(item[0]) || 0;
-        const text = (item[4] || '').toString().trim();
-        const color = item[2] || '#FFFFFF';
+      .slice(0, 50000)
+      .map((item: unknown): DanmuItem | null => {
+        if (!Array.isArray(item)) return null;
+        const time = Number.parseFloat(String(item[0]));
+        const text = String(item[4] ?? '').trim();
+        const rawColor =
+          typeof item[2] === 'string' && item[2].trim()
+            ? item[2].trim()
+            : '#FFFFFF';
+        const color = /^#[0-9a-f]{6}$/i.test(rawColor)
+          ? rawColor.toUpperCase()
+          : '#FFFFFF';
 
-        // 转换位置: top=1顶部, bottom=2底部, right=0滚动
         let mode = 0;
         if (item[1] === 'top') mode = 1;
         else if (item[1] === 'bottom') mode = 2;
-        else mode = 0; // right 或其他都是滚动
 
         return {
-          text: text,
-          time: time,
-          color: color,
-          mode: mode,
+          text: text.slice(0, 1000),
+          time,
+          color,
+          mode,
         };
       })
-      .filter((item) => {
-        const valid =
+      .filter((item): item is DanmuItem => {
+        if (!item) return false;
+        return (
           item.text.length > 0 &&
           !item.text.includes('弹幕正在赶来') &&
           !item.text.includes('官方弹幕库') &&
-          item.time >= 0;
-        return valid;
+          Number.isFinite(item.time) &&
+          item.time >= 0 &&
+          item.time <= 86400
+        );
       })
-      .sort((a, b) => a.time - b.time); // 按时间排序
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 20000);
 
     return danmuList;
   } catch (error) {

@@ -44,9 +44,8 @@ interface ArtplayerConfigOptions {
   onBlockAdToggle: (enabled: boolean) => void;
   onDanmuToggle: (enabled: boolean) => void;
   onNextEpisode: () => void;
-  // 🎯 新增：弹幕集数调整
-  danmuEpisodeNum: number; // 当前弹幕对应的集数
-  onDanmuEpisodeChange: (offset: number) => void; // 调整偏移量
+  danmuEpisodeNum?: number; // 兼容旧参数：当前弹幕对应的集数
+  onDanmuEpisodeChange?: (offset: number) => void; // 兼容旧参数：调整偏移量
 
   // Refs (用于在配置中访问播放器实例)
   artPlayerRef: MutableRefObject<ArtPlayerLike | null>;
@@ -153,6 +152,7 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
       },
     },
     {
+      name: 'external-danmu',
       html: '弹幕',
       icon: '<text x="50%" y="50%" font-size="18" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="#ffffff">DM</text>',
       tooltip: externalDanmuEnabledRef.current ? '已开启' : '已关闭',
