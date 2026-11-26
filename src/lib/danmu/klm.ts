@@ -76,7 +76,11 @@ async function fetchKlmJson<T>(
   timeout = 12000,
 ): Promise<T | null> {
   try {
-    await resolveAndValidateRemoteUrl(apiUrl, { allowHttp: true });
+    // 地址来自管理端配置，允许指向 docker 内网的弹幕服务。
+    await resolveAndValidateRemoteUrl(apiUrl, {
+      allowHttp: true,
+      allowPrivateNetwork: true,
+    });
   } catch (validationError) {
     console.warn('自建弹幕 API 地址未通过安全校验，跳过请求:', validationError);
     return null;

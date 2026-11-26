@@ -77,17 +77,33 @@ it('不将上游业务错误当作空数据或回显敏感信息', async () => {
   expect(await response.text()).not.toContain('secret-token');
 });
 
-it('拒绝指向内网或回环地址的弹幕服务配置', async () => {
+it('允许向管理端配置的内网弹幕服务转发（如 docker 内网 danmu-api）', async () => {
   mockGetConfig.mockResolvedValue({
-    DanmuConfig: { apiBaseUrl: 'http://127.0.0.1:9321' },
+    DanmuConfig: { apiBaseUrl: 'http://danmu-api:9321/klm' },
   });
   const response = await GET(
     new Request('http://localhost/api/danmaku?action=search&keyword=test', {
-      headers: { 'x-forwarded-for': '203.0.113.10' },
+      headers: { 'x-forwarded-for': '203.0.113.11' },
     }),
   );
-  expect(response.status).toBe(503);
-  expect(global.fetch).not.toHaveBeenCalled();
+  expect(response.status).toBe(200);
+  expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain(
+    'http://danmu-api:9321/klm/api/v2/search/anime?',
+  );
+});
+
+it('拒绝指向内网或回环地址的用户可控弹幕地址', async () => {
+  const response = await GET(
+    new Request(
+      'http://localhost/api/danmaku?action=search&keyword=test&url=http://127.0.0.1:9321',
+      { headers: { 'x-forwarded-for': '203.0.113.12' } },
+    ),
+  );
+  // 用户传入的 url 参数被忽略，仍只向管理端配置的地址转发
+  expect(response.status).toBe(200);
+  expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain(
+    'https://danmu.example/api/v2/search/anime?',
+  );
 });
 
 it('游客请求超过每分钟 60 次时返回 429', async () => {

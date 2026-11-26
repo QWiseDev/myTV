@@ -54,6 +54,29 @@ describe('url-safety', () => {
     );
   });
 
+  test('allowPrivateNetwork permits trusted internal targets but keeps format checks', () => {
+    expect(
+      assertPublicHttpUrl('http://danmu-api:9321/klm', {
+        allowHttp: true,
+        allowPrivateNetwork: true,
+      }).hostname,
+    ).toBe('danmu-api');
+    expect(
+      assertPublicHttpUrl('http://127.0.0.1:9321', {
+        allowPrivateNetwork: true,
+      }).hostname,
+    ).toBe('127.0.0.1');
+    // 即使放行内网，仍拒绝非法协议与内嵌凭据
+    expect(() =>
+      assertPublicHttpUrl('file:///etc/passwd', { allowPrivateNetwork: true }),
+    ).toThrow();
+    expect(() =>
+      assertPublicHttpUrl('http://user:pass@danmu-api:9321', {
+        allowPrivateNetwork: true,
+      }),
+    ).toThrow();
+  });
+
   test('isIpInWhitelist accurately handles exact match, IPv4/IPv6 CIDR and rejects invalid masks', () => {
     expect(isIpInWhitelist('192.168.1.42', ['192.168.1.0/24'])).toBe(true);
     expect(isIpInWhitelist('192.168.2.42', ['192.168.1.0/24'])).toBe(false);

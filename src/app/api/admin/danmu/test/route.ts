@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
     const normalizedBaseUrl = apiBaseUrl.trim().replace(/\/+$/, '');
     const targetUrl = `${normalizedBaseUrl}/api/config`;
     try {
-      await resolveAndValidateRemoteUrl(targetUrl, { allowHttp: true });
+      // 管理端配置的弹幕服务允许走 docker 内网（如 danmu-api）。
+      await resolveAndValidateRemoteUrl(targetUrl, {
+        allowHttp: true,
+        allowPrivateNetwork: true,
+      });
     } catch (validationError) {
       return NextResponse.json(
         {
@@ -40,6 +44,7 @@ export async function POST(request: NextRequest) {
     try {
       const response = await safeFetch(targetUrl, {
         signal: controller.signal,
+        allowPrivateNetwork: true,
         headers: {
           Accept: 'application/json, text/plain, */*',
         },

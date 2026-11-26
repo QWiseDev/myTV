@@ -189,10 +189,14 @@ export function isPrivateOrReservedIp(rawIp: string): boolean {
 
 /**
  * 同步校验 URL 格式与主机名是否可作为公网 HTTP(S) 请求目标。
+ *
+ * `allowPrivateNetwork` 仅用于「由管理端配置、用户不可控」的可信地址（例如
+ * docker 内网的弹幕服务 `http://danmu-api:9321`），此类目标不是用户输入，
+ * 因此允许指向私网；用户可控的外呼地址务必保持默认严格拦截。
  */
 export function assertPublicHttpUrl(
   rawUrl: string,
-  options?: { allowHttp?: boolean },
+  options?: { allowHttp?: boolean; allowPrivateNetwork?: boolean },
 ): URL {
   const allowHttp = options?.allowHttp ?? true;
   let parsed: URL;
@@ -221,17 +225,19 @@ export function assertPublicHttpUrl(
     throw new Error('URL 缺少主机名');
   }
 
-  if (
-    PRIVATE_HOSTNAMES.has(host) ||
-    host.endsWith('.localhost') ||
-    host.endsWith('.local') ||
-    host.endsWith('.internal')
-  ) {
-    throw new Error('禁止访问本地或内网地址');
-  }
+  if (!options?.allowPrivateNetwork) {
+    if (
+      PRIVATE_HOSTNAMES.has(host) ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal')
+    ) {
+      throw new Error('禁止访问本地或内网地址');
+    }
 
-  if (net.isIP(normalizeIpv6(host)) !== 0 && isPrivateOrReservedIp(host)) {
-    throw new Error('禁止访问内网或保留 IP 地址');
+    if (net.isIP(normalizeIpv6(host)) !== 0 && isPrivateOrReservedIp(host)) {
+      throw new Error('禁止访问内网或保留 IP 地址');
+    }
   }
 
   return parsed;
@@ -242,12 +248,20 @@ export function assertPublicHttpUrl(
  */
 export async function resolveAndValidateRemoteUrl(
   rawUrl: string,
-  options?: { allowHttp?: boolean; skipDnsCheck?: boolean },
+  options?: {
+    allowHttp?: boolean;
+    skipDnsCheck?: boolean;
+    allowPrivateNetwork?: boolean;
+  },
 ): Promise<URL> {
   const parsed = assertPublicHttpUrl(rawUrl, options);
   const host = parsed.hostname.trim().replace(/^\[|\]$/g, '');
 
-  if (net.isIP(normalizeIpv6(host)) !== 0 || options?.skipDnsCheck) {
+  if (
+    options?.allowPrivateNetwork ||
+    net.isIP(normalizeIpv6(host)) !== 0 ||
+    options?.skipDnsCheck
+  ) {
     return parsed;
   }
 
@@ -278,16 +292,22 @@ export async function safeFetch(
     maxRedirects?: number;
     skipDnsCheck?: boolean;
     allowHttp?: boolean;
+    allowPrivateNetwork?: boolean;
   } = {},
 ): Promise<Response> {
   const {
     maxRedirects = 3,
     skipDnsCheck = false,
     allowHttp = true,
+    allowPrivateNetwork = false,
     ...fetchInit
   } = init;
   let currentUrl = (
-    await resolveAndValidateRemoteUrl(rawUrl, { skipDnsCheck, allowHttp })
+    await resolveAndValidateRemoteUrl(rawUrl, {
+      skipDnsCheck,
+      allowHttp,
+      allowPrivateNetwork,
+    })
   ).toString();
 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
@@ -305,7 +325,11 @@ export async function safeFetch(
       await response.body?.cancel().catch(() => undefined);
       const nextUrl = new URL(locationHeader, currentUrl).toString();
       currentUrl = (
-        await resolveAndValidateRemoteUrl(nextUrl, { skipDnsCheck, allowHttp })
+        await resolveAndValidateRemoteUrl(nextUrl, {
+          skipDnsCheck,
+          allowHttp,
+          allowPrivateNetwork,
+        })
       ).toString();
       continue;
     }

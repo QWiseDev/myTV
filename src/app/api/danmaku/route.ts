@@ -83,7 +83,11 @@ export async function GET(request: Request) {
       );
     const url = new URL(base + path);
     try {
-      await resolveAndValidateRemoteUrl(url.toString(), { allowHttp: true });
+      // 地址来自管理端配置（用户不可控），允许指向 docker 内网的弹幕服务。
+      await resolveAndValidateRemoteUrl(url.toString(), {
+        allowHttp: true,
+        allowPrivateNetwork: true,
+      });
     } catch {
       return NextResponse.json({ error: '弹幕 API 配置无效' }, { status: 503 });
     }

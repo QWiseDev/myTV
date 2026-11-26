@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
       try {
         const parsed = await resolveAndValidateRemoteUrl(apiBaseUrl, {
           allowHttp: true,
+          // 管理端自行填写的弹幕服务允许走 docker 内网（如 danmu-api）。
+          allowPrivateNetwork: true,
         });
         if (parsed.search || parsed.hash) {
           return NextResponse.json(

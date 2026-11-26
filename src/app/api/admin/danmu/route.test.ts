@@ -51,9 +51,6 @@ beforeEach(() => {
 });
 
 it.each([
-  ['回环 IP', 'http://127.0.0.1:9321'],
-  ['本机域名', 'http://localhost:9321'],
-  ['内网地址', 'http://192.168.1.10:9321'],
   ['内嵌凭证', 'https://user:pass@danmu.example'],
   ['携带查询参数', 'https://danmu.example?token=secret'],
   ['携带锚点', 'https://danmu.example#hash'],
@@ -62,6 +59,20 @@ it.each([
   expect(response?.status).toBe(400);
   expect(mockSaveAdminConfig).not.toHaveBeenCalled();
   expect(mockClearConfigCache).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['回环 IP', 'http://127.0.0.1:9321'],
+  ['本机域名', 'http://localhost:9321'],
+  ['内网地址', 'http://192.168.1.10:9321'],
+  ['docker 服务名', 'http://danmu-api:9321/klm'],
+])('允许管理端配置指向内网/回环的弹幕服务 (%s)', async (_label, apiBaseUrl) => {
+  const response = await POST(createJsonRequest({ apiBaseUrl }));
+  expect(response?.status).toBe(200);
+  expect(mockSaveAdminConfig).toHaveBeenCalledWith({
+    DanmuConfig: { apiBaseUrl },
+  });
+  expect(mockClearConfigCache).toHaveBeenCalledTimes(1);
 });
 
 it('拒绝非字符串的 apiBaseUrl', async () => {
