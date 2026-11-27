@@ -541,11 +541,9 @@ export function useSourceInitialization({
         setLoadingStage('ready');
         setLoadingMessage('✨ 准备就绪，即将开始播放...');
 
-        setTimeout(() => {
-          if (isActive()) {
-            setLoading(false);
-          }
-        }, 1000);
+        if (isActive()) {
+          setLoading(false);
+        }
       } catch (error) {
         if (!isActive()) return;
         console.error('初始化失败:', error);

@@ -114,3 +114,19 @@ export function preloadArtplayerModules(
       .catch(() => undefined);
   }
 }
+
+/**
+ * 并行预加载播放页关键运行时（Artplayer + 弹幕插件 + hls.js + HLS 配置模块），
+ * 避免等详情就绪后再串行拉取脚本，缩短首帧起播时间。
+ */
+export function preloadPlayerModules(
+  loaders: ArtplayerModuleLoaders = defaultLoaders,
+  loadHlsRuntime: () => Promise<unknown> = () =>
+    Promise.all([import('hls.js'), import('@/app/play/utils/hlsConfig')]),
+) {
+  preloadArtplayerModules(loaders);
+  if (!canUseWindow()) {
+    return;
+  }
+  void loadHlsRuntime().catch(() => undefined);
+}

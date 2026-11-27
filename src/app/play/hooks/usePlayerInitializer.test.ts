@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { usePlayerInitializer } from './usePlayerInitializer';
 import { createArtplayerConfig } from '../utils/artplayerConfig';
 import { loadArtplayerModules } from '../utils/artplayerLoader';
+import { clearDynamicBufferSpeedHints } from '../utils/dynamicBuffer';
+import { prefetchNextEpisodeMedia } from '../utils/episodePrefetch';
 import { handleHlsError, initAdaptiveHls } from '../utils/hlsConfig';
 
 const mockArtplayerConstructor = jest.fn();
@@ -35,6 +37,10 @@ jest.mock('../utils/playerBrowserSupport', () => ({
 jest.mock('../utils/hlsConfig', () => ({
   handleHlsError: jest.fn(),
   initAdaptiveHls: jest.fn(),
+}));
+
+jest.mock('../utils/episodePrefetch', () => ({
+  prefetchNextEpisodeMedia: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('../utils/playerSwitch', () => ({
@@ -245,6 +251,7 @@ function emitPlayerEvent(
 describe('usePlayerInitializer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearDynamicBufferSpeedHints();
     (createArtplayerConfig as jest.Mock).mockReset().mockReturnValue({});
     (handleHlsError as jest.Mock).mockReset();
     (initAdaptiveHls as jest.Mock).mockReset();
@@ -1497,5 +1504,113 @@ describe('usePlayerInitializer', () => {
     expect(hlsConfig.maxBufferLength).toBe(2);
     expect(hlsConfig.maxMaxBufferLength).toBe(10);
     expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+  });
+
+  test('grants one extra loading grace window when sole source has active HLS progress', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    const hlsInstance = {
+      config: {
+        maxBufferLength: 60,
+        maxMaxBufferLength: 180,
+        maxBufferSize: 150 * 1000 * 1000,
+        backBufferLength: 30,
+      },
+      levels: [{ height: 1080 }],
+      on: jest.fn(),
+      off: jest.fn(),
+      destroy: jest.fn(),
+    };
+    (initAdaptiveHls as jest.Mock).mockImplementation(
+      (video: HTMLVideoElement) => {
+        (video as unknown as { hls?: unknown }).hls = hlsInstance;
+        return hlsInstance;
+      },
+    );
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+    (createArtplayerConfig as jest.Mock).mockImplementation(
+      (options: unknown) => options,
+    );
+
+    const params = createParams('https://example.com/slow-only.m3u8');
+    renderHook(() => usePlayerInitializer(params));
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const playerOptions = (createArtplayerConfig as jest.Mock).mock.calls[0][0];
+    act(() => {
+      playerOptions.customType.m3u8(
+        player.video,
+        'https://example.com/slow-only.m3u8',
+      );
+    });
+
+    const setIsVideoLoading = params.setIsVideoLoading as jest.Mock;
+    setIsVideoLoading.mockClear();
+
+    // 10s 时由于无其他备用源且 HLS 已解析档位，宽限一次而不直接判失败
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(setIsVideoLoading).not.toHaveBeenCalledWith(false);
+    expect(player.notice.show).toContain('仍在努力缓冲');
+
+    // 再过 10s 仍无画面才超时报失败
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(setIsVideoLoading).toHaveBeenCalledWith(false);
+    expect(player.notice.show).toContain('视频加载超时');
+  });
+
+  test('prefetches the next episode once when approaching the end of current episode', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    player.paused = false;
+    player.duration = 120;
+    player.currentTime = 100;
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+
+    const params = createParams('https://example.com/ep1.m3u8');
+    if (!params.detail) throw new Error('expected detail');
+    params.detail.episodes = [
+      'https://example.com/ep1.m3u8',
+      'https://example.com/ep2.m3u8',
+    ];
+    params.totalEpisodes = 2;
+
+    renderHook(() => usePlayerInitializer(params));
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+      expect(handlers.has('video:timeupdate')).toBe(true);
+    });
+
+    act(() => {
+      handlers.get('video:timeupdate')?.();
+      player.currentTime = 105;
+      handlers.get('video:timeupdate')?.();
+    });
+
+    expect(prefetchNextEpisodeMedia).toHaveBeenCalledTimes(1);
+    expect(prefetchNextEpisodeMedia).toHaveBeenCalledWith(
+      'https://example.com/ep2.m3u8',
+      expect.objectContaining({
+        sourceKey: 'source',
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 });

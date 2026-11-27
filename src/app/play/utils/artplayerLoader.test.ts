@@ -6,6 +6,7 @@ import {
   getCachedArtplayerModules,
   loadArtplayerModules,
   preloadArtplayerModules,
+  preloadPlayerModules,
 } from './artplayerLoader';
 
 const Artplayer: ArtplayerConstructor = Object.assign(jest.fn(), {
@@ -83,5 +84,21 @@ describe('artplayerLoader', () => {
 
     expect(window.DynamicArtplayer).toBe(Artplayer);
     expect(window.DynamicArtplayerPluginDanmuku).toBe(artplayerPluginDanmuku);
+  });
+
+  test('preloadPlayerModules also triggers HLS runtime preloading', async () => {
+    const loaders = {
+      loadArtplayer: jest.fn().mockResolvedValue({ default: Artplayer }),
+      loadDanmukuPlugin: jest
+        .fn()
+        .mockResolvedValue({ default: artplayerPluginDanmuku }),
+    };
+    const loadHlsRuntime = jest.fn().mockRejectedValue(new Error('ignore'));
+
+    preloadPlayerModules(loaders, loadHlsRuntime);
+    await Promise.resolve();
+
+    expect(loadHlsRuntime).toHaveBeenCalledTimes(1);
+    expect(window.DynamicArtplayer).toBe(Artplayer);
   });
 });

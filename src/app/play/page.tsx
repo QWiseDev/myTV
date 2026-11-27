@@ -51,7 +51,7 @@ import {
   type SourceChangeOwner,
   useSourceSwitcher,
 } from './hooks/useSourceSwitcher';
-import { preloadArtplayerModules } from './utils/artplayerLoader';
+import { preloadPlayerModules } from './utils/artplayerLoader';
 import type {
   DanmakuItemLike,
   DanmakuPluginLike,
@@ -909,9 +909,9 @@ function PlayPageClient() {
     };
   }, [isVideoLoading]);
 
-  // 🚀 新增：提前预加载播放器资源
+  // 🚀 提前预加载播放器与 HLS 核心模块
   useEffect(() => {
-    preloadArtplayerModules();
+    preloadPlayerModules();
   }, []);
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {

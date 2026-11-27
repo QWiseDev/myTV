@@ -79,6 +79,7 @@ export interface DynamicBufferTelemetrySnapshot {
   isLive: boolean;
   memoryPressure: BufferMemoryPressure;
   quotaCapSeconds: number | null;
+  hasActiveProgress: boolean;
   plan: DynamicBufferPlan;
 }
 
@@ -136,6 +137,9 @@ export interface DynamicBufferArtLike {
 export interface InstallDynamicBufferOptions {
   deviceInfo: BufferDeviceInfo;
   getMemoryPressure?: () => BufferMemoryPressure;
+  getSourceKey?: () => string;
+  getStreamUrl?: () => string;
+  hasAlternativeSource?: () => boolean;
   now?: () => number;
 }
 
@@ -157,6 +161,63 @@ const STALL_DECAY_STEP_SECONDS = 5;
 const MAX_STALL_BOOST_SECONDS = 90;
 const MIN_REAL_LOAD_SAMPLE_MS = 5;
 const IN_FLIGHT_WATCHDOG_INTERVAL_MS = 1_000;
+const BUFFERING_NOTICE_DELAY_MS = 1_500;
+const SOURCE_SPEED_HINT_TTL_MS = 10 * 60 * 1000;
+const MAX_SOURCE_SPEED_HINTS = 50;
+
+interface SourceSpeedHintEntry {
+  ewmaSpeedRatio: number;
+  ewmaTtfbMs: number | null;
+  updatedAt: number;
+}
+
+const sourceSpeedHints = new Map<string, SourceSpeedHintEntry>();
+
+export function clearDynamicBufferSpeedHints(): void {
+  sourceSpeedHints.clear();
+}
+
+function resolveSpeedHintKey(
+  sourceKey?: string,
+  streamUrl?: string,
+): string | null {
+  let host = '';
+  if (streamUrl) {
+    try {
+      host = new URL(streamUrl).hostname;
+    } catch {
+      /* ignore invalid url */
+    }
+  }
+  const source = sourceKey?.trim() || '';
+  if (!source && !host) return null;
+  return `${source}::${host}`;
+}
+
+function saveSourceSpeedHint(
+  key: string | null,
+  entry: SourceSpeedHintEntry,
+): void {
+  if (!key) return;
+  if (sourceSpeedHints.has(key)) {
+    sourceSpeedHints.delete(key);
+  } else if (sourceSpeedHints.size >= MAX_SOURCE_SPEED_HINTS) {
+    const oldestKey = sourceSpeedHints.keys().next().value;
+    if (oldestKey) sourceSpeedHints.delete(oldestKey);
+  }
+  sourceSpeedHints.set(key, entry);
+}
+
+function formatThroughput(bps: number | null): string | null {
+  if (typeof bps !== 'number' || !Number.isFinite(bps) || bps <= 0) {
+    return null;
+  }
+  const bytesPerSec = bps / 8;
+  if (bytesPerSec >= 1024 * 1024) {
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  }
+  return `${Math.max(1, Math.round(bytesPerSec / 1024))} KB/s`;
+}
 
 const HLS_EVENTS = {
   FRAG_LOADING: 'hlsFragLoading',
@@ -840,6 +901,9 @@ export function installDynamicBuffer(
 ): DynamicBufferController {
   const now = options.now ?? (() => Date.now());
   const deviceInfo = options.deviceInfo;
+  const getSourceKey = options.getSourceKey;
+  const getStreamUrl = options.getStreamUrl;
+  const hasAlternativeSource = options.hasAlternativeSource;
   let memoryPressure: BufferMemoryPressure =
     options.getMemoryPressure?.() ?? 'low';
   let strategy: BufferStrategy = readBufferStrategyPreference();
@@ -848,9 +912,13 @@ export function installDynamicBuffer(
   let activeHls: DynamicBufferHlsLike | null = null;
   let unbindHlsEvents: (() => void) | null = null;
   let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  let bufferingNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastBufferingNoticeText = '';
 
   // 每个 HLS 会话的实时网络与卡顿遥测
   let sampleCount = 0;
+  // 仅统计本会话真实完成的分片样本，避免历史慢源热启动把死链误判为“有活跃进展”
+  let realSampleCount = 0;
   let ewmaSpeedRatio: number | null = null;
   let ewmaTtfbMs: number | null = null;
   let ewmaBitrateBps: number | null = null;
@@ -869,10 +937,27 @@ export function installDynamicBuffer(
   let isLive = false;
   let hasRenderedPlayback = (resolveArtVideo(art)?.readyState ?? 0) >= 2;
   let slowNoticeShown = false;
+  let switchHintShown = false;
   let lastTooltipText = '';
 
+  const clearBufferingNotice = () => {
+    if (bufferingNoticeTimer) {
+      clearTimeout(bufferingNoticeTimer);
+      bufferingNoticeTimer = null;
+    }
+    if (
+      lastBufferingNoticeText &&
+      art.notice?.show === lastBufferingNoticeText
+    ) {
+      art.notice.show = '';
+    }
+    lastBufferingNoticeText = '';
+  };
+
   const resetSessionTelemetry = () => {
+    clearBufferingNotice();
     sampleCount = 0;
+    realSampleCount = 0;
     ewmaSpeedRatio = null;
     ewmaTtfbMs = null;
     ewmaBitrateBps = null;
@@ -887,6 +972,7 @@ export function installDynamicBuffer(
     isLive = false;
     hasRenderedPlayback = (resolveArtVideo(art)?.readyState ?? 0) >= 2;
     slowNoticeShown = false;
+    switchHintShown = false;
   };
 
   const pruneStalls = (currentNow: number) => {
@@ -998,6 +1084,21 @@ export function installDynamicBuffer(
 
     if (
       options?.allowNotice &&
+      hasRenderedPlayback &&
+      memoryPressure === 'low' &&
+      !isLive &&
+      !switchHintShown &&
+      recentStallTimestamps.length >= 2 &&
+      plan.speedTier === 'very_slow' &&
+      art.notice &&
+      hasAlternativeSource?.()
+    ) {
+      switchHintShown = true;
+      slowNoticeShown = true;
+      lastBufferingNoticeText = '';
+      art.notice.show = '当前播放源持续卡顿，可点击右侧「换源」切换更流畅线路';
+    } else if (
+      options?.allowNotice &&
       strategy === 'auto' &&
       !slowNoticeShown &&
       hasRenderedPlayback &&
@@ -1015,6 +1116,16 @@ export function installDynamicBuffer(
     return plan;
   };
 
+  const persistSpeedHint = (currentNow: number) => {
+    if (ewmaSpeedRatio === null) return;
+    const hintKey = resolveSpeedHintKey(getSourceKey?.(), getStreamUrl?.());
+    saveSourceSpeedHint(hintKey, {
+      ewmaSpeedRatio,
+      ewmaTtfbMs,
+      updatedAt: currentNow,
+    });
+  };
+
   const recordStall = (boostSeconds: number, allowNotice: boolean) => {
     const currentNow = now();
     if (currentNow - lastStallAt >= STALL_DEBOUNCE_MS) {
@@ -1025,6 +1136,10 @@ export function installDynamicBuffer(
       );
       lastStallAt = currentNow;
       lastDecayAt = currentNow;
+      if (ewmaSpeedRatio === null) {
+        ewmaSpeedRatio = 1.2;
+      }
+      persistSpeedHint(currentNow);
     }
     recomputeAndApply({ allowNotice });
   };
@@ -1078,6 +1193,7 @@ export function installDynamicBuffer(
   }
 
   const detachHls = () => {
+    clearBufferingNotice();
     unbindHlsEvents?.();
     unbindHlsEvents = null;
     activeHls = null;
@@ -1100,6 +1216,25 @@ export function installDynamicBuffer(
     detachHls();
     resetSessionTelemetry();
     activeHls = hls;
+
+    // 同源/同 CDN 换集热启动：若近期已测出慢源，首片即直接按慢源档位缓冲
+    const hintKey = resolveSpeedHintKey(getSourceKey?.(), getStreamUrl?.());
+    const hint = hintKey ? sourceSpeedHints.get(hintKey) : undefined;
+    if (hint && now() - hint.updatedAt <= SOURCE_SPEED_HINT_TTL_MS) {
+      const hintTier = classifySourceSpeedTier({
+        ewmaSpeedRatio: hint.ewmaSpeedRatio,
+        inFlightSlowRatio: null,
+        ewmaTtfbMs: hint.ewmaTtfbMs,
+        recentStallsCount: 0,
+        playbackRate: resolveArtVideo(art)?.playbackRate ?? 1,
+        sampleCount: 1,
+      });
+      if (hintTier === 'slow' || hintTier === 'very_slow') {
+        ewmaSpeedRatio = hint.ewmaSpeedRatio;
+        ewmaTtfbMs = hint.ewmaTtfbMs;
+        sampleCount = 1;
+      }
+    }
 
     if (typeof hls.on === 'function') {
       const onFragLoading = (_event: unknown, data: unknown) => {
@@ -1180,6 +1315,7 @@ export function installDynamicBuffer(
         }
 
         sampleCount += 1;
+        realSampleCount += 1;
         const rawRatio = clamp((durationSec * 1000) / totalLoadMs, 0.1, 20);
         const alphaRatio =
           ewmaSpeedRatio === null ? 1 : rawRatio < ewmaSpeedRatio ? 0.45 : 0.18;
@@ -1223,6 +1359,7 @@ export function installDynamicBuffer(
                 alphaTp * (sampleThroughput - ewmaThroughputBps);
         }
 
+        persistSpeedHint(now());
         recomputeAndApply({ allowNotice: true });
       };
 
@@ -1348,19 +1485,23 @@ export function installDynamicBuffer(
   const video = resolveArtVideo(art);
   const onPlaying = () => {
     hasRenderedPlayback = true;
+    clearBufferingNotice();
     recomputeAndApply();
   };
   const onCanPlay = () => {
     hasRenderedPlayback = true;
+    clearBufferingNotice();
     recomputeAndApply();
   };
   const onPause = () => {
+    clearBufferingNotice();
     recomputeAndApply();
   };
   const onRateChange = () => {
     recomputeAndApply();
   };
   const onSeeking = () => {
+    clearBufferingNotice();
     inFlightFrag = null;
     inFlightSlowRatio = null;
     syncWatchdog();
@@ -1377,6 +1518,35 @@ export function installDynamicBuffer(
       return;
     }
     recordStall(30, true);
+    if (!bufferingNoticeTimer && !disposed) {
+      bufferingNoticeTimer = setTimeout(() => {
+        bufferingNoticeTimer = null;
+        if (disposed) return;
+        const currentVideo = resolveArtVideo(art);
+        if (
+          !currentVideo ||
+          currentVideo.paused ||
+          currentVideo.seeking ||
+          currentVideo.ended ||
+          currentVideo.readyState >= 3
+        ) {
+          return;
+        }
+        const plan = buildPlan(now());
+        const bufferedSec = getForwardBufferedSeconds(currentVideo).toFixed(1);
+        const speedText = formatThroughput(ewmaThroughputBps);
+        const msg = speedText
+          ? `正在缓冲（已缓 ${bufferedSec}s，约 ${speedText}），预缓冲上限 ${plan.maxBufferLength}s`
+          : `正在缓冲（已缓 ${bufferedSec}s），已提高预缓冲上限至 ${plan.maxBufferLength}s`;
+        if (
+          art.notice &&
+          (!art.notice.show || art.notice.show === lastBufferingNoticeText)
+        ) {
+          lastBufferingNoticeText = msg;
+          art.notice.show = msg;
+        }
+      }, BUFFERING_NOTICE_DELAY_MS);
+    }
   };
 
   video?.addEventListener('playing', onPlaying);
@@ -1407,6 +1577,7 @@ export function installDynamicBuffer(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    clearBufferingNotice();
     if (watchdogTimer) {
       clearInterval(watchdogTimer);
       watchdogTimer = null;
@@ -1464,6 +1635,10 @@ export function installDynamicBuffer(
         isLive,
         memoryPressure,
         quotaCapSeconds,
+        hasActiveProgress:
+          realSampleCount > 0 ||
+          inFlightFrag !== null ||
+          (activeHls?.levels?.length ?? 0) > 0,
         plan,
       };
     },

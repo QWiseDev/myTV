@@ -31,6 +31,7 @@ import {
   type DynamicBufferController,
   installDynamicBuffer,
 } from '../utils/dynamicBuffer';
+import { prefetchNextEpisodeMedia } from '../utils/episodePrefetch';
 import { createAdFilterHlsLoader } from '../utils/hlsAdFilterLoader';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
 import {
@@ -197,6 +198,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const bufferStartAtRef = useRef<number>(0);
   const lastPlayTimeRef = useRef<number>(0);
   const dynamicBufferRef = useRef<DynamicBufferController | null>(null);
+  const nextEpisodePrefetchControllerRef = useRef<AbortController | null>(null);
+  const prefetchedEpisodeUrlRef = useRef<string>('');
 
   const {
     videoUrl,
@@ -214,6 +217,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
   useEffect(() => {
     return () => {
+      nextEpisodePrefetchControllerRef.current?.abort();
+      nextEpisodePrefetchControllerRef.current = null;
       dynamicBufferRef.current?.dispose();
       dynamicBufferRef.current = null;
     };
@@ -224,6 +229,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     const mediaSession = ++mediaSessionRef.current;
     autoPlayFallbackDoneRef.current = false;
     sourceFailureHandledRef.current = false;
+    prefetchedEpisodeUrlRef.current = '';
+    nextEpisodePrefetchControllerRef.current?.abort();
+    nextEpisodePrefetchControllerRef.current = null;
     const isCurrentInitialization = () =>
       initializationGenerationRef.current === generation;
 
@@ -348,7 +356,19 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       showPlayerNotice(finalNotice);
     };
 
-    const scheduleMediaLoadingTimeout = (artPlayer: PlayArtplayer) => {
+    const hasUnfailedAlternativeSource = () => {
+      const active = latestParamsRef.current;
+      return active.availableSourcesRef.current.some(
+        (s) =>
+          !s.failed &&
+          !(s.source === active.currentSource && s.id === active.currentId),
+      );
+    };
+
+    const scheduleMediaLoadingTimeout = (
+      artPlayer: PlayArtplayer,
+      graceExtended = false,
+    ) => {
       clearMediaLoadingTimeout();
 
       const timeoutId = setTimeout(() => {
@@ -375,6 +395,18 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         ) {
           setLoading(false);
           setIsVideoLoading(false);
+          return;
+        }
+
+        // 无备用源可切且当前 HLS 已拉取清单或分片正在下载时，给一次额外缓冲宽限期
+        const bufferSnapshot = dynamicBufferRef.current?.getSnapshot();
+        if (
+          !graceExtended &&
+          !hasUnfailedAlternativeSource() &&
+          bufferSnapshot?.hasActiveProgress
+        ) {
+          showPlayerNotice('当前源起播较慢，仍在努力缓冲中...');
+          scheduleMediaLoadingTimeout(artPlayer, true);
           return;
         }
 
@@ -655,10 +687,15 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         const dynamicBuffer = installDynamicBuffer(artPlayer, {
           deviceInfo: { isMobile, isIOS, isIOS13 },
           getMemoryPressure: () => latestParamsRef.current.memoryPressure,
+          getSourceKey: () => latestParamsRef.current.currentSource,
+          getStreamUrl: () => latestParamsRef.current.videoUrl,
+          hasAlternativeSource: hasUnfailedAlternativeSource,
         });
         dynamicBufferRef.current = dynamicBuffer;
         const originalDestroyForBuffer = artPlayer.destroy;
         artPlayer.destroy = function (removeHtml?: boolean) {
+          nextEpisodePrefetchControllerRef.current?.abort();
+          nextEpisodePrefetchControllerRef.current = null;
           dynamicBuffer.dispose();
           if (dynamicBufferRef.current === dynamicBuffer) {
             dynamicBufferRef.current = null;
@@ -1039,6 +1076,34 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             saveCurrentPlayProgress();
             lastSaveTimeRef.current = saveNow;
           }
+
+          // 临近片尾时提前预热下一集清单与首片，缩短连播切集等待
+          const d = detailRef.current;
+          const idx = currentEpisodeIndexRef.current;
+          const nextEpisodeUrl = d?.episodes?.[idx + 1]?.trim();
+          const bufferSnapshot = dynamicBufferRef.current?.getSnapshot();
+          if (
+            nextEpisodeUrl &&
+            nextEpisodeUrl !== prefetchedEpisodeUrlRef.current &&
+            duration >= 60 &&
+            currentTime > 0 &&
+            duration - currentTime <= 25 &&
+            duration - currentTime > 1 &&
+            !artPlayer.paused &&
+            latestParamsRef.current.memoryPressure === 'low' &&
+            bufferSnapshot?.strategy !== 'balanced' &&
+            bufferSnapshot?.speedTier !== 'very_slow'
+          ) {
+            prefetchedEpisodeUrlRef.current = nextEpisodeUrl;
+            nextEpisodePrefetchControllerRef.current?.abort();
+            const controller = new AbortController();
+            nextEpisodePrefetchControllerRef.current = controller;
+            void prefetchNextEpisodeMedia(nextEpisodeUrl, {
+              sourceKey: latestParamsRef.current.currentSource,
+              adFilterType: latestParamsRef.current.currentSource,
+              signal: controller.signal,
+            });
+          }
         });
 
         artPlayer.on('video:seeked', () => {
@@ -1105,6 +1170,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       if (initializationGenerationRef.current === generation) {
         initializationGenerationRef.current += 1;
       }
+      nextEpisodePrefetchControllerRef.current?.abort();
+      nextEpisodePrefetchControllerRef.current = null;
       clearMediaLoadingTimeout();
     };
   }, [

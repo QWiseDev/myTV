@@ -4,6 +4,7 @@ import {
   type DynamicBufferHlsLike,
   type DynamicBufferSettingItem,
   classifySourceSpeedTier,
+  clearDynamicBufferSpeedHints,
   computeDynamicBufferTarget,
   getForwardBufferedSeconds,
   installDynamicBuffer,
@@ -459,11 +460,13 @@ describe('computeDynamicBufferTarget', () => {
 describe('installDynamicBuffer runtime controller', () => {
   beforeEach(() => {
     localStorage.clear();
+    clearDynamicBufferSpeedHints();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+    clearDynamicBufferSpeedHints();
   });
 
   test('reacts to slow fragments, updates hls.config, and updates tooltip in-place', () => {
@@ -671,6 +674,97 @@ describe('installDynamicBuffer runtime controller', () => {
 
     art.emit('destroy');
     expect(hlsB.listenerCount('hlsFragLoaded')).toBe(0);
+    controller.dispose();
+  });
+
+  test('warm-starts next episode on the same slow source and clears hints cleanly', () => {
+    let clock = 10_000;
+    const video = createMockVideo();
+    const art = createMockArt(video);
+    const hlsEp1 = createMockHls();
+    const hlsEp2 = createMockHls();
+    video.hls = hlsEp1;
+
+    const controller = installDynamicBuffer(art, {
+      deviceInfo: { isMobile: false, isIOS: false, isIOS13: false },
+      getSourceKey: () => 'site-slow',
+      getStreamUrl: () => 'https://slow-cdn.example/ep1.m3u8',
+      now: () => clock,
+    });
+
+    clock = 14_000;
+    hlsEp1.emit('hlsFragLoaded', {
+      frag: {
+        sn: 1,
+        type: 'main',
+        duration: 5,
+        stats: {
+          loaded: 2_000_000,
+          loading: { start: 10_000, first: 11_200, end: 14_000 },
+        },
+      },
+    });
+    expect(hlsEp1.config?.maxBufferLength).toBe(300);
+
+    // 切到同源下一集（新 HLS 实例，清单尚未解析完成），首片尚未加载即热启动至极慢强缓档位，
+    // 但由于新会话尚无真实分片/档位到达，hasActiveProgress 应为 false（不误给死链宽限期）
+    clock = 20_000;
+    hlsEp2.levels = [];
+    video.hls = hlsEp2;
+    art.emit('restart');
+    expect(hlsEp2.config?.maxBufferLength).toBe(300);
+    expect(controller.getSnapshot().hasActiveProgress).toBe(false);
+
+    controller.dispose();
+  });
+
+  test('shows live buffering rate on waiting >1.5s, clears on playing, and suggests switching on repeated stalls', () => {
+    jest.useFakeTimers();
+    let clock = 1_000;
+    const video = createMockVideo();
+    video.readyState = 2;
+    const art = createMockArt(video);
+    const hls = createMockHls();
+    video.hls = hls;
+
+    const controller = installDynamicBuffer(art, {
+      deviceInfo: { isMobile: false, isIOS: false, isIOS13: false },
+      hasAlternativeSource: () => true,
+      now: () => clock,
+    });
+
+    // 先测出一个吞吐样本
+    clock = 3_500;
+    hls.emit('hlsFragLoaded', {
+      frag: {
+        sn: 1,
+        type: 'main',
+        duration: 5,
+        stats: {
+          loaded: 1_250_000,
+          loading: { start: 1_000, first: 1_400, end: 3_500 },
+        },
+      },
+    });
+    if (art.notice) art.notice.show = '';
+
+    // 第一次卡顿超过 1.5s -> 提示实时缓冲速率，恢复播放后自动清除
+    clock = 5_000;
+    video.emit('waiting');
+    jest.advanceTimersByTime(1500);
+    expect(art.notice?.show).toContain('正在缓冲');
+    expect(art.notice?.show).toContain('KB/s');
+
+    video.readyState = 4;
+    video.emit('playing');
+    expect(art.notice?.show).toBe('');
+
+    // 短时间内连续第二次卡顿且仍为极慢 -> 提示可右侧换源
+    clock = 10_000;
+    video.readyState = 2;
+    video.emit('waiting');
+    expect(art.notice?.show).toContain('换源');
+
     controller.dispose();
   });
 });

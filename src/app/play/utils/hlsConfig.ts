@@ -262,23 +262,12 @@ export function getOptimizedHlsConfig(
           : 70 * 1000 * 1000
       : 150 * 1000 * 1000,
 
-    // 增强的MediaSource配置
-    maxAudioBufferSize: 40 * 1000 * 1000,
-    maxVideoBufferSize: isMobile
-      ? isIOS13
-        ? 50 * 1000 * 1000
-        : isIOS
-          ? 60 * 1000 * 1000
-          : 70 * 1000 * 1000
-      : 150 * 1000 * 1000,
-
     /* 网络加载优化 - 参考 defaultLoadPolicy */
     maxLoadingDelay: isMobile ? (isIOS13 ? 2 : 3) : 4, // iOS13+设备更快超时
     maxBufferHole: isMobile ? (isIOS13 ? 0.05 : 0.1) : 0.1, // 减少缓冲洞容忍度
 
     /* Fragment管理 - 参考官方配置 */
     liveDurationInfinity: false, // 避免无限缓冲 (官方默认false)
-    liveBackBufferLength: isMobile ? (isIOS13 ? 3 : 5) : undefined, // 已废弃，保持兼容
 
     /* 高级优化配置 - 参考 StreamControllerConfig */
     maxMaxBufferLength: isMobile ? (isIOS13 ? 90 : 180) : 180, // 慢网大分片时目标可拉伸的硬顶

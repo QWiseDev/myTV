@@ -1,5 +1,6 @@
 import type { SearchResult } from '@/lib/types';
 
+import { smartCache } from './smartCache';
 import { markSourceFailedAndFindNext } from './sourceFailover';
 
 function createSource(overrides: Partial<SearchResult>): SearchResult {
@@ -120,5 +121,77 @@ describe('sourceFailover', () => {
 
     expect(result.sources[1].failed).toBeUndefined();
     expect(result.nextSource).toBe(other);
+  });
+
+  test('优先选择 smartCache 中更稳定且速度更快的备用源', () => {
+    const current = createSource({
+      source: 's1',
+      id: 'a',
+      episodes: ['https://bad.example/ep1.m3u8'],
+    });
+    const slowBackup = createSource({
+      source: 's2',
+      id: 'b',
+      episodes: ['https://slow-cdn.example/ep1.m3u8'],
+    });
+    const fastBackup = createSource({
+      source: 's3',
+      id: 'c',
+      episodes: ['https://fast-cdn.example/ep1.m3u8'],
+    });
+
+    smartCache.set('https://slow-cdn.example/ep1.m3u8', {
+      quality: '1080p',
+      loadSpeed: '300 KB/s',
+      pingTime: 1800,
+      success: false,
+    });
+    smartCache.set('https://fast-cdn.example/ep1.m3u8', {
+      quality: '1080p',
+      loadSpeed: '5.0 MB/s',
+      pingTime: 120,
+      success: true,
+    });
+
+    const result = markSourceFailedAndFindNext(
+      [current, slowBackup, fastBackup],
+      { source: 's1', id: 'a' },
+      { failedUrl: 'https://bad.example/ep1.m3u8', episodeIndex: 0 },
+    );
+
+    expect(result.nextSource).toBe(fastBackup);
+  });
+
+  test('已知全失败域名的评分低于未测过的备用源，避免重试已知故障源', () => {
+    const current = createSource({
+      source: 's1',
+      id: 'a',
+      episodes: ['https://cur-bad.example/ep1.m3u8'],
+    });
+    const knownBroken = createSource({
+      source: 's2',
+      id: 'b',
+      episodes: ['https://always-fail.example/ep1.m3u8'],
+    });
+    const untested = createSource({
+      source: 's3',
+      id: 'c',
+      episodes: ['https://fresh-untested.example/ep1.m3u8'],
+    });
+
+    smartCache.set('https://always-fail.example/ep1.m3u8', {
+      quality: '未知',
+      loadSpeed: '未知',
+      pingTime: 50,
+      success: false,
+    });
+
+    const result = markSourceFailedAndFindNext(
+      [current, knownBroken, untested],
+      { source: 's1', id: 'a' },
+      { failedUrl: 'https://cur-bad.example/ep1.m3u8', episodeIndex: 0 },
+    );
+
+    expect(result.nextSource).toBe(untested);
   });
 });

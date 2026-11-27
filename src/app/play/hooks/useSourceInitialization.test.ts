@@ -311,6 +311,8 @@ describe('useSourceInitialization', () => {
     });
     expect(params.setCurrentSource).toHaveBeenCalledWith('site-requested');
     expect(params.setCurrentId).toHaveBeenCalledWith('39394');
+    // 就绪后直接结束加载，不再人为阻塞 1000ms
+    expect(params.setLoading).toHaveBeenLastCalledWith(false);
   });
 
   test('isolates adult source (jp98.vip) enrichment to adult group and never mixes regular sources', async () => {

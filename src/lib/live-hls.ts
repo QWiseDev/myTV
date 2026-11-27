@@ -181,8 +181,34 @@ export function m3u8Loader(
   hls.attachMedia(video);
   video.hls = hls;
 
+  let liveStallCount = 0;
+
   hls.on(Hls.Events.ERROR, function (event: any, data: any) {
     console.error('HLS Error:', event, data);
+
+    // 弱网直播卡顿温和退避：适度放宽缓冲并关闭低延迟追帧，减少反复微卡顿
+    const hlsConfig = (
+      hls as unknown as {
+        config?: { maxBufferLength?: number; lowLatencyMode?: boolean };
+      }
+    ).config;
+    if (
+      !data?.fatal &&
+      data?.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR &&
+      hlsConfig
+    ) {
+      liveStallCount += 1;
+      const currentMax =
+        typeof hlsConfig.maxBufferLength === 'number'
+          ? hlsConfig.maxBufferLength
+          : 30;
+      if (currentMax < 45) {
+        hlsConfig.maxBufferLength = Math.min(45, currentMax + 10);
+      }
+      if (liveStallCount >= 2 && hlsConfig.lowLatencyMode) {
+        hlsConfig.lowLatencyMode = false;
+      }
+    }
 
     // 使用最新版本的错误详情类型
     if (data.details === Hls.ErrorDetails.KEY_LOAD_ERROR) {
