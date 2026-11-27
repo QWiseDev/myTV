@@ -1,7 +1,7 @@
 import { MessageSquare } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { MutableRefObject } from 'react';
-import { forwardRef, useEffect, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 
 import type { ArtPlayerLike } from '@/app/play/utils/danmakuRuntime';
 
@@ -13,6 +13,8 @@ interface PlayerContainerProps {
   // 播放器状态
   isVideoLoading?: boolean;
   videoLoadingStage?: string;
+  /** 播放器实例版本号：换源重建 Artplayer 实例时递增，驱动子组件重绑事件 */
+  playerInstanceId?: number;
 
   // 跳过设置
   currentSource?: string;
@@ -38,6 +40,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
     {
       isVideoLoading,
       videoLoadingStage,
+      playerInstanceId = 0,
       currentSource,
       currentId,
       detailTitle,
@@ -61,6 +64,8 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
         !!window.matchMedia?.('(pointer: coarse)')?.matches,
     );
     const [isHovered, setIsHovered] = useState(false);
+    const isHoveredRef = useRef(isHovered);
+    isHoveredRef.current = isHovered;
     const showOverlay = isCoarsePointer || isHovered;
 
     // 广告免责提示：仅起播/换集后显示 6 秒淡出，避免常驻遮挡画面
@@ -72,11 +77,27 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
       return () => clearTimeout(timer);
     }, [currentSource, currentId, episodeIndex]);
 
-    // 底部进度条跟随悬停：播放中移开鼠标即隐藏，暂停/悬停时显示
+    // 悬停变化时立即同步控制栏显隐（无需等 300ms 轮询）
+    useEffect(() => {
+      if (isCoarsePointer) return;
+      const art = artPlayerRef.current as
+        | (ArtPlayerLike & {
+            controls?: { show: boolean };
+            playing?: boolean;
+          })
+        | null;
+      if (art?.controls) {
+        art.controls.show = isHovered || !art.playing;
+      }
+    }, [isHovered, isCoarsePointer, artPlayerRef]);
+
+    // 底部进度条跟随播放/暂停态：按播放器实例生命周期绑定并正确解绑，避免悬停泄漏监听器
     useEffect(() => {
       if (isCoarsePointer) return;
       let attempts = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
+      let detach: (() => void) | null = null;
+
       const attach = () => {
         const art = artPlayerRef.current as
           | (ArtPlayerLike & {
@@ -88,29 +109,40 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
           | null;
         const controls = art?.controls;
         if (!art || !controls) return false;
-        const apply = () => {
-          controls.show = isHovered || !art.playing;
-        };
-        apply();
+
+        controls.show = isHoveredRef.current || !art.playing;
+
         const onPlay = () => {
-          if (!isHovered) controls.show = false;
+          if (!isHoveredRef.current) controls.show = false;
         };
         const onPause = () => {
           controls.show = true;
         };
         art.on?.('video:play', onPlay);
         art.on?.('video:pause', onPause);
+        detach = () => {
+          art.off?.('video:play', onPlay);
+          art.off?.('video:pause', onPause);
+        };
         return true;
       };
-      timer = setInterval(() => {
-        if (attach() || ++attempts > 20) {
-          if (timer) clearInterval(timer);
-        }
-      }, 300);
+
+      if (!attach()) {
+        timer = setInterval(() => {
+          if (attach() || ++attempts > 20) {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        }, 300);
+      }
+
       return () => {
         if (timer) clearInterval(timer);
+        detach?.();
       };
-    }, [isHovered, isCoarsePointer, artPlayerRef]);
+    }, [isCoarsePointer, artPlayerRef, playerInstanceId]);
 
     return (
       <div className='transition-all duration-300 ease-in-out rounded-xl border border-white/0 dark:border-white/30 h-full'>
@@ -268,6 +300,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
               title={detailTitle}
               episodeIndex={episodeIndex}
               artPlayerRef={artPlayerRef}
+              playerInstanceId={playerInstanceId}
               duration={duration}
               isSettingMode={isSkipSettingOpen}
               onSettingModeChange={onSkipSettingChange}

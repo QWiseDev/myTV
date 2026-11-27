@@ -64,8 +64,10 @@ export const usePlayRecordSync = ({
   artPlayerRef,
   isRestoringFromRecordRef,
 }: UsePlayRecordSyncOptions) => {
-  // 使用 useRef 来跟踪上次的播放记录，避免引用变化导致的无限循环
-  const lastPlayRecordsRef = useRef<Record<string, PlayRecord> | null>(null);
+  // 使用 useRef 来跟踪上次应用的播放记录，避免引用变化导致的重复处理
+  const lastRecordRef = useRef<{ key: string; record: PlayRecord } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!currentSource || !currentId || !playRecords || totalEpisodes <= 0) {
@@ -76,21 +78,21 @@ export const usePlayRecordSync = ({
       const key = generateStorageKey(currentSource, currentId);
       const record = playRecords[key];
 
-      // 🔧 修复：检查播放记录是否真的发生了变化，避免引用变化导致的无限循环
-      const lastRecord = lastPlayRecordsRef.current?.[key];
+      const lastEntry = lastRecordRef.current;
+      const lastRecord = lastEntry?.key === key ? lastEntry.record : undefined;
 
-      // 只有当两个记录都存在且内容完全相同时才跳过
+      // 仅比较关键字段，避免每次渲染深拷贝与 JSON.stringify
       if (
         lastRecord &&
         record &&
-        JSON.stringify(lastRecord) === JSON.stringify(record)
+        lastRecord.index === record.index &&
+        lastRecord.play_time === record.play_time &&
+        lastRecord.save_time === record.save_time
       ) {
-        // 播放记录内容没有变化，跳过处理
         return;
       }
 
-      // 更新上次播放记录的引用
-      lastPlayRecordsRef.current = { ...playRecords };
+      lastRecordRef.current = record ? { key, record } : null;
 
       if (playRecordKeyRef.current !== key) {
         playRecordKeyRef.current = key;
@@ -103,18 +105,15 @@ export const usePlayRecordSync = ({
 
       const targetIndex = record.index - 1;
       const targetTime = record.play_time;
+      const isValidTargetEpisode =
+        targetIndex >= 0 && targetIndex < totalEpisodes;
+      const isSameEpisodeRecord =
+        targetIndex === currentEpisodeIndexRef.current;
 
-      if (
-        targetIndex >= 0 &&
-        targetIndex < totalEpisodes &&
-        targetIndex !== currentEpisodeIndexRef.current
-      ) {
+      if (isValidTargetEpisode && !isSameEpisodeRecord) {
         isRestoringFromRecordRef.current = true;
         setCurrentEpisodeIndex(targetIndex);
       }
-
-      const isSameEpisodeRecord =
-        targetIndex === currentEpisodeIndexRef.current;
 
       // 首次挂载时 useEpisodeDanmuSync 会先标记一次“集数切换”以装载 URL。
       // 如果播放记录正好是当前集，仍应恢复进度，否则刷新首集会从头播放。
@@ -130,23 +129,21 @@ export const usePlayRecordSync = ({
         resumeTimeRef.current = targetTime;
         isRestoringFromRecordRef.current = true;
 
-        // 🔥 关键修复：如果播放器已经就绪，尝试立即恢复进度
-        if (artPlayerRef?.current) {
+        // 仅当播放器当前已在播放目标集时才尝试即时 seek；
+        // 若即将切换到其他集，必须保留 resumeTimeRef 交由目标集的 video:canplay 消费，
+        // 避免误 seek 旧集并提前清空 resumeTimeRef 导致目标集从 00:00 起播。
+        if (isSameEpisodeRecord && artPlayerRef?.current) {
           const player = artPlayerRef.current;
 
-          // 🎯 使用多种方式获取视频时长,确保能够获取到有效值
           const duration =
             player.duration ||
             player.video?.duration ||
             player?.$video?.duration ||
             0;
 
-          // 🔥 修复：即使 duration 为 0，也要设置 currentTime
-          // 因为视频可能还在加载中，直接设置 currentTime 会让播放器在加载完成后跳转到该位置
           if (player.video || player.$video) {
             let target = targetTime;
 
-            // 只有在知道视频时长的情况下才调整目标时间
             if (duration && !Number.isNaN(duration) && duration > 0) {
               if (target >= duration - 2) {
                 target = Math.max(0, duration - 5);
@@ -154,17 +151,13 @@ export const usePlayRecordSync = ({
             }
 
             try {
-              // 🔥 直接设置 video 元素的 currentTime，更可靠
               const videoElement = player.video || player.$video;
               if (videoElement) {
                 videoElement.currentTime = target;
               }
 
-              // 同时也设置播放器的 currentTime（双重保障）
               player.currentTime = target;
 
-              // 🔥 关键：只有在视频已经加载了足够数据时才清空 resumeTimeRef
-              // readyState >= 2 表示至少有当前帧的数据
               const readyState = videoElement?.readyState || 0;
               if (readyState >= 2) {
                 resumeTimeRef.current = null;
@@ -172,19 +165,12 @@ export const usePlayRecordSync = ({
               }
             } catch (error) {
               console.warn('即时恢复播放进度失败，将等待播放器事件:', error);
-              // 保留 resumeTimeRef，等待 video:canplay 事件再次恢复
             }
           }
         }
-      }
-
-      // 🎯 集数变化时更新状态，重置恢复标记避免循环
-      if (
-        targetIndex >= 0 &&
-        targetIndex < totalEpisodes &&
-        targetIndex !== currentEpisodeIndexRef.current
-      ) {
-        isRestoringFromRecordRef.current = false; // 确保用户手动操作时重置恢复标记
+      } else if (isValidTargetEpisode && !isSameEpisodeRecord) {
+        // 无有效续播时间时无需继续保持恢复标记
+        isRestoringFromRecordRef.current = false;
       }
 
       playRecordAppliedRef.current = true;

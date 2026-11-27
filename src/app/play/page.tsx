@@ -825,7 +825,7 @@ function PlayPageClient() {
     isSkipControllerTriggeredRef,
   });
 
-  usePlayerInitializer({
+  const { playerInstanceId } = usePlayerInitializer({
     videoUrl,
     loading,
     currentEpisodeIndex,
@@ -949,6 +949,7 @@ function PlayPageClient() {
             playerProps={{
               isVideoLoading,
               videoLoadingStage,
+              playerInstanceId,
               currentSource,
               currentId,
               detailTitle: detail?.title,
@@ -1030,7 +1031,7 @@ function PlayPageDataBoundary() {
   }, [routeQuery]);
 
   return (
-    <PlaybackDataProvider includePlayRecordKeys={includePlayRecordKeys}>
+    <PlaybackDataProvider includePlayRecordKeys={includePlayRecordKeys} eager>
       <PlayPageClient />
     </PlaybackDataProvider>
   );

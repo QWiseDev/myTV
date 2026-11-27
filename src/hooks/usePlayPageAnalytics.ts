@@ -314,14 +314,19 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     [videoId, getCurrentSessionTime, trackFeatureUsage],
   );
 
+  // 用 ref 镜像高频/延迟变化字段，避免 duration 异步更新触发 effect cleanup 误报 play_session_end
+  const durationRef = useRef(options.duration);
+  durationRef.current = options.duration;
+
   // 会话结束统计
   const trackSessionEnd = useCallback(() => {
     const totalWatchTime = getTotalWatchTime();
     const sessionDuration =
       playStartTimeRef.current > 0 ? Date.now() - playStartTimeRef.current : 0;
+    const currentDuration = durationRef.current;
     const completionRate =
-      options.duration && options.duration > 0
-        ? Math.min((totalWatchTime / options.duration) * 100, 100)
+      currentDuration && currentDuration > 0
+        ? Math.min((totalWatchTime / currentDuration) * 100, 100)
         : 0;
 
     trackFeatureUsage('play_session_end', true, {
@@ -352,23 +357,21 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
         },
       });
     }
-  }, [
-    videoId,
-    options.duration,
-    getTotalWatchTime,
-    trackFeatureUsage,
-    trackConversion,
-  ]);
+  }, [videoId, getTotalWatchTime, trackFeatureUsage, trackConversion]);
+
+  const trackSessionEndRef = useRef(trackSessionEnd);
+  trackSessionEndRef.current = trackSessionEnd;
 
   // 页面离开时触发：beforeunload 阶段请求不可靠，改用 visibilitychange/pagehide
+  // 仅在真正挂载/卸载时绑定，避免中间状态变动在 cleanup 阶段误报会话结束
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        trackSessionEnd();
+        trackSessionEndRef.current();
       }
     };
     const handlePageHide = () => {
-      trackSessionEnd();
+      trackSessionEndRef.current();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -376,9 +379,9 @@ export function usePlayPageAnalytics(options: PlayPageAnalyticsOptions) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handlePageHide);
-      trackSessionEnd();
+      trackSessionEndRef.current();
     };
-  }, [trackSessionEnd]);
+  }, []);
 
   return {
     // 播放控制

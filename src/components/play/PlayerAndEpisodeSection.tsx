@@ -69,6 +69,7 @@ export default function PlayerAndEpisodeSection({
 }: PlayerAndEpisodeSectionProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showInfoOverlay, setShowInfoOverlay] = useState(false);
+  const [hasOpenedInfo, setHasOpenedInfo] = useState(false);
   const [showDanmuModal, setShowDanmuModal] = useState(false);
 
   return (
@@ -108,8 +109,11 @@ export default function PlayerAndEpisodeSection({
                       弹幕
                     </button>
                     <button
-                      onClick={() => setShowInfoOverlay(true)}
-                      className='text-xs text-gray-400 transition-colors hover:text-white'
+                      onClick={() => {
+                        setHasOpenedInfo(true);
+                        setShowInfoOverlay(true);
+                      }}
+                      className='text-xs text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                     >
                       详情 &gt;
                     </button>
@@ -132,11 +136,12 @@ export default function PlayerAndEpisodeSection({
               </div>
             </div>
 
-            {/* 详情覆盖面板（点击「详情 >」展开，× 关闭） */}
+            {/* 详情覆盖面板（点击「详情 >」展开，× 关闭；首次展开后再挂载详情与短评，避免首屏额外请求） */}
             <div
-              className={`absolute inset-0 z-30 bg-gray-900 dark:bg-[#0d0d0d] transition-transform duration-300 ease-out ${
+              className={`absolute inset-0 z-30 bg-white dark:bg-[#0d0d0d] transition-transform duration-300 ease-out ${
                 showInfoOverlay ? 'translate-x-0' : 'translate-x-full'
               }`}
+              aria-hidden={!showInfoOverlay}
             >
               <div className='flex items-center justify-between px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/60 flex-shrink-0'>
                 <h3 className='text-base font-semibold text-gray-900 dark:text-gray-100'>
@@ -144,7 +149,7 @@ export default function PlayerAndEpisodeSection({
                 </h3>
                 <button
                   onClick={() => setShowInfoOverlay(false)}
-                  className='w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors'
+                  className='w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors'
                   aria-label='关闭详情'
                 >
                   <svg
@@ -163,7 +168,7 @@ export default function PlayerAndEpisodeSection({
                 </button>
               </div>
               <div className='absolute inset-0 top-[52px] overflow-y-auto p-3'>
-                <VideoDetailsPanelDynamic {...infoProps} />
+                {hasOpenedInfo && <VideoDetailsPanelDynamic {...infoProps} />}
               </div>
             </div>
           </div>

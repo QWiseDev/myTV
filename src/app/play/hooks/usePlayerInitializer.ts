@@ -1,7 +1,7 @@
 'use client';
 
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
 import { SearchResult } from '@/lib/types';
@@ -180,6 +180,7 @@ interface UsePlayerInitializerParams {
 }
 
 export function usePlayerInitializer(params: UsePlayerInitializerParams) {
+  const [playerInstanceId, setPlayerInstanceId] = useState(0);
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
   const customAdFilterCodeRef = useCustomAdFilterCode();
@@ -257,11 +258,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       setCurrentEpisodeIndex,
       handleDanmuOperationOptimized,
       handleNextEpisode,
-      handleSourceChange,
       currentSource,
-      currentId,
-      setAvailableSources,
-      availableSourcesRef,
       setIsVideoLoading,
       setLoading,
       videoTitle,
@@ -269,16 +266,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       detailRef,
       currentEpisodeIndexRef,
       resumeTimeRef,
-      memoryPressure,
       externalDanmuEnabledRef,
-      throttledTimeUpdate,
-      saveCurrentPlayProgress,
       lastSaveTimeRef,
       lastVolumeRef,
       lastPlaybackRateRef,
       requestWakeLock,
       releaseWakeLock,
-      analytics,
       ensureVideoSource,
       loadExternalDanmuRef,
       switchPromiseRef,
@@ -316,26 +309,29 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       if (sourceFailureHandledRef.current) return;
       sourceFailureHandledRef.current = true;
       const allowAutoSwitch = options.allowAutoSwitch ?? true;
+      const activeParams = latestParamsRef.current;
+      const activeSource = activeParams.currentSource;
+      const activeId = activeParams.currentId;
       const owner = sourceChangeOwnerRef.current;
       const isUserSwitchInFlight =
         isSourceChangingRef.current && owner?.by === 'user';
       const isUserSwitchTarget =
-        !!owner && owner.source === currentSource && owner.id === currentId;
+        !!owner && owner.source === activeSource && owner.id === activeId;
       const { sources, nextSource } = markSourceFailedAndFindNext(
-        availableSourcesRef.current,
+        activeParams.availableSourcesRef.current,
         {
-          source: currentSource,
-          id: currentId,
+          source: activeSource,
+          id: activeId,
         },
         {
           // 同集播放地址相同的源（常为同一 CDN 的多个聚合站）一并标记失败
-          failedUrl: latestParamsRef.current.videoUrl,
-          episodeIndex: currentEpisodeIndexRef.current,
+          failedUrl: activeParams.videoUrl,
+          episodeIndex: activeParams.currentEpisodeIndexRef.current,
         },
       );
 
-      availableSourcesRef.current = sources;
-      setAvailableSources(sources);
+      activeParams.availableSourcesRef.current = sources;
+      activeParams.setAvailableSources(sources);
 
       if (isUserSwitchInFlight && !isUserSwitchTarget) {
         // 用户手动换源进行中，且报错的是旧播放器：只标记失败并提示，
@@ -347,9 +343,14 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       finishSourceSwitch('当前源失败');
 
       if (allowAutoSwitch && nextSource) {
-        handleSourceChange(nextSource.source, nextSource.id, nextSource.title, {
-          initiatedBy: 'auto',
-        });
+        activeParams.handleSourceChange(
+          nextSource.source,
+          nextSource.id,
+          nextSource.title,
+          {
+            initiatedBy: 'auto',
+          },
+        );
         return;
       }
 
@@ -594,7 +595,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 blockAdEnabled: blockAdEnabledRef.current,
                 customLoader: CustomHlsJsLoader,
               },
-              memoryPressure,
+              latestParamsRef.current.memoryPressure,
               (event, data) => {
                 if (!isActiveHlsSession() || !hls) return;
                 handleHlsError(
@@ -676,6 +677,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         artPlayerRef.current = new Artplayer(playerConfig) as PlayArtplayer;
         const artPlayer = artPlayerRef.current;
+        let readyDanmuTimer: ReturnType<typeof setTimeout> | null = null;
+        // 通知依赖播放器实例的子组件（如 SkipController / PlayerContainer）重绑监听
+        setPlayerInstanceId((id) => id + 1);
         // 左上角初始标题：与换集后的 displayTitle 保持同一格式（换集由 applyPlayerMediaSwitch 更新）
         artPlayer.title = buildDisplayTitle(
           videoTitle,
@@ -694,6 +698,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         dynamicBufferRef.current = dynamicBuffer;
         const originalDestroyForBuffer = artPlayer.destroy;
         artPlayer.destroy = function (removeHtml?: boolean) {
+          if (readyDanmuTimer) {
+            clearTimeout(readyDanmuTimer);
+            readyDanmuTimer = null;
+          }
           nextEpisodePrefetchControllerRef.current?.abort();
           nextEpisodePrefetchControllerRef.current = null;
           dynamicBuffer.dispose();
@@ -755,9 +763,13 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             videoUrl: video.currentSrc || video.src,
           });
 
-          analytics.handlePlayerError('video_element_error', error.message, {
-            error_code: error.code,
-          });
+          latestParamsRef.current.analytics.handlePlayerError(
+            'video_element_error',
+            error.message,
+            {
+              error_code: error.code,
+            },
+          );
 
           setIsVideoLoading(false);
           clearMediaLoadingTimeout();
@@ -789,7 +801,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
                 artPlayer,
                 (fromLabel, toLabel) =>
                   // 手动选档：auto 标记由实现侧默认为 false
-                  analytics.handleQualityChange(fromLabel, toLabel),
+                  latestParamsRef.current.analytics.handleQualityChange(
+                    fromLabel,
+                    toLabel,
+                  ),
               );
               qualityArt.__qualityControls = qualityControls;
               const cleanupSpeed = addSpeedControl(artPlayer);
@@ -815,7 +830,11 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           }
 
           if (externalDanmuEnabledRef.current) {
-            setTimeout(async () => {
+            if (readyDanmuTimer) {
+              clearTimeout(readyDanmuTimer);
+            }
+            readyDanmuTimer = setTimeout(async () => {
+              readyDanmuTimer = null;
               if (!isActivePlayer() || !externalDanmuEnabledRef.current) return;
 
               try {
@@ -872,7 +891,9 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         artPlayer.on('play', () => {
           if (!isActivePlayer()) return;
           requestWakeLock();
-          analytics.handlePlay(artPlayer.currentTime || 0);
+          latestParamsRef.current.analytics.handlePlay(
+            artPlayer.currentTime || 0,
+          );
         });
 
         artPlayer.on('pause', () => {
@@ -882,16 +903,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const duration = artPlayer.duration || 0;
 
           if (!isNearVideoEnd(currentTime, duration)) {
-            saveCurrentPlayProgress();
+            latestParamsRef.current.saveCurrentPlayProgress();
           }
 
-          analytics.handlePause(currentTime, 'user');
+          latestParamsRef.current.analytics.handlePause(currentTime, 'user');
         });
 
         const handleVideoEnded = () => {
           if (!isActivePlayer()) return;
           releaseWakeLock();
-          analytics.trackProgress(100);
+          latestParamsRef.current.analytics.trackProgress(100);
 
           if (!isActivePlayer()) return;
           const idx = currentEpisodeIndexRef.current;
@@ -930,12 +951,16 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         artPlayer.on('video:volumechange', () => {
           if (!isActivePlayer()) return;
           lastVolumeRef.current = artPlayer.volume;
-          analytics.handleVolumeChange(artPlayer.volume);
+          latestParamsRef.current.analytics.handleVolumeChange(
+            artPlayer.volume,
+          );
         });
         artPlayer.on('video:ratechange', () => {
           if (!isActivePlayer()) return;
           lastPlaybackRateRef.current = artPlayer.playbackRate;
-          analytics.handleSpeedChange(artPlayer.playbackRate);
+          latestParamsRef.current.analytics.handleSpeedChange(
+            artPlayer.playbackRate,
+          );
         });
 
         // 缓冲卡顿统计（waiting → playing 为一次完整卡顿）
@@ -943,13 +968,15 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           if (!isActivePlayer()) return;
           if (bufferStartAtRef.current === 0) {
             bufferStartAtRef.current = Date.now();
-            analytics.handleBufferStart();
+            latestParamsRef.current.analytics.handleBufferStart();
           }
         });
         artPlayer.on('video:playing', () => {
           if (!isActivePlayer()) return;
           if (bufferStartAtRef.current > 0) {
-            analytics.handleBufferEnd(Date.now() - bufferStartAtRef.current);
+            latestParamsRef.current.analytics.handleBufferEnd(
+              Date.now() - bufferStartAtRef.current,
+            );
             bufferStartAtRef.current = 0;
           }
         });
@@ -957,7 +984,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         // 全屏切换埋点
         artPlayer.on('fullscreen', (flag: boolean) => {
           if (!isActivePlayer()) return;
-          analytics.handleFullscreenToggle(!!flag);
+          latestParamsRef.current.analytics.handleFullscreenToggle(!!flag);
         });
 
         artPlayer.on('video:canplay', () => {
@@ -1059,7 +1086,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const duration = artPlayer.duration || 0;
 
           lastPlayTimeRef.current = currentTime;
-          throttledTimeUpdate(duration);
+          latestParamsRef.current.throttledTimeUpdate(duration);
           lastDanmakuRecoverAt = recoverStoppedDanmaku(
             artPlayer,
             Date.now(),
@@ -1073,7 +1100,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           const isNearEnd = isNearVideoEnd(currentTime, duration);
 
           if (saveNow - lastSaveTimeRef.current > interval && !isNearEnd) {
-            saveCurrentPlayProgress();
+            latestParamsRef.current.saveCurrentPlayProgress();
             lastSaveTimeRef.current = saveNow;
           }
 
@@ -1111,7 +1138,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           resetDanmakuTimeline(artPlayer);
           // 拖动进度条埋点：拖动距离基于 timeupdate 维护的最近播放位置
           const to = artPlayer.currentTime || 0;
-          analytics.handleSeek(lastPlayTimeRef.current, to);
+          latestParamsRef.current.analytics.handleSeek(
+            lastPlayTimeRef.current,
+            to,
+          );
           lastPlayTimeRef.current = to;
         });
 
@@ -1184,4 +1214,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     customAdFilterCodeRef, // 稳定 ref（非裸 useRef，需显式声明以通过 exhaustive-deps）
     // 其他状态通过 ref 访问，避免不必要的重新初始化
   ]);
+
+  return { playerInstanceId };
 }

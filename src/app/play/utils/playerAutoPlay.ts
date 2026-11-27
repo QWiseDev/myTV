@@ -113,14 +113,19 @@ export function scheduleAutoPlayWithFallback(
         artPlayer.notice.show = '轻触播放按钮开始观看';
 
         let hasHandledFirstInteraction = false;
+        const detachInteractionListeners = () => {
+          artPlayer.off?.('video:play', handleFirstUserInteraction);
+          artPlayer.off?.('destroy', detachInteractionListeners);
+          document.removeEventListener('click', handleDocumentClick);
+        };
         const handleFirstUserInteraction = async () => {
           if (!isActivePlayer()) {
-            artPlayer.off('video:play', handleFirstUserInteraction);
-            document.removeEventListener('click', handleFirstUserInteraction);
+            detachInteractionListeners();
             return;
           }
           if (hasHandledFirstInteraction) return;
           hasHandledFirstInteraction = true;
+          detachInteractionListeners();
 
           try {
             await artPlayer.play();
@@ -135,13 +140,27 @@ export function scheduleAutoPlayWithFallback(
           } catch (error) {
             console.warn('用户交互播放失败:', error);
           }
-
-          artPlayer.off('video:play', handleFirstUserInteraction);
-          document.removeEventListener('click', handleFirstUserInteraction);
+        };
+        const handleDocumentClick = (event: MouseEvent) => {
+          if (!isActivePlayer()) {
+            detachInteractionListeners();
+            return;
+          }
+          const playerRoot = artPlayer.template?.$player;
+          // 仅响应播放器区域内的点击，避免点击返回/选集/收藏等外部控件时强行起播
+          if (
+            playerRoot &&
+            event.target instanceof Node &&
+            !playerRoot.contains(event.target)
+          ) {
+            return;
+          }
+          void handleFirstUserInteraction();
         };
 
-        artPlayer.on('video:play', handleFirstUserInteraction);
-        document.addEventListener('click', handleFirstUserInteraction);
+        artPlayer.on?.('video:play', handleFirstUserInteraction);
+        artPlayer.on?.('destroy', detachInteractionListeners);
+        document.addEventListener('click', handleDocumentClick);
       }
     } catch (error) {
       console.warn('自动播放回退机制执行失败:', error);

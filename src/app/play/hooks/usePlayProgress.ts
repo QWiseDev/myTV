@@ -7,6 +7,7 @@ import { generateStorageKey, savePlayRecord } from '@/lib/db.client';
 import type { PlayRecord, SearchResult } from '@/lib/types';
 import { selectUsableImageUrl } from '@/lib/utils';
 
+import { isNearVideoEnd } from './usePlayerInitializer';
 import type { BangumiDetails, MovieDetails } from '../types';
 import type { ArtPlayerLike } from '../utils/danmakuRuntime';
 
@@ -75,7 +76,7 @@ export function buildPlayProgressPayload({
   const currentTime = player.currentTime || 0;
   const duration = player.duration || 0;
 
-  if (currentTime < 1 || !duration) {
+  if (currentTime < 1 || !duration || isNearVideoEnd(currentTime, duration)) {
     return null;
   }
 
@@ -250,7 +251,12 @@ export function usePlayProgress({
   }, []);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    let unloadSavedAt = 0;
+
+    const saveOnPageExit = () => {
+      const now = Date.now();
+      // beforeunload 与 pagehide 可能在桌面端连续触发，短窗口内去重避免重复发送 beacon
+      if (now - unloadSavedAt < 1000) return;
       const payload = buildPlayProgressPayload({
         player: artPlayerRef.current,
         currentSource: currentSourceRef.current,
@@ -271,10 +277,21 @@ export function usePlayProgress({
         // 访客（未登录）不保存播放进度
         getAuthInfoFromBrowserCookie()?.username
       ) {
+        unloadSavedAt = now;
         sendPlayProgressOnUnload(payload);
       }
+    };
+
+    const handleBeforeUnload = () => {
+      saveOnPageExit();
       releaseWakeLock();
       cleanupPlayer();
+    };
+
+    // 移动端 Safari / iOS 不稳定触发 beforeunload，补充 pagehide 兜底上报
+    const handlePageHide = () => {
+      saveOnPageExit();
+      releaseWakeLock();
     };
 
     const handleVisibilityChange = () => {
@@ -289,10 +306,12 @@ export function usePlayProgress({
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [

@@ -1,9 +1,18 @@
-import { useCallback, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   type WatchingUpdate,
   getDetailedWatchingUpdates,
 } from '@/lib/watching-updates';
+
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function debugError(...args: unknown[]) {
   if (process.env.NODE_ENV !== 'production') {
@@ -25,12 +34,21 @@ function readCachedWatchingUpdates(): WatchingUpdate | null {
 }
 
 export function useWatchingUpdatesSnapshot() {
-  // 首屏同步读取本地/内存缓存，避免继续观看等徽章必须等 4s 网络刷新
+  // 初始值与 SSR 保持一致为 null，避免水合首帧读 localStorage 引发 Hydration Mismatch；
+  // 随后在 layoutEffect（首绘前）同步回填本地缓存，既无水合冲突也不闪烁。
   const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
-    () => readCachedWatchingUpdates(),
+    null,
   );
   const [loadingWatchingUpdates, setLoadingWatchingUpdates] = useState(false);
-  const hasLoadedRef = useRef(watchingUpdates !== null);
+  const hasLoadedRef = useRef(false);
+
+  useIsomorphicLayoutEffect(() => {
+    const cached = readCachedWatchingUpdates();
+    if (cached !== null) {
+      hasLoadedRef.current = true;
+      setWatchingUpdates(cached);
+    }
+  }, []);
 
   const loadWatchingUpdates = useCallback(async (force = false) => {
     if (typeof window === 'undefined') return;

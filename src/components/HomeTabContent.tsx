@@ -138,6 +138,7 @@ export default function HomeTabContent({
         continueItems={heroContinueItems}
         movies={hotMovies}
         loading={criticalLoading || continueWatching.loading}
+        deferEnrich={continueWatching.loading}
       />
 
       {/* 继续观看 */}

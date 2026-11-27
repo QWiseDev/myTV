@@ -24,6 +24,8 @@ interface SkipControllerProps {
   title: string;
   episodeIndex?: number; // 新增：当前集数索引，用于区分不同集数
   artPlayerRef: React.MutableRefObject<any>;
+  /** 播放器实例版本号：换源重建 Artplayer 时递增，确保监听绑到新实例 */
+  playerInstanceId?: number;
   duration?: number;
   isSettingMode?: boolean;
   onSettingModeChange?: (isOpen: boolean) => void;
@@ -84,6 +86,7 @@ export default function SkipController({
   title,
   episodeIndex = 0,
   artPlayerRef,
+  playerInstanceId = 0,
   duration = 0,
   isSettingMode = false,
   onSettingModeChange,
@@ -410,6 +413,11 @@ export default function SkipController({
           handleAutoSkip(currentSegment);
           setShowSkipButton(false); // 自动跳过时不显示按钮
         } else {
+          // 手动模式同样标记当前集该片段已提示过，避免 8 秒自动隐藏后下一次 timeupdate 反复闪现
+          lastProcessedSegmentRef.current = {
+            type: currentSegment.type,
+            episodeId: currentEpisodeId,
+          };
           // 手动模式：显示跳过按钮
           setShowSkipButton(true);
 
@@ -814,7 +822,11 @@ export default function SkipController({
     }
   }, [artPlayerRef, checkSkipSegment]);
 
-  // 监听播放器时间变化，避免父组件每秒传 currentTime 触发 React 重渲染
+  const checkCurrentPlayerTimeRef = useRef(checkCurrentPlayerTime);
+  checkCurrentPlayerTimeRef.current = checkCurrentPlayerTime;
+
+  // 监听播放器时间变化，避免父组件每秒传 currentTime 触发 React 重渲染；
+  // 依赖 playerInstanceId 确保换源重建 Artplayer 后重绑到新实例
   useEffect(() => {
     let stopped = false;
     let waitTimer: NodeJS.Timeout | null = null;
@@ -835,7 +847,7 @@ export default function SkipController({
       }
 
       const handleTimeUpdate = () => {
-        checkCurrentPlayerTime();
+        checkCurrentPlayerTimeRef.current();
       };
       player.on('video:timeupdate', handleTimeUpdate);
       detachTimeUpdate = () => {
@@ -844,10 +856,10 @@ export default function SkipController({
 
       // 用播放器 ready 事件触发首次检查，而非轮询/盲调
       if (player.isReady) {
-        checkCurrentPlayerTime();
+        checkCurrentPlayerTimeRef.current();
       } else {
         player.once?.('ready', () => {
-          if (!stopped) checkCurrentPlayerTime();
+          if (!stopped) checkCurrentPlayerTimeRef.current();
         });
       }
     };
@@ -861,7 +873,7 @@ export default function SkipController({
       }
       detachTimeUpdate?.();
     };
-  }, [artPlayerRef, checkCurrentPlayerTime, source, id, episodeIndex]);
+  }, [artPlayerRef, playerInstanceId, source, id, episodeIndex]);
 
   // 当 source 或 id 或 episodeIndex 变化时，清理所有状态（换集时）
   useEffect(() => {

@@ -114,8 +114,8 @@ export function useEpisodeControls({
       if (!e.altKey && e.key === 'ArrowLeft') {
         const player = artPlayerRef.current;
         const currentTime = player?.currentTime ?? 0;
-        if (player && currentTime > 5) {
-          player.currentTime = currentTime - 10;
+        if (player && currentTime > 0) {
+          player.currentTime = Math.max(0, currentTime - 10);
           e.preventDefault();
         }
       }
@@ -125,8 +125,8 @@ export function useEpisodeControls({
         const player = artPlayerRef.current;
         const currentTime = player?.currentTime ?? 0;
         const duration = player?.duration ?? 0;
-        if (player && duration > 0 && currentTime < duration - 5) {
-          player.currentTime = currentTime + 10;
+        if (player && duration > 0 && currentTime < duration) {
+          player.currentTime = Math.min(duration, currentTime + 10);
           e.preventDefault();
         }
       }
@@ -136,7 +136,7 @@ export function useEpisodeControls({
         const player = artPlayerRef.current;
         const volume = player?.volume ?? 0;
         if (player && volume < 1) {
-          player.volume = Math.round((volume + 0.1) * 10) / 10;
+          player.volume = Math.min(1, Math.round((volume + 0.1) * 10) / 10);
           if (player.notice) {
             player.notice.show = `音量: ${Math.round(player.volume * 100)}`;
           }
@@ -149,7 +149,7 @@ export function useEpisodeControls({
         const player = artPlayerRef.current;
         const volume = player?.volume ?? 0;
         if (player && volume > 0) {
-          player.volume = Math.round((volume - 0.1) * 10) / 10;
+          player.volume = Math.max(0, Math.round((volume - 0.1) * 10) / 10);
           if (player.notice) {
             player.notice.show = `音量: ${Math.round(player.volume * 100)}`;
           }

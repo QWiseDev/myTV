@@ -29,6 +29,7 @@ export const useBangumiDetails = ({
   setLoadingMovieDetails,
 }: UseBangumiDetailsOptions) => {
   const activeRequestKeyRef = useRef<string | null>(null);
+  const loadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!videoDoubanId || videoDoubanId === 0) {
@@ -36,13 +37,27 @@ export const useBangumiDetails = ({
     }
 
     const isBangumi = isBangumiId(videoDoubanId);
-    if ((isBangumi && bangumiDetails) || (!isBangumi && movieDetails)) {
+    const requestKey = `${isBangumi ? 'bangumi' : 'douban'}:${videoDoubanId}`;
+
+    // 仅当当前已加载数据属于同一个 douban/bangumi ID 时才跳过，
+    // 切换影片或换源修正 douban_id 后必须重新加载
+    if (
+      loadedKeyRef.current === requestKey &&
+      ((isBangumi && bangumiDetails) || (!isBangumi && movieDetails))
+    ) {
       return;
     }
 
-    const requestKey = `${isBangumi ? 'bangumi' : 'douban'}:${videoDoubanId}`;
     if (activeRequestKeyRef.current === requestKey) {
       return;
+    }
+
+    if (loadedKeyRef.current && loadedKeyRef.current !== requestKey) {
+      if (isBangumi) {
+        setBangumiDetails(null);
+      } else {
+        setMovieDetails(null);
+      }
     }
 
     let cancelled = false;
@@ -54,6 +69,7 @@ export const useBangumiDetails = ({
         try {
           const bangumiData = await fetchBangumiDetailsWithCache(videoDoubanId);
           if (!cancelled && bangumiData) {
+            loadedKeyRef.current = requestKey;
             setBangumiDetails(bangumiData);
           }
         } catch (error) {
@@ -70,6 +86,7 @@ export const useBangumiDetails = ({
       try {
         const response = await getDoubanDetails(videoDoubanId.toString());
         if (!cancelled && response.code === 200 && response.data) {
+          loadedKeyRef.current = requestKey;
           setMovieDetails(response.data);
         }
       } catch (error) {

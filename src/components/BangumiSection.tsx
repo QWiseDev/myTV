@@ -1,9 +1,13 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
+import { useMemo } from 'react';
 
 import type { BangumiCalendarData } from '@/lib/bangumi.client';
-import { HOME_RENDER_LIMITS } from '@/lib/constants/home';
+import {
+  HOME_RENDER_LIMITS,
+  HOME_VIDEO_CARD_SIZES,
+} from '@/lib/constants/home';
 import { selectUsableImageUrl } from '@/lib/utils';
 
 import HomeCardShell from './HomeCardShell';
@@ -25,11 +29,10 @@ const bangumiWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'short',
 });
 
-function getTodayAnimes(
+function getAnimesByWeekday(
   bangumiCalendarData: BangumiCalendarData[],
-  now = new Date(),
+  currentWeekday: string,
 ) {
-  const currentWeekday = bangumiWeekdayFormatter.format(now);
   return (
     bangumiCalendarData.find((item) => item.weekday.en === currentWeekday)
       ?.items || []
@@ -60,9 +63,14 @@ export default function BangumiSection({
   loadError,
   onRetry,
 }: BangumiSectionProps) {
-  const todayAnimes = getTodayAnimes(bangumiCalendarData).slice(
-    0,
-    HOME_RENDER_LIMITS.BANGUMI,
+  const currentWeekday = bangumiWeekdayFormatter.format(new Date());
+  const todayAnimes = useMemo(
+    () =>
+      getAnimesByWeekday(bangumiCalendarData, currentWeekday).slice(
+        0,
+        HOME_RENDER_LIMITS.BANGUMI,
+      ),
+    [bangumiCalendarData, currentWeekday],
   );
   const hasData = bangumiCalendarData.length > 0;
   const showSkeleton = loading && !hasData;
@@ -97,6 +105,7 @@ export default function BangumiSection({
                   rate={anime.rating?.score?.toFixed(1) || ''}
                   year={anime.air_date?.split('-')?.[0] || ''}
                   isBangumi={true}
+                  sizes={HOME_VIDEO_CARD_SIZES}
                 />
               </HomeCardShell>
             ))

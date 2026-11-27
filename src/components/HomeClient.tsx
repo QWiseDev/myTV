@@ -113,7 +113,7 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
   }, [activeTab]);
 
   return (
-    <PageLayout>
+    <PageLayout initialLoggedIn>
       {/* 布局容器交给 PageLayout，避免多层 padding 叠加 */}
       <div className='overflow-visible'>
         {aiEnabled && (

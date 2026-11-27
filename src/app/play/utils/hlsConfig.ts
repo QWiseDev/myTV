@@ -48,6 +48,22 @@ const MANIFEST_LIKE_ERROR_DETAILS = new Set<unknown>([
   Hls.ErrorDetails.FRAG_LOAD_ERROR,
 ]);
 
+const MAX_FATAL_NETWORK_RETRIES = 2;
+const MAX_FATAL_MEDIA_RETRIES = 2;
+const hlsFatalRetryCounts = new WeakMap<
+  HlsRuntimeInstance,
+  { network: number; media: number }
+>();
+
+function getFatalRetryState(hls: HlsRuntimeInstance) {
+  let state = hlsFatalRetryCounts.get(hls);
+  if (!state) {
+    state = { network: 0, media: 0 };
+    hlsFatalRetryCounts.set(hls, state);
+  }
+  return state;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object'
     ? (value as Record<string, unknown>)
@@ -437,13 +453,15 @@ export function handleHlsError(
           return;
         }
 
-        hls.startLoad();
-
         // 获取详细错误信息并传递给回调
         const networkDetails = extractNetworkErrorDetails(data);
 
         // manifest 级别错误直接触发回调
-        if (data.details === 'manifestLoadError') {
+        if (
+          data.details === 'manifestLoadError' ||
+          data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR
+        ) {
+          hls.startLoad();
           setTimeout(() => {
             if (onFatalError) {
               onFatalError(
@@ -452,10 +470,47 @@ export function handleHlsError(
               );
             }
           }, 500);
+          break;
+        }
+
+        // 其他致命网络错误（如 404/403/CORS 分片或子清单失败）限制重试次数，
+        // 避免无限 startLoad() 循环导致永远无法触发自动换源
+        const retryState = getFatalRetryState(hls);
+        if (retryState.network < MAX_FATAL_NETWORK_RETRIES) {
+          retryState.network += 1;
+          hls.startLoad();
+        } else {
+          try {
+            hls.destroy();
+          } catch (e) {
+            console.warn('销毁 HLS 实例失败:', e);
+          }
+          if (onFatalError) {
+            onFatalError(
+              errorMessage +
+                (networkDetails ? `\n\n详情: ${networkDetails}` : ''),
+            );
+          }
         }
         break;
       }
-      case Hls.ErrorTypes.MEDIA_ERROR:
+      case Hls.ErrorTypes.MEDIA_ERROR: {
+        const retryState = getFatalRetryState(hls);
+        if (retryState.media >= MAX_FATAL_MEDIA_RETRIES) {
+          try {
+            hls.destroy();
+          } catch (e) {
+            console.warn('销毁 HLS 实例失败:', e);
+          }
+          if (onFatalError) {
+            onFatalError(
+              errorMessage + '\n\n建议：尝试切换其他播放源或刷新页面',
+            );
+          }
+          break;
+        }
+
+        retryState.media += 1;
         // 尝试恢复媒体错误
         try {
           hls.recoverMediaError();
@@ -468,13 +523,19 @@ export function handleHlsError(
             // 尝试重新加载更低码率的级别
             setTimeout(() => {
               if (hls.levels && hls.levels.length > 0) {
-                // 选择最低的码率级别以提高兼容性
-                const lowestLevel = Math.min(
-                  ...hls.levels.map((level) => level.height || 0),
-                );
-                hls.currentLevel = hls.levels.findIndex(
-                  (level) => level.height === lowestLevel,
-                );
+                const levelsWithHeight = hls.levels
+                  .map((level, index) => ({
+                    height: level.height || 0,
+                    index,
+                  }))
+                  .filter((item) => item.height > 0);
+                const lowestLevelIndex =
+                  levelsWithHeight.length > 0
+                    ? levelsWithHeight.reduce((min, item) =>
+                        item.height < min.height ? item : min,
+                      ).index
+                    : 0;
+                hls.currentLevel = lowestLevelIndex;
                 hls.startLoad(video.currentTime || 0);
               }
             }, 1000);
@@ -487,6 +548,7 @@ export function handleHlsError(
           }
         }
         break;
+      }
       default:
         hls.destroy();
         if (onFatalError) {

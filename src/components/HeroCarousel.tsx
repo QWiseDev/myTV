@@ -46,6 +46,8 @@ interface HeroCarouselProps {
   /** 热门电影，补足剩余帧位（整轮最多 8 帧） */
   movies: DoubanItem[];
   loading?: boolean;
+  /** 继续观看尚未返回时暂缓请求 TMDB 横图，避免继续追插队后重复请求 */
+  deferEnrich?: boolean;
 }
 
 function buildSlides(
@@ -107,6 +109,7 @@ export default function HeroCarousel({
   continueItems,
   movies,
   loading = false,
+  deferEnrich = false,
 }: HeroCarouselProps) {
   const slides = useMemo(
     () => buildSlides(continueItems, movies),
@@ -117,10 +120,15 @@ export default function HeroCarousel({
   const [infoByTitle, setInfoByTitle] = useState<Record<string, TMDBHeroInfo>>(
     {},
   );
+  const fetchedTitlesRef = useRef(new Set<string>());
 
-  // slides 数量变化（数据异步到达）时收拢索引，避免停留在越界帧
+  // 渲染期直接收拢越界索引，避免 slides 数量缩减时出现一帧全透明空白
+  const safeActiveIndex =
+    slides.length > 0 && activeIndex < slides.length ? activeIndex : 0;
+
+  // slides 数量变化（数据异步到达）时同步收拢状态索引
   useEffect(() => {
-    if (activeIndex >= slides.length) {
+    if (activeIndex >= slides.length && slides.length > 0) {
       setActiveIndex(0);
     }
   }, [activeIndex, slides.length]);
@@ -149,7 +157,9 @@ export default function HeroCarousel({
     const params = new URLSearchParams();
     for (const slide of slides) {
       const title = slide.title.trim();
-      if (!title || seen.has(title)) continue;
+      if (!title || seen.has(title) || fetchedTitlesRef.current.has(title)) {
+        continue;
+      }
       seen.add(title);
       params.append('title', title);
       // 无年份也传空串，保证服务端 title/year 按下标对齐
@@ -159,8 +169,8 @@ export default function HeroCarousel({
   }, [slides]);
 
   useEffect(() => {
-    // 无 fetch 的环境（jsdom 测试等）直接跳过，保持海报模糊垫底
-    if (typeof fetch === 'undefined') return;
+    // 无 fetch 的环境（jsdom 测试等）或等待继续观看稳定时跳过
+    if (typeof fetch === 'undefined' || deferEnrich) return;
     if (!backdropQueryString) return;
     const controller = new AbortController();
     const titles = new URLSearchParams(backdropQueryString).getAll('title');
@@ -174,26 +184,28 @@ export default function HeroCarousel({
         if (!data?.info) return;
         const next: Record<string, TMDBHeroInfo> = {};
         for (const title of titles) {
+          fetchedTitlesRef.current.add(title);
           const info = data.info[title];
           if (info?.backdrop) next[title] = info;
         }
-        setInfoByTitle(next);
+        if (Object.keys(next).length > 0) {
+          setInfoByTitle((prev) => ({ ...prev, ...next }));
+        }
       })
       .catch(() => {
         // TMDB 未启用/网络失败：保持模糊海报降级
       });
     return () => controller.abort();
-  }, [backdropQueryString]);
+  }, [backdropQueryString, deferEnrich]);
 
-  // 只为「当前帧 + 下一帧」挂载图片，已挂载过的帧保留（淡出过渡不闪）。
-  // 避免 8 帧的底图/海报/横图在首屏同时发起请求。
-  const mediaSlideKeysRef = useRef(new Set<string>());
-  if (slides.length > 0) {
-    const current = slides[activeIndex] ?? slides[0];
-    const upcoming = slides[(activeIndex + 1) % slides.length];
-    mediaSlideKeysRef.current.add(current.key);
-    if (upcoming) mediaSlideKeysRef.current.add(upcoming.key);
-  }
+  // 仅挂载「当前帧 + 前后相邻帧」的模糊底图与海报，既保证淡入淡出过渡平滑，
+  // 又将 blur-2xl 合成层上限控制在 3 帧以内，避免 8 帧长期常驻 GPU 显存。
+  const prevIndex =
+    slides.length > 0
+      ? (safeActiveIndex - 1 + slides.length) % slides.length
+      : -1;
+  const nextIndex =
+    slides.length > 0 ? (safeActiveIndex + 1) % slides.length : -1;
 
   if (slides.length === 0) {
     if (!loading) return null;
@@ -206,7 +218,7 @@ export default function HeroCarousel({
     );
   }
 
-  const active = slides[activeIndex];
+  const active = slides[safeActiveIndex];
 
   return (
     <section
@@ -214,26 +226,34 @@ export default function HeroCarousel({
       className='group relative mb-6'
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      // 键盘聚焦到轮播内（播放按钮/指示条）时同样暂停自动切换
+      // 键盘聚焦到轮播内（播放按钮/指示条）时暂停自动切换；焦点在容器内部切换时不误重置计时器
       onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setPaused(false);
+        }
+      }}
     >
       <div className='relative h-[220px] overflow-hidden rounded-xl sm:h-[300px] lg:h-[360px]'>
         {slides.map((slide, index) => {
           const info = infoByTitle[slide.title.trim()];
-          const isActive = index === activeIndex;
-          const showMedia = mediaSlideKeysRef.current.has(slide.key);
+          const isActive = index === safeActiveIndex;
+          const showMedia =
+            index === safeActiveIndex ||
+            index === prevIndex ||
+            index === nextIndex;
           const posterSrc = processImageUrl(slide.poster);
           // 外链/代理图直连，不经源站 /_next/image（源站并发有限）
           const posterUnoptimized = shouldUseUnoptimizedImage(posterSrc);
+          const backdropUnoptimized = info?.backdrop
+            ? shouldUseUnoptimizedImage(info.backdrop)
+            : false;
           return (
             <div
               key={slide.key}
-              aria-hidden={index !== activeIndex}
+              aria-hidden={!isActive}
               className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                index === activeIndex
-                  ? 'opacity-100'
-                  : 'pointer-events-none opacity-0'
+                isActive ? 'opacity-100' : 'pointer-events-none opacity-0'
               }`}
             >
               {/* 背景层：海报模糊放大垫底，TMDB 横图就绪后叠加清晰横图 */}
@@ -256,7 +276,8 @@ export default function HeroCarousel({
                   src={info.backdrop}
                   alt=''
                   fill
-                  // 横图仍走优化器（已鉴权、按帧懒挂载），按容器实际宽度取图
+                  unoptimized={backdropUnoptimized}
+                  referrerPolicy='no-referrer'
                   sizes='(max-width: 1280px) 100vw, 1280px'
                   className='animate-fade-in object-cover brightness-[0.8]'
                   aria-hidden
@@ -383,10 +404,10 @@ export default function HeroCarousel({
                 key={slide.key}
                 type='button'
                 aria-label={`切换到 ${slide.title}`}
-                aria-current={index === activeIndex}
+                aria-current={index === safeActiveIndex}
                 onClick={() => setActiveIndex(index)}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  index === activeIndex
+                  index === safeActiveIndex
                     ? 'w-6 bg-[#00be06]'
                     : 'w-1.5 bg-white/50 hover:bg-white/80'
                 }`}

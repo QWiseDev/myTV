@@ -74,7 +74,7 @@ export async function getServerInitialGuestHomeData(): Promise<
 
     const defaultCategory = pickDefaultSourceCategory(categories, false);
     const initialCategory = defaultCategory ? defaultCategory.type_id : '';
-    if (!initialCategory || remainingMs() === 0) {
+    if (initialCategory === '' || remainingMs() === 0) {
       return {
         source,
         categories,

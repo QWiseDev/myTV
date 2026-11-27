@@ -297,6 +297,18 @@ html:not(.dark)::view-transition-new(root) {
   }
 }
 
+/* 首页卡片轻量入场动画（替代 framer-motion 减小首屏主包体积） */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* 平滑动画效果 */
 @keyframes fade-in {
   from {

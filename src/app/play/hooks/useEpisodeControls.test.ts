@@ -44,4 +44,37 @@ describe('useEpisodeControls', () => {
     expect(isSkipControllerTriggeredRef.current).toBe(true);
     expect(setCurrentEpisodeIndex).toHaveBeenCalledWith(1);
   });
+
+  test('clamps keyboard volume shortcuts within [0, 1]', () => {
+    const player = {
+      paused: false,
+      volume: 0.95,
+      notice: { show: '' },
+    } as ArtPlayerLike;
+
+    renderHook(() =>
+      useEpisodeControls({
+        totalEpisodes: 2,
+        artPlayerRef: { current: player },
+        saveCurrentPlayProgress: jest.fn(),
+        setCurrentEpisodeIndex: jest.fn(),
+        detailRef: { current: createDetail() },
+        currentEpisodeIndexRef: { current: 0 },
+        isSkipControllerTriggeredRef: { current: false },
+      }),
+    );
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    });
+    expect(player.volume).toBe(1);
+
+    player.volume = 0.04;
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+    });
+    expect(player.volume).toBe(0);
+  });
 });

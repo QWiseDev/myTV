@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,react-hooks/exhaustive-deps,@typescript-eslint/no-empty-function */
 
 import { Heart, Link, PlayCircleIcon, Radio, Trash2 } from 'lucide-react';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import Image from 'next/image';
 import React, {
   memo,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -592,9 +594,15 @@ const VideoCard = memo(function VideoCard({
     ],
   );
 
+  const appRouter = useContext(AppRouterContext);
+
   const handleClick = useCallback(() => {
-    navigateVideoCardPlayUrl(playUrl);
-  }, [playUrl]);
+    if (appRouter) {
+      navigateVideoCardPlayUrl(playUrl, appRouter);
+    } else {
+      navigateVideoCardPlayUrl(playUrl);
+    }
+  }, [appRouter, playUrl]);
 
   const handlePrimaryLinkClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -776,9 +784,9 @@ const VideoCard = memo(function VideoCard({
             onDragStart={preventDragStart}
           />
 
-          {/* 悬浮遮罩 - 玻璃态效果 */}
+          {/* 悬浮遮罩 */}
           <div
-            className='absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-all duration-300 ease-in-out opacity-0 group-hover:opacity-100 backdrop-blur-[2px]'
+            className='absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 ease-in-out opacity-0 group-hover:opacity-100'
             style={noSelectStyle}
             onContextMenu={preventContextMenu}
           />
@@ -921,7 +929,8 @@ const VideoCard = memo(function VideoCard({
             <div className='absolute inset-0 bg-gradient-to-r from-transparent via-[#e3f8e3]/0 to-transparent group-hover:via-[#e3f8e3]/45 dark:via-[#123a18]/0 dark:group-hover:via-[#123a18]/45 transition-all duration-300 rounded-md'></div>
 
             <span
-              className='block text-sm font-semibold line-clamp-2 text-[#111111] dark:text-[#f5f5f5] transition-all duration-300 ease-in-out group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] peer relative z-10'
+              title={actualTitle}
+              className='block text-sm font-semibold line-clamp-2 text-[#111111] dark:text-[#f5f5f5] transition-all duration-300 ease-in-out group-hover:text-[#00a304] dark:group-hover:text-[#57e07a] relative z-10'
               style={{
                 ...noSelectStyle,
                 display: '-webkit-box',
@@ -934,28 +943,6 @@ const VideoCard = memo(function VideoCard({
             >
               {actualTitle}
             </span>
-            {/* 增强的 tooltip */}
-            <div
-              className='absolute bottom-full left-0 mb-2 px-3 py-2 bg-gradient-to-br from-gray-800 to-gray-900 text-white text-xs rounded-lg shadow-xl border border-white/10 opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 ease-out delay-100 pointer-events-none z-50 backdrop-blur-sm'
-              style={{
-                ...noSelectStyle,
-                minWidth: '200px',
-                maxWidth: 'min(90vw, 400px)',
-                whiteSpace: 'normal',
-                wordBreak: 'break-word',
-                left: '50%',
-                transform: 'translateX(-50%)',
-              }}
-              onContextMenu={preventContextMenu}
-            >
-              <span className='font-medium leading-relaxed block text-center'>
-                {actualTitle}
-              </span>
-              <div
-                className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-gray-800'
-                style={noSelectStyle}
-              />
-            </div>
           </div>
           {/* 副标题：年份 · 类型 */}
           {subtitleParts.length > 0 && (

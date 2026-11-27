@@ -27,20 +27,28 @@ function readCachedAiStatus(): boolean | null {
       return parsed.enabled;
     }
   } catch {
-    localStorage.removeItem(AI_STATUS_CACHE_KEY);
+    try {
+      localStorage.removeItem(AI_STATUS_CACHE_KEY);
+    } catch {
+      /* 存储不可用时忽略 */
+    }
   }
 
   return null;
 }
 
 function cacheAiStatus(enabled: boolean) {
-  localStorage.setItem(
-    AI_STATUS_CACHE_KEY,
-    JSON.stringify({
-      enabled,
-      timestamp: Date.now(),
-    }),
-  );
+  try {
+    localStorage.setItem(
+      AI_STATUS_CACHE_KEY,
+      JSON.stringify({
+        enabled,
+        timestamp: Date.now(),
+      }),
+    );
+  } catch {
+    /* 隐私模式或配额满时忽略，不影响页面渲染 */
+  }
 }
 
 export function useAiRecommendStatus() {

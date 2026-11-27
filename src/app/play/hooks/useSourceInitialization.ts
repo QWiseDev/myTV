@@ -120,6 +120,13 @@ export function useSourceInitialization({
   const latestRequestRef = useRef(0);
   const sourceSearchLoaderRef = useRef<(() => Promise<void>) | null>(null);
   const handleError = errorHandler.handleError;
+  // 异步到达的播放记录兜底字段存 ref：避免 playRecords 晚到时中断首轮 /api/detail 或重复全源搜索
+  const fallbackTitleRef = useRef(fallbackTitle);
+  const fallbackCoverRef = useRef(fallbackCover);
+  const fallbackDoubanIdRef = useRef(fallbackDoubanId);
+  fallbackTitleRef.current = fallbackTitle;
+  fallbackCoverRef.current = fallbackCover;
+  fallbackDoubanIdRef.current = fallbackDoubanId;
 
   const loadAvailableSources = useCallback(async () => {
     if (!sourceSearchLoaderRef.current) {
@@ -486,12 +493,12 @@ export function useSourceInitialization({
           detailData.title ||
           videoTitleRef.current ||
           videoTitle ||
-          fallbackTitle ||
+          fallbackTitleRef.current ||
           searchTitle ||
           '';
         const resolvedYear = detailData.year || videoYearRef.current || '';
         const resolvedCover = selectUsableImageUrl(
-          fallbackCover,
+          fallbackCoverRef.current,
           detailData.poster,
         );
 
@@ -500,7 +507,7 @@ export function useSourceInitialization({
         setVideoCover(resolvedCover);
         const resolvedDoubanId = resolveDoubanId(
           detailData,
-          videoDoubanIdRef.current || fallbackDoubanId || null,
+          videoDoubanIdRef.current || fallbackDoubanIdRef.current || null,
         );
         const resolvedDetail: SearchResult = {
           ...detailData,
@@ -569,9 +576,6 @@ export function useSourceInitialization({
     handleError,
     optimizationEnabled,
     searchTitle,
-    fallbackTitle,
-    fallbackCover,
-    fallbackDoubanId,
     searchType,
     setAvailableSources,
     setCurrentEpisodeIndex,

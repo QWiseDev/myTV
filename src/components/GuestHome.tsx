@@ -91,6 +91,7 @@ export default function GuestHome({
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -192,7 +193,9 @@ export default function GuestHome({
         if (cancelled) return;
         const list: Category[] = data.categories || [];
         setCategories(list);
-        setActiveCategory(list[0]?.type_id ?? '');
+        setActiveCategory(
+          pickDefaultSourceCategory(list, false)?.type_id ?? '',
+        );
       } catch {
         if (!cancelled) setCategories([]);
       }
@@ -206,8 +209,9 @@ export default function GuestHome({
     async (p: number, append: boolean) => {
       if (!source) return;
       const trimmedKeyword = searchKeyword.trim();
+      const hasCategory = activeCategory !== '';
       if (!trimmedKeyword && p === 1 && !append) {
-        if (!activeCategory) {
+        if (!hasCategory) {
           setItems([]);
           setPageCount(1);
           return;
@@ -223,6 +227,7 @@ export default function GuestHome({
           setLoadingMore(false);
           setLoadingItems(false);
           setItemsError(null);
+          setLoadMoreError(null);
           setItems(cached.items);
           setPage(Number(cached.meta?.page || 1));
           setPageCount(Number(cached.meta?.pagecount || 1));
@@ -231,9 +236,14 @@ export default function GuestHome({
       }
 
       const reqId = ++fetchReqIdRef.current;
-      if (append) setLoadingMore(true);
-      else setLoadingItems(true);
-      setItemsError(null);
+      if (append) {
+        setLoadingMore(true);
+        setLoadMoreError(null);
+      } else {
+        setLoadingItems(true);
+        setItemsError(null);
+        setLoadMoreError(null);
+      }
       try {
         let url: string;
         if (trimmedKeyword) {
@@ -241,7 +251,7 @@ export default function GuestHome({
             source.key,
           )}&q=${encodeURIComponent(trimmedKeyword)}&page=${p}`;
         } else {
-          if (!activeCategory) {
+          if (!hasCategory) {
             setItems([]);
             setPageCount(1);
             return;
@@ -262,13 +272,24 @@ export default function GuestHome({
             data,
           );
         }
-        setItems((prev) => (append ? [...prev, ...list] : list));
+        setItems((prev) => {
+          if (!append) return list;
+          // 上游分页可能因新片入库产生跨页重复，按 id 去重避免重复卡片与 React duplicate key
+          const seen = new Set(prev.map((item) => item.id));
+          const uniqueNext = list.filter((item) => !seen.has(item.id));
+          return uniqueNext.length > 0 ? [...prev, ...uniqueNext] : prev;
+        });
         setPage(Number(data.meta?.page || p));
         setPageCount(Number(data.meta?.pagecount || 1));
       } catch (e) {
         if (reqId !== fetchReqIdRef.current) return;
-        setItemsError(e instanceof Error ? e.message : '获取列表失败');
-        if (!append) setItems([]);
+        const message = e instanceof Error ? e.message : '获取列表失败';
+        if (append) {
+          setLoadMoreError(message);
+        } else {
+          setItemsError(message);
+          setItems([]);
+        }
       } finally {
         if (reqId === fetchReqIdRef.current) {
           setLoadingMore(false);
@@ -435,7 +456,10 @@ export default function GuestHome({
                       role='button'
                       tabIndex={0}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') goPlay(item);
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          goPlay(item);
+                        }
                       }}
                     >
                       <div className='relative aspect-[2/3] overflow-hidden rounded-lg bg-[#e8e8e8] shadow-sm transition-all duration-300 group-hover:scale-[1.03] group-hover:shadow-lg group-hover:shadow-black/15 dark:bg-[#2a2a2a]'>
@@ -487,6 +511,14 @@ export default function GuestHome({
                 >
                   {loadingMore ? (
                     <div className='h-5 w-5 animate-spin rounded-full border-2 border-[#00be06] border-t-transparent'></div>
+                  ) : loadMoreError ? (
+                    <button
+                      type='button'
+                      onClick={() => void fetchPage(page + 1, true)}
+                      className='text-xs text-red-500 hover:underline dark:text-red-400'
+                    >
+                      {loadMoreError}，点击重试
+                    </button>
                   ) : hasMore ? (
                     <div className='text-xs text-[#8f8f8f]'>下拉加载更多</div>
                   ) : (

@@ -537,4 +537,36 @@ describe('useSourceSwitcher', () => {
 
     expect(params.loadExternalDanmu).not.toHaveBeenCalled();
   });
+
+  test('an existing failover callback reads the latest episode index after episode changes', async () => {
+    const sourceA = createSource('source-a', 'id-a', {
+      douban_id: 1,
+      episodes: ['ep1', 'ep2', 'ep3'],
+    });
+    const sourceB = createSource('source-b', 'id-b', {
+      douban_id: 2,
+      episodes: ['b-ep1', 'b-ep2', 'b-ep3'],
+    });
+    const params = createParams([sourceA, sourceB]);
+
+    const { result, rerender } = renderHook(
+      ({ episodeIndex }) =>
+        useSourceSwitcher({
+          ...params,
+          currentEpisodeIndex: episodeIndex,
+        }),
+      { initialProps: { episodeIndex: 0 } },
+    );
+    const initialFailoverCallback = result.current.handleSourceChange;
+
+    rerender({ episodeIndex: 2 });
+
+    await act(async () => {
+      await initialFailoverCallback('source-b', 'id-b', 'fallback title', {
+        initiatedBy: 'auto',
+      });
+    });
+
+    expect(params.setCurrentEpisodeIndex).toHaveBeenCalledWith(2);
+  });
 });

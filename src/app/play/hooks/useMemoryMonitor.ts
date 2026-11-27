@@ -50,8 +50,12 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
     onPressureChangeRef.current = onPressureChange;
   }, [onPressureChange]);
 
-  // 使用 Ref 保存上一次的压力状态，避免 checkMemory 依赖 memoryInfo 状态
-  const previousPressureRef = useRef<MemoryPressure>('low');
+  // 使用 Ref 保存上一次的压力状态与冷却标记，避免轮询无条件触发父组件重渲染或重启 interval
+  const previousPressureRef = useRef<MemoryPressure | null>(null);
+  const autoCleanupTriggeredRef = useRef(false);
+  const cleanupResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // 计算内存压力等级
   const calculateMemoryPressure = useCallback(
@@ -101,8 +105,25 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
       // 忽略错误，因为大多数浏览器不支持
     }
 
+    autoCleanupTriggeredRef.current = true;
     setAutoCleanupTriggered(true);
-    setTimeout(() => setAutoCleanupTriggered(false), 3000);
+    if (cleanupResetTimerRef.current) {
+      clearTimeout(cleanupResetTimerRef.current);
+    }
+    cleanupResetTimerRef.current = setTimeout(() => {
+      cleanupResetTimerRef.current = null;
+      autoCleanupTriggeredRef.current = false;
+      setAutoCleanupTriggered(false);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (cleanupResetTimerRef.current) {
+        clearTimeout(cleanupResetTimerRef.current);
+        cleanupResetTimerRef.current = null;
+      }
+    };
   }, []);
 
   // 检查内存状态
@@ -112,13 +133,11 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
 
     const previousPressure = previousPressureRef.current;
 
-    // 更新状态
-    setMemoryInfo(info);
-
-    // 检测压力变化
-    if (previousPressure !== info.pressure) {
+    // 仅在首次获取或压力等级变化时更新 React 状态，避免每 30s 引发播放页整树无意义重渲染
+    if (previousPressure === null || previousPressure !== info.pressure) {
       previousPressureRef.current = info.pressure;
-      if (onPressureChangeRef.current) {
+      setMemoryInfo(info);
+      if (previousPressure !== null && onPressureChangeRef.current) {
         onPressureChangeRef.current(info.pressure, info);
       }
     }
@@ -127,7 +146,7 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
     if (
       enableAutoCleanup &&
       info.pressure === 'critical' &&
-      !autoCleanupTriggered
+      !autoCleanupTriggeredRef.current
     ) {
       console.warn('⚠️ 内存压力达到临界值，触发自动清理');
       triggerMemoryCleanup();
@@ -141,12 +160,7 @@ export function useMemoryMonitor(options: MemoryMonitorOptions = {}) {
         limit: `${(info.jsHeapSizeLimit / 1024 / 1024).toFixed(1)}MB`,
       });
     }
-  }, [
-    getMemoryInfo,
-    enableAutoCleanup,
-    autoCleanupTriggered,
-    triggerMemoryCleanup,
-  ]);
+  }, [getMemoryInfo, enableAutoCleanup, triggerMemoryCleanup]);
 
   // 获取优化建议
   const getOptimizations = useCallback((): string[] => {

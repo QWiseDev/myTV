@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import React from 'react';
 
 const mockPush = jest.fn();
@@ -190,5 +196,71 @@ describe('GuestHome SSR initialData & caching', () => {
     await waitFor(() => {
       expect(document.cookie).not.toContain('user_auth=');
     });
+  });
+
+  it('supports numeric type_id 0 and preserves existing items when loading next page fails', async () => {
+    const observerHolder: {
+      cb: ((entries: IntersectionObserverEntry[]) => void) | null;
+    } = { cb: null };
+    global.IntersectionObserver = jest.fn((cb) => {
+      observerHolder.cb = cb;
+      return {
+        observe: jest.fn(),
+        disconnect: jest.fn(),
+        unobserve: jest.fn(),
+      };
+    }) as unknown as typeof IntersectionObserver;
+
+    const fetchMock = jest.fn(async (url: string) => {
+      if (url.includes('type_id=0&page=1')) {
+        return {
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: 'z1',
+                title: '零分类影片',
+                poster: '',
+                year: '2026',
+                type_name: '全部',
+              },
+            ],
+            meta: { page: 1, pagecount: 2, total: 2, limit: 20 },
+          }),
+        };
+      }
+      if (url.includes('type_id=0&page=2')) {
+        return { ok: false };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const GuestHome = (await import('./GuestHome')).default;
+    render(
+      <GuestHome
+        initialData={{
+          source: {
+            key: 'iqiyizyapi.com',
+            name: '爱奇艺',
+            api: 'https://iqiyizyapi.com/api.php/provide/vod/',
+          },
+          categories: [{ type_id: 0, type_name: '全部' }],
+          initialCategory: 0,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('零分类影片')).toBeInTheDocument();
+
+    // 触发第二页加载失败：应保留第一页条目并给出重试按钮
+    await act(async () => {
+      observerHolder.cb?.([
+        { isIntersecting: true } as IntersectionObserverEntry,
+      ]);
+    });
+
+    expect(await screen.findByText(/点击重试/)).toBeInTheDocument();
+    expect(screen.getByText('零分类影片')).toBeInTheDocument();
   });
 });

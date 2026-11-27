@@ -19,6 +19,8 @@ interface HeaderProps {
   theater?: boolean;
   /** 访客模式：即使客户端残留失效 cookie 也按未登录态渲染顶栏 */
   guest?: boolean;
+  /** SSR 已校验登录态时透传，避免首屏顶栏布局跳动 */
+  initialLoggedIn?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ const Header = ({
   activePath = '/',
   theater = false,
   guest = false,
+  initialLoggedIn = false,
 }: HeaderProps) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -42,7 +45,7 @@ const Header = ({
 
   const menuItems = useNavMenuItems();
   // 访客（未登录）：隐藏导航、搜索与收藏夹等登录入口，只留 Logo 和登录按钮
-  const isLoggedIn = useIsLoggedIn();
+  const isLoggedIn = useIsLoggedIn(guest ? false : initialLoggedIn);
   const effectiveLoggedIn = !guest && isLoggedIn;
 
   // 优先使用传入的 activePath，否则使用当前完整路径（含 query）

@@ -46,6 +46,8 @@ export function usePlaybackData() {
 interface PlaybackDataProviderProps {
   children: ReactNode;
   includePlayRecordKeys?: string[];
+  /** 立即加载首屏播放记录（播放页跳过 200ms idle 延迟，加快续播恢复） */
+  eager?: boolean;
 }
 
 const EMPTY_INCLUDE_PLAY_RECORD_KEYS: string[] = [];
@@ -53,6 +55,7 @@ const EMPTY_INCLUDE_PLAY_RECORD_KEYS: string[] = [];
 export function PlaybackDataProvider({
   children,
   includePlayRecordKeys = EMPTY_INCLUDE_PLAY_RECORD_KEYS,
+  eager = false,
 }: PlaybackDataProviderProps) {
   const {
     loadingWatchingUpdates,
@@ -74,6 +77,9 @@ export function PlaybackDataProvider({
       ),
     [includePlayRecordKeys, priorityPlayRecordKeys],
   );
+  const continueWatchingArgs: [string[], { eager: boolean }?] = eager
+    ? [firstPagePlayRecordKeys, { eager: true }]
+    : [firstPagePlayRecordKeys];
   const {
     loadingPlayRecords,
     loadingMorePlayRecords,
@@ -84,7 +90,7 @@ export function PlaybackDataProvider({
     retryPlayRecords,
     deleteRecord,
     clearAll,
-  } = useContinueWatchingData(firstPagePlayRecordKeys);
+  } = useContinueWatchingData(...continueWatchingArgs);
 
   // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(

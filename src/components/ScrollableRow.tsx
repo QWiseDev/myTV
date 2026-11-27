@@ -91,6 +91,7 @@ function ScrollableRow({
   const checkScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const scrollRafRef = useRef<number | null>(null);
 
   const checkScroll = useCallback(() => {
     if (!canUseScrollControls()) {
@@ -115,6 +116,28 @@ function ScrollableRow({
         prev !== canScrollLeft ? canScrollLeft : prev,
       );
     }
+  }, []);
+
+  // 用 requestAnimationFrame 合并滚动期间的布局读取，避免每像素同步重排
+  const handleScroll = useCallback(() => {
+    if (typeof window === 'undefined' || !window.requestAnimationFrame) {
+      checkScroll();
+      return;
+    }
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      checkScroll();
+    });
+  }, [checkScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame?.(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, []);
 
   // 使用 useMemo 缓存 children 数量，减少不必要的 effect 触发
@@ -183,7 +206,7 @@ function ScrollableRow({
       <div
         ref={containerRef}
         className='flex space-x-4 sm:space-x-5 md:space-x-6 overflow-x-auto scrollbar-hide py-1 sm:py-2 pb-12 sm:pb-14 px-0'
-        onScroll={checkScroll}
+        onScroll={handleScroll}
       >
         {enableAnimation ? (
           <AnimatedCardGrid className='flex space-x-4 sm:space-x-5 md:space-x-6'>

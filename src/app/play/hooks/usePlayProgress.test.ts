@@ -186,4 +186,27 @@ describe('buildPlayProgressPayload', () => {
 
     expect(payload?.record.cover).toBe(routeCover);
   });
+
+  test('skips building progress payload near video end', () => {
+    const payload = buildPlayProgressPayload({
+      player: {
+        currentTime: 1100,
+        duration: 1200,
+      } as ArtPlayerLike,
+      currentSource: 'source',
+      currentId: 'id',
+      videoTitle: 'Title',
+      videoCover: '',
+      videoDoubanId: 123,
+      detail: createDetail(),
+      playRecords: null,
+      availableSources: [createDetail()],
+      movieDetails: null,
+      bangumiDetails: null,
+      currentEpisodeIndex: 0,
+      searchTitle: 'Title',
+    });
+
+    expect(payload).toBeNull();
+  });
 });

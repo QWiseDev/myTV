@@ -17,6 +17,8 @@ interface PageLayoutProps {
   theater?: boolean;
   /** 访客模式：由 SSR 明确判定未登录时强制关闭登录导航，防止残留失效 cookie 导致菜单回流 */
   guest?: boolean;
+  /** SSR 已校验登录态时透传 true，避免首屏先按未登录渲染再右移 md:pl-44 造成 CLS */
+  initialLoggedIn?: boolean;
 }
 
 const PageLayout = ({
@@ -26,9 +28,10 @@ const PageLayout = ({
   fullWidth = false,
   theater = false,
   guest = false,
+  initialLoggedIn = false,
 }: PageLayoutProps) => {
   // 访客（未登录）：隐藏全部导航入口，只留顶栏 Logo 与登录按钮
-  const isLoggedIn = useIsLoggedIn();
+  const isLoggedIn = useIsLoggedIn(guest ? false : initialLoggedIn);
   const showChrome = !guest && isLoggedIn;
 
   return (
@@ -65,7 +68,12 @@ const PageLayout = ({
           </header>
         }
       >
-        <Header activePath={activePath} theater={theater} guest={guest} />
+        <Header
+          activePath={activePath}
+          theater={theater}
+          guest={guest}
+          initialLoggedIn={initialLoggedIn}
+        />
       </Suspense>
 
       <main

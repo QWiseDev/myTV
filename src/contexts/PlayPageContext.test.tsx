@@ -55,4 +55,20 @@ describe('PlaybackDataProvider', () => {
       'update-source+update-id',
     ]);
   });
+
+  it('播放页传入 eager 时透传给 useContinueWatchingData', () => {
+    render(
+      <PlaybackDataProvider
+        includePlayRecordKeys={['route-source+route-id']}
+        eager
+      >
+        <div>content</div>
+      </PlaybackDataProvider>,
+    );
+
+    expect(mockUseContinueWatchingData).toHaveBeenCalledWith(
+      ['route-source+route-id', 'update-source+update-id'],
+      { eager: true },
+    );
+  });
 });

@@ -88,18 +88,25 @@ export function getVideoCardSearchType({
 }
 
 export interface VideoCardLocation {
-  assign(url: string): void;
+  assign?: (url: string) => void;
+  push?: (url: string) => void;
 }
 
 export function navigateVideoCardPlayUrl(
   playUrl: string,
-  location: VideoCardLocation = window.location,
+  target: VideoCardLocation = window.location,
 ): void {
   if (!playUrl) {
     return;
   }
 
-  location.assign(playUrl);
+  // 优先走 Next.js 客户端路由，保留路由缓存、JS 运行时与预加载 chunk，避免整页硬刷新
+  if (typeof target.push === 'function') {
+    target.push(playUrl);
+    return;
+  }
+
+  target.assign?.(playUrl);
 }
 
 export function buildVideoCardSubjectUrl(
@@ -181,26 +188,33 @@ export function buildPlayUrl(params: BuildPlayUrlParams): string {
   const resolvedTitle = title.trim() || query?.trim() || '';
 
   if (origin === 'live' && source && id) {
-    return `/live?source=${source.replace('live_', '')}&id=${id.replace(
-      'live_',
-      '',
-    )}`;
+    return `/live?source=${encodeURIComponent(
+      source.replace('live_', ''),
+    )}&id=${encodeURIComponent(id.replace('live_', ''))}`;
   }
 
+  const encodedYear = year ? `&year=${encodeURIComponent(year)}` : '';
+  const encodedSearchType = searchType
+    ? `&stype=${encodeURIComponent(searchType)}`
+    : '';
+  const encodedQuery = query
+    ? `&stitle=${encodeURIComponent(query.trim())}`
+    : '';
+
   if (from === 'douban' || (isAggregate && !source && !id)) {
-    return `/play?title=${encodeURIComponent(resolvedTitle)}${
-      year ? `&year=${year}` : ''
-    }${doubanIdParam}${searchType ? `&stype=${searchType}` : ''}${
+    return `/play?title=${encodeURIComponent(
+      resolvedTitle,
+    )}${encodedYear}${doubanIdParam}${encodedSearchType}${
       isAggregate ? '&prefer=true' : ''
-    }${query ? `&stitle=${encodeURIComponent(query.trim())}` : ''}`;
+    }${encodedQuery}`;
   }
 
   if (source && id) {
-    return `/play?source=${source}&id=${id}&title=${encodeURIComponent(resolvedTitle)}${
-      year ? `&year=${year}` : ''
-    }${doubanIdParam}${isAggregate ? '&prefer=true' : ''}${
-      query ? `&stitle=${encodeURIComponent(query.trim())}` : ''
-    }${searchType ? `&stype=${searchType}` : ''}`;
+    return `/play?source=${encodeURIComponent(source)}&id=${encodeURIComponent(
+      id,
+    )}&title=${encodeURIComponent(resolvedTitle)}${encodedYear}${doubanIdParam}${
+      isAggregate ? '&prefer=true' : ''
+    }${encodedQuery}${encodedSearchType}`;
   }
 
   return '';

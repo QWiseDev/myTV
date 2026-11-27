@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import React from 'react';
 
 interface AnimatedCardGridProps {
@@ -10,38 +9,6 @@ interface AnimatedCardGridProps {
   maxAnimatedItems?: number;
 }
 
-// 容器动画配置
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.05,
-    },
-  },
-};
-
-// 子元素动画配置
-const itemVariants = {
-  hidden: {
-    opacity: 0,
-    y: 12,
-    scale: 0.98,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: 'spring' as const,
-      stiffness: 140,
-      damping: 18,
-      mass: 0.45,
-    },
-  },
-};
-
 export default function AnimatedCardGrid({
   children,
   className = '',
@@ -50,25 +17,29 @@ export default function AnimatedCardGrid({
   const childArray = React.Children.toArray(children);
 
   return (
-    <motion.div
-      className={className}
-      variants={containerVariants}
-      initial='hidden'
-      animate='visible'
-    >
+    <div className={className}>
       {childArray.map((child, index) => {
         const key = React.isValidElement(child) ? child.key : null;
+        const shouldAnimate = index < maxAnimatedItems;
 
         return (
-          <motion.div
+          <div
             key={key ?? index}
-            variants={index < maxAnimatedItems ? itemVariants : undefined}
-            className='flex-shrink-0'
+            className={`flex-shrink-0 ${
+              shouldAnimate
+                ? 'motion-safe:animate-[card-enter_0.32s_cubic-bezier(0.22,1,0.36,1)_both]'
+                : ''
+            }`}
+            style={
+              shouldAnimate
+                ? { animationDelay: `${(index + 1) * 40}ms` }
+                : undefined
+            }
           >
             {child}
-          </motion.div>
+          </div>
         );
       })}
-    </motion.div>
+    </div>
   );
 }

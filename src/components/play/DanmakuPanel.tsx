@@ -119,13 +119,29 @@ export default function DanmakuPanel({
       const hadSelection = Boolean(selection || sharedSelection);
       saveDanmakuSelection(mediaKey, episodeIndex, value);
       setSelection(value);
+      if (!value) {
+        setSharedSelection(null);
+      }
       setError('');
+
+      // 恢复自动匹配且需清除服务端共享记录时，先等待服务端清除完成再触发弹幕重载，
+      // 避免 loadExternalDanmu 在 300ms 后抢先读回尚未删除的共享选择。
+      if (!value && canUseSharedCache && hadSelection) {
+        void syncSharedDanmakuSelection(mediaKey, episodeIndex, null)
+          .catch(() => undefined)
+          .finally(() => {
+            if (enabled) {
+              onToggle(true);
+            }
+          });
+        return;
+      }
+
       if (value || enabled) {
         onToggle(true);
       }
       // 手动选择镜像到服务端：其他用户播放同一内容且未选择时默认采用。
-      // 「恢复自动匹配」同样清除共享记录，否则会被默认选择覆盖回原样。
-      if (canUseSharedCache && (value || hadSelection)) {
+      if (canUseSharedCache && value) {
         void syncSharedDanmakuSelection(mediaKey, episodeIndex, value);
       }
     } catch {

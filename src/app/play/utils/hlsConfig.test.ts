@@ -187,6 +187,60 @@ describe('hlsConfig error guards', () => {
       expect.stringContaining('媒体错误'),
     );
   });
+
+  test('notifies fatal handler after fatal network or media retries are exhausted', () => {
+    jest.spyOn(console, 'error').mockImplementation();
+    jest.spyOn(console, 'warn').mockImplementation();
+    const hls = {
+      recoverMediaError: jest.fn(),
+      startLoad: jest.fn(),
+      destroy: jest.fn(),
+      trigger: jest.fn(),
+      levels: [],
+      currentLevel: -1,
+    } as unknown as HlsErrorHandlerInstance;
+    const video = document.createElement('video');
+    const onFatalError = jest.fn();
+
+    // 前两次致命分片网络错误重试 startLoad，第三次销毁并上报触发换源
+    for (let i = 0; i < 3; i += 1) {
+      handleHlsError(
+        'hlsError',
+        { fatal: true, type: 'networkError', details: 'fragLoadError' },
+        hls,
+        video,
+        onFatalError,
+      );
+    }
+
+    expect(hls.startLoad).toHaveBeenCalledTimes(2);
+    expect(hls.destroy).toHaveBeenCalledTimes(1);
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+
+    // 前两次致命媒体错误调用 recoverMediaError，第三次销毁并上报
+    const mediaHls = {
+      recoverMediaError: jest.fn(),
+      startLoad: jest.fn(),
+      destroy: jest.fn(),
+      trigger: jest.fn(),
+      levels: [],
+      currentLevel: -1,
+    } as unknown as HlsErrorHandlerInstance;
+    const onMediaFatal = jest.fn();
+    for (let i = 0; i < 3; i += 1) {
+      handleHlsError(
+        'hlsError',
+        { fatal: true, type: 'mediaError', details: 'bufferStalledError' },
+        mediaHls,
+        video,
+        onMediaFatal,
+      );
+    }
+
+    expect(mediaHls.recoverMediaError).toHaveBeenCalledTimes(2);
+    expect(mediaHls.destroy).toHaveBeenCalledTimes(1);
+    expect(onMediaFatal).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('hlsConfig performance defaults', () => {

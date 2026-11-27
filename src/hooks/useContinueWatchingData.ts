@@ -85,7 +85,16 @@ function normalizeKeys(keys: string[]): string[] {
   return Array.from(new Set(keys)).sort();
 }
 
-export function useContinueWatchingData(desiredKeys: string[]) {
+export interface UseContinueWatchingDataOptions {
+  /** 立即发起首拉，跳过 200ms idle 调度（用于播放页快速续播） */
+  eager?: boolean;
+}
+
+export function useContinueWatchingData(
+  ...args: [desiredKeys: string[], options?: UseContinueWatchingDataOptions]
+) {
+  const [desiredKeys, options] = args;
+  const eager = options?.eager === true;
   // ---- 视图状态 ----
   const [page, setPageState] = useState<PageState | null>(null);
   const [loadingPlayRecords, setLoadingPlayRecords] = useState(true);
@@ -833,22 +842,27 @@ export function useContinueWatchingData(desiredKeys: string[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desiredSignature, scheduleSync]);
 
-  // ---- 首拉 idle 调度（方案 5.3.1 / 5.3.7）----
+  // ---- 首拉调度（方案 5.3.1 / 5.3.7；播放页支持 eager 立即首拉）----
   useEffect(() => {
-    const cancelLoad = scheduleIdleTask(
-      () => {
-        cancelInitialLoadRef.current = null;
-        void runInitialLoad('idle');
-      },
-      {
-        delayMs: 200,
-        timeoutMs: 1000,
-      },
-    );
-    cancelInitialLoadRef.current = cancelLoad;
+    let cancelLoad: (() => void) | null = null;
+    if (eager) {
+      void runInitialLoad('idle');
+    } else {
+      cancelLoad = scheduleIdleTask(
+        () => {
+          cancelInitialLoadRef.current = null;
+          void runInitialLoad('idle');
+        },
+        {
+          delayMs: 200,
+          timeoutMs: 1000,
+        },
+      );
+      cancelInitialLoadRef.current = cancelLoad;
+    }
 
     return () => {
-      cancelLoad();
+      cancelLoad?.();
       // 卸载：作废所有在飞响应、catch 与 finally（方案 5.3.7）
       generationRef.current += 1;
       cancelSyncDebounce();

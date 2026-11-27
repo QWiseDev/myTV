@@ -99,14 +99,23 @@ export function useSourceSwitcher({
   loadExternalDanmu,
 }: UseSourceSwitcherParams) {
   const availableSourcesRef = useRef(availableSources);
+  const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
+  const deferredDanmuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const operationGenerationRef = useRef(0);
   availableSourcesRef.current = availableSources;
+  currentEpisodeIndexRef.current = currentEpisodeIndex;
 
   useEffect(() => {
     return () => {
       operationGenerationRef.current += 1;
       isSourceChangingRef.current = false;
       sourceChangeOwnerRef.current = null;
+      if (deferredDanmuTimeoutRef.current) {
+        clearTimeout(deferredDanmuTimeoutRef.current);
+        deferredDanmuTimeoutRef.current = null;
+      }
     };
   }, [isSourceChangingRef, sourceChangeOwnerRef]);
 
@@ -142,12 +151,14 @@ export function useSourceSwitcher({
         return;
       }
 
+      const activeEpisodeIndex = currentEpisodeIndexRef.current;
+
       // 换源尝试埋点：from/to 源名在 lib 层统一脱敏
       analytics.trackFeatureUsage('source_switch', true, {
         from_source: currentSourceRef.current,
         to_source: newSource,
         initiated_by: initiatedBy,
-        episode_index: currentEpisodeIndex,
+        episode_index: activeEpisodeIndex,
       });
 
       const operationGeneration = ++operationGenerationRef.current;
@@ -187,6 +198,10 @@ export function useSourceSwitcher({
           clearTimeout(episodeSwitchTimeoutRef.current);
           episodeSwitchTimeoutRef.current = null;
         }
+        if (deferredDanmuTimeoutRef.current) {
+          clearTimeout(deferredDanmuTimeoutRef.current);
+          deferredDanmuTimeoutRef.current = null;
+        }
 
         clearDanmakuDisplay(artPlayerRef.current, { hide: true });
         const artBeforeSwitch = artPlayerRef.current;
@@ -223,7 +238,7 @@ export function useSourceSwitcher({
           return;
         }
 
-        let targetIndex = currentEpisodeIndex;
+        let targetIndex = activeEpisodeIndex;
 
         if (
           !resolvedDetail.episodes ||
@@ -236,7 +251,7 @@ export function useSourceSwitcher({
         if (!targetVideoUrl) {
           throw new Error('目标播放源当前集没有可播放地址');
         }
-        if (targetIndex !== currentEpisodeIndex) {
+        if (targetIndex !== activeEpisodeIndex) {
           resumeTimeRef.current = 0;
         } else if (
           (!resumeTimeRef.current || resumeTimeRef.current === 0) &&
@@ -302,7 +317,8 @@ export function useSourceSwitcher({
         }
         window.history.replaceState({}, '', newUrl.toString());
 
-        setTimeout(async () => {
+        deferredDanmuTimeoutRef.current = setTimeout(async () => {
+          deferredDanmuTimeoutRef.current = null;
           if (!canCommitOperation()) return;
           const art = artPlayerRef.current;
           // 换源若已重建新播放器实例，则由新实例的 ready 钩子负责加载弹幕，避免双发竞争
@@ -360,14 +376,13 @@ export function useSourceSwitcher({
           {
             to_source: newSource,
             initiated_by: initiatedBy,
-            episode_index: currentEpisodeIndex,
+            episode_index: activeEpisodeIndex,
           },
         );
       }
     },
     [
       artPlayerRef,
-      currentEpisodeIndex,
       currentSourceRef,
       currentIdRef,
       danmuLoadingRef,

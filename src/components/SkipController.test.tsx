@@ -255,4 +255,51 @@ describe('SkipController', () => {
       }),
     );
   });
+
+  test('rebinds timeupdate listener when playerInstanceId increments after source rebuild', async () => {
+    mockGetSkipConfig.mockResolvedValue(null);
+    const firstPlayer = createPlayerRef().current;
+    const secondPlayer = createPlayerRef().current;
+    const playerRef = { current: firstPlayer };
+
+    const { rerender } = render(
+      <SkipController
+        source='source-a'
+        id='id-a'
+        title='A'
+        duration={1200}
+        artPlayerRef={playerRef}
+        playerInstanceId={1}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mockGetSkipConfig).toHaveBeenCalledWith('source-a', 'id-a'),
+    );
+    expect(firstPlayer.on).toHaveBeenCalledWith(
+      'video:timeupdate',
+      expect.any(Function),
+    );
+
+    playerRef.current = secondPlayer;
+    rerender(
+      <SkipController
+        source='source-a'
+        id='id-a'
+        title='A'
+        duration={1200}
+        artPlayerRef={playerRef}
+        playerInstanceId={2}
+      />,
+    );
+
+    expect(firstPlayer.off).toHaveBeenCalledWith(
+      'video:timeupdate',
+      expect.any(Function),
+    );
+    expect(secondPlayer.on).toHaveBeenCalledWith(
+      'video:timeupdate',
+      expect.any(Function),
+    );
+  });
 });

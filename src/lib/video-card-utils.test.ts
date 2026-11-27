@@ -55,6 +55,21 @@ describe('buildPlayUrl', () => {
       '/play?title=%E5%8D%97%E9%83%A8%E6%A1%A3%E6%A1%88&year=2026&douban_id=35465012&stype=tv',
     );
   });
+
+  it('encodes special characters in source, id, year, and searchType', () => {
+    expect(
+      buildPlayUrl({
+        from: 'playrecord',
+        source: 'site&a',
+        id: 'vid#1?x',
+        title: '测试',
+        year: '2026+',
+        searchType: 'tv show',
+      }),
+    ).toBe(
+      '/play?source=site%26a&id=vid%231%3Fx&title=%E6%B5%8B%E8%AF%95&year=2026%2B&stype=tv%20show',
+    );
+  });
 });
 
 describe('shouldUseUnoptimizedImage', () => {
@@ -174,6 +189,18 @@ describe('navigateVideoCardPlayUrl', () => {
     navigateVideoCardPlayUrl('/play?title=test', location);
 
     expect(location.assign).toHaveBeenCalledWith('/play?title=test');
+  });
+
+  it('uses router push when available for SPA navigation', () => {
+    const router = {
+      push: jest.fn(),
+      assign: jest.fn(),
+    };
+
+    navigateVideoCardPlayUrl('/play?title=test', router);
+
+    expect(router.push).toHaveBeenCalledWith('/play?title=test');
+    expect(router.assign).not.toHaveBeenCalled();
   });
 
   it('skips empty playback links', () => {
