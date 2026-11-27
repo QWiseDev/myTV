@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 
 import { SearchResult } from '@/lib/types';
+import { buildDefaultUserMenuSettings } from '@/lib/user-menu-settings';
 import { processImageUrl } from '@/lib/utils';
 
 import {
@@ -17,7 +18,6 @@ import {
   buildEpisodeSourceKey,
   EpisodeSourceCheckResult,
   EpisodeSourceProbeError,
-  getOptimalProbeConcurrency,
   isEpisodeProbeResultFresh,
   planEpisodeSourceChecks,
   probePlayableMediaUrl,
@@ -190,6 +190,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
           adFilterType: source.source,
           sourceKey: source.source,
         });
+        if (signal.aborted) return;
         writeResult({
           status: 'success',
           url: raw,
@@ -217,7 +218,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     [selectedEpisodeIndex],
   );
 
-  // 读取本地"优选和测速"开关，默认开启
+  // 读取本地"优选和测速"开关，与 UserMenuSettings / PlayPage 保持一致默认关闭
   const [optimizationEnabled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('enableOptimization');
@@ -229,7 +230,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         }
       }
     }
-    return true;
+    return buildDefaultUserMenuSettings().enableOptimization;
   });
 
   // 当切换到换源tab并且有源数据时，异步获取视频信息
@@ -275,21 +276,14 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       const controller = new AbortController();
       autoProbeAbortRef.current = controller;
 
-      const concurrency = Math.max(1, getOptimalProbeConcurrency());
+      // 自动探测改为串行队列：正在播放页面上并发探测 2~4 路媒体流会与主播放器抢带宽，
+      // 既可能造成当前播放卡顿，也会让各源实测速度偏低失真。
       let cursor = 0;
-      const worker = async () => {
-        while (cursor < pendingSources.length && !controller.signal.aborted) {
-          const source = pendingSources[cursor];
-          cursor += 1;
-          await runAutoProbe(source, controller.signal);
-        }
-      };
-      await Promise.all(
-        Array.from(
-          { length: Math.min(concurrency, pendingSources.length) },
-          worker,
-        ),
-      );
+      while (cursor < pendingSources.length && !controller.signal.aborted) {
+        const source = pendingSources[cursor];
+        cursor += 1;
+        await runAutoProbe(source, controller.signal);
+      }
 
       if (autoProbeAbortRef.current === controller) {
         autoProbeAbortRef.current = null;

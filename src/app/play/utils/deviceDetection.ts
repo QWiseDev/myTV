@@ -55,16 +55,24 @@ export const detectDevice = (): DeviceInfo => {
     };
   }
 
+  const hasMsStream = Boolean((window as WindowWithMSStream).MSStream);
+  const isIPadDesktopMode =
+    !hasMsStream &&
+    userAgent.includes('Macintosh') &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.maxTouchPoints === 'number' &&
+    navigator.maxTouchPoints > 2;
   const isIOS =
-    /iPad|iPhone|iPod/.test(userAgent) &&
-    !(window as WindowWithMSStream).MSStream;
-  const isIOS13 = isIOS && /OS 1[3-9]|OS [2-9][0-9]/.test(userAgent);
+    (/iPad|iPhone|iPod/.test(userAgent) && !hasMsStream) || isIPadDesktopMode;
+  const isIOS13 =
+    isIOS && (/OS 1[3-9]|OS [2-9][0-9]/.test(userAgent) || isIPadDesktopMode);
   const isAndroid = /Android/i.test(userAgent);
   const isMobile =
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       userAgent,
-    );
-  const isTablet = /iPad|Android(?!.*Mobile)/i.test(userAgent);
+    ) || isIPadDesktopMode;
+  const isTablet =
+    /iPad|Android(?!.*Mobile)/i.test(userAgent) || isIPadDesktopMode;
   const isSafari = /^(?:(?!chrome|android).)*safari/i.test(userAgent);
   const isWebKit = isSafari || isIOS;
   const isEdge = /Edg/i.test(userAgent);

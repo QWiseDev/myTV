@@ -18,6 +18,6 @@ export function appendSourceFragmentParam(
   const param = sourceKey
     ? FRAGMENT_URL_SUFFIX_BY_SOURCE[sourceKey]
     : undefined;
-  if (!param || !url) return url;
+  if (!param || !url || url.includes(param)) return url;
   return url.includes('?') ? `${url}&${param}` : `${url}?${param}`;
 }

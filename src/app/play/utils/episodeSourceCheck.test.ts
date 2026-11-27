@@ -10,9 +10,12 @@ import {
   isEpisodeProbeResultFresh,
   isLikelyHlsUrl,
   measureSegmentLoadSpeed,
+  measureSegmentLoadSpeedDetailed,
   pickDeclaredResolutionHeight,
   pickFirstMediaSegment,
   planEpisodeSourceChecks,
+  probePlayableMediaUrl,
+  readLocalAdFilterSettings,
   runEpisodeSourceChecks,
 } from '@/app/play/utils/episodeSourceCheck';
 
@@ -555,6 +558,65 @@ describe('episodeSourceCheck', () => {
       await expect(promise).resolves.toMatch(/(KB\/s|MB\/s)$/);
     });
 
+    test('filterAds=true 时 followManifestToSegment 跳过前置广告分片', async () => {
+      const media = [
+        '#EXTM3U',
+        '#EXT-X-DISCONTINUITY',
+        '#EXT-X-CUE-OUT:DURATION=10',
+        '#EXTINF:10,',
+        'https://ads.test/ad0.ts',
+        '#EXT-X-CUE-IN',
+        '#EXT-X-DISCONTINUITY',
+        '#EXTINF:10,',
+        'https://cdn.test/main0.ts',
+      ].join('\n');
+
+      const res = await followManifestToSegment(
+        media,
+        'https://cdn.test/index.m3u8',
+        { filterAds: true },
+      );
+
+      expect(res.segmentUrl).toBe('https://cdn.test/main0.ts');
+    });
+
+    test('measureSegmentLoadSpeedDetailed 对 403 分片标记 reachable=false，小分片且耗时充足时仍给出实测速度', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+      }) as unknown as typeof fetch;
+
+      const blocked = await measureSegmentLoadSpeedDetailed(
+        'https://cdn.test/403.ts',
+      );
+      expect(blocked.reachable).toBe(false);
+      expect(blocked.status).toBe(403);
+      expect(blocked.speed).toBe('未知');
+
+      const smallChunk = new Uint8Array(24 * 1024);
+      const reader = {
+        read: jest
+          .fn()
+          .mockImplementationOnce(async () => {
+            await new Promise((r) => setTimeout(r, 170));
+            return { done: false, value: smallChunk };
+          })
+          .mockResolvedValueOnce({ done: true }),
+        cancel: jest.fn().mockResolvedValue(undefined),
+      };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      }) as unknown as typeof fetch;
+
+      const smallOk = await measureSegmentLoadSpeedDetailed(
+        'https://cdn.test/tiny.ts',
+      );
+      expect(smallOk.reachable).toBe(true);
+      expect(smallOk.speed).toMatch(/KB\/s$/);
+    });
+
     test('外部取消返回未知，不编造速度', async () => {
       global.fetch = jest.fn(
         (_url: string, init: { signal?: AbortSignal }) =>
@@ -572,6 +634,101 @@ describe('episodeSourceCheck', () => {
       controller.abort();
 
       await expect(promise).resolves.toBe('未知');
+    });
+
+    test('readLocalAdFilterSettings 正确读取本地去广告开关与自定义代码', () => {
+      localStorage.removeItem('enable_blockad');
+      localStorage.removeItem('custom_ad_filter_code_cache');
+      expect(readLocalAdFilterSettings()).toEqual({
+        enabled: true,
+        customCode: '',
+      });
+
+      localStorage.setItem('enable_blockad', 'false');
+      localStorage.setItem('custom_ad_filter_code_cache', 'return lines;');
+      expect(readLocalAdFilterSettings()).toEqual({
+        enabled: false,
+        customCode: 'return lines;',
+      });
+
+      localStorage.removeItem('enable_blockad');
+      localStorage.removeItem('custom_ad_filter_code_cache');
+    });
+
+    test('probePlayableMediaUrl 在原生 HLS 路径清单挂起时仍受总超时预算约束不会永久阻塞', async () => {
+      const originalUserAgent = navigator.userAgent;
+      Object.defineProperty(navigator, 'userAgent', {
+        configurable: true,
+        value:
+          'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+      });
+      const originalCreateElement = document.createElement.bind(document);
+      let createdVideo: HTMLVideoElement | null = null;
+      jest
+        .spyOn(document, 'createElement')
+        .mockImplementation((tagName: string) => {
+          const el = originalCreateElement(tagName);
+          if (tagName.toLowerCase() === 'video') {
+            createdVideo = el as HTMLVideoElement;
+            Object.defineProperty(createdVideo, 'canPlayType', {
+              configurable: true,
+              value: () => 'probably',
+            });
+            Object.defineProperty(createdVideo, 'videoHeight', {
+              configurable: true,
+              value: 1080,
+            });
+            Object.defineProperty(createdVideo, 'readyState', {
+              configurable: true,
+              value: 4,
+            });
+            createdVideo.play = jest.fn().mockResolvedValue(undefined);
+            createdVideo.pause = jest.fn();
+            createdVideo.load = jest.fn(() => {
+              setTimeout(() => {
+                createdVideo?.dispatchEvent(new Event('loadedmetadata'));
+              }, 10);
+            });
+          }
+          return el;
+        });
+
+      global.fetch = jest.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.method === 'HEAD') {
+            return Promise.resolve({ ok: true, status: 200 });
+          }
+          // 模拟原生 HLS 结算后的独立测速清单请求挂起，直到收到 abort 才退出
+          return new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            );
+          });
+        },
+      ) as unknown as typeof fetch;
+
+      try {
+        const started = Date.now();
+        const controller = new AbortController();
+        const result = await probePlayableMediaUrl(
+          'https://cdn.test/native/index.m3u8',
+          {
+            timeoutMs: 450,
+            signal: controller.signal,
+          },
+        );
+        const elapsed = Date.now() - started;
+
+        expect(result.quality).toBe('1080p');
+        expect(result.loadSpeed).toBe('未知');
+        expect(elapsed).toBeLessThan(1500);
+      } finally {
+        Object.defineProperty(navigator, 'userAgent', {
+          configurable: true,
+          value: originalUserAgent,
+        });
+        jest.restoreAllMocks();
+      }
     });
   });
 });

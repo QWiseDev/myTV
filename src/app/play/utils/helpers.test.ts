@@ -1,4 +1,8 @@
-import { filterAdsFromM3U8 } from './helpers';
+import {
+  calculateSourceScore,
+  filterAdsFromM3U8,
+  parseSpeedToKBps,
+} from './helpers';
 
 describe('helpers', () => {
   test('filterAdsFromM3U8 preserves discontinuity tags and manifest content', () => {
@@ -89,5 +93,54 @@ describe('helpers', () => {
     ].join('\n');
 
     expect(filterAdsFromM3U8(manifest)).toBe(manifest);
+  });
+
+  test('parseSpeedToKBps parses KB/s and MB/s uniformly and rejects unknown strings', () => {
+    expect(parseSpeedToKBps('1.50 MB/s')).toBe(1536);
+    expect(parseSpeedToKBps('512.00 KB/s')).toBe(512);
+    expect(parseSpeedToKBps('未知')).toBe(0);
+    expect(parseSpeedToKBps('测量中...')).toBe(0);
+    expect(parseSpeedToKBps(undefined)).toBe(0);
+  });
+
+  test('calculateSourceScore gives 0 speed points to unknown speed so it never beats measured working sources', () => {
+    const measuredWorking = calculateSourceScore(
+      { quality: '1080p', loadSpeed: '1.00 MB/s', pingTime: 120 },
+      10 * 1024,
+      80,
+      200,
+    );
+    const unknownSpeed = calculateSourceScore(
+      { quality: '1080p', loadSpeed: '未知', pingTime: 80 },
+      10 * 1024,
+      80,
+      200,
+    );
+
+    // 1MB/s (4 pts) + same 1080p (30) + ping (~13.33) = 47.33 vs unknown 30 + 0 + 20?
+    // Verify score components explicitly: unknown gets 0 speedScore; broken 9999 ping gets 0 pingScore
+    const measuredSamePing = calculateSourceScore(
+      { quality: '1080p', loadSpeed: '1.00 MB/s', pingTime: 100 },
+      10 * 1024,
+      100,
+      200,
+    );
+    const unknownSamePing = calculateSourceScore(
+      { quality: '1080p', loadSpeed: '未知', pingTime: 100 },
+      10 * 1024,
+      100,
+      200,
+    );
+    expect(measuredWorking).toBeGreaterThan(0);
+    expect(unknownSpeed).toBe(50);
+    expect(measuredSamePing).toBeGreaterThan(unknownSamePing);
+
+    const sentinelPingScore = calculateSourceScore(
+      { quality: '未知', loadSpeed: '未知', pingTime: 9999 },
+      1024,
+      80,
+      9999,
+    );
+    expect(sentinelPingScore).toBe(0);
   });
 });

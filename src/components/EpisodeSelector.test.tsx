@@ -188,4 +188,20 @@ describe('EpisodeSelector', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mockProbePlayableMediaUrl).toHaveBeenCalledTimes(1);
   });
+
+  test('defaults optimizationEnabled to false consistently with global settings and avoids unprompted auto-probing', async () => {
+    const sourceA = createSource('source-a', 'a', ['https://a.example/1.m3u8']);
+
+    render(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        availableSources={[sourceA]}
+      />,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mockProbePlayableMediaUrl).not.toHaveBeenCalled();
+  });
 });

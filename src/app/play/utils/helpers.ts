@@ -215,6 +215,19 @@ export const checkAllKeywordsMatch = (
 };
 
 /**
+ * 将测速文本（如 `1.50 MB/s` / `512.00 KB/s`）统一解析为 KB/s；
+ * 未知、测量中或非法值返回 0。
+ */
+export function parseSpeedToKBps(speedStr: string | undefined): number {
+  if (!speedStr || speedStr === '未知' || speedStr === '测量中...') return 0;
+  const match = speedStr.match(/^([\d.]+)\s*(KB\/s|MB\/s)$/i);
+  if (!match) return 0;
+  const value = parseFloat(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return match[2].toUpperCase() === 'MB/S' ? value * 1024 : value;
+}
+
+/**
  * 计算播放源综合评分
  */
 export const calculateSourceScore = (
@@ -251,17 +264,10 @@ export const calculateSourceScore = (
   score += qualityScore * 0.4;
 
   // 下载速度评分 (40% 权重) - 基于最大速度线性映射
+  // 未测出速度或采样无效不得高于实测正速度源
   const speedScore = (() => {
-    const speedStr = testResult.loadSpeed;
-    if (speedStr === '未知' || speedStr === '测量中...') return 30;
-
-    // 解析速度值
-    const match = speedStr.match(/^([\d.]+)\s*(KB\/s|MB\/s)$/);
-    if (!match) return 30;
-
-    const value = parseFloat(match[1]);
-    const unit = match[2];
-    const speedKBps = unit === 'MB/s' ? value * 1024 : value;
+    const speedKBps = parseSpeedToKBps(testResult.loadSpeed);
+    if (speedKBps <= 0 || maxSpeed <= 0) return 0;
 
     // 基于最大速度线性映射，最高100分
     const speedRatio = speedKBps / maxSpeed;
@@ -272,10 +278,10 @@ export const calculateSourceScore = (
   // 网络延迟评分 (20% 权重) - 基于延迟范围线性映射
   const pingScore = (() => {
     const ping = testResult.pingTime;
-    if (ping <= 0) return 0; // 无效延迟给默认分
+    if (ping <= 0 || ping >= 9999) return 0; // 无效或超时兜底延迟不参与高分
 
     // 如果所有延迟都相同，给满分
-    if (maxPing === minPing) return 100;
+    if (maxPing <= minPing) return 100;
 
     // 线性映射：最低延迟=100分，最高延迟=0分
     const pingRatio = (maxPing - ping) / (maxPing - minPing);

@@ -5,6 +5,27 @@ import { filterAdsFromM3U8 } from './helpers';
 
 const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
 
+/**
+ * 读取本地去广告开关与自定义去广告代码（与 Play 页保持一致，默认开启）。
+ */
+export function readLocalAdFilterSettings(): {
+  enabled: boolean;
+  customCode: string;
+} {
+  let enabled = true;
+  let customCode = '';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('enable_blockad');
+      if (v !== null) enabled = v === 'true';
+      customCode = localStorage.getItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY) || '';
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return { enabled, customCode };
+}
+
 type HlsLoaderContext = {
   type?: string;
   url?: string;
@@ -12,6 +33,7 @@ type HlsLoaderContext = {
 
 type HlsLoaderResponse = {
   data?: unknown;
+  url?: string;
 };
 
 type HlsLoaderCallbacks = {
@@ -258,6 +280,15 @@ export function pickDeclaredResolutionHeight(manifestText: string): number {
   return maxHeight;
 }
 
+export interface SegmentSpeedMeasurement {
+  speed: string;
+  reachable: boolean;
+  status?: number;
+  bytes: number;
+  durationMs: number;
+  ttfbMs?: number;
+}
+
 /**
  * 顺着 manifest 走到真正的媒体分片。
  *
@@ -268,10 +299,25 @@ export function pickDeclaredResolutionHeight(manifestText: string): number {
 export async function followManifestToSegment(
   manifestText: string,
   baseUrl: string,
-  options: { signal?: AbortSignal } = {},
+  options: {
+    signal?: AbortSignal;
+    cache?: RequestCache;
+    filterAds?: boolean;
+    adFilterType?: string;
+    customAdFilterCode?: string;
+  } = {},
 ): Promise<{ segmentUrl: string | null; declaredHeight: number }> {
-  let declaredHeight = pickDeclaredResolutionHeight(manifestText);
-  let segmentUrl = pickFirstMediaSegment(manifestText, baseUrl);
+  const applyFilter = (text: string) =>
+    options.filterAds
+      ? filterAdsFromM3U8(text, {
+          type: options.adFilterType,
+          customCode: options.customAdFilterCode,
+        })
+      : text;
+
+  const declaredHeightOuter = pickDeclaredResolutionHeight(manifestText);
+  let declaredHeight = declaredHeightOuter;
+  let segmentUrl = pickFirstMediaSegment(applyFilter(manifestText), baseUrl);
 
   if (!segmentUrl || !isLikelyHlsUrl(segmentUrl)) {
     return { segmentUrl, declaredHeight };
@@ -280,10 +326,13 @@ export async function followManifestToSegment(
   try {
     const response = await fetch(segmentUrl, {
       signal: options.signal,
-      cache: 'no-store',
+      cache: options.cache ?? 'no-store',
     });
     if (!response.ok) return { segmentUrl, declaredHeight };
     const childText = await response.text();
+    if (!/#EXT(?:M3U|-X-|INF)/i.test(childText)) {
+      return { segmentUrl: null, declaredHeight };
+    }
 
     if (declaredHeight === 0) {
       const childHeight = pickDeclaredResolutionHeight(childText);
@@ -292,13 +341,190 @@ export async function followManifestToSegment(
 
     // 重定向后的相对路径要基于最终地址解析
     const childBase = response.url || segmentUrl;
-    const childSegment = pickFirstMediaSegment(childText, childBase);
+    const childSegment = pickFirstMediaSegment(
+      applyFilter(childText),
+      childBase,
+    );
     if (childSegment) segmentUrl = childSegment;
   } catch {
     // 子列表读取失败时保留外层信息
   }
 
   return { segmentUrl, declaredHeight };
+}
+
+/**
+ * 以独立请求精确测量首个分片下载速度，并暴露明确的可达性信息供选源复用。
+ */
+export async function measureSegmentLoadSpeedDetailed(
+  segmentUrl: string,
+  options: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    /** 读够该字节数即可停止，避免为测速白下载整个分片 */
+    maxBytes?: number;
+    /** 被中止时也按已读字节给结论（慢源因此能显示低速而不是「未知」） */
+    partialOnAbort?: boolean;
+    /** 源 key：部分 CDN（如爱奇艺源）的分片请求须携带防盗链参数 */
+    sourceKey?: string;
+  } = {},
+): Promise<SegmentSpeedMeasurement> {
+  const timeoutMs =
+    typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
+  const maxBytes =
+    typeof options.maxBytes === 'number' ? options.maxBytes : 512 * 1024;
+  const partialOnAbort = options.partialOnAbort === true;
+
+  if (options.signal?.aborted) {
+    return { speed: '未知', reachable: false, bytes: 0, durationMs: 0 };
+  }
+
+  // 样本下限：读取量太小或时间窗太短时，速度没有统计意义；
+  // 若片段本身较小（>=16KB）但已稳定经历一段网络耗时，也允许结算真实低速/小分片速度。
+  const MIN_SAMPLE_BYTES = 64 * 1024;
+  const RELAXED_SAMPLE_BYTES = 16 * 1024;
+  const MIN_SAMPLE_MS = 20;
+
+  const isSampleValid = (
+    sampleBytes: number,
+    sampleDuration: number,
+    isPartial: boolean,
+  ): boolean => {
+    if (sampleBytes >= MIN_SAMPLE_BYTES && sampleDuration >= MIN_SAMPLE_MS) {
+      return true;
+    }
+    if (sampleBytes >= RELAXED_SAMPLE_BYTES) {
+      return isPartial ? sampleDuration >= 500 : sampleDuration >= 150;
+    }
+    return false;
+  };
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+
+  let bytes = 0;
+  let headersOk = false;
+  let status: number | undefined;
+  let ttfbMs: number | undefined;
+  // 从请求发出即开始计时：TTFB 与首个 chunk 的合并缓冲都计入窗口，
+  // 否则慢首包会被算成高速，或快源因窗口过短被判成「未知」。
+  const startedAt = performance.now();
+
+  const reportPartial = (): SegmentSpeedMeasurement => {
+    const duration = performance.now() - startedAt;
+    if (options.signal?.aborted && !partialOnAbort) {
+      return {
+        speed: '未知',
+        reachable: headersOk,
+        status,
+        bytes,
+        durationMs: duration,
+        ttfbMs,
+      };
+    }
+    if (!isSampleValid(bytes, duration, true)) {
+      return {
+        speed: '未知',
+        reachable: headersOk,
+        status,
+        bytes,
+        durationMs: duration,
+        ttfbMs,
+      };
+    }
+    return {
+      speed: formatSpeed(bytes, duration),
+      reachable: headersOk,
+      status,
+      bytes,
+      durationMs: duration,
+      ttfbMs,
+    };
+  };
+
+  try {
+    const response = await fetch(
+      appendSourceFragmentParam(options.sourceKey, segmentUrl),
+      {
+        signal: controller.signal,
+        // 命中浏览器缓存时读到的是本地数据，测出来会是假高速，因此显式绕过缓存
+        cache: 'no-store',
+      },
+    );
+    ttfbMs = Math.max(1, Math.round(performance.now() - startedAt));
+    status = response.status;
+    if (!response.ok) {
+      return {
+        speed: '未知',
+        reachable: false,
+        status,
+        bytes: 0,
+        durationMs: performance.now() - startedAt,
+        ttfbMs,
+      };
+    }
+    headersOk = true;
+    if (!response.body) {
+      return {
+        speed: '未知',
+        reachable: true,
+        status,
+        bytes: 0,
+        durationMs: performance.now() - startedAt,
+        ttfbMs,
+      };
+    }
+
+    const reader = response.body.getReader();
+
+    while (bytes < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) bytes += value.byteLength;
+    }
+    const duration = performance.now() - startedAt;
+    void reader.cancel().catch(() => undefined);
+
+    if (!isSampleValid(bytes, duration, false)) {
+      return {
+        speed: '未知',
+        reachable: true,
+        status,
+        bytes,
+        durationMs: duration,
+        ttfbMs,
+      };
+    }
+    return {
+      speed: formatSpeed(bytes, duration),
+      reachable: true,
+      status,
+      bytes,
+      durationMs: duration,
+      ttfbMs,
+    };
+  } catch {
+    if (headersOk && (timedOut || partialOnAbort)) {
+      return reportPartial();
+    }
+    return {
+      speed: '未知',
+      reachable: false,
+      status,
+      bytes,
+      durationMs: performance.now() - startedAt,
+      ttfbMs,
+    };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /**
@@ -322,72 +548,8 @@ export async function measureSegmentLoadSpeed(
     sourceKey?: string;
   } = {},
 ): Promise<string> {
-  const timeoutMs =
-    typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
-  const maxBytes =
-    typeof options.maxBytes === 'number' ? options.maxBytes : 512 * 1024;
-  const partialOnAbort = options.partialOnAbort === true;
-
-  if (options.signal?.aborted) return '未知';
-
-  // 样本下限：读取量太小或时间窗太短时，速度没有统计意义
-  const MIN_SAMPLE_BYTES = 64 * 1024;
-  const MIN_SAMPLE_MS = 20;
-
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const onAbort = () => controller.abort();
-  options.signal?.addEventListener('abort', onAbort, { once: true });
-
-  let bytes = 0;
-  // 从请求发出即开始计时：TTFB 与首个 chunk 的合并缓冲都计入窗口，
-  // 否则慢首包会被算成高速，或快源因窗口过短被判成「未知」。
-  const startedAt = performance.now();
-
-  const reportPartial = () => {
-    if (options.signal?.aborted && !partialOnAbort) return '未知';
-    const duration = performance.now() - startedAt;
-    if (bytes < MIN_SAMPLE_BYTES || duration < MIN_SAMPLE_MS) return '未知';
-    return formatSpeed(bytes, duration);
-  };
-
-  try {
-    const response = await fetch(
-      appendSourceFragmentParam(options.sourceKey, segmentUrl),
-      {
-        signal: controller.signal,
-        // 命中浏览器缓存时读到的是本地数据，测出来会是假高速，因此显式绕过缓存
-        cache: 'no-store',
-      },
-    );
-    if (!response.ok || !response.body) return '未知';
-
-    const reader = response.body.getReader();
-
-    while (bytes < maxBytes) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) bytes += value.byteLength;
-    }
-    const duration = performance.now() - startedAt;
-    void reader.cancel().catch(() => undefined);
-
-    // 至少读到 64KB 且耗时足够长，结果才有统计意义；否则视为样本不足
-    if (bytes < MIN_SAMPLE_BYTES || duration < MIN_SAMPLE_MS) return '未知';
-    return formatSpeed(bytes, duration);
-  } catch {
-    // 超时/被中止时已经读到不少数据：按已测字节与耗时给出低速结论，
-    // 否则最慢的源会和「没测过」看起来一样。
-    if (timedOut || partialOnAbort) return reportPartial();
-    return '未知';
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener('abort', onAbort);
-  }
+  const result = await measureSegmentLoadSpeedDetailed(segmentUrl, options);
+  return result.speed;
 }
 
 export class EpisodeSourceProbeError extends Error {
@@ -479,8 +641,7 @@ export async function probePlayableMediaUrl(
   let done = false;
   let hasMetadata = false;
   let hasFirstFrag = false;
-  // 独立测速任务的 Promise：结算时短等一次，避免「可播但速度未知」的闪空
-  let speedProbe: Promise<void> | null = null;
+  let capturedSegmentUrl: string | null = null;
   // 等待分辨率而延后结算的一次性定时器
   let pendingResolveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -489,7 +650,13 @@ export async function probePlayableMediaUrl(
   // 0 表示未知：HLS 取 manifest TTFB，直链用串行 HEAD 探活
   let pingTimeMs = 0;
 
-  // 旁路测速专用中止开关：探测结束后必须停掉，避免退出后仍在后台下载分片
+  const probeDeadline = Date.now() + options.timeoutMs;
+
+  // 读取本地去广告开关（与 Play 页一致，默认开启）
+  const { enabled: blockAdEnabled, customCode: customAdFilterCode } =
+    readLocalAdFilterSettings();
+
+  // 旁路测速专用中止开关：仅在探测彻底取消/退出时触发，避免后台继续下载
   const speedController = new AbortController();
   const abortSpeedProbe = () => {
     try {
@@ -542,7 +709,77 @@ export async function probePlayableMediaUrl(
 
   return new Promise((resolve, reject) => {
     void (async () => {
-      const safeResolve = () => {
+      const runIsolatedSpeedProbe = async (): Promise<void> => {
+        if (options.signal.aborted || speedController.signal.aborted) return;
+        const remainingMs = Math.max(0, probeDeadline - Date.now());
+        if (remainingMs < 250) return;
+        const speedTimeoutMs = Math.min(4500, remainingMs);
+        const speedTimer = setTimeout(abortSpeedProbe, speedTimeoutMs);
+        try {
+          let targetSegmentUrl = capturedSegmentUrl;
+          if (isLikelyHlsUrl(url) && !targetSegmentUrl) {
+            const manifestResponse = await fetch(url, {
+              signal: speedController.signal,
+              cache: 'no-store',
+            });
+            if (manifestResponse.ok) {
+              const manifestText = await manifestResponse.text();
+              const manifestBase = manifestResponse.url || url;
+              const followed = await followManifestToSegment(
+                manifestText,
+                manifestBase,
+                {
+                  signal: speedController.signal,
+                  filterAds: blockAdEnabled,
+                  adFilterType: options.adFilterType,
+                  customAdFilterCode,
+                },
+              );
+              if (followed.declaredHeight > 0 && quality === '未知') {
+                quality = qualityFromHeight(followed.declaredHeight);
+              }
+              targetSegmentUrl = followed.segmentUrl;
+            }
+          } else if (!isLikelyHlsUrl(url) && !targetSegmentUrl) {
+            targetSegmentUrl = url;
+          }
+
+          if (
+            !targetSegmentUrl ||
+            (isLikelyHlsUrl(url) && isLikelyHlsUrl(targetSegmentUrl)) ||
+            options.signal.aborted ||
+            speedController.signal.aborted
+          ) {
+            return;
+          }
+
+          const remainingForSegMs = Math.max(
+            200,
+            Math.min(
+              isLikelyHlsUrl(url)
+                ? speedTimeoutMs
+                : Math.min(3000, speedTimeoutMs),
+              probeDeadline - Date.now(),
+            ),
+          );
+          const speed = await measureSegmentLoadSpeed(targetSegmentUrl, {
+            signal: speedController.signal,
+            timeoutMs: remainingForSegMs,
+            maxBytes: isLikelyHlsUrl(url) ? 512 * 1024 : 384 * 1024,
+            partialOnAbort: true,
+            sourceKey: options.sourceKey,
+          });
+          if (speed !== '未知') {
+            loadSpeed = speed;
+          }
+        } catch {
+          // CORS 受限或直链测速失败时保留「未知」，不影响已确认的可播结果
+        } finally {
+          clearTimeout(speedTimer);
+        }
+      };
+
+      const safeResolve = async () => {
         if (done) return;
         done = true;
         clearTimeout(timeoutId);
@@ -556,31 +793,23 @@ export async function probePlayableMediaUrl(
         if (quality === '未知' && video.videoHeight > 0) {
           quality = qualityFromHeight(video.videoHeight);
         }
+        // 先销毁 hls.js / video 停止预加载，再以单路流式测速，消除自相抢带宽与 1200ms 截断
         cleanup();
 
-        const finish = () => resolve({ quality, loadSpeed, pingTimeMs });
-        if (!speedProbe) {
-          finish();
+        options.signal.addEventListener('abort', abortSpeedProbe, {
+          once: true,
+        });
+        try {
+          await runIsolatedSpeedProbe();
+        } finally {
+          options.signal.removeEventListener('abort', abortSpeedProbe);
+        }
+
+        if (options.signal.aborted) {
+          reject(new EpisodeSourceProbeError('已取消'));
           return;
         }
-        // 测速通常几秒内完成；短暂等待可避免结果先出、速度后到的闪空。
-        // 超时不阻塞判定，速度保持「未知」。
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          // 放弃等待：停掉还在跑的分片下载，避免和正在播放的视频抢带宽；
-          // 中止后测速会按已读字节结算，短暂等它落定以拿到低速结论。
-          abortSpeedProbe();
-          void speedProbe?.finally(finish);
-          setTimeout(finish, 200);
-        }, 1200);
-        void speedProbe.finally(() => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          finish();
-        });
+        resolve({ quality, loadSpeed, pingTimeMs });
       };
 
       const safeReject = (message: string, details?: string) => {
@@ -676,64 +905,6 @@ export async function probePlayableMediaUrl(
           const mod = await import('hls.js');
           const HlsCtor = mod.default;
 
-          // 独立测速（与 hls.js 并行）：拉 manifest 取首分片自行计时。
-          // hls.js 内部 stats 在并发预加载下不可靠，这里不依赖它。
-          // 使用专用 signal：探测结束/放弃等待时要能立刻停掉下载。
-          speedProbe = (async () => {
-            try {
-              const manifestResponse = await fetch(url, {
-                signal: speedController.signal,
-                cache: 'no-store',
-              });
-              if (!manifestResponse.ok) return;
-              const manifestText = await manifestResponse.text();
-              // 重定向后相对路径要基于最终地址解析，否则会拼到错误路径
-              const manifestBase = manifestResponse.url || url;
-
-              // 多码率主列表还要再下钻一层才能拿到真正的媒体分片
-              const { segmentUrl, declaredHeight } =
-                await followManifestToSegment(manifestText, manifestBase, {
-                  signal: speedController.signal,
-                });
-
-              if (declaredHeight > 0 && quality === '未知') {
-                quality = qualityFromHeight(declaredHeight);
-              }
-              if (!segmentUrl) return;
-              const speed = await measureSegmentLoadSpeed(segmentUrl, {
-                signal: speedController.signal,
-                timeoutMs: 6000,
-                partialOnAbort: true,
-                sourceKey: options.sourceKey,
-              });
-              if (speed !== '未知') {
-                loadSpeed = speed;
-              }
-            } catch {
-              // 测速失败不影响可播判定
-            }
-          })();
-
-          // 读取本地去广告开关（与 Play 页一致，默认开启）
-          const blockAdEnabled = (() => {
-            try {
-              const v = localStorage.getItem('enable_blockad');
-              if (v !== null) return v === 'true';
-            } catch {
-              // ignore
-            }
-            return true;
-          })();
-          const customAdFilterCode = (() => {
-            try {
-              return (
-                localStorage.getItem(CUSTOM_AD_FILTER_CODE_CACHE_KEY) || ''
-              );
-            } catch {
-              return '';
-            }
-          })();
-
           const BaseLoader = HlsCtor.DefaultConfig
             .loader as HlsLoaderConstructor;
 
@@ -746,12 +917,16 @@ export async function probePlayableMediaUrl(
                 conf: unknown,
                 callbacks: HlsLoaderCallbacks,
               ) => {
-                // 部分 CDN（如爱奇艺源）要求 ts 分片请求携带防盗链参数
-                // （hls.js 1.5+ 分片请求的 context.type 是 'media-fragment'）
+                // 部分 CDN（如爱奇艺源）要求 ts 分片请求携带防盗链参数；
+                // 同时在追加签名参数前记录原始首分片地址供单路测速复用，避免重复拉清单。
                 if (
-                  context.type === 'media-fragment' &&
+                  (context.type === 'media-fragment' ||
+                    context.type === 'fragment') &&
                   typeof context.url === 'string'
                 ) {
+                  if (!capturedSegmentUrl) {
+                    capturedSegmentUrl = context.url;
+                  }
                   context.url = appendSourceFragmentParam(
                     options.sourceKey,
                     context.url,
@@ -770,10 +945,23 @@ export async function probePlayableMediaUrl(
                         context.type === 'level') &&
                       typeof response?.data === 'string'
                     ) {
-                      response.data = filterAdsFromM3U8(response.data, {
-                        type: options.adFilterType,
-                        customCode: customAdFilterCode,
-                      });
+                      const manifestText = blockAdEnabled
+                        ? filterAdsFromM3U8(response.data, {
+                            type: options.adFilterType,
+                            customCode: customAdFilterCode,
+                          })
+                        : response.data;
+                      response.data = manifestText;
+                      const manifestBase =
+                        response.url ||
+                        (typeof context.url === 'string' ? context.url : url);
+                      const firstSeg = pickFirstMediaSegment(
+                        manifestText,
+                        manifestBase,
+                      );
+                      if (firstSeg && !isLikelyHlsUrl(firstSeg)) {
+                        capturedSegmentUrl = firstSeg;
+                      }
                     }
                     return originalOnSuccess(
                       response,
@@ -797,9 +985,7 @@ export async function probePlayableMediaUrl(
             maxBufferLength: 2,
             backBufferLength: 0,
             maxBufferSize: 2 * 1024 * 1024,
-            loader: blockAdEnabled
-              ? CustomHlsJsLoader
-              : HlsCtor.DefaultConfig.loader,
+            loader: CustomHlsJsLoader,
           };
 
           const instance = new HlsCtor(hlsConfig);
@@ -856,7 +1042,15 @@ export async function probePlayableMediaUrl(
             (_evt: unknown, data: unknown) => {
               if (hasFirstFrag) return;
               if (!data || typeof data !== 'object') return;
-              // 分片到达即可判定可播；速度由独立测速任务提供
+              const fragUrl = (data as { frag?: { url?: unknown } }).frag?.url;
+              if (
+                typeof fragUrl === 'string' &&
+                !capturedSegmentUrl &&
+                !isLikelyHlsUrl(fragUrl)
+              ) {
+                capturedSegmentUrl = fragUrl;
+              }
+              // 分片到达即可判定可播；速度在 cleanup 后独立单路测速提供
               // （hls.js 并发预加载下其内部计时不可靠，见 measureSegmentLoadSpeed 注释）
               hasFirstFrag = true;
               // 分辨率兜底：单码率 m3u8 的 levels[].height 常为 0，
@@ -1002,99 +1196,125 @@ export async function runEpisodeSourceChecks(params: {
   resolveCache?: (
     item: EpisodeSourceCheckPlanItem,
   ) => EpisodeSourceCheckResult | null;
+  /** 最大探测并发数（默认 1 串行，保证测速不受互抢带宽影响） */
+  concurrency?: number;
   onUpdate: (next: EpisodeSourceCheckResult) => void;
 }): Promise<void> {
-  const { plan, signal, resolveUrl, probeUrl, resolveCache, onUpdate } = params;
+  const {
+    plan,
+    signal,
+    resolveUrl,
+    probeUrl,
+    resolveCache,
+    concurrency: rawConcurrency,
+    onUpdate,
+  } = params;
 
   const emit = (patch: Omit<EpisodeSourceCheckResult, 'checkedAt'>) => {
     onUpdate({ ...patch, checkedAt: Date.now() });
   };
 
-  for (let idx = 0; idx < plan.length; idx += 1) {
-    const item = plan[idx];
-    if (signal.aborted) {
-      for (let i = idx; i < plan.length; i += 1) {
-        emit({
-          sourceKey: plan[i].sourceKey,
-          episodeIndex: plan[i].episodeIndex,
-          status: 'cancelled',
-          message: '已取消',
-        });
+  const concurrency = Math.max(1, Math.floor(rawConcurrency ?? 1));
+  let cursor = 0;
+
+  const worker = async (): Promise<void> => {
+    while (cursor < plan.length) {
+      if (signal.aborted) {
+        while (cursor < plan.length) {
+          const cancelledItem = plan[cursor];
+          cursor += 1;
+          emit({
+            sourceKey: cancelledItem.sourceKey,
+            episodeIndex: cancelledItem.episodeIndex,
+            status: 'cancelled',
+            message: '已取消',
+          });
+        }
+        return;
       }
-      return;
-    }
 
-    if (item.skippedReason) {
-      emit({
-        sourceKey: item.sourceKey,
-        episodeIndex: item.episodeIndex,
-        status: 'skipped',
-        message: item.skippedReason,
-      });
-      continue;
-    }
+      const item = plan[cursor];
+      cursor += 1;
 
-    if (resolveCache) {
-      const cached = resolveCache(item);
-      if (cached && isFinalEpisodeProbeStatus(cached.status)) {
-        onUpdate(cached);
-        continue;
-      }
-    }
-
-    emit({
-      sourceKey: item.sourceKey,
-      episodeIndex: item.episodeIndex,
-      status: 'checking',
-      message: '检测中',
-    });
-
-    try {
-      const resolved = await resolveUrl(item, signal);
-      if (resolved.skippedReason) {
+      if (item.skippedReason) {
         emit({
           sourceKey: item.sourceKey,
           episodeIndex: item.episodeIndex,
           status: 'skipped',
-          message: resolved.skippedReason,
+          message: item.skippedReason,
         });
         continue;
       }
 
-      const url = (resolved.url || '').trim();
-      if (!url) {
+      if (resolveCache) {
+        const cached = resolveCache(item);
+        if (cached && isFinalEpisodeProbeStatus(cached.status)) {
+          onUpdate(cached);
+          continue;
+        }
+      }
+
+      emit({
+        sourceKey: item.sourceKey,
+        episodeIndex: item.episodeIndex,
+        status: 'checking',
+        message: '检测中',
+      });
+
+      try {
+        const resolved = await resolveUrl(item, signal);
+        if (resolved.skippedReason) {
+          emit({
+            sourceKey: item.sourceKey,
+            episodeIndex: item.episodeIndex,
+            status: 'skipped',
+            message: resolved.skippedReason,
+          });
+          continue;
+        }
+
+        const url = (resolved.url || '').trim();
+        if (!url) {
+          emit({
+            sourceKey: item.sourceKey,
+            episodeIndex: item.episodeIndex,
+            status: 'error',
+            message: '解析后播放地址为空',
+          });
+          continue;
+        }
+
+        const metrics = await probeUrl(url, signal, item);
         emit({
           sourceKey: item.sourceKey,
           episodeIndex: item.episodeIndex,
-          status: 'error',
-          message: '解析后播放地址为空',
+          status: 'success',
+          url,
+          quality: metrics.quality,
+          loadSpeed: metrics.loadSpeed,
+          pingTimeMs: metrics.pingTimeMs,
+          message: '可播放',
         });
-        continue;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '检测失败';
+        const details =
+          err instanceof EpisodeSourceProbeError ? err.details : undefined;
+
+        emit({
+          sourceKey: item.sourceKey,
+          episodeIndex: item.episodeIndex,
+          status: signal.aborted ? 'cancelled' : 'error',
+          message: signal.aborted ? '已取消' : message,
+          details,
+        });
       }
-
-      const metrics = await probeUrl(url, signal, item);
-      emit({
-        sourceKey: item.sourceKey,
-        episodeIndex: item.episodeIndex,
-        status: 'success',
-        url,
-        quality: metrics.quality,
-        loadSpeed: metrics.loadSpeed,
-        pingTimeMs: metrics.pingTimeMs,
-        message: '可播放',
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '检测失败';
-      const details =
-        err instanceof EpisodeSourceProbeError ? err.details : undefined;
-
-      emit({
-        sourceKey: item.sourceKey,
-        episodeIndex: item.episodeIndex,
-        status: signal.aborted ? 'cancelled' : 'error',
-        message: signal.aborted ? '已取消' : message,
-        details,
-      });
     }
-  }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, Math.max(1, plan.length)) },
+      () => worker(),
+    ),
+  );
 }

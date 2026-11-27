@@ -40,6 +40,8 @@ interface SourceReliability {
 class SmartCache {
   private cache = new Map<string, SourceTestResult>();
   private reliability = new Map<string, SourceReliability>();
+  private pingSampleCount = new Map<string, number>();
+  private qualitySampleCount = new Map<string, number>();
   private readonly DEFAULT_CACHE_TTL = 15 * 60 * 1000; // 15分钟
   private readonly MAX_CACHE_TTL = 60 * 60 * 1000; // 60分钟
   private readonly MIN_CACHE_TTL = 5 * 60 * 1000; // 5分钟
@@ -49,15 +51,26 @@ class SmartCache {
   private readonly MAX_RELIABILITY_SIZE = 100; // 最大可靠性数据条目数
 
   /**
-   * 生成缓存键
+   * 生成结果缓存键：按归一化完整地址区分（保留查询参数、忽略 hash），
+   * 避免同一 CDN 域名下不同影片、不同清晰度或失效链接互相串台。
    */
   private generateCacheKey(m3u8Url: string): string {
-    // 提取域名作为源的标识，减少同一源不同视频的重复测试
     try {
       const url = new URL(m3u8Url);
-      return url.hostname;
+      return `${url.origin}${url.pathname}${url.search}`;
     } catch {
-      // 如果URL解析失败，使用完整的URL作为键
+      return m3u8Url;
+    }
+  }
+
+  /**
+   * 生成域名可靠性统计键：用于跨视频累积域名级稳定性与动态 TTL。
+   */
+  private generateReliabilityKey(m3u8Url: string): string {
+    try {
+      const url = new URL(m3u8Url);
+      return url.hostname || m3u8Url;
+    } catch {
       return m3u8Url;
     }
   }
@@ -126,12 +139,13 @@ class SmartCache {
   get(m3u8Url: string): SourceTestResult | null {
     const cacheKey = this.generateCacheKey(m3u8Url);
     const cached = this.cache.get(cacheKey);
-    const reliability = this.reliability.get(cacheKey);
-
-    if (!cached || !reliability) {
+    if (!cached || !cached.success) {
       return null;
     }
 
+    const reliability = this.reliability.get(
+      this.generateReliabilityKey(m3u8Url),
+    );
     const ttl = this.getCacheTTL(reliability);
     const now = Date.now();
 
@@ -175,6 +189,8 @@ class SmartCache {
 
       oldestReliabilityKeys.forEach((key) => {
         this.reliability.delete(key);
+        this.pingSampleCount.delete(key);
+        this.qualitySampleCount.delete(key);
       });
     }
   }
@@ -184,20 +200,25 @@ class SmartCache {
    */
   set(m3u8Url: string, result: Omit<SourceTestResult, 'timestamp'>): void {
     const cacheKey = this.generateCacheKey(m3u8Url);
+    const reliabilityKey = this.generateReliabilityKey(m3u8Url);
     const now = Date.now();
 
     // 🚀 性能优化：检查缓存大小限制
     this.cleanupOldestEntries();
 
-    // 更新缓存
-    this.cache.set(cacheKey, {
-      ...result,
-      timestamp: now,
-    });
+    // 仅缓存有效成功结果；失败时清除该 URL 旧缓存，防止将瞬时故障或 404 长期锁定
+    if (result.success) {
+      this.cache.set(cacheKey, {
+        ...result,
+        timestamp: now,
+      });
+    } else {
+      this.cache.delete(cacheKey);
+    }
 
-    // 更新可靠性统计
-    const reliability = this.reliability.get(cacheKey) || {
-      sourceKey: cacheKey,
+    // 更新域名级可靠性统计
+    const reliability = this.reliability.get(reliabilityKey) || {
+      sourceKey: reliabilityKey,
       successCount: 0,
       totalCount: 0,
       avgResponseTime: 0,
@@ -206,30 +227,50 @@ class SmartCache {
       stability: 0,
     };
 
-    // 更新统计数据
     reliability.totalCount++;
     if (result.success) {
       reliability.successCount++;
     }
 
-    // 更新平均响应时间
-    reliability.avgResponseTime =
-      (reliability.avgResponseTime * (reliability.totalCount - 1) +
-        result.pingTime) /
-      reliability.totalCount;
+    // 仅在成功样本且延迟有效（排除 <=0 或 9999 超时兜底值）时累计平均响应时间，
+    // 防止 404/403 快速失败响应拉低均值，且使用独立样本计数保证算术平均准确。
+    if (result.success && result.pingTime > 0 && result.pingTime < 9999) {
+      const prevPingSamples =
+        this.pingSampleCount.get(reliabilityKey) ??
+        (reliability.avgResponseTime > 0
+          ? Math.max(1, reliability.successCount - 1)
+          : 0);
+      reliability.avgResponseTime =
+        prevPingSamples > 0
+          ? (reliability.avgResponseTime * prevPingSamples + result.pingTime) /
+            (prevPingSamples + 1)
+          : result.pingTime;
+      this.pingSampleCount.set(reliabilityKey, prevPingSamples + 1);
+    }
 
-    // 更新平均质量（简单的质量等级映射）
+    // 仅在成功且拿到有效清晰度时使用独立样本计数更新平均质量
     const qualityScore = this.getQualityScore(result.quality);
-    const currentQualityScore = this.getQualityScore(reliability.avgQuality);
-    reliability.avgQuality = this.getQualityFromScore(
-      (currentQualityScore * (reliability.totalCount - 1) + qualityScore) /
-        reliability.totalCount,
-    );
+    if (result.success && qualityScore > 0) {
+      const currentQualityScore = this.getQualityScore(reliability.avgQuality);
+      const prevQualitySamples =
+        this.qualitySampleCount.get(reliabilityKey) ??
+        (currentQualityScore > 0
+          ? Math.max(1, reliability.successCount - 1)
+          : 0);
+      reliability.avgQuality =
+        prevQualitySamples > 0 && currentQualityScore > 0
+          ? this.getQualityFromScore(
+              (currentQualityScore * prevQualitySamples + qualityScore) /
+                (prevQualitySamples + 1),
+            )
+          : result.quality;
+      this.qualitySampleCount.set(reliabilityKey, prevQualitySamples + 1);
+    }
 
     reliability.lastTestTime = now;
     reliability.stability = this.calculateStability(reliability);
 
-    this.reliability.set(cacheKey, reliability);
+    this.reliability.set(reliabilityKey, reliability);
   }
 
   /**
@@ -271,8 +312,8 @@ class SmartCache {
    * 获取源可靠性统计
    */
   getReliability(m3u8Url: string): SourceReliability | undefined {
-    const cacheKey = this.generateCacheKey(m3u8Url);
-    return this.reliability.get(cacheKey);
+    const reliabilityKey = this.generateReliabilityKey(m3u8Url);
+    return this.reliability.get(reliabilityKey);
   }
 
   /**
@@ -282,9 +323,14 @@ class SmartCache {
     const now = Date.now();
 
     this.cache.forEach((cached, key) => {
-      const reliability = this.reliability.get(key);
-      if (!reliability) return;
+      if (!cached.success) {
+        this.cache.delete(key);
+        return;
+      }
 
+      const reliability = this.reliability.get(
+        this.generateReliabilityKey(key),
+      );
       const ttl = this.getCacheTTL(reliability);
       if (now - cached.timestamp >= ttl) {
         this.cache.delete(key);
@@ -352,12 +398,19 @@ class SmartCache {
 const smartCache = new SmartCache();
 
 // 定期清理过期缓存
-setInterval(
+const cleanupTimer = setInterval(
   () => {
     smartCache.cleanup();
   },
   5 * 60 * 1000,
 ); // 每5分钟清理一次
+if (
+  typeof cleanupTimer === 'object' &&
+  cleanupTimer !== null &&
+  'unref' in cleanupTimer
+) {
+  (cleanupTimer as NodeJS.Timeout).unref();
+}
 
 export { SmartCache, smartCache };
 export type { HLSLevel, SourceReliability, SourceTestResult };

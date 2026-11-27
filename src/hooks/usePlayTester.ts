@@ -83,6 +83,25 @@ export function usePlayTester({
   const hlsInstanceRef = useRef<HlsInstance | null>(null);
   const latestPlaySourceRef = useRef<string | undefined>(undefined);
   const latestPlayUrlRef = useRef<string | undefined>(undefined);
+  const latestPlayRequestIdRef = useRef(0);
+  const playTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeDrawerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const clearPlayTimeout = () => {
+    if (playTimeoutRef.current) {
+      clearTimeout(playTimeoutRef.current);
+      playTimeoutRef.current = null;
+    }
+  };
+
+  const clearCloseDrawerTimer = () => {
+    if (closeDrawerTimerRef.current) {
+      clearTimeout(closeDrawerTimerRef.current);
+      closeDrawerTimerRef.current = null;
+    }
+  };
 
   const updatePlayStatus = (
     sourceKey: string,
@@ -112,6 +131,7 @@ export function usePlayTester({
   };
 
   const cleanupPlayer = () => {
+    clearPlayTimeout();
     if (hlsInstanceRef.current) {
       hlsInstanceRef.current.destroy();
       hlsInstanceRef.current = null;
@@ -143,6 +163,7 @@ export function usePlayTester({
   };
 
   const handleOpenPlayTester = (source: ApiSite) => {
+    clearCloseDrawerTimer();
     const result = testResults.get(source.key);
     if (
       !result ||
@@ -170,12 +191,15 @@ export function usePlayTester({
   };
 
   const handleClosePlayTester = () => {
+    clearCloseDrawerTimer();
     setPlayDrawerAnimating(false);
-    setTimeout(() => {
+    closeDrawerTimerRef.current = setTimeout(() => {
+      closeDrawerTimerRef.current = null;
       setPlayTester((prev) => ({
         ...prev,
         visible: false,
       }));
+      latestPlayRequestIdRef.current += 1;
       latestPlaySourceRef.current = undefined;
       latestPlayUrlRef.current = undefined;
       setPlayerState({ status: 'idle' });
@@ -234,9 +258,20 @@ export function usePlayTester({
       return;
     }
 
+    // 先失效旧会话并清理旧视频，避免 cleanupPlayer() 里的 removeAttribute/load
+    // 触发的延迟 error/playing 事件误记到即将启动的新源会话。
+    latestPlayRequestIdRef.current += 1;
+    const requestId = latestPlayRequestIdRef.current;
+    latestPlaySourceRef.current = undefined;
+    latestPlayUrlRef.current = undefined;
+    cleanupPlayer();
     latestPlaySourceRef.current = options.sourceKey;
     latestPlayUrlRef.current = normalizedUrl;
-    cleanupPlayer();
+    const isActivePlaySession = () =>
+      latestPlayRequestIdRef.current === requestId &&
+      latestPlaySourceRef.current === options.sourceKey &&
+      latestPlayUrlRef.current === normalizedUrl;
+
     setPlayerState({
       status: 'loading',
       url: normalizedUrl,
@@ -257,6 +292,12 @@ export function usePlayTester({
       return;
     }
 
+    playTimeoutRef.current = setTimeout(() => {
+      if (!isActivePlaySession()) return;
+      cleanupPlayer();
+      handlePlaybackFailure('播放检测超时');
+    }, 12000);
+
     const isHlsStream = /\.m3u8($|\?)/i.test(normalizedUrl);
     let handledByHls = false;
     if (isHlsStream) {
@@ -264,16 +305,15 @@ export function usePlayTester({
       try {
         Hls = (await import('hls.js')).default;
       } catch (error) {
+        if (!isActivePlaySession()) return;
+        cleanupPlayer();
         handlePlaybackFailure(
           error instanceof Error ? error.message : 'HLS 播放器加载失败',
         );
         return;
       }
 
-      if (
-        latestPlaySourceRef.current !== options.sourceKey ||
-        latestPlayUrlRef.current !== normalizedUrl
-      ) {
+      if (!isActivePlaySession()) {
         return;
       }
 
@@ -290,6 +330,7 @@ export function usePlayTester({
 
         // 获取 HLS 流信息
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (!isActivePlaySession()) return;
           const streamInfo = getHLSStreamInfo(hls);
 
           if (streamInfo) {
@@ -326,7 +367,9 @@ export function usePlayTester({
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
+          if (!isActivePlaySession()) return;
           if (data?.fatal) {
+            clearPlayTimeout();
             const reason =
               data?.response?.code === 0
                 ? '跨域被拒或未开放 CORS'
@@ -338,9 +381,11 @@ export function usePlayTester({
         });
         hls.attachMedia(video);
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          if (!isActivePlaySession()) return;
           try {
             hls.loadSource(normalizedUrl);
           } catch (err) {
+            clearPlayTimeout();
             handlePlaybackFailure(
               (err instanceof Error ? err.message : undefined) ||
                 'HLS 源加载失败',
@@ -348,6 +393,10 @@ export function usePlayTester({
           }
         });
       }
+    }
+
+    if (!isActivePlaySession()) {
+      return;
     }
 
     if (!handledByHls) {
@@ -358,6 +407,8 @@ export function usePlayTester({
     const playPromise = video.play();
     if (playPromise && typeof playPromise.catch === 'function') {
       playPromise.catch((err) => {
+        if (!isActivePlaySession()) return;
+        clearPlayTimeout();
         const msg =
           err?.message?.includes('NotAllowedError') ||
           err?.message?.includes('AbortError')
@@ -370,8 +421,13 @@ export function usePlayTester({
 
   useEffect(() => {
     return () => {
+      clearCloseDrawerTimer();
+      latestPlayRequestIdRef.current += 1;
+      latestPlaySourceRef.current = undefined;
+      latestPlayUrlRef.current = undefined;
       cleanupPlayer();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -379,7 +435,9 @@ export function usePlayTester({
     if (!video) return;
     const handlePlaying = () => {
       const sourceKey = latestPlaySourceRef.current;
-      if (!sourceKey) return;
+      const playUrl = latestPlayUrlRef.current;
+      if (!sourceKey || !playUrl) return;
+      clearPlayTimeout();
       setPlayerState((prev) => ({
         ...prev,
         status: 'playing',
@@ -387,11 +445,15 @@ export function usePlayTester({
       }));
       updatePlayStatus(sourceKey, {
         status: 'success',
-        url: latestPlayUrlRef.current,
+        url: playUrl,
         message: '播放成功',
       });
     };
     const handleVideoError = () => {
+      const sourceKey = latestPlaySourceRef.current;
+      const playUrl = latestPlayUrlRef.current;
+      if (!sourceKey || !playUrl) return;
+      clearPlayTimeout();
       const mediaError = video.error;
       const errorCode = mediaError?.code || 0;
       const messageMap: Record<number, string> = {

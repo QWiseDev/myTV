@@ -32,6 +32,7 @@ interface DeviceInfo {
   isIOS: boolean;
   isIOS13: boolean;
   isMobile: boolean;
+  isTablet?: boolean;
 }
 
 export interface UseSourceInitializationParams {
@@ -452,6 +453,7 @@ export function useSourceInitialization({
           detailData = await preferBestSource(sourcesInfo, {
             deviceInfo,
             setSpeedTestProgress,
+            episodeIndex: currentEpisodeIndexRef.current,
           });
           if (!isActive()) return;
         }

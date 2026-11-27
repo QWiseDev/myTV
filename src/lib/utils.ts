@@ -282,282 +282,250 @@ export function getImageFallbackUrls(originalUrl: string): string[] {
   ).filter(Boolean);
 }
 
+const DIRECT_VIDEO_EXT_RE = /\.(?:mp4|webm|mkv|mov|flv|avi)(?:$|[?#])/i;
+
+interface M3u8StreamLevelInfo {
+  width: number;
+  height: number;
+  bitrate: number;
+  name?: string;
+}
+
+export interface VideoResolutionProbeResult {
+  quality: string;
+  loadSpeed: string;
+  pingTime: number;
+  success?: boolean;
+  levels?: M3u8StreamLevelInfo[];
+  maxResolution?: string;
+  minResolution?: string;
+  maxBandwidth?: number;
+  minBandwidth?: number;
+}
+
 /**
- * 从m3u8地址获取视频质量等级和网络信息
- * @param m3u8Url m3u8播放列表的URL
- * @param timeout 超时时间（毫秒），默认5000ms
- * @returns Promise<{quality: string, loadSpeed: string, pingTime: number}> 视频质量等级和网络信息
+ * 从 m3u8 / 直链地址探测视频清晰度与真实媒体分片下载速度
+ * @param m3u8Url 播放列表或直链 URL
+ * @param timeout 超时时间（毫秒），默认 5000ms
+ * @returns Promise<VideoResolutionProbeResult> 视频清晰度、实测下载速度与响应延迟
  */
 export async function getVideoResolutionFromM3u8(
   m3u8Url: string,
   timeout = 5000,
-): Promise<{
-  quality: string;
-  loadSpeed: string;
-  pingTime: number;
-}> {
-  // 动态导入智能缓存
-  const { smartCache } = await import('@/app/play/utils/smartCache');
+  options?: {
+    sourceKey?: string;
+    adFilterType?: string;
+    signal?: AbortSignal;
+    maxBytes?: number;
+  },
+): Promise<VideoResolutionProbeResult> {
+  const normalizedUrl = (m3u8Url || '').trim();
+  if (!normalizedUrl || !/^https?:\/\//i.test(normalizedUrl)) {
+    return {
+      quality: '未知',
+      loadSpeed: '未知',
+      pingTime: 9999,
+      success: false,
+    };
+  }
 
-  // 尝试从智能缓存获取
-  const cached = smartCache.get(m3u8Url);
-  if (cached) {
+  const [{ smartCache }, episodeCheck] = await Promise.all([
+    import('@/app/play/utils/smartCache'),
+    import('@/app/play/utils/episodeSourceCheck'),
+  ]);
+
+  const cached = smartCache.get(normalizedUrl);
+  if (cached && cached.success) {
     return {
       quality: cached.quality,
       loadSpeed: cached.loadSpeed,
       pingTime: cached.pingTime,
+      success: true,
+      levels: cached.levels,
+      maxResolution: cached.maxResolution,
+      minResolution: cached.minResolution,
+      maxBandwidth: cached.maxBandwidth,
+      minBandwidth: cached.minBandwidth,
     };
   }
 
-  const userAgent = navigator.userAgent;
-  const isMobile =
-    /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const recordFailure = (observedPing = 9999): VideoResolutionProbeResult => {
+    const failed: VideoResolutionProbeResult = {
+      quality: '未知',
+      loadSpeed: '未知',
+      pingTime: 9999,
+      success: false,
+    };
+    smartCache.set(normalizedUrl, {
+      quality: '未知',
+      loadSpeed: '未知',
+      pingTime: observedPing,
+      success: false,
+    });
+    return failed;
+  };
+
+  const controller = new AbortController();
+  const timeoutMs = Math.max(500, timeout);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  options?.signal?.addEventListener('abort', onExternalAbort, { once: true });
+
+  const sampleBytes =
+    options?.maxBytes ?? (isMobile || isIPad ? 256 * 1024 : 384 * 1024);
+  const deadline = performance.now() + timeoutMs;
 
   try {
-    // 检测是否为iPad（无论什么浏览器）
-    const isIPad = /iPad/i.test(userAgent);
+    if (DIRECT_VIDEO_EXT_RE.test(normalizedUrl)) {
+      const directSeg = await episodeCheck.measureSegmentLoadSpeedDetailed(
+        normalizedUrl,
+        {
+          signal: controller.signal,
+          timeoutMs,
+          maxBytes: sampleBytes,
+          partialOnAbort: true,
+          sourceKey: options?.sourceKey,
+        },
+      );
+      if (!directSeg.reachable) {
+        return recordFailure();
+      }
+      const pingTime = Math.max(
+        1,
+        Math.round(
+          directSeg.ttfbMs ?? Math.min(directSeg.durationMs, timeoutMs),
+        ),
+      );
+      const result: VideoResolutionProbeResult = {
+        quality: '未知',
+        loadSpeed: directSeg.speed,
+        pingTime,
+        success: true,
+      };
+      smartCache.set(normalizedUrl, {
+        ...result,
+        success: true,
+      });
+      return result;
+    }
 
-    if (isIPad) {
-      // iPad使用文本解析避免崩溃
+    const pingStart = performance.now();
+    const response = await fetch(normalizedUrl, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    const pingTime = Math.max(1, Math.round(performance.now() - pingStart));
 
-      const startTime = performance.now();
-      try {
-        const response = await fetch(m3u8Url, {
-          signal: AbortSignal.timeout(Math.min(timeout, 3000)),
-        });
-        const text = await response.text();
-        const pingTime = Math.round(performance.now() - startTime);
+    if (!response.ok) {
+      return recordFailure(pingTime);
+    }
 
-        // ✅ 解析主播放列表获取分辨率信息
-        const resolutions: Array<{
-          width: number;
-          height: number;
-          bitrate: number;
-        }> = [];
-        const lines = text.split('\n');
+    const text =
+      typeof response.text === 'function' ? await response.text() : '';
+    if (!/#EXT(?:M3U|-X-|INF)/i.test(text)) {
+      return recordFailure(pingTime);
+    }
 
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].startsWith('#EXT-X-STREAM-INF:')) {
-            const resMatch = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
-            const bandwidthMatch = lines[i].match(/BANDWIDTH=(\d+)/);
+    const lines = text.split('\n');
+    const levels: M3u8StreamLevelInfo[] = [];
 
-            if (resMatch) {
-              resolutions.push({
-                width: parseInt(resMatch[1]),
-                height: parseInt(resMatch[2]),
-                bitrate: bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0,
-              });
-            }
-          }
-        }
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF:')) {
+        continue;
+      }
 
-        if (resolutions.length > 0) {
-          // 按分辨率降序排序
-          resolutions.sort((a, b) => b.height - a.height || b.width - a.width);
-          const best = resolutions[0];
-          const worst = resolutions[resolutions.length - 1];
-          const height = best.height;
+      const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/);
+      if (!resMatch) {
+        continue;
+      }
 
-          const quality =
-            height >= 2160
-              ? '4K'
-              : height >= 1440
-                ? '2K'
-                : height >= 1080
-                  ? '1080p'
-                  : height >= 720
-                    ? '720p'
-                    : height >= 480
-                      ? '480p'
-                      : height > 0
-                        ? 'SD'
-                        : '未知';
+      const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
+      const width = parseInt(resMatch[1], 10);
+      const height = parseInt(resMatch[2], 10);
+      const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1], 10) : 0;
 
-          const result = {
-            quality,
-            loadSpeed: '未知', // iPad 不测速避免崩溃
-            pingTime,
-            levels: resolutions.map((r) => ({
-              width: r.width,
-              height: r.height,
-              bitrate: r.bitrate,
-              name: `${r.height}p`,
-            })),
+      levels.push({
+        width,
+        height,
+        bitrate,
+        name: `${height}p`,
+      });
+    }
+
+    const sortedLevels = [...levels].sort(
+      (a, b) => b.height - a.height || b.bitrate - a.bitrate,
+    );
+    const best = sortedLevels[0];
+    const worst = sortedLevels[sortedLevels.length - 1];
+
+    let quality = best ? episodeCheck.qualityFromHeight(best.height) : '未知';
+
+    const adFilterSettings = episodeCheck.readLocalAdFilterSettings();
+    const { segmentUrl, declaredHeight } =
+      await episodeCheck.followManifestToSegment(
+        text,
+        response.url || normalizedUrl,
+        {
+          signal: controller.signal,
+          cache: 'no-store',
+          filterAds: adFilterSettings.enabled,
+          adFilterType: options?.adFilterType,
+          customAdFilterCode: adFilterSettings.customCode,
+        },
+      );
+
+    if (quality === '未知' && declaredHeight > 0) {
+      quality = episodeCheck.qualityFromHeight(declaredHeight);
+    }
+
+    // 子播放列表下钻失败或未解析出媒体分片时，不把 .m3u8 当作媒体分片重复请求或误判可达
+    if (!segmentUrl || episodeCheck.isLikelyHlsUrl(segmentUrl)) {
+      return recordFailure(pingTime);
+    }
+
+    const remainingMs = Math.max(400, Math.round(deadline - performance.now()));
+    const segResult = await episodeCheck.measureSegmentLoadSpeedDetailed(
+      segmentUrl,
+      {
+        signal: controller.signal,
+        timeoutMs: remainingMs,
+        maxBytes: sampleBytes,
+        partialOnAbort: true,
+        sourceKey: options?.sourceKey,
+      },
+    );
+
+    if (!segResult.reachable) {
+      return recordFailure(pingTime);
+    }
+
+    const result: VideoResolutionProbeResult = {
+      quality,
+      loadSpeed: segResult.speed,
+      pingTime,
+      success: true,
+      ...(sortedLevels.length > 0
+        ? {
+            levels: sortedLevels,
             maxResolution: `${best.width}x${best.height}`,
             minResolution: `${worst.width}x${worst.height}`,
             maxBandwidth: best.bitrate,
             minBandwidth: worst.bitrate,
-          };
-
-          // 缓存结果
-          smartCache.set(m3u8Url, {
-            ...result,
-            success: true,
-          });
-
-          return result;
-        }
-
-        // 没有找到分辨率信息，可能是媒体播放列表（非主列表）
-        return {
-          quality: '未知',
-          loadSpeed: '未知',
-          pingTime,
-        };
-      } catch (error) {
-        console.warn('⚠️ iPad 文本解析失败:', error);
-        return {
-          quality: '未知',
-          loadSpeed: '未知',
-          pingTime: 9999,
-        };
-      }
-    }
-
-    // 尝试快速路径：仅解析清单（不挂载video，不加载分片）
-    const tryFastManifest = async (): Promise<{
-      quality: string;
-      loadSpeed: string;
-      pingTime: number;
-      levels?: Array<{
-        width: number;
-        height: number;
-        bitrate: number;
-        name: string;
-      }>;
-      maxResolution?: string;
-      minResolution?: string;
-      maxBandwidth?: number;
-      minBandwidth?: number;
-    } | null> => {
-      const pingStartFast = performance.now();
-
-      try {
-        const response = await fetch(m3u8Url, {
-          signal: AbortSignal.timeout(
-            Math.min(timeout, isMobile ? 2500 : 3500),
-          ),
-        });
-        const pingTimeFast = Math.round(performance.now() - pingStartFast);
-
-        if (!response.ok) {
-          return {
-            quality: '未知',
-            loadSpeed: '未知',
-            pingTime: pingTimeFast,
-          };
-        }
-
-        const text = await response.text();
-        const lines = text.split('\n');
-        const levels: Array<{
-          width: number;
-          height: number;
-          bitrate: number;
-          name: string;
-        }> = [];
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line.startsWith('#EXT-X-STREAM-INF:')) {
-            continue;
           }
-
-          const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/);
-          if (!resMatch) {
-            continue;
-          }
-
-          const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
-          const width = parseInt(resMatch[1], 10);
-          const height = parseInt(resMatch[2], 10);
-          const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1], 10) : 0;
-
-          levels.push({
-            width,
-            height,
-            bitrate,
-            name: `${height}p`,
-          });
-        }
-
-        if (levels.length === 0) {
-          return {
-            quality: '未知',
-            loadSpeed: '未知',
-            pingTime: pingTimeFast,
-          };
-        }
-
-        const sortedLevels = [...levels].sort(
-          (a, b) => b.height - a.height || b.bitrate - a.bitrate,
-        );
-        const best = sortedLevels[0];
-        const worst = sortedLevels[sortedLevels.length - 1];
-
-        const quality =
-          best.height >= 2160
-            ? '4K'
-            : best.height >= 1440
-              ? '2K'
-              : best.height >= 1080
-                ? '1080p'
-                : best.height >= 720
-                  ? '720p'
-                  : best.height >= 480
-                    ? '480p'
-                    : best.height > 0
-                      ? 'SD'
-                      : '未知';
-
-        const speedKBps = best.bitrate > 0 ? best.bitrate / 8 / 1024 : 0;
-        const loadSpeed =
-          speedKBps >= 1024
-            ? `${(speedKBps / 1024).toFixed(2)} MB/s`
-            : speedKBps > 0
-              ? `${speedKBps.toFixed(2)} KB/s`
-              : '未知';
-
-        return {
-          quality,
-          loadSpeed,
-          pingTime: pingTimeFast,
-          levels: sortedLevels,
-          maxResolution: `${best.width}x${best.height}`,
-          minResolution: `${worst.width}x${worst.height}`,
-          maxBandwidth: best.bitrate,
-          minBandwidth: worst.bitrate,
-        };
-      } catch {
-        return null;
-      }
+        : {}),
     };
 
-    const fast = await tryFastManifest();
-    if (fast) {
-      // 使用智能缓存
-      smartCache.set(m3u8Url, {
-        ...fast,
-        success: true,
-      });
-      return fast;
-    }
-
-    const fallback = { quality: '未知', loadSpeed: '未知', pingTime: 9999 };
-    smartCache.set(m3u8Url, {
-      ...fallback,
-      success: false,
+    smartCache.set(normalizedUrl, {
+      ...result,
+      success: true,
     });
-    return fallback;
-  } catch (error) {
-    // 快速失败返回占位数据，避免阻塞
-    const fallback = { quality: '未知', loadSpeed: '未知', pingTime: 9999 };
-    // 使用智能缓存
-    smartCache.set(m3u8Url, {
-      ...fallback,
-      success: false,
-    });
-    return fallback;
+    return result;
+  } catch {
+    return recordFailure();
+  } finally {
+    clearTimeout(timeoutId);
+    options?.signal?.removeEventListener('abort', onExternalAbort);
   }
 }
 

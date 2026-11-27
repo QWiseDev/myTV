@@ -1,6 +1,6 @@
 import type { SearchResult } from '@/lib/types';
 
-import { lightweightPreference } from './sourcePreference';
+import { lightweightPreference, preferBestSource } from './sourcePreference';
 
 function createSource(name: string, episode: string): SearchResult {
   return {
@@ -139,5 +139,249 @@ describe('sourcePreference', () => {
     );
 
     expect(best.source_name).toBe('nohead');
+  });
+
+  test('403 Forbidden 不再被当作可用源', async () => {
+    global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('forbidden.example')) {
+        return { ok: false, status: 403 };
+      }
+      return { ok: true, status: 200 };
+    }) as unknown as typeof fetch;
+    jest.spyOn(console, 'warn').mockImplementation();
+
+    const best = await lightweightPreference(
+      [
+        createSource('forbidden', 'https://forbidden.example/video.m3u8'),
+        createSource('good', 'https://good.example/video.m3u8'),
+      ],
+      jest.fn(),
+    );
+
+    expect(best.source_name).toBe('good');
+  });
+
+  test('现代 iPhone（isIOS13=true 且非平板）走移动端分批优选而非截断前 6 源', async () => {
+    global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('good8.example')) {
+        return { ok: true, status: 200 };
+      }
+      return { ok: false, status: 502 };
+    }) as unknown as typeof fetch;
+    jest.spyOn(console, 'warn').mockImplementation();
+    const setProgress = jest.fn();
+
+    const sources = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        createSource(`bad-${i + 1}`, `https://bad${i + 1}.example/video.m3u8`),
+      ),
+      createSource('good-8', 'https://good8.example/video.m3u8'),
+    ];
+
+    const best = await preferBestSource(sources, {
+      deviceInfo: {
+        userAgent:
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        isIOS: true,
+        isIOS13: true,
+        isMobile: true,
+        isTablet: false,
+      },
+      setSpeedTestProgress: setProgress,
+    });
+
+    expect(best.source_name).toBe('good-8');
+    expect(setProgress).toHaveBeenLastCalledWith(null);
+  });
+
+  test('iPad 兜底不原地修改传入的 sources 数组，并在结束时清理进度', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof fetch;
+    jest.spyOn(console, 'warn').mockImplementation();
+    const setProgress = jest.fn();
+
+    const first = createSource('first-site', 'https://a.example/ep1.m3u8');
+    const second: SearchResult = {
+      ...createSource('dyttzyapi.com', 'https://b.example/ep1.m3u8'),
+      source_name: '电影天堂',
+    };
+    const input = [first, second];
+
+    const best = await preferBestSource(input, {
+      deviceInfo: {
+        userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)',
+        isIOS: true,
+        isIOS13: true,
+        isMobile: true,
+        isTablet: true,
+      },
+      setSpeedTestProgress: setProgress,
+    });
+
+    expect(best.source).toBe('dyttzyapi.com');
+    expect(input[0].source).toBe('first-site');
+    expect(setProgress).toHaveBeenLastCalledWith(null);
+  });
+
+  test('桌面端优选按传入的 episodeIndex 探测并清理进度条', async () => {
+    const fetchUrls: string[] = [];
+    const reader = {
+      read: jest
+        .fn()
+        .mockImplementationOnce(async () => {
+          await new Promise((r) => setTimeout(r, 40));
+          return { done: false, value: new Uint8Array(96 * 1024) };
+        })
+        .mockResolvedValueOnce({ done: true }),
+      cancel: jest.fn().mockResolvedValue(undefined),
+    };
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const target = String(input);
+      fetchUrls.push(target);
+      if (target.endsWith('.m3u8')) {
+        return {
+          ok: true,
+          status: 200,
+          url: target,
+          text: async () => ['#EXTM3U', '#EXTINF:6,', 'seg0.ts'].join('\n'),
+        };
+      }
+      if (target.endsWith('.ts')) {
+        return {
+          ok: true,
+          status: 200,
+          body: {
+            getReader: () => ({
+              read:
+                reader.read.mock.calls.length === 0
+                  ? reader.read
+                  : jest
+                      .fn()
+                      .mockImplementationOnce(async () => {
+                        await new Promise((r) => setTimeout(r, 40));
+                        return {
+                          done: false,
+                          value: new Uint8Array(96 * 1024),
+                        };
+                      })
+                      .mockResolvedValueOnce({ done: true }),
+              cancel: jest.fn().mockResolvedValue(undefined),
+            }),
+          },
+        };
+      }
+      throw new Error(`unexpected: ${target}`);
+    }) as unknown as typeof fetch;
+
+    const setProgress = jest.fn();
+    const s1: SearchResult = {
+      ...createSource('s1', 'https://s1.example/ep1.m3u8'),
+      episodes: [
+        'https://s1.example/ep1.m3u8',
+        'https://s1.example/ep2.m3u8',
+        'https://s1.example/ep3.m3u8',
+      ],
+    };
+    const s2: SearchResult = {
+      ...createSource('s2', 'https://s2.example/ep1.m3u8'),
+      episodes: [
+        'https://s2.example/ep1.m3u8',
+        'https://s2.example/ep2.m3u8',
+        'https://s2.example/ep3.m3u8',
+      ],
+    };
+
+    await preferBestSource([s1, s2], {
+      deviceInfo: {
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        isIOS: false,
+        isIOS13: false,
+        isMobile: false,
+        isTablet: false,
+      },
+      setSpeedTestProgress: setProgress,
+      episodeIndex: 2,
+    });
+
+    expect(fetchUrls).toContain('https://s1.example/ep3.m3u8');
+    expect(fetchUrls).toContain('https://s2.example/ep3.m3u8');
+    expect(fetchUrls).not.toContain('https://s1.example/ep2.m3u8');
+    expect(setProgress).toHaveBeenLastCalledWith(null);
+  });
+
+  test('Android 平板不被误判为 iPad，仍按移动端多批次探测后续源', async () => {
+    global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes('good8.example')) {
+        return { ok: true, status: 200 };
+      }
+      return { ok: false, status: 502 };
+    }) as unknown as typeof fetch;
+    jest.spyOn(console, 'warn').mockImplementation();
+    const setProgress = jest.fn();
+
+    const sources = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        createSource(`bad-${i + 1}`, `https://bad${i + 1}.example/video.m3u8`),
+      ),
+      createSource('good-8', 'https://good8.example/video.m3u8'),
+    ];
+
+    const best = await preferBestSource(sources, {
+      deviceInfo: {
+        userAgent:
+          'Mozilla/5.0 (Linux; Android 14; Xiaomi Pad 6) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        isIOS: false,
+        isIOS13: false,
+        isMobile: true,
+        isTablet: true,
+      },
+      setSpeedTestProgress: setProgress,
+    });
+
+    expect(best.source_name).toBe('good-8');
+    expect(setProgress).toHaveBeenLastCalledWith(null);
+  });
+
+  test('iPad 多候选分片探测全失败时保留评分最高的优先源作为兜底', async () => {
+    global.fetch = jest.fn(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        const target = String(url);
+        if (init?.method === 'HEAD') {
+          // 非优先源略快，但优先源综合评分更高
+          if (target.includes('preferred.example')) {
+            await new Promise((r) => setTimeout(r, 30));
+          }
+          return { ok: true, status: 200 };
+        }
+        // GET 拉清单失败模拟分片验证全部不可用
+        return { ok: false, status: 403, text: async () => '' };
+      },
+    ) as unknown as typeof fetch;
+    jest.spyOn(console, 'warn').mockImplementation();
+    const setProgress = jest.fn();
+
+    const normalFast = createSource(
+      'normal',
+      'https://normal.example/ep1.m3u8',
+    );
+    const preferred: SearchResult = {
+      ...createSource('dyttzyapi.com', 'https://preferred.example/ep1.m3u8'),
+      source_name: '电影天堂',
+    };
+
+    const best = await preferBestSource([normalFast, preferred], {
+      deviceInfo: {
+        userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)',
+        isIOS: true,
+        isIOS13: true,
+        isMobile: true,
+        isTablet: true,
+      },
+      setSpeedTestProgress: setProgress,
+    });
+
+    expect(best.source).toBe('dyttzyapi.com');
+    expect(setProgress).toHaveBeenLastCalledWith(null);
   });
 });
