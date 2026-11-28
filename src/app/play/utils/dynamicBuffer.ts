@@ -6,7 +6,14 @@
  * - 源速度慢或波动时提前扩大预缓存窗口，降低弱源卡顿；
  * - 源快且稳定时保持适度缓冲，减少无效流量与内存占用；
  * - 内存受限或遭遇 MSE QuotaExceededError 时自动收紧上限。
+ * - 会话测速与卡顿数据按源持久化（sourceSpeedHistory），供选源排序与热启动使用。
  */
+
+import {
+  getSourceSpeedHistory,
+  isSourceHistoricallySlow,
+  recordSourceSpeedSession,
+} from './sourceSpeedHistory';
 
 export type BufferStrategy = 'auto' | 'aggressive' | 'balanced';
 
@@ -940,6 +947,41 @@ export function installDynamicBuffer(
   let switchHintShown = false;
   let lastTooltipText = '';
 
+  // 持久化测速历史（按源 key）：累计本会话增量，切源/离开页面/定时写入
+  let historySourceKey: string | null = null;
+  let sessionStallCount = 0;
+  let sessionPlayedSeconds = 0;
+  let flushedSampleCount = 0;
+  let flushedStallCount = 0;
+  let flushedPlayedSeconds = 0;
+  let lastHistoryFlushAt = 0;
+  let lastObservedMediaTime: number | null = null;
+
+  const flushSpeedHistory = () => {
+    if (!historySourceKey || isLive) return;
+    const newSamples = realSampleCount - flushedSampleCount;
+    const newStalls = sessionStallCount - flushedStallCount;
+    const newPlayedSeconds = sessionPlayedSeconds - flushedPlayedSeconds;
+    if (newSamples <= 0 && newStalls <= 0 && newPlayedSeconds < 5) return;
+    const currentNow = now();
+    recordSourceSpeedSession(
+      historySourceKey,
+      {
+        speedRatio: newSamples > 0 ? ewmaSpeedRatio : null,
+        ttfbMs: newSamples > 0 ? ewmaTtfbMs : null,
+        throughputBps: newSamples > 0 ? ewmaThroughputBps : null,
+        newSamples: Math.max(0, newSamples),
+        newStalls: Math.max(0, newStalls),
+        newPlayedSeconds: Math.max(0, newPlayedSeconds),
+      },
+      currentNow,
+    );
+    flushedSampleCount = realSampleCount;
+    flushedStallCount = sessionStallCount;
+    flushedPlayedSeconds = sessionPlayedSeconds;
+    lastHistoryFlushAt = currentNow;
+  };
+
   const clearBufferingNotice = () => {
     if (bufferingNoticeTimer) {
       clearTimeout(bufferingNoticeTimer);
@@ -973,6 +1015,12 @@ export function installDynamicBuffer(
     hasRenderedPlayback = (resolveArtVideo(art)?.readyState ?? 0) >= 2;
     slowNoticeShown = false;
     switchHintShown = false;
+    sessionStallCount = 0;
+    sessionPlayedSeconds = 0;
+    flushedSampleCount = 0;
+    flushedStallCount = 0;
+    flushedPlayedSeconds = 0;
+    lastObservedMediaTime = null;
   };
 
   const pruneStalls = (currentNow: number) => {
@@ -1136,6 +1184,9 @@ export function installDynamicBuffer(
       );
       lastStallAt = currentNow;
       lastDecayAt = currentNow;
+      if (hasRenderedPlayback) {
+        sessionStallCount += 1;
+      }
       if (ewmaSpeedRatio === null) {
         ewmaSpeedRatio = 1.2;
       }
@@ -1193,6 +1244,7 @@ export function installDynamicBuffer(
   }
 
   const detachHls = () => {
+    flushSpeedHistory();
     clearBufferingNotice();
     unbindHlsEvents?.();
     unbindHlsEvents = null;
@@ -1216,11 +1268,22 @@ export function installDynamicBuffer(
     detachHls();
     resetSessionTelemetry();
     activeHls = hls;
+    historySourceKey = getSourceKey?.()?.trim() || null;
 
     // 同源/同 CDN 换集热启动：若近期已测出慢源，首片即直接按慢源档位缓冲
     const hintKey = resolveSpeedHintKey(getSourceKey?.(), getStreamUrl?.());
     const hint = hintKey ? sourceSpeedHints.get(hintKey) : undefined;
-    if (hint && now() - hint.updatedAt <= SOURCE_SPEED_HINT_TTL_MS) {
+    const historyNow = now();
+    if (
+      !(hint && historyNow - hint.updatedAt <= SOURCE_SPEED_HINT_TTL_MS) &&
+      isSourceHistoricallySlow(historySourceKey, historyNow)
+    ) {
+      // 无近期内存测速时，参考跨会话持久化历史：已知慢/易卡源直接按慢源档位热启动
+      const history = getSourceSpeedHistory(historySourceKey, historyNow);
+      ewmaSpeedRatio = Math.min(history?.speedRatio ?? 2, 2);
+      ewmaTtfbMs = history?.ttfbMs ?? null;
+      sampleCount = 1;
+    } else if (hint && now() - hint.updatedAt <= SOURCE_SPEED_HINT_TTL_MS) {
       const hintTier = classifySourceSpeedTier({
         ewmaSpeedRatio: hint.ewmaSpeedRatio,
         inFlightSlowRatio: null,
@@ -1360,6 +1423,9 @@ export function installDynamicBuffer(
         }
 
         persistSpeedHint(now());
+        if (now() - lastHistoryFlushAt >= 60_000) {
+          flushSpeedHistory();
+        }
         recomputeAndApply({ allowNotice: true });
       };
 
@@ -1500,7 +1566,33 @@ export function installDynamicBuffer(
   const onRateChange = () => {
     recomputeAndApply();
   };
+  const onTimeUpdate = () => {
+    const targetVideo = resolveArtVideo(art);
+    if (!targetVideo || targetVideo.seeking) {
+      lastObservedMediaTime = null;
+      return;
+    }
+    const current = targetVideo.currentTime;
+    if (!Number.isFinite(current)) return;
+    if (lastObservedMediaTime !== null && !targetVideo.paused) {
+      const delta = current - lastObservedMediaTime;
+      // 只累计连续正常播放的增量，跳转/回退不计入
+      if (delta > 0 && delta <= 3) {
+        sessionPlayedSeconds += delta;
+      }
+    }
+    lastObservedMediaTime = current;
+  };
+  const onPageHide = () => {
+    flushSpeedHistory();
+  };
+  const onVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      flushSpeedHistory();
+    }
+  };
   const onSeeking = () => {
+    lastObservedMediaTime = null;
     clearBufferingNotice();
     inFlightFrag = null;
     inFlightSlowRatio = null;
@@ -1555,6 +1647,13 @@ export function installDynamicBuffer(
   video?.addEventListener('ratechange', onRateChange);
   video?.addEventListener('seeking', onSeeking);
   video?.addEventListener('waiting', onWaiting);
+  video?.addEventListener('timeupdate', onTimeUpdate);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', onPageHide);
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
 
   const connection = getNavigatorConnection();
   const onConnectionChange = () => {
@@ -1589,6 +1688,13 @@ export function installDynamicBuffer(
     video?.removeEventListener('ratechange', onRateChange);
     video?.removeEventListener('seeking', onSeeking);
     video?.removeEventListener('waiting', onWaiting);
+    video?.removeEventListener('timeupdate', onTimeUpdate);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', onPageHide);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
     connection?.removeEventListener?.('change', onConnectionChange);
     art.off?.('restart', onArtRestart);
     art.off?.('destroy', dispose);

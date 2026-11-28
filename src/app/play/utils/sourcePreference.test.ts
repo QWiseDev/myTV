@@ -1,6 +1,14 @@
 import type { SearchResult } from '@/lib/types';
 
-import { lightweightPreference, preferBestSource } from './sourcePreference';
+import {
+  lightweightPreference,
+  preferBestSource,
+  sortSourcesByPriority,
+} from './sourcePreference';
+import {
+  clearSourceSpeedHistory,
+  recordSourceSpeedSession,
+} from './sourceSpeedHistory';
 
 function createSource(name: string, episode: string): SearchResult {
   return {
@@ -20,6 +28,7 @@ describe('sourcePreference', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    clearSourceSpeedHistory();
     jest.restoreAllMocks();
   });
 
@@ -383,5 +392,69 @@ describe('sourcePreference', () => {
 
     expect(best.source).toBe('dyttzyapi.com');
     expect(setProgress).toHaveBeenLastCalledWith(null);
+  });
+
+  test('sortSourcesByPriority 将历史易卡源沉底并提升历史流畅源', () => {
+    const now = Date.now();
+    recordSourceSpeedSession(
+      'bad-src',
+      {
+        speedRatio: 1.0,
+        ttfbMs: 2800,
+        newSamples: 8,
+        newStalls: 5,
+        newPlayedSeconds: 300,
+      },
+      now,
+    );
+    recordSourceSpeedSession(
+      'good-src',
+      {
+        speedRatio: 6.5,
+        ttfbMs: 180,
+        newSamples: 10,
+        newStalls: 0,
+        newPlayedSeconds: 600,
+      },
+      now,
+    );
+
+    const ordered = sortSourcesByPriority([
+      createSource('bad-src', 'https://bad.example/1.m3u8'),
+      createSource('neutral-src', 'https://neutral.example/1.m3u8'),
+      createSource('good-src', 'https://good.example/1.m3u8'),
+      createSource('dyttzyapi.com', 'https://preferred.example/1.m3u8'),
+    ]);
+
+    expect(ordered.map((s) => s.source)).toEqual([
+      'dyttzyapi.com',
+      'good-src',
+      'neutral-src',
+      'bad-src',
+    ]);
+  });
+
+  test('sortSourcesByPriority 在优先源历史表现极差时也会将其沉底', () => {
+    recordSourceSpeedSession(
+      'dyttzyapi.com',
+      {
+        speedRatio: 1.0,
+        ttfbMs: 3000,
+        newSamples: 8,
+        newStalls: 6,
+        newPlayedSeconds: 300,
+      },
+      Date.now(),
+    );
+
+    const ordered = sortSourcesByPriority([
+      createSource('dyttzyapi.com', 'https://preferred.example/1.m3u8'),
+      createSource('other-src', 'https://other.example/1.m3u8'),
+    ]);
+
+    expect(ordered.map((s) => s.source)).toEqual([
+      'other-src',
+      'dyttzyapi.com',
+    ]);
   });
 });

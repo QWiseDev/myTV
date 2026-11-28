@@ -11,6 +11,14 @@ import {
 
 import { getOptimalProbeConcurrency } from './episodeSourceCheck';
 import { calculateSourceScore, parseSpeedToKBps } from './helpers';
+import { createSourceHistoryLookup } from './sourceSpeedHistory';
+
+/** 历史评分在测速综合分中的权重（无历史按中性 50 分计，保证同一尺度可比） */
+const HISTORY_SCORE_WEIGHT = 0.25;
+const NEUTRAL_HISTORY_SCORE = 50;
+/** 移动端按延迟排序时，历史易卡源 / 历史流畅源的等效延迟修正（ms） */
+const BAD_HISTORY_PING_PENALTY_MS = 1500;
+const GOOD_HISTORY_PING_BONUS_MS = 100;
 
 interface DeviceInfo {
   userAgent: string;
@@ -140,13 +148,18 @@ async function probeSourceReachability(
 }
 
 /**
- * 聚合搜源结果按优先源置顶排序（稳定排序，其余保持原相对顺序）。
- * 优选测速只探测列表前几个源，优先源排前可大幅提高其命中率。
+ * 聚合搜源结果排序（稳定排序）：
+ * 1. 优先源（历史表现不差时）置顶；
+ * 2. 本机历史播放流畅的源其次；
+ * 3. 无历史/表现一般的源保持原相对顺序；
+ * 4. 本机历史上经常卡顿的源（含优先源）沉底。
+ * 优选测速只探测列表前几个源，排序直接影响命中率。
  */
 export function sortSourcesByPriority<
   T extends { source: string; source_name?: string },
 >(sources: T[]): T[] {
   if (sources.length <= 1) return sources;
+  const history = createSourceHistoryLookup();
   const rankOf = (item: T): number => {
     const byKey = PREFERRED_SOURCE_KEYS.indexOf(item.source);
     if (byKey !== -1) return byKey;
@@ -158,10 +171,20 @@ export function sortSourcesByPriority<
       ? Number.MAX_SAFE_INTEGER
       : PREFERRED_SOURCE_KEYS.length + byName;
   };
+  const tierOf = (item: T, rank: number): number => {
+    const grade = history.getGrade(item.source);
+    if (grade === 'bad') return 3;
+    if (rank !== Number.MAX_SAFE_INTEGER) return 0;
+    if (grade === 'good') return 1;
+    return 2;
+  };
 
   return sources
-    .map((item, index) => ({ item, index, rank: rankOf(item) }))
-    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((item, index) => {
+      const rank = rankOf(item);
+      return { item, index, rank, tier: tierOf(item, rank) };
+    })
+    .sort((a, b) => a.tier - b.tier || a.rank - b.rank || a.index - b.index)
     .map((entry) => entry.item);
 }
 
@@ -288,10 +311,17 @@ export async function lightweightPreference(
       episodeIndex,
     );
 
-    // 按可用性和响应时间排序
+    // 按可用性和响应时间排序；本机历史易卡源等效加延迟、流畅源略减延迟
+    const history = createSourceHistoryLookup();
+    const effectivePing = (r: { source: SearchResult; pingTime: number }) => {
+      const grade = history.getGrade(r.source.source);
+      if (grade === 'bad') return r.pingTime + BAD_HISTORY_PING_PENALTY_MS;
+      if (grade === 'good') return r.pingTime - GOOD_HISTORY_PING_BONUS_MS;
+      return r.pingTime;
+    };
     const availableResults = results
       .filter((r) => r.available)
-      .sort((a, b) => a.pingTime - b.pingTime);
+      .sort((a, b) => effectivePing(a) - effectivePing(b));
 
     if (availableResults.length === 0) {
       console.warn('所有源都不可用，返回第一个');
@@ -585,11 +615,24 @@ function selectBestSource(
   const minPing = validPings.length > 0 ? Math.min(...validPings) : 50;
   const maxPing = validPings.length > 0 ? Math.max(...validPings) : 1000;
 
-  // 计算每个结果的评分
-  const resultsWithScore = successfulResults.map((result) => ({
-    ...result,
-    score: calculateSourceScore(result.testResult, maxSpeed, minPing, maxPing),
-  }));
+  // 计算每个结果的评分：本次测速为主，叠加本机跨会话历史表现（卡顿率/速度余量）
+  const history = createSourceHistoryLookup();
+  const resultsWithScore = successfulResults.map((result) => {
+    const probeScore = calculateSourceScore(
+      result.testResult,
+      maxSpeed,
+      minPing,
+      maxPing,
+    );
+    const historyScore =
+      history.getScore(result.source.source) ?? NEUTRAL_HISTORY_SCORE;
+    return {
+      ...result,
+      score:
+        probeScore * (1 - HISTORY_SCORE_WEIGHT) +
+        historyScore * HISTORY_SCORE_WEIGHT,
+    };
+  });
 
   // 按综合评分排序，选择最佳播放源
   resultsWithScore.sort((a, b) => b.score - a.score);
@@ -706,12 +749,14 @@ function calculateIPadScore(source: SearchResult, pingTime: number): number {
   const pingScore = Math.max(0, 100 - pingTime / 50); // 50ms以下满分
   score += pingScore * 0.7;
 
-  // 源可靠性评分 (30% 权重) - 结合现有优先源与常见源权重，避免沿用失效清单
+  // 源可靠性评分 (30% 权重) - 优先使用本机历史表现，无历史时按优先源清单
   const isPreferredByKey = PREFERRED_SOURCE_KEYS.includes(source.source);
   const isPreferredByName = PREFERRED_SOURCE_NAMES.some((n) =>
     source.source_name?.toLowerCase().includes(n.toLowerCase()),
   );
-  const reliabilityScore = isPreferredByKey || isPreferredByName ? 100 : 60;
+  const historyScore = createSourceHistoryLookup().getScore(source.source);
+  const reliabilityScore =
+    historyScore ?? (isPreferredByKey || isPreferredByName ? 100 : 60);
 
   score += reliabilityScore * 0.3;
 

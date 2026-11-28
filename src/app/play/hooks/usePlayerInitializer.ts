@@ -32,8 +32,17 @@ import {
   installDynamicBuffer,
 } from '../utils/dynamicBuffer';
 import { prefetchNextEpisodeMedia } from '../utils/episodePrefetch';
+import {
+  type FragmentPrefetcher,
+  createFragmentPrefetcher,
+} from '../utils/fragmentPrefetcher';
+import { appendSourceFragmentParam } from '../utils/fragmentUrlParams';
 import { createAdFilterHlsLoader } from '../utils/hlsAdFilterLoader';
 import type { HlsRuntimeInstance } from '../utils/hlsConfig';
+import {
+  type PlaybackQualityMonitor,
+  installPlaybackQualityMonitor,
+} from '../utils/playbackQualityMonitor';
 import {
   restoreMutedVolumeOnFirstPlay,
   scheduleAutoPlayWithFallback,
@@ -58,6 +67,7 @@ import {
   createQualityControls,
 } from '../utils/qualitySelector';
 import { markSourceFailedAndFindNext } from '../utils/sourceFailover';
+import { isSourceHistoricallySlow } from '../utils/sourceSpeedHistory';
 import { installSuperResolution } from '../utils/superResolution';
 import { getVideoErrorMessage } from '../utils/videoErrorMessage';
 
@@ -199,6 +209,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const bufferStartAtRef = useRef<number>(0);
   const lastPlayTimeRef = useRef<number>(0);
   const dynamicBufferRef = useRef<DynamicBufferController | null>(null);
+  const fragmentPrefetcherRef = useRef<FragmentPrefetcher | null>(null);
+  const playbackQualityMonitorRef = useRef<PlaybackQualityMonitor | null>(null);
   const superResolutionEnabledRef = useRef<boolean>(false);
   const nextEpisodePrefetchControllerRef = useRef<AbortController | null>(null);
   const prefetchedEpisodeUrlRef = useRef<string>('');
@@ -223,6 +235,10 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
       nextEpisodePrefetchControllerRef.current = null;
       dynamicBufferRef.current?.dispose();
       dynamicBufferRef.current = null;
+      fragmentPrefetcherRef.current?.dispose();
+      fragmentPrefetcherRef.current = null;
+      playbackQualityMonitorRef.current?.dispose();
+      playbackQualityMonitorRef.current = null;
     };
   }, []);
 
@@ -447,12 +463,6 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
         return;
       }
 
-      const CustomHlsJsLoader = createAdFilterHlsLoader(Hls, {
-        blockAdEnabledRef,
-        customAdFilterCodeRef,
-        source: currentSource,
-      });
-
       if (
         !detail ||
         !detail.episodes ||
@@ -578,6 +588,35 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
 
         setupArtplayerGlobals(Artplayer);
 
+        fragmentPrefetcherRef.current?.dispose();
+        const fragmentPrefetcher = createFragmentPrefetcher({
+          isMobile,
+          getSignals: () => {
+            const snapshot = dynamicBufferRef.current?.getSnapshot();
+            if (!snapshot) return null;
+            return {
+              speedTier: snapshot.speedTier,
+              memoryPressure: snapshot.memoryPressure,
+              strategy: snapshot.strategy,
+            };
+          },
+          isHistoricallySlow: () =>
+            isSourceHistoricallySlow(latestParamsRef.current.currentSource),
+          resolveUrl: (rawUrl) =>
+            appendSourceFragmentParam(
+              latestParamsRef.current.currentSource,
+              rawUrl,
+            ),
+        });
+        fragmentPrefetcherRef.current = fragmentPrefetcher;
+
+        const CustomHlsJsLoader = createAdFilterHlsLoader(Hls, {
+          blockAdEnabledRef,
+          customAdFilterCodeRef,
+          source: currentSource,
+          fragmentPrefetcher,
+        });
+
         const customType = {
           m3u8: function (video: HTMLVideoElement, url: string) {
             const hlsSession = mediaSessionRef.current;
@@ -627,6 +666,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             if (hls) {
               ensureVideoSource(video, url);
               dynamicBufferRef.current?.attachHls(hls);
+              fragmentPrefetcher.attach(hls, video);
             }
           },
         };
@@ -702,6 +742,21 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           hasAlternativeSource: hasUnfailedAlternativeSource,
         });
         dynamicBufferRef.current = dynamicBuffer;
+        playbackQualityMonitorRef.current?.dispose();
+        const playbackQualityMonitor = installPlaybackQualityMonitor(
+          artPlayer,
+          {
+            isSuperResolutionEnabled: () => superResolutionEnabledRef.current,
+            isDanmakuActive: () =>
+              Boolean(
+                externalDanmuEnabledRef.current &&
+                artPlayer.plugins?.artplayerPluginDanmuku &&
+                !artPlayer.plugins.artplayerPluginDanmuku.isHide &&
+                !artPlayer.plugins.artplayerPluginDanmuku.isStop,
+              ),
+          },
+        );
+        playbackQualityMonitorRef.current = playbackQualityMonitor;
         const originalDestroyForBuffer = artPlayer.destroy;
         artPlayer.destroy = function (removeHtml?: boolean) {
           if (readyDanmuTimer) {
@@ -713,6 +768,14 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           dynamicBuffer.dispose();
           if (dynamicBufferRef.current === dynamicBuffer) {
             dynamicBufferRef.current = null;
+          }
+          fragmentPrefetcher.dispose();
+          if (fragmentPrefetcherRef.current === fragmentPrefetcher) {
+            fragmentPrefetcherRef.current = null;
+          }
+          playbackQualityMonitor.dispose();
+          if (playbackQualityMonitorRef.current === playbackQualityMonitor) {
+            playbackQualityMonitorRef.current = null;
           }
           return originalDestroyForBuffer.call(this, removeHtml);
         };

@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 
 import { filterAdsFromM3U8, filterAdsFromM3U8Async } from '@/lib/ad-filter';
 
+import type { PrefetchClaim } from './fragmentPrefetcher';
 import { appendSourceFragmentParam } from './fragmentUrlParams';
 import { stripMpegTsPrefix } from './mpegTs';
 
@@ -11,10 +12,22 @@ type HlsConstructor = typeof import('hls.js').default;
 type HlsLoaderContext = {
   type?: string;
   url?: string;
+  rangeStart?: number;
+  rangeEnd?: number;
 };
 
 type HlsLoaderResponse = {
+  url?: string;
   data?: unknown;
+  code?: number;
+};
+
+type HlsLoaderStats = {
+  aborted: boolean;
+  loaded: number;
+  total: number;
+  bwEstimate: number;
+  loading: { start: number; first: number; end: number };
 };
 
 type HlsLoaderCallbacks = {
@@ -24,6 +37,24 @@ type HlsLoaderCallbacks = {
     context: HlsLoaderContext,
     networkDetails: unknown,
   ) => void;
+  onTimeout?: (
+    stats: unknown,
+    context: HlsLoaderContext,
+    networkDetails: unknown,
+  ) => void;
+};
+
+type HlsLoaderConfiguration = {
+  timeout?: number;
+  loadPolicy?: { maxLoadTimeMs?: number };
+};
+
+/** hls.js BaseLoader 的内部字段：从预取缓存交付时需要按原生 loader 的方式维护 */
+type LoaderInternals = {
+  stats: HlsLoaderStats | null;
+  context: HlsLoaderContext | null;
+  config: unknown;
+  callbacks: HlsLoaderCallbacks | null;
 };
 
 export interface AdFilterHlsLoaderDeps {
@@ -33,27 +64,51 @@ export interface AdFilterHlsLoaderDeps {
   customAdFilterCodeRef: MutableRefObject<string>;
   /** 当前源标识，用于选择对应的去广告规则 */
   source: string;
+  /** 慢源并发预取器：命中时直接从缓存交付分片 */
+  fragmentPrefetcher?: {
+    claim: (url: string | undefined | null) => PrefetchClaim | null;
+  } | null;
 }
 
 /**
  * 构造带去广告能力的自定义 hls.js loader：
  * - manifest / level 响应按去广告规则重写 m3u8 文本（含自定义规则代码）；
  * - fragment 请求按源配置追加防盗链参数（如爱奇艺源的 domianurl）；
- * - fragment 响应剥离 mpegts 前缀，保证 ArtPlayer 可正常解码。
+ * - fragment 响应剥离 mpegts 前缀，保证 ArtPlayer 可正常解码；
+ * - fragment 若已被慢源并发预取，直接交付缓存数据（失败时回退原生加载）。
  */
 export function createAdFilterHlsLoader(
   Hls: HlsConstructor,
   deps: AdFilterHlsLoaderDeps,
 ) {
-  const { blockAdEnabledRef, customAdFilterCodeRef, source } = deps;
+  const {
+    blockAdEnabledRef,
+    customAdFilterCodeRef,
+    source,
+    fragmentPrefetcher,
+  } = deps;
 
   return class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
     constructor(config: HlsConfig) {
       super(config);
       let cancelled = false;
+      let servingClaim: PrefetchClaim | null = null;
+      let servingTimer: ReturnType<typeof setTimeout> | null = null;
+      const internals = this as unknown as LoaderInternals;
       const lifecycleTarget = this as unknown as {
         abort?: (...args: unknown[]) => unknown;
         destroy?: (...args: unknown[]) => unknown;
+      };
+      const releaseClaim = () => {
+        if (servingTimer) {
+          clearTimeout(servingTimer);
+          servingTimer = null;
+        }
+        if (servingClaim) {
+          servingClaim.cancel();
+          servingClaim = null;
+          if (internals.stats) internals.stats.aborted = true;
+        }
       };
       const rawAbort =
         typeof lifecycleTarget.abort === 'function'
@@ -62,6 +117,7 @@ export function createAdFilterHlsLoader(
       if (rawAbort) {
         lifecycleTarget.abort = (...args: unknown[]) => {
           cancelled = true;
+          releaseClaim();
           return rawAbort(...args);
         };
       }
@@ -72,17 +128,106 @@ export function createAdFilterHlsLoader(
       if (rawDestroy) {
         lifecycleTarget.destroy = (...args: unknown[]) => {
           cancelled = true;
+          releaseClaim();
           return rawDestroy(...args);
         };
       }
 
       const load = this.load.bind(this);
+
+      const serveFromPrefetch = (
+        claim: PrefetchClaim,
+        context: HlsLoaderContext,
+        conf: unknown,
+        callbacks: HlsLoaderCallbacks,
+      ) => {
+        const stats = internals.stats;
+        if (!stats) {
+          claim.cancel();
+          load(context, conf, callbacks);
+          return;
+        }
+        // 与 BaseLoader.load 保持一致的状态，使 abort() 能正常回调 onAbort
+        internals.context = context;
+        internals.config = conf;
+        internals.callbacks = callbacks;
+        stats.loading.start = performance.now();
+        stats.loading.first = 0;
+        stats.loaded = 0;
+        stats.aborted = false;
+        servingClaim = claim;
+
+        const loaderConf = (conf || {}) as HlsLoaderConfiguration;
+        const timeoutMs =
+          loaderConf.timeout ?? loaderConf.loadPolicy?.maxLoadTimeMs ?? 0;
+        let settled = false;
+        const clearServingTimer = () => {
+          if (servingTimer) {
+            clearTimeout(servingTimer);
+            servingTimer = null;
+          }
+        };
+        if (timeoutMs > 0) {
+          servingTimer = setTimeout(() => {
+            if (settled || cancelled) return;
+            settled = true;
+            servingTimer = null;
+            servingClaim = null;
+            claim.cancel();
+            callbacks.onTimeout?.(stats, context, null);
+          }, timeoutMs);
+        }
+
+        claim.promise.then(
+          (fragment) => {
+            if (settled) return;
+            settled = true;
+            clearServingTimer();
+            servingClaim = null;
+            if (cancelled || !internals.callbacks || !internals.stats) return;
+            // 上报真实网络耗时（预取发起→完成），供 ABR 与动态缓冲测速使用
+            stats.loading.start = fragment.startedAt;
+            stats.loading.first = fragment.firstByteAt;
+            stats.loading.end = fragment.endAt;
+            stats.loaded = stats.total = fragment.bytes;
+            const transferMs = Math.max(
+              1,
+              fragment.endAt - fragment.firstByteAt,
+            );
+            stats.bwEstimate = (fragment.bytes * 8000) / transferMs;
+            callbacks.onSuccess?.(
+              { url: fragment.url, data: fragment.data, code: 200 },
+              stats,
+              context,
+              null,
+            );
+          },
+          () => {
+            if (settled) return;
+            settled = true;
+            clearServingTimer();
+            servingClaim = null;
+            if (cancelled) return;
+            // 预取失败：重置为未使用状态后回退到 hls.js 原生加载
+            stats.loading.start = 0;
+            stats.loading.first = 0;
+            stats.loading.end = 0;
+            stats.aborted = false;
+            internals.context = null;
+            internals.config = null;
+            internals.callbacks = null;
+            load(context, conf, callbacks);
+          },
+        );
+      };
+
       this.load = function (
         context: HlsLoaderContext,
         conf: unknown,
         callbacks: HlsLoaderCallbacks,
       ) {
         cancelled = false;
+        let prefetchClaim: PrefetchClaim | null = null;
         if (context.type === 'manifest' || context.type === 'level') {
           const onSuccess = callbacks.onSuccess;
           if (typeof onSuccess === 'function') {
@@ -124,6 +269,10 @@ export function createAdFilterHlsLoader(
             };
           }
         } else if (context.type === 'media-fragment') {
+          // 预取缓存以 hls.js 原始分片地址为键（改写防盗链参数之前）
+          if (fragmentPrefetcher && !context.rangeEnd) {
+            prefetchClaim = fragmentPrefetcher.claim(context.url);
+          }
           // hls.js 1.5+ 分片请求的 context.type 是 'media-fragment'（非 'fragment'）
           // 部分 CDN（如爱奇艺源）要求 ts 分片请求携带防盗链参数
           if (typeof context.url === 'string') {
@@ -140,6 +289,10 @@ export function createAdFilterHlsLoader(
               return onSuccess(response, stats, ctx, null);
             };
           }
+        }
+        if (prefetchClaim) {
+          serveFromPrefetch(prefetchClaim, context, conf, callbacks);
+          return;
         }
         load(context, conf, callbacks);
       };
