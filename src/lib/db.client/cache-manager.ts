@@ -148,6 +148,21 @@ class HybridCacheManager {
   }
 
   /**
+   * 检查收藏缓存是否处于软新鲜期（避免同屏多张卡片挂载时重复触发后台全量同步）
+   */
+  isFavoritesCacheSoftFresh(softTtlMs = 30_000): boolean {
+    const username = this.getCurrentUsername();
+    if (!username) return false;
+
+    const cached = this.getUserCache(username).favorites;
+    if (!cached || !this.isCacheValid(cached)) {
+      return false;
+    }
+
+    return Date.now() - cached.timestamp < softTtlMs;
+  }
+
+  /**
    * 缓存收藏
    */
   cacheFavorites(data: Record<string, Favorite>): void {

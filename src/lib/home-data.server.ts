@@ -1,5 +1,5 @@
-import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
-import { db } from '@/lib/db';
+import { DATA_FETCH_TIMEOUTS, HOME_RENDER_LIMITS } from '@/lib/constants/home';
+import { db, generateStorageKey } from '@/lib/db';
 import { fetchDoubanData } from '@/lib/douban';
 import {
   type DoubanRecentHotResponse,
@@ -8,8 +8,14 @@ import {
 } from '@/lib/douban-shared';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import type { DoubanItem } from '@/lib/types';
+import { getCachedWatchingUpdatesForUser } from '@/lib/watching-updates-cache';
 
-import { type HomeData, EMPTY_HOME_DATA } from './home-data-types';
+import {
+  type HomeData,
+  type HomeInitialPlaybackData,
+  EMPTY_HOME_DATA,
+  EMPTY_INITIAL_PLAYBACK_DATA,
+} from './home-data-types';
 
 /** 进程内短缓存，吸收同实例的连续 SSR 请求 */
 const HOME_DATA_MEMORY_TTL_MS = 60_000;
@@ -186,12 +192,79 @@ async function getCriticalMovies(): Promise<DoubanItem[]> {
   return request;
 }
 
+const SSR_PLAYBACK_READ_TIMEOUT_MS = 450;
+
+async function readWithDeadline<T>(
+  reader: () => Promise<T>,
+  timeoutMs: number,
+  fallback: T,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader(),
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return fallback;
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 /**
  * 获取首页 SSR 首批数据。
  * 冷缓存只等待热门电影，其余区块交给客户端按优先级补载。
  */
 export async function getServerInitialHomeData(): Promise<HomeData> {
   return createCriticalHomeData(await getCriticalMovies());
+}
+
+/**
+ * 获取已登录用户首屏播放记录与已缓存的追更快照。
+ * 采用短超时兜底：命中时实现首屏继续观看与 Hero 零闪烁直出，慢查询或异常时平滑回退给客户端补载。
+ */
+export async function getServerInitialPlaybackData(
+  username: string,
+): Promise<HomeInitialPlaybackData> {
+  if (!username) {
+    return EMPTY_INITIAL_PLAYBACK_DATA;
+  }
+
+  const watchingUpdates = await readWithDeadline(
+    () => getCachedWatchingUpdatesForUser(username),
+    SSR_PLAYBACK_READ_TIMEOUT_MS,
+    null,
+  );
+
+  const includeKeys = (watchingUpdates?.updatedSeries || [])
+    .filter(
+      (series) =>
+        series.hasNewEpisode &&
+        Boolean(series.sourceKey) &&
+        Boolean(series.videoId),
+    )
+    .map((series) => generateStorageKey(series.sourceKey, series.videoId));
+
+  const playRecordsPage = await readWithDeadline(
+    () =>
+      db.getPlayRecordsPage(username, {
+        cursor: null,
+        includeKeys,
+        pageSize: HOME_RENDER_LIMITS.CONTINUE_WATCHING_PAGE,
+      }),
+    SSR_PLAYBACK_READ_TIMEOUT_MS,
+    null,
+  );
+
+  return {
+    playRecordsPage,
+    watchingUpdates,
+  };
 }
 
 /** 测试/运维用：清理进程内缓存 */

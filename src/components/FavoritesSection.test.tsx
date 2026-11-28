@@ -133,7 +133,7 @@ describe('FavoritesSection', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('clears storage before updating the local favorite state', async () => {
+  it('requires confirmation and clears storage before updating the local favorite state', async () => {
     const events: string[] = [];
     mockClearAllFavorites.mockImplementation(async () => {
       events.push('storage');
@@ -152,6 +152,13 @@ describe('FavoritesSection', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(mockClearAllFavorites).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(mockClearAllFavorites).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认清空' }));
 
     await waitFor(() => expect(onClearAll).toHaveBeenCalledTimes(1));
     expect(events).toEqual(['storage', 'state']);
@@ -171,6 +178,7 @@ describe('FavoritesSection', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认清空' }));
 
     await waitFor(() => expect(mockClearAllFavorites).toHaveBeenCalledTimes(1));
     expect(onClearAll).not.toHaveBeenCalled();

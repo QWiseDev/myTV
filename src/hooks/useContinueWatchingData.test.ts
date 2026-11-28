@@ -1130,6 +1130,51 @@ describe('useContinueWatchingData', () => {
         'source+c',
       ]);
     });
+
+    it('SSR initialPage 传入时首帧直接就绪且不发起初始网络请求，并实时响应 playRecordsUpdated', async () => {
+      const ssrPage = createPage({
+        'source+ssr': createRecord({ title: 'SSR 直出剧集', save_time: 200 }),
+      });
+      const { result } = renderHook(() =>
+        useContinueWatchingData([], { initialPage: ssrPage }),
+      );
+
+      expect(result.current.loadingPlayRecords).toBe(false);
+      expect(result.current.playRecords).toEqual({
+        'source+ssr': createRecord({ title: 'SSR 直出剧集', save_time: 200 }),
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await flushAsyncWork();
+      });
+      expect(dbClient.getPlayRecordsPage).not.toHaveBeenCalled();
+
+      // 站内外部写入/导入触发 playRecordsUpdated 时自动同步最新快照
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent('playRecordsUpdated', {
+            detail: {
+              'source+ssr': createRecord({
+                title: 'SSR 直出剧集',
+                index: 5,
+                save_time: 500,
+              }),
+              'source+new': createRecord({
+                title: '新导入记录',
+                save_time: 600,
+              }),
+            },
+          }),
+        );
+      });
+
+      expect(Object.keys(result.current.playRecords ?? {})).toEqual([
+        'source+new',
+        'source+ssr',
+      ]);
+      expect(result.current.playRecords?.['source+ssr'].index).toBe(5);
+    });
   });
 });
 

@@ -1,66 +1,42 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { Coins, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import React from 'react';
 
+/**
+ * 首页幸运老虎机悬浮入口：
+ * - 移除重型 framer-motion 依赖与多重无限循环动画，改用轻量 CSS 过渡并遵循 prefers-reduced-motion；
+ * - 直接使用 Link 作为单一交互根节点，修复 <a><button> 非法嵌套；
+ * - 移动端上移避开底部导航栏（bottom-20），层级置于模态框之下（z-40）。
+ */
 export default function SlotMachineFloatButton() {
   const pathname = usePathname();
 
-  // 只在首页显示
   if (pathname !== '/') {
     return null;
   }
 
   return (
-    <Link href='/slot'>
-      <motion.button
-        className='fixed bottom-8 right-4 z-[1002] bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full p-3 shadow-xl hover:shadow-2xl transition-all group animate-pulse'
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{
-          opacity: 1,
-          scale: [1, 1.2, 1],
-          rotate: [0, 5, -5, 0],
-        }}
-        transition={{
-          opacity: { duration: 0.3, delay: 1 },
-          scale: {
-            duration: 2,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 1.5,
-          },
-          rotate: {
-            duration: 4,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 2,
-          },
-        }}
-      >
-        <div className='relative'>
-          {/* 旋转动画背景 */}
-          <div className='absolute inset-0 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 opacity-0 group-hover:opacity-100 animate-ping'></div>
+    <Link
+      href='/slot'
+      aria-label='幸运老虎机'
+      style={{
+        bottom: 'calc(4.75rem + env(safe-area-inset-bottom))',
+      }}
+      className='group fixed right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white shadow-lg ring-1 ring-white/25 transition-all duration-300 hover:from-purple-700 hover:to-pink-700 hover:shadow-xl motion-safe:hover:-translate-y-0.5 motion-safe:hover:scale-105 active:scale-95 md:!bottom-7 md:right-6 md:h-12 md:w-12'
+    >
+      <span className='relative flex items-center justify-center'>
+        <Coins className='h-5 w-5 sm:h-6 sm:w-6' aria-hidden='true' />
+        <Sparkles
+          className='absolute -right-1 -top-1 h-2.5 w-2.5 text-yellow-300 sm:h-3 sm:w-3'
+          aria-hidden='true'
+        />
+      </span>
 
-          {/* 主图标 */}
-          <div className='relative flex items-center justify-center'>
-            <Coins className='w-5 h-5 sm:w-6 sm:h-6' />
-            <Sparkles className='w-2 h-2 sm:w-3 sm:h-3 absolute -top-1 -right-1 text-yellow-300' />
-          </div>
-
-          {/* 发光效果 */}
-          <div className='absolute inset-0 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 opacity-20 animate-pulse'></div>
-        </div>
-
-        {/* 提示文字 */}
-        <div className='absolute bottom-full right-0 mb-2 bg-gray-800 text-white text-xs px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap'>
-          幸运老虎机
-        </div>
-      </motion.button>
+      <span className='pointer-events-none absolute bottom-full right-0 mb-2 whitespace-nowrap rounded-lg bg-[#1c1c1c]/95 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-md transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100'>
+        幸运老虎机
+      </span>
     </Link>
   );
 }

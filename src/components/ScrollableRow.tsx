@@ -17,6 +17,8 @@ interface ScrollableRowProps {
   children: React.ReactNode;
   scrollDistance?: number;
   enableAnimation?: boolean;
+  /** 横版内嵌文案卡片使用紧凑底部内边距，避免底部留出过多空白 */
+  compactBottomPadding?: boolean;
 }
 
 function canUseScrollControls(): boolean {
@@ -83,6 +85,7 @@ function ScrollableRow({
   children,
   scrollDistance = 1000,
   enableAnimation = true,
+  compactBottomPadding = false,
 }: ScrollableRowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showLeftScroll, setShowLeftScroll] = useState(false);
@@ -186,11 +189,19 @@ function ScrollableRow({
   }, [childrenCount, checkScroll]);
 
   const handleScrollBy = useCallback((distance: number) => {
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     containerRef.current?.scrollBy({
       left: distance,
-      behavior: 'smooth',
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
     });
   }, []);
+
+  const bottomPaddingClass = compactBottomPadding
+    ? 'pb-3 sm:pb-4'
+    : 'pb-12 sm:pb-14';
 
   return (
     <div
@@ -205,7 +216,7 @@ function ScrollableRow({
     >
       <div
         ref={containerRef}
-        className='flex space-x-4 sm:space-x-5 md:space-x-6 overflow-x-auto scrollbar-hide py-1 sm:py-2 pb-12 sm:pb-14 px-0'
+        className={`flex space-x-4 sm:space-x-5 md:space-x-6 overflow-x-auto scrollbar-hide py-1 sm:py-2 ${bottomPaddingClass} px-0`}
         onScroll={handleScroll}
       >
         {enableAnimation ? (

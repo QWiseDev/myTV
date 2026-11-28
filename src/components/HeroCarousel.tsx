@@ -7,6 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { analytics } from '@/lib/analytics';
 import type { TMDBHeroInfo } from '@/lib/tmdb.client';
+import {
+  fetchTMDBHeroInfoBatch,
+  peekCachedTMDBHeroInfo,
+} from '@/lib/tmdb-hero.client';
 import type { DoubanItem } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
 import {
@@ -150,53 +154,68 @@ export default function HeroCarousel({
     return () => clearInterval(timer);
   }, [paused, slides.length]);
 
-  // 异步拉取 TMDB 横图（按标题批量查询），未配置 TMDB 时静默保持海报模糊垫底。
-  // 查询串作为稳定依赖：播放记录对象引用变化但帧内容不变时不重复请求。
-  const backdropQueryString = useMemo(() => {
+  // 异步拉取 TMDB 横图（按标题批量查询），与下方 ContinueWatching 共享内存缓存，避免同名剧集重复请求。
+  const backdropLookupSignature = useMemo(() => {
     const seen = new Set<string>();
-    const params = new URLSearchParams();
+    const entries: string[] = [];
     for (const slide of slides) {
       const title = slide.title.trim();
       if (!title || seen.has(title) || fetchedTitlesRef.current.has(title)) {
         continue;
       }
       seen.add(title);
-      params.append('title', title);
-      // 无年份也传空串，保证服务端 title/year 按下标对齐
-      params.append('year', slide.year?.trim() || '');
+      entries.push(`${title}\t${slide.year?.trim() || ''}`);
     }
-    return params.toString();
+    return entries.join('\n');
   }, [slides]);
 
   useEffect(() => {
-    // 无 fetch 的环境（jsdom 测试等）或等待继续观看稳定时跳过
     if (typeof fetch === 'undefined' || deferEnrich) return;
-    if (!backdropQueryString) return;
-    const controller = new AbortController();
-    const titles = new URLSearchParams(backdropQueryString).getAll('title');
+    if (!backdropLookupSignature) return;
 
-    // v2：接口响应结构升级后强制绕过浏览器旧缓存
-    fetch(`/api/tmdb/hero?v=2&${backdropQueryString}`, {
-      signal: controller.signal,
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { info?: Record<string, TMDBHeroInfo | null> } | null) => {
-        if (!data?.info) return;
-        const next: Record<string, TMDBHeroInfo> = {};
-        for (const title of titles) {
-          fetchedTitlesRef.current.add(title);
-          const info = data.info[title];
-          if (info?.backdrop) next[title] = info;
+    const lookupItems = backdropLookupSignature.split('\n').map((line) => {
+      const [title, year] = line.split('\t');
+      return { title, year };
+    });
+
+    const cachedHits: Record<string, TMDBHeroInfo> = {};
+    const uncachedItems: Array<{ title: string; year?: string }> = [];
+    for (const item of lookupItems) {
+      const cached = peekCachedTMDBHeroInfo(item.title, item.year);
+      if (cached !== undefined) {
+        fetchedTitlesRef.current.add(item.title);
+        if (cached?.backdrop) {
+          cachedHits[item.title] = cached;
         }
-        if (Object.keys(next).length > 0) {
-          setInfoByTitle((prev) => ({ ...prev, ...next }));
+      } else {
+        uncachedItems.push(item);
+      }
+    }
+
+    if (Object.keys(cachedHits).length > 0) {
+      setInfoByTitle((prev) => ({ ...prev, ...cachedHits }));
+    }
+    if (uncachedItems.length === 0) return;
+
+    const controller = new AbortController();
+    fetchTMDBHeroInfoBatch(uncachedItems, controller.signal)
+      .then((infoMap) => {
+        if (controller.signal.aborted) return;
+        for (const item of uncachedItems) {
+          if (peekCachedTMDBHeroInfo(item.title, item.year) !== undefined) {
+            fetchedTitlesRef.current.add(item.title);
+          }
+        }
+        if (Object.keys(infoMap).length > 0) {
+          setInfoByTitle((prev) => ({ ...prev, ...infoMap }));
         }
       })
       .catch(() => {
         // TMDB 未启用/网络失败：保持模糊海报降级
       });
+
     return () => controller.abort();
-  }, [backdropQueryString, deferEnrich]);
+  }, [backdropLookupSignature, deferEnrich]);
 
   // 仅挂载「当前帧 + 前后相邻帧」的模糊底图与海报，既保证淡入淡出过渡平滑，
   // 又将 blur-2xl 合成层上限控制在 3 帧以内，避免 8 帧长期常驻 GPU 显存。

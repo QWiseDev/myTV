@@ -1,6 +1,6 @@
 'use client';
 
-import { Film, Loader, LogIn, Search, Tv } from 'lucide-react';
+import { Film, Loader, LogIn, Search, Tv, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -95,6 +95,9 @@ export default function GuestHome({
 
   const [query, setQuery] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [brokenPosterIds, setBrokenPosterIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const lastFetchAtRef = useRef(0);
@@ -416,9 +419,22 @@ export default function GuestHome({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder='搜索片名…'
-                  className='h-9 w-full rounded-full border border-[#e5e5e5] bg-white py-2 pl-9 pr-4 text-sm text-[#111111] outline-none transition-colors placeholder:text-[#9a9a9a] focus:border-[#00be06] dark:border-[#3d3d3d] dark:bg-[#2a2a2a] dark:text-[#f5f5f5] dark:placeholder:text-[#6f6f6f]'
+                  className='h-9 w-full rounded-full border border-[#e5e5e5] bg-white py-2 pl-9 pr-8 text-sm text-[#111111] outline-none transition-colors placeholder:text-[#9a9a9a] focus:border-[#00be06] dark:border-[#3d3d3d] dark:bg-[#2a2a2a] dark:text-[#f5f5f5] dark:placeholder:text-[#6f6f6f]'
                 />
                 <Search className='pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8f8f8f]' />
+                {(query || searchKeyword) && (
+                  <button
+                    type='button'
+                    aria-label='清除搜索关键词'
+                    onClick={() => {
+                      setQuery('');
+                      setSearchKeyword('');
+                    }}
+                    className='absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[#8f8f8f] transition-colors hover:bg-[#f2f2f2] hover:text-[#111111] dark:hover:bg-[#3a3a3a] dark:hover:text-[#f5f5f5]'
+                  >
+                    <X className='h-3.5 w-3.5' />
+                  </button>
+                )}
               </form>
             </div>
 
@@ -463,7 +479,7 @@ export default function GuestHome({
                       }}
                     >
                       <div className='relative aspect-[2/3] overflow-hidden rounded-lg bg-[#e8e8e8] shadow-sm transition-all duration-300 group-hover:scale-[1.03] group-hover:shadow-lg group-hover:shadow-black/15 dark:bg-[#2a2a2a]'>
-                        {item.poster ? (
+                        {item.poster && !brokenPosterIds.has(item.id) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={processImageUrl(item.poster)}
@@ -471,6 +487,13 @@ export default function GuestHome({
                             className='h-full w-full object-cover'
                             loading='lazy'
                             referrerPolicy='no-referrer'
+                            onError={() => {
+                              setBrokenPosterIds((prev) => {
+                                const next = new Set(prev);
+                                next.add(item.id);
+                                return next;
+                              });
+                            }}
                           />
                         ) : (
                           <div className='flex h-full w-full flex-col items-center justify-center text-[#8f8f8f]'>

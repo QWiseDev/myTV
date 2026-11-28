@@ -1,5 +1,6 @@
 import type { BangumiCalendarData } from '@/lib/bangumi.client';
-import type { DoubanItem } from '@/lib/types';
+import type { DoubanItem, PlayRecordsPage } from '@/lib/types';
+import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
 export interface HomeData {
   hotMovies: DoubanItem[];
@@ -7,6 +8,16 @@ export interface HomeData {
   hotVarietyShows: DoubanItem[];
   bangumiCalendarData: BangumiCalendarData[];
 }
+
+export interface HomeInitialPlaybackData {
+  playRecordsPage: PlayRecordsPage | null;
+  watchingUpdates: WatchingUpdatesCache | null;
+}
+
+export const EMPTY_INITIAL_PLAYBACK_DATA: HomeInitialPlaybackData = {
+  playRecordsPage: null,
+  watchingUpdates: null,
+};
 
 export const EMPTY_HOME_DATA: HomeData = {
   hotMovies: [],

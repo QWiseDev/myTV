@@ -2,11 +2,13 @@
 
 import { createContext, ReactNode, useContext, useMemo } from 'react';
 
+import type { HomeInitialPlaybackData } from '@/lib/home-data-types';
 import { generateStorageKey } from '@/lib/storage-key';
 import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdate } from '@/lib/watching-updates';
 import {
   type PlayRecordsLoadError,
+  type UseContinueWatchingDataOptions,
   useContinueWatchingData,
 } from '@/hooks/useContinueWatchingData';
 import { useWatchingUpdatesSnapshot } from '@/hooks/useWatchingUpdatesSnapshot';
@@ -34,7 +36,6 @@ interface PlaybackDataContextType {
 
 const PlaybackDataContext = createContext<PlaybackDataContextType | null>(null);
 
-// 创建自定义Hook用于在页面内部使用
 export function usePlaybackData() {
   const context = useContext(PlaybackDataContext);
   if (!context) {
@@ -48,6 +49,8 @@ interface PlaybackDataProviderProps {
   includePlayRecordKeys?: string[];
   /** 立即加载首屏播放记录（播放页跳过 200ms idle 延迟，加快续播恢复） */
   eager?: boolean;
+  /** SSR 首屏直出的播放记录与追更快照 */
+  initialPlaybackData?: HomeInitialPlaybackData;
 }
 
 const EMPTY_INCLUDE_PLAY_RECORD_KEYS: string[] = [];
@@ -56,13 +59,14 @@ export function PlaybackDataProvider({
   children,
   includePlayRecordKeys = EMPTY_INCLUDE_PLAY_RECORD_KEYS,
   eager = false,
+  initialPlaybackData,
 }: PlaybackDataProviderProps) {
   const {
     loadingWatchingUpdates,
     refreshWatchingUpdates,
     setWatchingUpdates,
     watchingUpdates,
-  } = useWatchingUpdatesSnapshot();
+  } = useWatchingUpdatesSnapshot(initialPlaybackData?.watchingUpdates);
   const priorityPlayRecordKeys = useMemo(
     () =>
       (watchingUpdates?.updatedSeries || [])
@@ -77,9 +81,17 @@ export function PlaybackDataProvider({
       ),
     [includePlayRecordKeys, priorityPlayRecordKeys],
   );
-  const continueWatchingArgs: [string[], { eager: boolean }?] = eager
-    ? [firstPagePlayRecordKeys, { eager: true }]
-    : [firstPagePlayRecordKeys];
+  const initialPage = initialPlaybackData?.playRecordsPage ?? null;
+  const continueWatchingArgs: [string[], UseContinueWatchingDataOptions?] =
+    eager || initialPage !== null
+      ? [
+          firstPagePlayRecordKeys,
+          {
+            ...(eager ? { eager: true } : {}),
+            ...(initialPage !== null ? { initialPage } : {}),
+          },
+        ]
+      : [firstPagePlayRecordKeys];
   const {
     loadingPlayRecords,
     loadingMorePlayRecords,
@@ -92,7 +104,6 @@ export function PlaybackDataProvider({
     clearAll,
   } = useContinueWatchingData(...continueWatchingArgs);
 
-  // 🚀 渲染性能优化：使用useMemo缓存Context值，防止不必要的重新渲染
   const value: PlaybackDataContextType = useMemo(
     () => ({
       playRecords,

@@ -1,11 +1,11 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { logAccess } from '@/lib/access-log';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import type { HomeData } from '@/lib/home-data-types';
+import type { HomeData, HomeInitialPlaybackData } from '@/lib/home-data-types';
 import { useAiRecommendStatus } from '@/hooks/useAiRecommendStatus';
 import { useAnnouncementVisibility } from '@/hooks/useAnnouncementVisibility';
 import { useFavoriteItems } from '@/hooks/useFavoriteItems';
@@ -38,6 +38,13 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
   const activeTab: HomeTab =
     searchParams.get('tab') === 'favorites' ? 'favorites' : 'home';
   const [showAIRecommendModal, setShowAIRecommendModal] = useState(false);
+
+  // 记录是否曾浏览过首页主列表：在首页与收藏夹间往返时保活 DOM 以保留横向滚动位置，
+  // 同时若直接从 URL 打开 /?tab=favorites 则延迟挂载首页主列表，减少非活跃 DOM 开销。
+  const hasVisitedHomeRef = useRef(activeTab === 'home');
+  if (activeTab === 'home') {
+    hasVisitedHomeRef.current = true;
+  }
 
   const {
     playRecords,
@@ -76,7 +83,6 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
     useAnnouncementVisibility(announcement);
   const aiEnabled = useAiRecommendStatus();
 
-  // 继续观看与 Hero 的骨架 loading 仅由播放首屏加载决定，追更补齐不重新置 true（方案 5.1）
   const continueWatching = useMemo<HomeContinueWatchingState>(
     () => ({
       playRecords: playRecords ?? {},
@@ -114,7 +120,6 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
   return (
     <PageLayout initialLoggedIn>
-      {/* 布局容器交给 PageLayout，避免多层 padding 叠加 */}
       <div className='overflow-visible'>
         {aiEnabled && (
           <div className='mb-4 flex justify-end'>
@@ -122,7 +127,7 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
           </div>
         )}
 
-        {activeTab === 'favorites' ? (
+        {activeTab === 'favorites' && (
           <Suspense fallback={null}>
             <FavoritesSection
               favoriteItems={favoriteItems}
@@ -132,14 +137,18 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
               onRetry={retryFavorites}
             />
           </Suspense>
-        ) : (
-          <HomeTabContent
-            continueWatching={continueWatching}
-            errors={homeErrors}
-            homeData={homeData}
-            loading={homeLoading}
-            retrySection={retrySection}
-          />
+        )}
+
+        {hasVisitedHomeRef.current && (
+          <div className={activeTab === 'home' ? 'block' : 'hidden'}>
+            <HomeTabContent
+              continueWatching={continueWatching}
+              errors={homeErrors}
+              homeData={homeData}
+              loading={homeLoading}
+              retrySection={retrySection}
+            />
+          </div>
         )}
       </div>
 
@@ -167,11 +176,13 @@ function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
 
 export default function HomeClient({
   initialHomeData,
+  initialPlaybackData,
 }: {
   initialHomeData?: HomeData;
+  initialPlaybackData?: HomeInitialPlaybackData;
 }) {
   return (
-    <PlaybackDataProvider>
+    <PlaybackDataProvider initialPlaybackData={initialPlaybackData}>
       <HomeContent initialHomeData={initialHomeData} />
     </PlaybackDataProvider>
   );

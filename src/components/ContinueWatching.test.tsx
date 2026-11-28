@@ -1,14 +1,30 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 
 import type { PlayRecord } from '@/lib/types';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 
 import ContinueWatching from './ContinueWatching';
 
-jest.mock('@/components/HomeSectionHeader', () => ({
+jest.mock('next/image', () => ({
   __esModule: true,
-  default: ({ title }: { title: string }) => <h2>{title}</h2>,
+  default: (
+    props: Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
+      fill?: boolean;
+      priority?: boolean;
+      unoptimized?: boolean;
+      src: string | { src: string };
+    },
+  ) => {
+    const { src, ...imageProps } = props;
+    delete imageProps.fill;
+    delete imageProps.priority;
+    delete imageProps.unoptimized;
+    return React.createElement('img', {
+      ...imageProps,
+      src: typeof src === 'string' ? src : src.src,
+    });
+  },
 }));
 
 jest.mock('@/components/ScrollableRow', () => ({
@@ -26,25 +42,20 @@ jest.mock('@/components/ScrollableRow', () => ({
   ),
 }));
 
-jest.mock('@/components/VideoCard', () => ({
-  __esModule: true,
-  default: ({ title }: { title: string }) => <div>{title}</div>,
-}));
-
 function createPlayRecords(count: number): Record<string, PlayRecord> {
   return Object.fromEntries(
     Array.from({ length: count }, (_, index) => [
       `source+video-${index + 1}`,
       {
         cover: `https://example.com/${index + 1}.jpg`,
-        index: 1,
-        play_time: 10,
+        index: 2,
+        play_time: 600,
         save_time: count - index,
         search_title: `影片 ${index + 1}`,
         source_name: '测试源',
         title: `影片 ${index + 1}`,
         total_episodes: 12,
-        total_time: 100,
+        total_time: 1800,
         year: '2026',
       },
     ]),
@@ -63,10 +74,18 @@ const defaultProps = {
   watchingUpdates: null,
 };
 
-describe('ContinueWatching', () => {
+describe('ContinueWatching 16:9 workbench', () => {
   beforeEach(() => {
+    defaultProps.onClearAll.mockClear();
+    defaultProps.onDeleteRecord.mockClear();
     defaultProps.onLoadMore.mockClear();
     defaultProps.onRetry.mockClear();
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: false,
+        json: async () => null,
+      } as unknown as Response),
+    );
   });
 
   it('disables row animation while loading skeletons', () => {
@@ -83,29 +102,44 @@ describe('ContinueWatching', () => {
     );
   });
 
-  it('keeps the animated row structure when a second page is appended', () => {
-    const { rerender } = render(
-      <ContinueWatching
-        {...defaultProps}
-        playRecords={createPlayRecords(12)}
-      />,
+  it('renders 16:9 cards with remaining watch time and supports single-record removal', () => {
+    render(
+      <ContinueWatching {...defaultProps} playRecords={createPlayRecords(2)} />,
     );
 
-    expect(screen.getByTestId('scrollable-row').dataset.animation).toBe('true');
+    expect(screen.getByText('影片 1')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('第 2 集 · 剩余 20 分钟').length,
+    ).toBeGreaterThan(0);
 
-    rerender(
-      <ContinueWatching
-        {...defaultProps}
-        playRecords={createPlayRecords(13)}
-      />,
+    fireEvent.click(
+      screen.getByRole('button', { name: '删除 影片 1 的播放记录' }),
     );
-
-    expect(screen.getByTestId('scrollable-row').dataset.animation).toBe('true');
+    expect(defaultProps.onDeleteRecord).toHaveBeenCalledWith('source+video-1');
   });
 
-  it('keeps corner badges outside pointer hit testing', () => {
+  it('requires two-step confirmation before clearing all play records', () => {
+    render(
+      <ContinueWatching {...defaultProps} playRecords={createPlayRecords(2)} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(defaultProps.onClearAll).not.toHaveBeenCalled();
+
+    // 先点取消不会清空
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(defaultProps.onClearAll).not.toHaveBeenCalled();
+
+    // 再次点击清空并确认
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认清空' }));
+    expect(defaultProps.onClearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters cards via interactive pills and keeps corner badges outside pointer hit testing', () => {
+    const records = createPlayRecords(2);
     const watchingUpdates: WatchingUpdatesCache = {
-      continueWatchingCount: 1,
+      continueWatchingCount: 2,
       hasUpdates: true,
       timestamp: 1,
       updatedCount: 1,
@@ -117,7 +151,7 @@ describe('ContinueWatching', () => {
           cover: 'https://example.com/1.jpg',
           sourceKey: 'source',
           videoId: 'video-1',
-          currentEpisode: 1,
+          currentEpisode: 2,
           totalEpisodes: 13,
           hasNewEpisode: true,
           hasContinueWatching: true,
@@ -129,12 +163,18 @@ describe('ContinueWatching', () => {
     render(
       <ContinueWatching
         {...defaultProps}
-        playRecords={createPlayRecords(1)}
+        playRecords={records}
         watchingUpdates={watchingUpdates}
       />,
     );
 
     expect(screen.getByText('+1集').className).toContain('pointer-events-none');
+    expect(screen.getByText('影片 2')).toBeInTheDocument();
+
+    // 切换到「新剧集 1」筛选
+    fireEvent.click(screen.getByRole('tab', { name: /新剧集 1/ }));
+    expect(screen.getByText('影片 1')).toBeInTheDocument();
+    expect(screen.queryByText('影片 2')).not.toBeInTheDocument();
   });
 
   it('keeps the next-page entry visible after the loaded records are deleted', () => {

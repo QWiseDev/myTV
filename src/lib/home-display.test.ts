@@ -1,4 +1,7 @@
-import { sortHomeContinueWatchingRecords } from './home-display';
+import {
+  isHomeRecordUnfinished,
+  sortHomeContinueWatchingRecords,
+} from './home-display';
 import type { PlayRecord } from './types';
 
 function createRecord(index: number): PlayRecord & { key: string } {
@@ -18,20 +21,42 @@ function createRecord(index: number): PlayRecord & { key: string } {
 }
 
 describe('sortHomeContinueWatchingRecords', () => {
-  it('prioritizes unfinished records while keeping recent watch order within each group', () => {
+  it('treats >= 95% progress on final episode or movie as finished', () => {
+    expect(
+      isHomeRecordUnfinished({
+        ...createRecord(1),
+        index: 1,
+        total_episodes: 1,
+        play_time: 96,
+        total_time: 100,
+      }),
+    ).toBe(false);
+
+    expect(
+      isHomeRecordUnfinished({
+        ...createRecord(2),
+        index: 1,
+        total_episodes: 1,
+        play_time: 40,
+        total_time: 100,
+      }),
+    ).toBe(true);
+  });
+
+  it('prioritizes unfinished records while keeping recent watch order across movies and TV shows', () => {
     const records = [
       {
         ...createRecord(1),
         key: 'source+finished-newest',
         index: 10,
         total_episodes: 10,
-        play_time: 100,
+        play_time: 98,
         total_time: 100,
-        save_time: 400,
+        save_time: 500,
       },
       {
         ...createRecord(2),
-        key: 'source+unfinished-older',
+        key: 'source+unfinished-tv-older',
         index: 2,
         total_episodes: 10,
         play_time: 100,
@@ -40,20 +65,25 @@ describe('sortHomeContinueWatchingRecords', () => {
       },
       {
         ...createRecord(3),
-        key: 'source+unfinished-newer',
+        key: 'source+unfinished-movie-newer',
         index: 1,
         total_episodes: 1,
-        play_time: 20,
+        play_time: 35,
         total_time: 100,
-        save_time: 300,
+        save_time: 400,
       },
     ];
 
+    // 即使旧剧集在追更表里标记了 priority=1（hasContinueWatching），也不应压过刚看的未看完电影
+    const priorityByKey = new Map([['source+unfinished-tv-older', 1]]);
+
     expect(
-      sortHomeContinueWatchingRecords(records).map((record) => record.key),
+      sortHomeContinueWatchingRecords(records, undefined, priorityByKey).map(
+        (record) => record.key,
+      ),
     ).toEqual([
-      'source+unfinished-newer',
-      'source+unfinished-older',
+      'source+unfinished-movie-newer',
+      'source+unfinished-tv-older',
       'source+finished-newest',
     ]);
   });

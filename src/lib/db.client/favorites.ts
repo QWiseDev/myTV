@@ -20,14 +20,19 @@ function isGuest(): boolean {
   );
 }
 
+function getFavoritesUserScope(): string {
+  return cacheManager.getCurrentUsername() || '__guest__';
+}
+
 function readFavoritesThroughCache(): Promise<Record<string, Favorite>> {
+  const scope = getFavoritesUserScope();
   return readThroughCache<Record<string, Favorite>>({
     readCache: () => cacheManager.getCachedFavorites(),
     writeCache: (data) => cacheManager.cacheFavorites(data),
     fetchFromServer: () =>
       fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-    backgroundSyncKey: 'favorites-background-sync',
-    initialFetchKey: 'favorites-initial-fetch',
+    backgroundSyncKey: `favorites-background-sync:${scope}`,
+    initialFetchKey: `favorites-initial-fetch:${scope}`,
     dispatchUpdated: (data) =>
       window.dispatchEvent(
         new CustomEvent('favoritesUpdated', {
@@ -163,14 +168,24 @@ export async function isFavorited(
 
   const key = generateStorageKey(source, id);
 
+  // 软新鲜期内（默认 30s）直接命中内存缓存，避免首屏多张卡片错峰挂载重复触发后台 GET
+  if (cacheManager.isFavoritesCacheSoftFresh()) {
+    const cached = cacheManager.getCachedFavorites();
+    if (cached) {
+      return !!cached[key];
+    }
+  }
+
+  const scope = getFavoritesUserScope();
+
   try {
     const favorites = await readThroughCache<Record<string, Favorite>>({
       readCache: () => cacheManager.getCachedFavorites(),
       writeCache: (data) => cacheManager.cacheFavorites(data),
       fetchFromServer: () =>
         fetchFromApi<Record<string, Favorite>>(`/api/favorites`),
-      backgroundSyncKey: 'favorites-background-sync',
-      initialFetchKey: 'favorites-initial-fetch',
+      backgroundSyncKey: `favorites-background-sync:${scope}`,
+      initialFetchKey: `favorites-initial-fetch:${scope}`,
       dispatchUpdated: (data) =>
         window.dispatchEvent(
           new CustomEvent('favoritesUpdated', {

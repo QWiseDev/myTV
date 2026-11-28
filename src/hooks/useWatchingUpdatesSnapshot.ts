@@ -6,10 +6,8 @@ import {
   useState,
 } from 'react';
 
-import {
-  type WatchingUpdate,
-  getDetailedWatchingUpdates,
-} from '@/lib/watching-updates';
+import type { WatchingUpdate } from '@/lib/watching-updates';
+import * as watchingUpdatesLib from '@/lib/watching-updates';
 
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -26,29 +24,43 @@ function readCachedWatchingUpdates(): WatchingUpdate | null {
   }
 
   try {
-    return getDetailedWatchingUpdates();
+    return watchingUpdatesLib.getDetailedWatchingUpdates();
   } catch (error) {
     debugError('读取追更缓存失败:', error);
     return null;
   }
 }
 
-export function useWatchingUpdatesSnapshot() {
-  // 初始值与 SSR 保持一致为 null，避免水合首帧读 localStorage 引发 Hydration Mismatch；
-  // 随后在 layoutEffect（首绘前）同步回填本地缓存，既无水合冲突也不闪烁。
+export function useWatchingUpdatesSnapshot(
+  initialWatchingUpdates?: WatchingUpdate | null,
+) {
+  // 若 SSR 已传入初始快照，首帧直接与服务端一致渲染，零闪烁且无水合冲突；
+  // 否则保持 null 并在 layoutEffect 首绘前同步回填客户端内存缓存。
   const [watchingUpdates, setWatchingUpdates] = useState<WatchingUpdate | null>(
-    null,
+    initialWatchingUpdates ?? null,
   );
   const [loadingWatchingUpdates, setLoadingWatchingUpdates] = useState(false);
-  const hasLoadedRef = useRef(false);
+  const hasLoadedRef = useRef(Boolean(initialWatchingUpdates));
 
   useIsomorphicLayoutEffect(() => {
+    if (initialWatchingUpdates) {
+      hasLoadedRef.current = true;
+      if (typeof watchingUpdatesLib.seedWatchingUpdatesCache === 'function') {
+        watchingUpdatesLib.seedWatchingUpdatesCache(initialWatchingUpdates);
+      }
+      const cached = readCachedWatchingUpdates();
+      if (cached && cached.timestamp > initialWatchingUpdates.timestamp) {
+        setWatchingUpdates(cached);
+      }
+      return;
+    }
+
     const cached = readCachedWatchingUpdates();
     if (cached !== null) {
       hasLoadedRef.current = true;
       setWatchingUpdates(cached);
     }
-  }, []);
+  }, [initialWatchingUpdates]);
 
   const loadWatchingUpdates = useCallback(async (force = false) => {
     if (typeof window === 'undefined') return;
@@ -59,7 +71,7 @@ export function useWatchingUpdatesSnapshot() {
       if (!hasLoadedRef.current) {
         setLoadingWatchingUpdates(true);
       }
-      setWatchingUpdates(getDetailedWatchingUpdates());
+      setWatchingUpdates(watchingUpdatesLib.getDetailedWatchingUpdates());
       hasLoadedRef.current = true;
     } catch (error) {
       debugError('加载观看更新失败:', error);

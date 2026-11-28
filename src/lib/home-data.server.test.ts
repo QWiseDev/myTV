@@ -3,17 +3,28 @@ import { DATA_FETCH_TIMEOUTS } from '@/lib/constants/home';
 import {
   clearServerHomeDataMemoryCache,
   getServerInitialHomeData,
+  getServerInitialPlaybackData,
 } from './home-data.server';
 
 const mockFetchDoubanData = jest.fn();
 const mockDbGetCache = jest.fn();
 const mockDbSetCache = jest.fn();
+const mockDbGetPlayRecordsPage = jest.fn();
+const mockGetCachedWatchingUpdatesForUser = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   db: {
     getCache: (...args: unknown[]) => mockDbGetCache(...args),
     setCache: (...args: unknown[]) => mockDbSetCache(...args),
+    getPlayRecordsPage: (...args: unknown[]) =>
+      mockDbGetPlayRecordsPage(...args),
   },
+  generateStorageKey: (source: string, id: string) => `${source}+${id}`,
+}));
+
+jest.mock('@/lib/watching-updates-cache', () => ({
+  getCachedWatchingUpdatesForUser: (...args: unknown[]) =>
+    mockGetCachedWatchingUpdatesForUser(...args),
 }));
 
 jest.mock('@/lib/douban', () => ({
@@ -70,6 +81,8 @@ describe('home data server cache', () => {
     mockFetchDoubanData.mockResolvedValue(createDoubanResponse());
     mockDbGetCache.mockReset().mockResolvedValue(null);
     mockDbSetCache.mockReset().mockResolvedValue(undefined);
+    mockDbGetPlayRecordsPage.mockReset().mockResolvedValue(null);
+    mockGetCachedWatchingUpdatesForUser.mockReset().mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -214,5 +227,52 @@ describe('home data server cache', () => {
     expect(cached).toEqual(newerData);
     expect(cached.hotMovies[0].title).toBe('新缓存电影');
     expect(mockFetchDoubanData).toHaveBeenCalledTimes(2);
+  });
+
+  it('preloads first-page play records with priority keys from cached watching updates', async () => {
+    const watchingUpdates = {
+      hasUpdates: true,
+      timestamp: 100,
+      updatedCount: 1,
+      continueWatchingCount: 1,
+      updatedSeries: [
+        {
+          title: '追更剧',
+          source_name: '源A',
+          year: '2026',
+          cover: '',
+          sourceKey: 'src',
+          videoId: 'ep-new',
+          currentEpisode: 2,
+          totalEpisodes: 8,
+          hasNewEpisode: true,
+          hasContinueWatching: true,
+          newEpisodes: 2,
+          remainingEpisodes: 6,
+          latestEpisodes: 8,
+        },
+      ],
+    };
+    const page = {
+      records: {},
+      pageSize: 12,
+      nextCursor: null,
+      hasMore: false,
+      total: 0,
+    };
+    mockGetCachedWatchingUpdatesForUser.mockResolvedValueOnce(watchingUpdates);
+    mockDbGetPlayRecordsPage.mockResolvedValueOnce(page);
+
+    const result = await getServerInitialPlaybackData('alice');
+
+    expect(mockDbGetPlayRecordsPage).toHaveBeenCalledWith('alice', {
+      cursor: null,
+      includeKeys: ['src+ep-new'],
+      pageSize: 12,
+    });
+    expect(result).toEqual({
+      playRecordsPage: page,
+      watchingUpdates,
+    });
   });
 });

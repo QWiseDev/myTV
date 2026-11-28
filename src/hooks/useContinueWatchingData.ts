@@ -6,17 +6,16 @@ import { HOME_RENDER_LIMITS } from '@/lib/constants/home';
 import type { PlayRecordsReconciliationResult } from '@/lib/db.client';
 import { paginatePlayRecords } from '@/lib/play-records-pagination';
 import { parseStorageKey } from '@/lib/storage-key';
-import type { PlayRecord } from '@/lib/types';
+import type { PlayRecord, PlayRecordsPage } from '@/lib/types';
 
 /**
- * 继续观看分页数据与删除/清空动作（替代旧 usePlaybackRecords + usePlayRecordActions）。
- *
- * 并发规则（docs/continue-watching-data-layer-refactor-plan.md 第 5 节）：
- * - 同一会话最多一个有效页面读取（首拉 / 补拉 / append 互斥，后到者等待或跳过）；
- * - 首拉失败前不启动补拉；append 失败保留游标由 onLoadMore 重试；
- * - 删除在任何 await 之前注册 shield 并移除 UI；失败按 db 层补偿结果处理：
- *   confirmed 以权威记录恢复 / 保持删除，unconfirmed 标记待核实并暴露 refresh 重试；
- * - 清空期间禁止新页面读取，失败用权威快照经 paginatePlayRecords 重建分页。
+ * 继续观看分页数据与删除/清空动作：
+ * - 支持 SSR initialPage 首屏零闪烁直出，跳过客户端初始瀑布；
+ * - 同一会话最多一个有效页面读取（首拉 / 补拉 / append / 静默同步互斥）；
+ * - 监听 playRecordsUpdated 事件与标签页切回可见（visibilitychange），保证新标签页续播、
+ *   数据迁移导入、缓存刷新等外部变更实时同步到首页与轮播；
+ * - 删除在 await 前注册 shield 并乐观移除；失败按 db 层权威补偿恢复或转入待核实状态；
+ * - 清空期间暂停页面读取，失败用权威快照经 paginatePlayRecords 重建分页。
  */
 
 export type PlayRecordsLoadError = 'initial' | 'refresh' | 'append' | null;
@@ -41,17 +40,18 @@ const LOAD_ERROR_BY_CAUSE: Record<
 };
 
 const SYNC_DEBOUNCE_MS = 300;
+const VISIBILITY_REFRESH_MIN_HIDDEN_MS = 3_000;
 
 interface PageState {
   records: Record<string, PlayRecord>;
   cursor: string | null;
-  /** append 请求携带的固定 includeKeys 基线，由首拉建立 */
+  /** append 请求携带的固定 includeKeys 基线，由首屏建立 */
   baseIncludeKeys: string[];
   hasMore: boolean;
 }
 
 type ActiveRead = {
-  kind: 'initial' | 'sync' | 'append';
+  kind: 'initial' | 'sync' | 'append' | 'revalidate';
   seq: number;
   promise: Promise<void>;
 };
@@ -85,9 +85,26 @@ function normalizeKeys(keys: string[]): string[] {
   return Array.from(new Set(keys)).sort();
 }
 
+function createInitialPageState(
+  initialPage: PlayRecordsPage | null | undefined,
+  desiredKeys: string[],
+): PageState | null {
+  if (!initialPage) {
+    return null;
+  }
+  return {
+    records: { ...initialPage.records },
+    cursor: initialPage.nextCursor,
+    baseIncludeKeys: normalizeKeys(desiredKeys),
+    hasMore: initialPage.hasMore,
+  };
+}
+
 export interface UseContinueWatchingDataOptions {
   /** 立即发起首拉，跳过 200ms idle 调度（用于播放页快速续播） */
   eager?: boolean;
+  /** SSR 首屏直出的第一页记录，存在时首帧直接完成渲染且跳过初始网络拉取 */
+  initialPage?: PlayRecordsPage | null;
 }
 
 export function useContinueWatchingData(
@@ -95,20 +112,31 @@ export function useContinueWatchingData(
 ) {
   const [desiredKeys, options] = args;
   const eager = options?.eager === true;
+  const initialPage = options?.initialPage ?? null;
+
+  const initialState = useMemo(
+    () => createInitialPageState(initialPage, desiredKeys),
+    // 仅挂载首帧消费 initialPage 建立基线
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // ---- 视图状态 ----
-  const [page, setPageState] = useState<PageState | null>(null);
-  const [loadingPlayRecords, setLoadingPlayRecords] = useState(true);
+  const [page, setPageState] = useState<PageState | null>(initialState);
+  const [loadingPlayRecords, setLoadingPlayRecords] = useState(
+    initialState === null,
+  );
   const [loadingMorePlayRecords, setLoadingMorePlayRecords] = useState(false);
   const [playRecordsLoadError, setPlayRecordsLoadError] =
     useState<PlayRecordsLoadError>(null);
 
-  // ---- 操作状态（同步 ref，先于 React state 提交，防止同 tick 重复操作绕过保护）----
-  const pageRef = useRef<PageState | null>(null);
+  // ---- 同步操作状态 ----
+  const pageRef = useRef<PageState | null>(initialState);
   const generationRef = useRef(0);
   const readSeqRef = useRef(0);
   const activeReadRef = useRef<ActiveRead | null>(null);
   const errorCauseRef = useRef<ErrorCause>(null);
-  const desiredKeysRef = useRef<string[]>([]);
+  const desiredKeysRef = useRef<string[]>(normalizeKeys(desiredKeys));
   const shieldRef = useRef<Set<string>>(new Set());
   const deleteActionsRef = useRef<Map<string, DeleteAction>>(new Map());
   const pendingVerifyRef = useRef<Set<string>>(new Set());
@@ -122,6 +150,7 @@ export function useContinueWatchingData(
   const appendWantedRef = useRef(false);
   const retryPromiseRef = useRef<Promise<void> | null>(null);
   const actionTokenRef = useRef(0);
+  const hiddenSinceRef = useRef<number | null>(null);
   const dbClientPromiseRef = useRef<Promise<
     typeof import('@/lib/db.client')
   > | null>(null);
@@ -135,7 +164,6 @@ export function useContinueWatchingData(
   );
 
   const getDbClient = useCallback(() => {
-    // 复用同一加载 Promise：保证删除/清空的 db 队列入队顺序与用户调用顺序一致（方案 5.7.3）
     if (!dbClientPromiseRef.current) {
       dbClientPromiseRef.current = import('@/lib/db.client');
     }
@@ -186,15 +214,12 @@ export function useContinueWatchingData(
     );
   }, []);
 
-  // ---- 增量补拉调度（方案 5.4）----
+  // ---- 增量补拉调度 ----
   const scheduleSync = useCallback(() => {
-    // 清空 pending/unknown 期间不读取（方案 5.7.4）
     if (clearStatusRef.current !== 'idle') return;
-    // 首屏尚未成功（含首屏错误未解决）不启动补拉：首拉先于补拉（方案 5.3 / 5.8）
     if (pageRef.current === null) return;
     if (errorCauseRef.current === 'initial') return;
     if (computeMissingKeys().length === 0) return;
-    // 首拉/append/另一补拉在飞时记住需求，等待其完成后重新计算（方案 5.4.3）
     if (activeReadRef.current) return;
     if (syncDebounceRef.current) return;
 
@@ -204,14 +229,13 @@ export function useContinueWatchingData(
       if (pageRef.current === null) return;
       if (errorCauseRef.current === 'initial') return;
       if (activeReadRef.current) return;
-      // 真正执行时重新计算 missing，而不是使用防抖前捕获的集合（方案 5.4.2）
       const missing = computeMissingKeys();
       if (missing.length === 0) return;
       void runSyncRef.current(missing);
     }, SYNC_DEBOUNCE_MS);
   }, [computeMissingKeys]);
 
-  // ---- 增量补拉执行（方案 5.4）----
+  // ---- 增量补拉执行 ----
   const runSync = useCallback(
     (keys: string[]): Promise<void> => {
       const capturedGeneration = generationRef.current;
@@ -241,7 +265,6 @@ export function useContinueWatchingData(
             const nextRecords = { ...current.records };
             let changed = false;
             for (const [key, record] of Object.entries(fetched)) {
-              // 只消费本次请求的 keys，且仅填补仍缺失的记录，不覆盖已有值（方案 5.4.4/5.4.5）
               if (keys.includes(key) && !(key in nextRecords)) {
                 nextRecords[key] = record;
                 changed = true;
@@ -275,7 +298,6 @@ export function useContinueWatchingData(
           if (activeReadRef.current?.seq === seq) {
             activeReadRef.current = null;
           }
-          // 读取期间到达的新 keys 在此重新计算（方案 5.4.3）
           scheduleSync();
         }
       })();
@@ -286,12 +308,10 @@ export function useContinueWatchingData(
   );
   runSyncRef.current = runSync;
 
-  // ---- 首拉（方案 5.3）----
+  // ---- 首拉 ----
   const runInitialLoad = useCallback(
-    (trigger: 'idle' | 'retry'): Promise<void> => {
-      void trigger;
+    (_trigger: 'idle' | 'retry'): Promise<void> => {
       if (clearStatusRef.current !== 'idle') return Promise.resolve();
-      // 同一会话最多一个有效页面读取（方案 5.3.3 / 5.4.3）
       if (activeReadRef.current) return Promise.resolve();
 
       const capturedGeneration = generationRef.current;
@@ -299,7 +319,6 @@ export function useContinueWatchingData(
       const promise = (async () => {
         try {
           const db = await getDbClient();
-          // 发出时读取最新 desired keys（方案 5.3.2）
           const includeKeys = desiredKeysRef.current;
           const pageResult = await db.getPlayRecordsPage({
             cursor: null,
@@ -342,7 +361,6 @@ export function useContinueWatchingData(
           if (activeReadRef.current?.seq === seq) {
             activeReadRef.current = null;
           }
-          // 首拉完成后按最新需求重新计算 missing（方案 5.3.5）
           scheduleSync();
         }
       })();
@@ -352,10 +370,86 @@ export function useContinueWatchingData(
     [applyLoadError, filterShieldedRecords, getDbClient, scheduleSync, setPage],
   );
 
-  // ---- append（方案 5.5）----
+  // ---- 标签页切回时的静默重验（新标签页观看后返回首页自动刷新进度，不闪骨架）----
+  const runSilentRevalidate = useCallback((): Promise<void> => {
+    if (clearStatusRef.current !== 'idle') return Promise.resolve();
+    if (activeReadRef.current) return Promise.resolve();
+    if (
+      deleteActionsRef.current.size > 0 ||
+      pendingVerifyRef.current.size > 0
+    ) {
+      return Promise.resolve();
+    }
+    if (pageRef.current === null) return Promise.resolve();
+
+    const capturedGeneration = generationRef.current;
+    const seq = ++readSeqRef.current;
+    const promise = (async () => {
+      try {
+        const db = await getDbClient();
+        const includeKeys = desiredKeysRef.current;
+        const pageResult = await db.getPlayRecordsPage({
+          cursor: null,
+          includeKeys,
+          pageSize: HOME_RENDER_LIMITS.CONTINUE_WATCHING_PAGE,
+        });
+
+        if (
+          generationRef.current !== capturedGeneration ||
+          seq !== readSeqRef.current ||
+          activeReadRef.current?.seq !== seq ||
+          clearStatusRef.current !== 'idle' ||
+          deleteActionsRef.current.size > 0
+        ) {
+          return;
+        }
+
+        const freshFirstPage = filterShieldedRecords(pageResult.records);
+        setPage((current) => {
+          if (!current) {
+            return {
+              records: freshFirstPage,
+              cursor: pageResult.nextCursor,
+              baseIncludeKeys: includeKeys,
+              hasMore: pageResult.hasMore,
+            };
+          }
+          // 若当前只加载了首屏，直接用最新首屏替换（同步跨标签页删除/合并）；
+          // 若已翻页加载过更多记录，则用最新首屏覆盖同名 key 并保留已追加的后续页记录。
+          const loadedCount = Object.keys(current.records).length;
+          if (loadedCount <= HOME_RENDER_LIMITS.CONTINUE_WATCHING_PAGE) {
+            return {
+              records: freshFirstPage,
+              cursor: pageResult.nextCursor,
+              baseIncludeKeys: includeKeys,
+              hasMore: pageResult.hasMore,
+            };
+          }
+          return {
+            ...current,
+            records: filterShieldedRecords({
+              ...current.records,
+              ...freshFirstPage,
+            }),
+          };
+        });
+      } catch {
+        // 静默重验失败不打扰已有视图
+      } finally {
+        if (activeReadRef.current?.seq === seq) {
+          activeReadRef.current = null;
+        }
+        scheduleSync();
+      }
+    })();
+    activeReadRef.current = { kind: 'revalidate', seq, promise };
+    return promise;
+  }, [filterShieldedRecords, getDbClient, scheduleSync, setPage]);
+
+  // ---- append ----
   const appendGuardFail = useCallback((): boolean => {
     if (clearStatusRef.current !== 'idle') return true;
-    if (pageRef.current === null) return true; // 初始页未成功
+    if (pageRef.current === null) return true;
     if (!pageRef.current.hasMore || !pageRef.current.cursor) return true;
     if (
       errorCauseRef.current === 'initial' ||
@@ -363,7 +457,7 @@ export function useContinueWatchingData(
         errorCauseRef.current as Exclude<ErrorCause, null>,
       )
     ) {
-      return true; // refresh 类错误未解决时不能启动 append（方案 5.8）
+      return true;
     }
     return false;
   }, []);
@@ -374,6 +468,7 @@ export function useContinueWatchingData(
     const self: { promise?: Promise<void> } = {};
     const promise = (async () => {
       try {
+        setLoadingMorePlayRecords(true);
         const db = await getDbClient();
         const cursor = pageRef.current?.cursor ?? null;
         const includeKeys = pageRef.current?.baseIncludeKeys ?? [];
@@ -397,12 +492,10 @@ export function useContinueWatchingData(
           if (!current?.records) return current;
           const nextRecords = { ...current.records };
           for (const [key, record] of Object.entries(fetched)) {
-            // 已存在记录保留当前值，避免追加页重复项回退较新的本地值（方案 5.5.5）
             if (!(key in nextRecords)) {
               nextRecords[key] = record;
             }
           }
-          // 整页均为重复记录时仍按服务器 cursor 前进（方案 5.5.8）
           return {
             ...current,
             records: nextRecords,
@@ -411,7 +504,6 @@ export function useContinueWatchingData(
           };
         });
         setLoadingMorePlayRecords(false);
-        // 成功 append 不能清掉尚未解决的 refresh 错误（方案 5.8）
         if (errorCauseRef.current === 'append') {
           applyLoadError(null);
         }
@@ -424,7 +516,6 @@ export function useContinueWatchingData(
         ) {
           return;
         }
-        // 失败保留原 cursor（page 不动），下一次 onLoadMore 重试同一页
         setLoadingMorePlayRecords(false);
         applyLoadError('append');
       } finally {
@@ -439,7 +530,6 @@ export function useContinueWatchingData(
     })();
     self.promise = promise;
     activeReadRef.current = { kind: 'append', seq, promise };
-    // 同步占位并返回共享 Promise，避免 loading state 尚未 commit 时重复请求（方案 5.5.1）
     appendPromiseRef.current = promise;
     promise.catch(() => undefined);
     return promise;
@@ -456,7 +546,6 @@ export function useContinueWatchingData(
     if (appendGuardFail()) return Promise.resolve();
 
     if (activeReadRef.current) {
-      // 其他页面读取在飞：等待完成后重新检查状态和 cursor；同一待执行 append 去重（方案 5.5.3）
       if (appendWantedRef.current) return Promise.resolve();
       appendWantedRef.current = true;
       const pending = activeReadRef.current.promise.then(() => {
@@ -471,13 +560,12 @@ export function useContinueWatchingData(
     return runAppend();
   }, [appendGuardFail, runAppend]);
 
-  // ---- 权威核实（retry 共用，一次读取结算清空 + 待核实删除）----
+  // ---- 权威核实 ----
   const settleWithAuthoritativeSnapshot = useCallback(
     (
       records: Record<string, PlayRecord>,
       options: { rebuild: boolean },
     ): string[] => {
-      // 统一结算清空前的删除状态：权威快照含该 key 则恢复（撤销 shield），否则保持删除态
       const restoredKeys: string[] = [];
       const trackedKeys = new Set<string>([
         ...Array.from(deleteActionsRef.current.keys()),
@@ -493,7 +581,6 @@ export function useContinueWatchingData(
       pendingVerifyRef.current.clear();
 
       if (options.rebuild) {
-        // 用权威快照经 paginatePlayRecords 重建首屏、cursor、hasMore 与分页基线（方案 5.7.6）
         const desired = desiredKeysRef.current;
         const filtered = filterShieldedRecords(records);
         const paged = paginatePlayRecords(filtered, {
@@ -509,7 +596,6 @@ export function useContinueWatchingData(
         setLoadingPlayRecords(false);
         setLoadingMorePlayRecords(false);
       } else {
-        // 仅删除核实：恢复权威记录（存在且当前仍缺失时）
         setPage((current) => {
           if (!current?.records) return current;
           const nextRecords = { ...current.records };
@@ -535,7 +621,6 @@ export function useContinueWatchingData(
       const snapshot = await db.reconcilePlayRecordsAuthoritative();
 
       if (generationRef.current !== capturedGeneration) return;
-      // 身份复核：不对新身份应用旧会话结果（方案 5.6.9）
       const currentUsername = getAuthInfoFromBrowserCookie()?.username || null;
       if (snapshot.username !== currentUsername) return;
 
@@ -551,10 +636,8 @@ export function useContinueWatchingData(
       ) {
         applyLoadError(null);
       }
-      // unknown 恢复后是否补拉由最新 missing 计算决定（方案 5.7.9）
       scheduleSync();
     } catch (error) {
-      // 读取失败：保持待核实状态与 refresh 错误，不伪造服务器真值（方案 5.6.7）
       reportActionError('核实播放记录失败:', error);
     }
   }, [
@@ -580,7 +663,6 @@ export function useContinueWatchingData(
     await runSync(keys);
   }, [applyLoadError, runSync]);
 
-  // ---- 重试（方案 5.8 优先级：clear 核实 → 删除核实 → 补拉 → 首屏）----
   const retryPlayRecords = useCallback((): Promise<void> => {
     if (retryPromiseRef.current) return retryPromiseRef.current;
     if (clearStatusRef.current === 'pending') return Promise.resolve();
@@ -610,22 +692,19 @@ export function useContinueWatchingData(
     return promise;
   }, [retrySyncKeys, runInitialLoad, verifyAuthoritative]);
 
-  // ---- 删除（方案 5.6）----
+  // ---- 删除 ----
   const deleteRecord = useCallback(
     (key: string): void => {
       const parsedKey = parseStorageKey(key);
       if (!parsedKey) {
-        // 非法 key：不移除 UI、不注册 shield、不请求服务器（方案 5.6.1）
         reportActionError('删除播放记录失败: 无效的记录键', key);
         return;
       }
 
-      // 同 key pending 删除共享动作；不同 key 独立（方案 5.6.2）
       if (deleteActionsRef.current.has(key)) return;
 
       const token = ++actionTokenRef.current;
       const capturedGeneration = generationRef.current;
-      // 在任何 await 之前注册 shield，再同步移除 UI（方案 5.6.3 / 5.2）
       shieldRef.current.add(key);
       const action: DeleteAction = { token, promise: Promise.resolve() };
       deleteActionsRef.current.set(key, action);
@@ -644,13 +723,11 @@ export function useContinueWatchingData(
 
       action.promise = (async () => {
         try {
-          // 清空期间收到的删除等待清空结算（方案 5.7.4）
           if (clearStatusRef.current === 'pending') {
             await clearPromiseRef.current;
             const statusAfterSettle = clearStatusRef.current as ClearStatus;
             if (generationRef.current !== capturedGeneration) return;
             if (statusAfterSettle === 'unknown') {
-              // unknown 先走核实，不盲发写请求
               markPendingVerify();
               return;
             }
@@ -658,7 +735,6 @@ export function useContinueWatchingData(
               statusAfterSettle === 'idle' &&
               !pageRef.current?.records?.[key]
             ) {
-              // 清空成功或重建后目标记录已不存在：跳过
               return;
             }
           }
@@ -666,7 +742,6 @@ export function useContinueWatchingData(
           const db = await getDbClient();
           await db.deletePlayRecord(parsedKey.source, parsedKey.id);
 
-          // 成功：保持本会话 shield，防止较早发出的页面响应带回记录（方案 5.6.5）
           if (deleteActionsRef.current.get(key)?.token === token) {
             deleteActionsRef.current.delete(key);
           }
@@ -678,7 +753,6 @@ export function useContinueWatchingData(
             deleteActionsRef.current.delete(key);
           }
 
-          // 会话已被清空/卸载取代：结果无权恢复旧状态（方案 5.6.9）
           if (
             !actionStillCurrent ||
             generationRef.current !== capturedGeneration ||
@@ -687,8 +761,6 @@ export function useContinueWatchingData(
             return;
           }
 
-          // 结构化读取补偿结果：db 层以 PlayRecordsMutationError 携带，
-          // 这里不依赖跨模块实例的 instanceof
           const reconciliation = (
             error as {
               reconciliation?: PlayRecordsReconciliationResult;
@@ -696,12 +768,10 @@ export function useContinueWatchingData(
           )?.reconciliation;
 
           if (reconciliation?.kind === 'cancelled') {
-            // 用户切换等：保持 shield，不对新身份恢复旧数据
             return;
           }
 
           if (reconciliation?.kind === 'confirmed') {
-            // receipt 已被后续写覆盖时按 unconfirmed 处理（方案 4.5）
             const db = await getDbClient();
             const storeRevision = db.getPlayRecordsRevision();
             if (storeRevision !== reconciliation.revision) {
@@ -717,7 +787,6 @@ export function useContinueWatchingData(
 
             const authoritativeRecord = reconciliation.records[key];
             if (authoritativeRecord) {
-              // 服务器仍有记录：恢复权威记录并撤销 shield（方案 5.6.6）
               shieldRef.current.delete(key);
               pendingVerifyRef.current.delete(key);
               setPage((current) => {
@@ -728,13 +797,10 @@ export function useContinueWatchingData(
                   records: { ...current.records, [key]: authoritativeRecord },
                 };
               });
-            } else {
-              // 服务器已实际删除：保持删除态（shield 保留）
             }
             return;
           }
 
-          // unconfirmed（含 localStorage 模式失败）：保持 shield，标记待核实并暴露 refresh 重试
           markPendingVerify();
           reportActionError('删除播放记录失败:', error);
         }
@@ -743,14 +809,12 @@ export function useContinueWatchingData(
     [applyLoadError, getDbClient, setPage],
   );
 
-  // ---- 清空（方案 5.7）----
+  // ---- 清空 ----
   const clearAll = useCallback((): void => {
-    if (clearStatusRef.current === 'pending') return; // 重复清空共享 Promise
+    if (clearStatusRef.current === 'pending') return;
     clearStatusRef.current = 'pending';
 
-    // 同步递增 generation、取消调度、废弃旧页面请求占位（方案 5.7.1）
     generationRef.current += 1;
-    // 本次清空会话的 token：快照取 bump 之后的值，用于识别后续清空/卸载取代
     const capturedGeneration = generationRef.current;
     cancelInitialLoadRef.current?.();
     cancelInitialLoadRef.current = null;
@@ -759,7 +823,6 @@ export function useContinueWatchingData(
     appendWantedRef.current = false;
     appendPromiseRef.current = null;
 
-    // 清空 UI；旧删除动作的 token 被此次清空取代，已入队操作继续按顺序结束（方案 5.7.2）
     setPage(() => ({
       records: {},
       cursor: null,
@@ -781,7 +844,6 @@ export function useContinueWatchingData(
         deleteActionsRef.current.clear();
         pendingVerifyRef.current.clear();
         failedSyncKeysRef.current.clear();
-        // 当前 desired keys 视为已由清空确认覆盖，避免旧追更快照立即触发补拉（方案 5.7.5）
         confirmedMissingRef.current = new Set(desiredKeysRef.current);
       } catch (error) {
         if (generationRef.current !== capturedGeneration) return;
@@ -798,7 +860,6 @@ export function useContinueWatchingData(
             storeRevision === reconciliation.revision &&
             reconciliation.username === currentUsername
           ) {
-            // 权威快照重建分页并统一结算删除状态；不恢复旧本地快照或旧游标（方案 5.7.6）
             settleWithAuthoritativeSnapshot(reconciliation.records, {
               rebuild: true,
             });
@@ -810,7 +871,6 @@ export function useContinueWatchingData(
           return;
         }
 
-        // unconfirmed / cancelled：未确认状态可见，普通页面读取仍暂停（方案 5.7.7）
         clearStatusRef.current = 'unknown';
         applyLoadError('clear-verify');
         reportActionError('清空播放记录失败:', error);
@@ -826,11 +886,10 @@ export function useContinueWatchingData(
     setPage,
   ]);
 
-  // ---- desired keys 同步（方案 5.4）----
+  // ---- desired keys 同步 ----
   useEffect(() => {
     const normalized = normalizeKeys(desiredKeys);
     desiredKeysRef.current = normalized;
-    // key 离开 desired 后清除“已确认缺失”标记，重新进入时重新查询（方案 5.4.7）
     const normalizedSet = new Set(normalized);
     confirmedMissingRef.current = new Set(
       Array.from(confirmedMissingRef.current).filter((key) =>
@@ -838,14 +897,105 @@ export function useContinueWatchingData(
       ),
     );
     scheduleSync();
-    // 仅在 keys 集合实际变化时执行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desiredSignature, scheduleSync]);
 
-  // ---- 首拉调度（方案 5.3.1 / 5.3.7；播放页支持 eager 立即首拉）----
+  // ---- 监听外部 playRecordsUpdated 事件 & 标签页可见性切回同步 ----
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handlePlayRecordsUpdated = (event: Event) => {
+      // 本 hook 自身进行中的删除/清空/待核实由队列与补偿独立结算，不走外部广播覆盖
+      if (
+        clearStatusRef.current !== 'idle' ||
+        deleteActionsRef.current.size > 0 ||
+        pendingVerifyRef.current.size > 0
+      ) {
+        return;
+      }
+
+      const detail = (event as CustomEvent<Record<string, PlayRecord>>).detail;
+      if (!detail || typeof detail !== 'object') {
+        return;
+      }
+
+      // 外部全量快照到达（如保存进度、导入数据、强制刷新缓存）：作废旧在飞读并同步分页视图
+      readSeqRef.current += 1;
+      activeReadRef.current = null;
+      const desired = desiredKeysRef.current;
+      const currentLoadedCount = Object.keys(
+        pageRef.current?.records ?? {},
+      ).length;
+      const pageSize = Math.max(
+        HOME_RENDER_LIMITS.CONTINUE_WATCHING_PAGE,
+        currentLoadedCount,
+      );
+      const filtered = filterShieldedRecords(detail);
+      const paged = paginatePlayRecords(filtered, {
+        pageSize,
+        includeKeys: desired,
+      });
+
+      setPage(() => ({
+        records: paged.records,
+        cursor: paged.nextCursor,
+        baseIncludeKeys: desired,
+        hasMore: paged.hasMore,
+      }));
+      setLoadingPlayRecords(false);
+      if (errorCauseRef.current === 'initial') {
+        applyLoadError(null);
+      }
+      scheduleSync();
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.hidden) {
+        hiddenSinceRef.current = Date.now();
+        return;
+      }
+      const hiddenSince = hiddenSinceRef.current;
+      hiddenSinceRef.current = null;
+      if (
+        hiddenSince !== null &&
+        Date.now() - hiddenSince >= VISIBILITY_REFRESH_MIN_HIDDEN_MS
+      ) {
+        void runSilentRevalidate();
+      }
+    };
+
+    window.addEventListener('playRecordsUpdated', handlePlayRecordsUpdated);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      window.removeEventListener(
+        'playRecordsUpdated',
+        handlePlayRecordsUpdated,
+      );
+      if (typeof document !== 'undefined') {
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange,
+        );
+      }
+    };
+  }, [
+    applyLoadError,
+    filterShieldedRecords,
+    runSilentRevalidate,
+    scheduleSync,
+    setPage,
+  ]);
+
+  // ---- 首拉调度（SSR 已提供 initialPage 时跳过首拉网络请求）----
   useEffect(() => {
     let cancelLoad: (() => void) | null = null;
-    if (eager) {
+    if (initialState !== null) {
+      scheduleSync();
+    } else if (eager) {
       void runInitialLoad('idle');
     } else {
       cancelLoad = scheduleIdleTask(
@@ -863,7 +1013,6 @@ export function useContinueWatchingData(
 
     return () => {
       cancelLoad?.();
-      // 卸载：作废所有在飞响应、catch 与 finally（方案 5.3.7）
       generationRef.current += 1;
       cancelSyncDebounce();
       activeReadRef.current = null;

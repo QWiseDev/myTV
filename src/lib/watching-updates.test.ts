@@ -1,5 +1,8 @@
+let currentMockUsername = 'test-user';
+
 jest.mock('@/lib/auth', () => ({
-  getAuthInfoFromBrowserCookie: () => ({ username: 'test-user' }),
+  getAuthInfoFromBrowserCookie: () =>
+    currentMockUsername ? { username: currentMockUsername } : null,
 }));
 
 import {
@@ -48,6 +51,7 @@ describe('watching updates cache helpers', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    currentMockUsername = 'test-user';
     // 重置模块级内存缓存
     forceClearWatchingUpdatesCache();
     mockFetchWith(createUpdate());
@@ -191,5 +195,39 @@ describe('watching updates cache helpers', () => {
     expect(eventListener).toHaveBeenCalledTimes(1);
 
     window.removeEventListener('watchingUpdatesChanged', eventListener);
+  });
+
+  it('isolates cached watching updates by username and deduplicates forced checks', async () => {
+    await checkWatchingUpdates(true);
+    expect(getDetailedWatchingUpdates()).not.toBeNull();
+
+    // 切换到另一账号时不会串读上一账号的内存缓存
+    currentMockUsername = 'another-user';
+    expect(getDetailedWatchingUpdates()).toBeNull();
+
+    // 同一账号并发调用 checkWatchingUpdates(true) 共享在飞请求
+    let resolveForced!: (value: {
+      json: () => Promise<WatchingUpdate>;
+      ok: boolean;
+      status: number;
+    }) => void;
+    global.fetch = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveForced = resolve;
+        }),
+    );
+
+    const p1 = checkWatchingUpdates(true);
+    const p2 = checkWatchingUpdates(true);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    resolveForced({
+      json: async () => createUpdate({ updatedCount: 3 }),
+      ok: true,
+      status: 200,
+    });
+    await Promise.all([p1, p2]);
+    expect(getDetailedWatchingUpdates()?.updatedCount).toBe(3);
   });
 });

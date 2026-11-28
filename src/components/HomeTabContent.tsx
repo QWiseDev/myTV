@@ -1,31 +1,28 @@
 'use client';
 
 import { Film, Sparkles, Tv } from 'lucide-react';
-import { lazy, Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import {
   HOME_RENDER_LIMITS,
   HOME_VIDEO_CARD_SIZES,
 } from '@/lib/constants/home';
+import { buildHeroContinueItems } from '@/lib/continue-watching-display';
 import type {
   HomeErrorState,
   HomeLoadingState,
   HomeSectionKey,
 } from '@/lib/home-data-client';
 import type { HomeData } from '@/lib/home-data-types';
-import { parseStorageKey } from '@/lib/storage-key';
 import type { DoubanItem, PlayRecord } from '@/lib/types';
-import { buildPlayUrl } from '@/lib/video-card-utils';
 import type { WatchingUpdatesCache } from '@/lib/watching-updates';
 import type { PlayRecordsLoadError } from '@/hooks/useContinueWatchingData';
 
 import BangumiSection from './BangumiSection';
+import ContinueWatching from './ContinueWatching';
 import HeroCarousel, { type HeroContinueItem } from './HeroCarousel';
 import LazyVideoSection from './LazyVideoSection';
-import SectionSkeleton from './SectionSkeleton';
 import VideoCard from './VideoCard';
-
-const ContinueWatching = lazy(() => import('./ContinueWatching'));
 
 /** 继续观看区块所需的播放态与操作 */
 export interface HomeContinueWatchingState {
@@ -72,7 +69,7 @@ function renderDoubanCard(
 }
 
 /**
- * 首页内容区块组件 - 展示继续观看、热门内容等区块
+ * 首页内容区块组件 - 静态引入首屏 ContinueWatching，消除动态 chunk 瀑布与空态骨架坍缩
  */
 export default function HomeTabContent({
   continueWatching,
@@ -88,48 +85,16 @@ export default function HomeTabContent({
   const { criticalLoading, tertiaryLoading, tvLoading, varietyLoading } =
     loading;
 
-  // 爱奇艺式首屏轮播：最近 4 条继续追记录作为前几帧（按最近观看排序，同名多源去重）
-  const heroContinueItems = useMemo<HeroContinueItem[]>(() => {
-    const entries = Object.entries(continueWatching.playRecords)
-      .filter(([, record]) => record.title && record.cover)
-      .sort((a, b) => b[1].save_time - a[1].save_time);
-
-    const items: HeroContinueItem[] = [];
-    const seenTitles = new Set<string>();
-    for (const [key, record] of entries) {
-      if (items.length >= HOME_RENDER_LIMITS.HERO_CONTINUE) break;
-      if (seenTitles.has(record.title)) continue;
-
-      const parsed = parseStorageKey(key);
-      if (!parsed?.source || !parsed.id) continue;
-
-      const href = buildPlayUrl({
-        from: 'playrecord',
-        source: parsed.source,
-        id: parsed.id,
-        title: record.title,
-        year: record.year,
-        // 与下方继续观看卡片保持一致，带上豆瓣 ID 与搜索标题
-        doubanId: record.douban_id,
-        query: record.search_title,
-      });
-      if (!href) continue;
-
-      seenTitles.add(record.title);
-      items.push({
-        key,
-        title: record.title,
-        poster: record.cover,
-        year: record.year,
-        episodeLabel:
-          record.total_episodes > 1
-            ? `看到第 ${record.index} 集 / 共 ${record.total_episodes} 集`
-            : undefined,
-        href,
-      });
-    }
-    return items;
-  }, [continueWatching.playRecords]);
+  // 爱奇艺式首屏轮播：统一过滤已看完记录并融合最新追更集数
+  const heroContinueItems = useMemo<HeroContinueItem[]>(
+    () =>
+      buildHeroContinueItems(
+        continueWatching.playRecords,
+        continueWatching.watchingUpdates,
+        HOME_RENDER_LIMITS.HERO_CONTINUE,
+      ),
+    [continueWatching.playRecords, continueWatching.watchingUpdates],
+  );
 
   return (
     <>
@@ -141,23 +106,21 @@ export default function HomeTabContent({
         deferEnrich={continueWatching.loading}
       />
 
-      {/* 继续观看 */}
-      <Suspense fallback={<SectionSkeleton title='继续观看' />}>
-        <ContinueWatching
-          playRecords={continueWatching.playRecords}
-          watchingUpdates={continueWatching.watchingUpdates}
-          loading={continueWatching.loading}
-          loadingMore={continueWatching.loadingMore}
-          hasMore={continueWatching.hasMore}
-          loadError={continueWatching.loadError}
-          onDeleteRecord={continueWatching.onDeleteRecord}
-          onClearAll={continueWatching.onClearAll}
-          onLoadMore={continueWatching.onLoadMore}
-          onRetry={continueWatching.onRetry}
-        />
-      </Suspense>
+      {/* 继续观看（首屏同步直出，无二次 chunk 阻塞） */}
+      <ContinueWatching
+        playRecords={continueWatching.playRecords}
+        watchingUpdates={continueWatching.watchingUpdates}
+        loading={continueWatching.loading}
+        loadingMore={continueWatching.loadingMore}
+        hasMore={continueWatching.hasMore}
+        loadError={continueWatching.loadError}
+        onDeleteRecord={continueWatching.onDeleteRecord}
+        onClearAll={continueWatching.onClearAll}
+        onLoadMore={continueWatching.onLoadMore}
+        onRetry={continueWatching.onRetry}
+      />
 
-      {/* 热门电影：首屏关键路径，VideoCard 静态导入减少瀑布 */}
+      {/* 热门电影：首屏关键路径 */}
       <LazyVideoSection
         title='热门电影'
         icon={Film}

@@ -103,6 +103,13 @@ export function useHomeData({
   const retryRequestsRef = useRef<
     Partial<Record<HomeSectionKey, HomeRetryRequest>>
   >({});
+  // 若首屏直接进入 /?tab=favorites，暂缓拉取首页内容板块，待首次进入 home tab 再启动；
+  // 一旦激活过 home tab 即保持 true，后续往返切换 tab 不会中断或重拉进行中的请求。
+  const hasActivatedHomeRef = useRef(activeTab === 'home');
+  if (activeTab === 'home') {
+    hasActivatedHomeRef.current = true;
+  }
+  const hasActivatedHome = hasActivatedHomeRef.current;
 
   const { scheduleWatchingUpdatesCheck } = useWatchingUpdatesRefresh({
     activeTab,
@@ -261,6 +268,10 @@ export function useHomeData({
   );
 
   useEffect(() => {
+    if (!hasActivatedHome) {
+      return undefined;
+    }
+
     const initialDataChanged = previousInitialDataRef.current !== initialData;
     previousInitialDataRef.current = initialData;
 
@@ -381,6 +392,7 @@ export function useHomeData({
   }, [
     abortRetryRequests,
     executeSections,
+    hasActivatedHome,
     initialData,
     scheduleWatchingUpdatesCheck,
   ]);

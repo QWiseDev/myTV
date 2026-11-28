@@ -1,20 +1,39 @@
 import { generateAuthCookie } from '@/lib/auth';
+import { SessionRevokedError, UserBannedError } from '@/lib/user-access';
 
 const mockHeaders = jest.fn();
 const mockGetServerInitialHomeData = jest.fn();
+const mockGetServerInitialPlaybackData = jest.fn();
 const mockGetServerInitialGuestHomeData = jest.fn();
+const mockResolveUserAccess = jest.fn();
 
 jest.mock('next/headers', () => ({
   headers: () => mockHeaders(),
 }));
 
 jest.mock('@/lib/home-data.server', () => ({
-  getServerInitialHomeData: mockGetServerInitialHomeData,
+  getServerInitialHomeData: (...args: unknown[]) =>
+    mockGetServerInitialHomeData(...args),
+  getServerInitialPlaybackData: (...args: unknown[]) =>
+    mockGetServerInitialPlaybackData(...args),
 }));
 
 jest.mock('@/lib/guest-home.server', () => ({
-  getServerInitialGuestHomeData: mockGetServerInitialGuestHomeData,
+  getServerInitialGuestHomeData: (...args: unknown[]) =>
+    mockGetServerInitialGuestHomeData(...args),
 }));
+
+jest.mock('@/lib/user-access', () => {
+  class UserNotFoundError extends Error {}
+  class UserBannedError extends Error {}
+  class SessionRevokedError extends Error {}
+  return {
+    UserNotFoundError,
+    UserBannedError,
+    SessionRevokedError,
+    resolveUserAccess: (...args: unknown[]) => mockResolveUserAccess(...args),
+  };
+});
 
 jest.mock('@/components/HomeClient', () => ({
   __esModule: true,
@@ -39,6 +58,17 @@ const initialHomeData = {
   hotTvShows: [],
   hotVarietyShows: [],
   bangumiCalendarData: [],
+};
+
+const initialPlaybackData = {
+  playRecordsPage: {
+    records: {},
+    pageSize: 12,
+    nextCursor: null,
+    hasMore: false,
+    total: 0,
+  },
+  watchingUpdates: null,
 };
 
 const emptyHomeData = {
@@ -67,7 +97,6 @@ const tamperedLoginCookieHeader = () =>
 const getRenderedComponents = async () => {
   const Home = (await import('./page')).default;
   const element = await Home();
-  // Home 的直接子节点：HomeClient（已登录）或 GuestHome（访客）
   return element;
 };
 
@@ -94,7 +123,11 @@ describe('Home page initial data', () => {
   beforeEach(() => {
     mockHeaders.mockReset();
     mockGetServerInitialHomeData.mockReset();
+    mockGetServerInitialPlaybackData
+      .mockReset()
+      .mockResolvedValue(initialPlaybackData);
     mockGetServerInitialGuestHomeData.mockReset().mockResolvedValue(undefined);
+    mockResolveUserAccess.mockReset().mockResolvedValue({ role: 'user' });
   });
 
   it('renders GuestHome with SSR preloaded guest data for requests without a cookie', async () => {
@@ -126,6 +159,7 @@ describe('Home page initial data', () => {
     const element = await getRenderedComponents();
 
     expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+    expect(mockGetServerInitialPlaybackData).not.toHaveBeenCalled();
     expect(mockGetServerInitialGuestHomeData).toHaveBeenCalledTimes(1);
     expect(element.type).toBe(GuestHome);
     expect(element.props.initialData).toEqual(guestInitialData);
@@ -170,7 +204,21 @@ describe('Home page initial data', () => {
     expect(element.type).toBe(GuestHome);
   });
 
-  it('uses the SSR initial-data reader for authenticated requests', async () => {
+  it('renders GuestHome when user is banned or session is revoked', async () => {
+    const cookieHeader = await createSignedLoginCookieHeader();
+    mockHeaders.mockReturnValue({ get: () => cookieHeader });
+    mockResolveUserAccess.mockRejectedValueOnce(new UserBannedError());
+
+    const bannedElement = await getRenderedComponents();
+    expect(bannedElement.type).toBe(GuestHome);
+    expect(mockGetServerInitialHomeData).not.toHaveBeenCalled();
+
+    mockResolveUserAccess.mockRejectedValueOnce(new SessionRevokedError());
+    const revokedElement = await getRenderedComponents();
+    expect(revokedElement.type).toBe(GuestHome);
+  });
+
+  it('preloads home data and playback data in parallel for authenticated requests', async () => {
     const cookieHeader = await createSignedLoginCookieHeader();
     mockHeaders.mockReturnValue({ get: () => cookieHeader });
     mockGetServerInitialHomeData.mockResolvedValue(initialHomeData);
@@ -178,8 +226,10 @@ describe('Home page initial data', () => {
     const element = await getRenderedComponents();
 
     expect(mockGetServerInitialHomeData).toHaveBeenCalledTimes(1);
+    expect(mockGetServerInitialPlaybackData).toHaveBeenCalledWith('alice');
     expect(element.type).toBe(HomeClient);
     expect(element.props.initialHomeData).toEqual(initialHomeData);
+    expect(element.props.initialPlaybackData).toEqual(initialPlaybackData);
   });
 
   it('falls back to empty data when server preloading fails', async () => {
@@ -189,12 +239,19 @@ describe('Home page initial data', () => {
     const cookieHeader = await createSignedLoginCookieHeader();
     mockHeaders.mockReturnValue({ get: () => cookieHeader });
     mockGetServerInitialHomeData.mockRejectedValue(new Error('cache failed'));
+    mockGetServerInitialPlaybackData.mockRejectedValue(
+      new Error('playback failed'),
+    );
 
     try {
       const element = await getRenderedComponents();
 
       expect(element.type).toBe(HomeClient);
       expect(element.props.initialHomeData).toEqual(emptyHomeData);
+      expect(element.props.initialPlaybackData).toEqual({
+        playRecordsPage: null,
+        watchingUpdates: null,
+      });
     } finally {
       consoleError.mockRestore();
     }
