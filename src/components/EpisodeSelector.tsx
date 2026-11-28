@@ -16,6 +16,7 @@ import { processImageUrl } from '@/lib/utils';
 import {
   buildEpisodeProbeCacheKey,
   buildEpisodeSourceKey,
+  classifyEpisodeProbeSpeed,
   EpisodeSourceCheckResult,
   EpisodeSourceProbeError,
   isEpisodeProbeResultFresh,
@@ -47,6 +48,10 @@ interface EpisodeSelectorProps {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 正在拉取详情并准备切换的目标源 key（source-id），用于即时反馈与防重复点击 */
+  switchingSourceKey?: string | null;
+  /** 播放器当前是否处于换源加载阶段 */
+  isSourceSwitching?: boolean;
   /** 访客（未登录）禁用换源：隐藏换源 Tab，即使单集也只展示选集 */
   disableSourceSwitch?: boolean;
 }
@@ -75,6 +80,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   onLoadSources,
   sourceSearchLoading = false,
   sourceSearchError = null,
+  switchingSourceKey = null,
+  isSourceSwitching = false,
   disableSourceSwitch = false,
 }) => {
   const router = useRouter();
@@ -197,7 +204,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
           quality: metrics.quality,
           loadSpeed: metrics.loadSpeed,
           pingTimeMs: metrics.pingTimeMs,
-          message: '可播放',
+          slow: metrics.slow,
+          message: metrics.slow ? '速度偏慢' : '可播放',
         });
       } catch (err) {
         // 被手动检查/切集中止时不写入，避免把"已取消"误标为检测失败
@@ -517,17 +525,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     [availableSources, currentId, currentSource, isEpisodeChecking, value],
   );
 
-  // 换源列表排序与检查计划共用同一排序规则，memo 化避免每次渲染重排
-  const orderedSources = useMemo(
-    () =>
-      planEpisodeSourceChecks({
-        sources: availableSources,
-        episodeIndex: selectedEpisodeIndex,
-        currentSource,
-        currentId,
-      }).map((item) => item.source),
-    [availableSources, currentId, currentSource, selectedEpisodeIndex],
-  );
+  // 换源列表保持稳定展示顺序，不再把每次新选中的源强行顶到第一行（避免点击后列表跳动引发误点）；
+  // 「检查当前集」队列仍通过 planEpisodeSourceChecks 优先检测当前源。
+  const orderedSources = availableSources;
 
   // 升序分页标签
   const categoriesAsc = useMemo(() => {
@@ -953,24 +953,35 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 {/* 固定高度的滚动详情列表 */}
                 <div className='flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-2'>
                   {orderedSources.map((source, index) => {
+                    const sourceKey = buildEpisodeSourceKey(source);
                     const isCurrentSource =
                       source.source?.toString() === currentSource?.toString() &&
                       source.id?.toString() === currentId?.toString();
+                    const isPendingTarget = switchingSourceKey === sourceKey;
+                    const isSwitchingThisSource =
+                      isPendingTarget ||
+                      (isCurrentSource &&
+                        isSourceSwitching &&
+                        !switchingSourceKey);
+                    const isClickDisabled = isCurrentSource || isPendingTarget;
                     return (
                       <div
-                        key={`${source.source}-${source.id}`}
+                        key={sourceKey}
+                        aria-busy={isSwitchingThisSource || undefined}
                         onClick={() =>
-                          !isCurrentSource && handleSourceClick(source)
+                          !isClickDisabled && handleSourceClick(source)
                         }
                         className={`group flex items-start gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-3 rounded-lg sm:rounded-xl transition-all select-none duration-300 relative overflow-hidden
                       ${
-                        isCurrentSource
-                          ? 'bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/30 dark:via-emerald-900/30 dark:to-teal-900/30 border-2 border-green-500/50 dark:border-green-400/50 shadow-lg shadow-green-500/10'
-                          : 'bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
+                        isSwitchingThisSource
+                          ? 'bg-gradient-to-r from-blue-50 via-cyan-50 to-sky-50 dark:from-blue-900/30 dark:via-cyan-900/30 dark:to-sky-900/30 border-2 border-blue-500/60 dark:border-blue-400/60 shadow-md shadow-blue-500/10 cursor-wait'
+                          : isCurrentSource
+                            ? 'bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/30 dark:via-emerald-900/30 dark:to-teal-900/30 border-2 border-green-500/50 dark:border-green-400/50 shadow-lg shadow-green-500/10'
+                            : 'bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
                       }`.trim()}
                       >
                         {/* 悬浮光效 */}
-                        {!isCurrentSource && (
+                        {!isClickDisabled && (
                           <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
                         )}
 
@@ -1015,13 +1026,31 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               if (!check) return null;
 
                               const status = check.status;
+                              const speedTier =
+                                status === 'success'
+                                  ? classifyEpisodeProbeSpeed(
+                                      check.loadSpeed,
+                                      check.slow,
+                                    )
+                                  : 'normal';
+                              const hasQuality =
+                                Boolean(check.quality) &&
+                                check.quality !== '未知';
                               const label =
                                 status === 'checking'
                                   ? '检查中'
                                   : status === 'success'
-                                    ? check.quality && check.quality !== '未知'
-                                      ? `可播 ${check.quality}`
-                                      : '可播放'
+                                    ? speedTier === 'slow'
+                                      ? hasQuality
+                                        ? `较慢 ${check.quality}`
+                                        : '较慢'
+                                      : speedTier === 'unknown'
+                                        ? hasQuality
+                                          ? `未测速 ${check.quality}`
+                                          : '未测速'
+                                        : hasQuality
+                                          ? `可播 ${check.quality}`
+                                          : '可播放'
                                     : status === 'skipped'
                                       ? check.message || '跳过'
                                       : status === 'cancelled'
@@ -1032,7 +1061,9 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                                 status === 'checking'
                                   ? 'bg-blue-500/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
                                   : status === 'success'
-                                    ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
+                                    ? speedTier === 'normal'
+                                      ? 'bg-green-500/10 dark:bg-green-400/20 text-green-600 dark:text-green-400'
+                                      : 'bg-amber-500/15 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300'
                                     : status === 'skipped' ||
                                         status === 'cancelled'
                                       ? 'bg-gray-500/10 dark:bg-gray-400/20 text-gray-600 dark:text-gray-300'
@@ -1055,11 +1086,18 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               <span className='text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300 truncate'>
                                 {source.source_name}
                               </span>
-                              {/* 当前源标记：行内展示，避免遮挡右上角分辨率 */}
-                              {isCurrentSource && (
-                                <span className='flex-shrink-0 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-sm whitespace-nowrap'>
-                                  当前源
+                              {/* 切换中 / 当前源标记：点击后立即反馈，避免无响应引发重复点击 */}
+                              {isSwitchingThisSource ? (
+                                <span className='flex-shrink-0 inline-flex items-center gap-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-sm whitespace-nowrap'>
+                                  <span className='inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-white/40 border-t-white' />
+                                  切换中
                                 </span>
+                              ) : (
+                                isCurrentSource && (
+                                  <span className='flex-shrink-0 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shadow-sm whitespace-nowrap'>
+                                    当前源
+                                  </span>
+                                )
                               )}
                             </div>
                             {source.episodes.length > 1 && (
@@ -1081,9 +1119,19 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               if (!check) return null;
 
                               if (check.status === 'success') {
+                                const speedTier = classifyEpisodeProbeSpeed(
+                                  check.loadSpeed,
+                                  check.slow,
+                                );
                                 return (
                                   <div className='flex items-end gap-1 sm:gap-3 text-[10px] sm:text-xs'>
-                                    <div className='text-green-600 dark:text-green-400 font-medium text-[10px] sm:text-xs'>
+                                    <div
+                                      className={`${
+                                        speedTier === 'normal'
+                                          ? 'text-green-600 dark:text-green-400'
+                                          : 'text-amber-600 dark:text-amber-400'
+                                      } font-medium text-[10px] sm:text-xs`}
+                                    >
                                       {check.loadSpeed || '未知'}
                                     </div>
                                     <div className='text-orange-600 dark:text-orange-400 font-medium text-[10px] sm:text-xs'>

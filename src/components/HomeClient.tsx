@@ -10,6 +10,7 @@ import { useAiRecommendStatus } from '@/hooks/useAiRecommendStatus';
 import { useAnnouncementVisibility } from '@/hooks/useAnnouncementVisibility';
 import { useFavoriteItems } from '@/hooks/useFavoriteItems';
 import { useHomeData } from '@/hooks/useHomeData';
+import { usePrefetchPlayRoute } from '@/hooks/usePrefetchPlayRoute';
 
 import AIRecommendButton from '@/components/AIRecommendButton';
 import AnnouncementModal from '@/components/AnnouncementModal';
@@ -33,6 +34,7 @@ const SlotMachineFloatButton = lazy(
 type HomeTab = 'home' | 'favorites';
 
 function HomeContent({ initialHomeData }: { initialHomeData?: HomeData }) {
+  usePrefetchPlayRoute();
   // Tab 状态由 URL ?tab= 派生（顶栏收藏夹入口跳转 /?tab=favorites）
   const searchParams = useSearchParams();
   const activeTab: HomeTab =

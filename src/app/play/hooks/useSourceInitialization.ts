@@ -61,6 +61,7 @@ export interface UseSourceInitializationParams {
   currentSourceRef?: MutableRefObject<string>;
   currentIdRef?: MutableRefObject<string>;
   detailRef?: MutableRefObject<SearchResult | null>;
+  availableSourcesRef?: MutableRefObject<SearchResult[]>;
   setDetail: (detail: SearchResult | null) => void;
   setAvailableSources: (sources: SearchResult[]) => void;
   setCurrentEpisodeIndex: (index: number) => void;
@@ -105,6 +106,7 @@ export function useSourceInitialization({
   currentSourceRef,
   currentIdRef,
   detailRef,
+  availableSourcesRef,
   setDetail,
   setAvailableSources,
   setCurrentEpisodeIndex,
@@ -317,16 +319,24 @@ export function useSourceInitialization({
       });
       if (!isActive() || searchedSources.length === 0) return;
 
-      // 优先源紧跟当前源之后置顶，并跳过同身份源以免覆盖已补全的 currentDetail
       const otherSources = searchedSources.filter(
         (source) => !isSameSource(source, currentDetail),
       );
       if (otherSources.length === 0) return;
 
-      const mergedSources = dedupeSources([
-        currentDetail,
-        ...sortSourcesByPriority(otherSources),
-      ]);
+      // 已有完整多源列表时保持既有顺序（避免换源后把当前源强行顶到第一行）；
+      // 首次补齐时优先源紧跟当前源之后置顶，并跳过同身份源以免覆盖已补全的 currentDetail。
+      const existingSources = availableSourcesRef?.current || [];
+      const mergedSources =
+        existingSources.length > 1
+          ? dedupeSources([
+              ...replaceSourceDetail(existingSources, currentDetail),
+              ...sortSourcesByPriority(otherSources),
+            ])
+          : dedupeSources([
+              currentDetail,
+              ...sortSourcesByPriority(otherSources),
+            ]);
       setAvailableSources(mergedSources);
     };
 
@@ -352,12 +362,17 @@ export function useSourceInitialization({
             }),
           );
 
+        const hasPopulatedSourceList =
+          (availableSourcesRef?.current?.length ?? 0) > 1;
+
         if (routeAlreadyApplied && currentDetail) {
           appliedRouteSignatureRef.current = routeSignature;
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
           setLoading(false);
-          void enrichAvailableSources(currentDetail);
+          if (!hasPopulatedSourceList) {
+            void enrichAvailableSources(currentDetail);
+          }
           return;
         }
 
@@ -381,7 +396,9 @@ export function useSourceInitialization({
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
           setLoading(false);
-          void enrichAvailableSources(currentDetail);
+          if (!hasPopulatedSourceList) {
+            void enrichAvailableSources(currentDetail);
+          }
           return;
         }
 
@@ -585,6 +602,7 @@ export function useSourceInitialization({
     currentIdRef,
     currentEpisodeIndexRef,
     currentSourceRef,
+    availableSourcesRef,
     deviceInfo,
     detailRef,
     handleError,

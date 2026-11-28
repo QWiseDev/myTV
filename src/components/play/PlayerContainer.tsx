@@ -1,13 +1,10 @@
 import { MessageSquare } from 'lucide-react';
-import dynamic from 'next/dynamic';
 import type { MutableRefObject } from 'react';
 import { forwardRef, useEffect, useRef, useState } from 'react';
 
-import type { ArtPlayerLike } from '@/app/play/utils/danmakuRuntime';
+import SkipController from '@/components/SkipController';
 
-const SkipController = dynamic(() => import('@/components/SkipController'), {
-  ssr: false,
-});
+import type { ArtPlayerLike } from '@/app/play/utils/danmakuRuntime';
 
 interface PlayerContainerProps {
   // 播放器状态

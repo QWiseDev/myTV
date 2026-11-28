@@ -515,4 +515,36 @@ describe('useSourceInitialization', () => {
     expect(initialProps.setCurrentSource).toHaveBeenLastCalledWith('site-b');
     expect(initialProps.setCurrentId).toHaveBeenLastCalledWith('video-2');
   });
+
+  test('does not re-fetch or reorder availableSources when route updates after switching source on a populated list', async () => {
+    const sourceA: SearchResult = { ...detail, source: 'site-a', id: 'v1' };
+    const sourceB: SearchResult = {
+      ...detail,
+      source: 'site-b',
+      id: 'v2',
+      source_name: '站点 B',
+    };
+    const availableSourcesRef = { current: [sourceA, sourceB] };
+    const params = createParams({
+      currentSource: 'site-b',
+      currentId: 'v2',
+      currentSourceRef: { current: 'site-b' },
+      currentIdRef: { current: 'v2' },
+      detailRef: { current: sourceB },
+      availableSourcesRef,
+    });
+
+    renderHook(() => useSourceInitialization(params));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(params.setLoading).toHaveBeenCalledWith(false);
+    expect(mockedCachedGet).not.toHaveBeenCalledWith(
+      '/api/search',
+      expect.anything(),
+    );
+    expect(params.setAvailableSources).not.toHaveBeenCalled();
+  });
 });

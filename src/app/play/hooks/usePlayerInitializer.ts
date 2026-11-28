@@ -57,6 +57,7 @@ import {
 } from '../utils/playerSwitch';
 import {
   EXTERNAL_DANMU_LOAD_DELAY_MS,
+  MEDIA_LOADING_GRACE_TIMEOUT_MS,
   MEDIA_LOADING_TIMEOUT_MS,
 } from '../utils/playerTimings';
 import type { PlayArtplayer } from '../utils/playerTypes';
@@ -389,59 +390,66 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
     ) => {
       clearMediaLoadingTimeout();
 
-      const timeoutId = setTimeout(() => {
-        if (mediaLoadingTimeoutRef.current === timeoutId) {
-          mediaLoadingTimeoutRef.current = null;
-        }
-        if (
-          mediaSessionRef.current !== mediaSession ||
-          artPlayerRef.current !== artPlayer ||
-          artPlayer.playing
-        ) {
-          return;
-        }
+      const timeoutId = setTimeout(
+        () => {
+          if (mediaLoadingTimeoutRef.current === timeoutId) {
+            mediaLoadingTimeoutRef.current = null;
+          }
+          if (
+            mediaSessionRef.current !== mediaSession ||
+            artPlayerRef.current !== artPlayer ||
+            artPlayer.playing
+          ) {
+            return;
+          }
 
-        const activeParams = latestParamsRef.current;
-        const mediaVideo = artPlayer.video as HTMLVideoElement | undefined;
+          const activeParams = latestParamsRef.current;
+          const mediaVideo = artPlayer.video as HTMLVideoElement | undefined;
 
-        // 媒体数据已就绪只是自动播放被浏览器拦截时，不判源失败：
-        // 否则移动端会把每个可用源都标成失败并来回切换，表现为「一直不播放」。
-        if (
-          mediaVideo &&
-          mediaVideo.readyState >= VIDEO_HAVE_CURRENT_DATA &&
-          mediaVideo.videoWidth > 0
-        ) {
+          // 媒体数据已就绪只是自动播放被浏览器拦截时，不判源失败：
+          // 否则移动端会把每个可用源都标成失败并来回切换，表现为「一直不播放」。
+          if (
+            mediaVideo &&
+            mediaVideo.readyState >= VIDEO_HAVE_CURRENT_DATA &&
+            mediaVideo.videoWidth > 0
+          ) {
+            setLoading(false);
+            setIsVideoLoading(false);
+            return;
+          }
+
+          // 当前 HLS 已拉取清单或分片正在下载时，给一次额外缓冲宽限期（不再受限于"无备用源"），
+          // 避免用户手动选中的慢源或网络抖动在已有下载进度时满 10s 就被判失败并连环切源
+          const bufferSnapshot = dynamicBufferRef.current?.getSnapshot();
+          if (!graceExtended && bufferSnapshot?.hasActiveProgress) {
+            showPlayerNotice('当前源起播较慢，仍在努力缓冲中...');
+            scheduleMediaLoadingTimeout(artPlayer, true);
+            return;
+          }
+
           setLoading(false);
           setIsVideoLoading(false);
-          return;
-        }
 
-        // 无备用源可切且当前 HLS 已拉取清单或分片正在下载时，给一次额外缓冲宽限期
-        const bufferSnapshot = dynamicBufferRef.current?.getSnapshot();
-        if (
-          !graceExtended &&
-          !hasUnfailedAlternativeSource() &&
-          bufferSnapshot?.hasActiveProgress
-        ) {
-          showPlayerNotice('当前源起播较慢，仍在努力缓冲中...');
-          scheduleMediaLoadingTimeout(artPlayer, true);
-          return;
-        }
+          const totalTimeoutSeconds =
+            (graceExtended
+              ? MEDIA_LOADING_TIMEOUT_MS + MEDIA_LOADING_GRACE_TIMEOUT_MS
+              : MEDIA_LOADING_TIMEOUT_MS) / 1000;
 
-        setLoading(false);
-        setIsVideoLoading(false);
+          console.error('视频加载超时:', {
+            url: activeParams.videoUrl,
+            source: activeParams.currentSource,
+            id: activeParams.currentId,
+            episodeIndex: activeParams.currentEpisodeIndex,
+          });
 
-        console.error('视频加载超时:', {
-          url: activeParams.videoUrl,
-          source: activeParams.currentSource,
-          id: activeParams.currentId,
-          episodeIndex: activeParams.currentEpisodeIndex,
-        });
-
-        handleCurrentSourceFailure(
-          `视频加载超时 (${MEDIA_LOADING_TIMEOUT_MS / 1000}秒)\n地址: ${activeParams.videoUrl}\n\n没有更多播放源了`,
-        );
-      }, MEDIA_LOADING_TIMEOUT_MS);
+          handleCurrentSourceFailure(
+            `视频加载超时 (${totalTimeoutSeconds}秒)\n地址: ${activeParams.videoUrl}\n\n没有更多播放源了`,
+          );
+        },
+        graceExtended
+          ? MEDIA_LOADING_GRACE_TIMEOUT_MS
+          : MEDIA_LOADING_TIMEOUT_MS,
+      );
 
       mediaLoadingTimeoutRef.current = timeoutId;
     };

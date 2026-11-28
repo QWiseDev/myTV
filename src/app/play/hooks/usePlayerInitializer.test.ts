@@ -1571,6 +1571,90 @@ describe('usePlayerInitializer', () => {
     expect(player.notice.show).toContain('视频加载超时');
   });
 
+  test('grants one extra loading grace window even when alternative sources exist if HLS has active progress', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    const player = createMockPlayer(handlers);
+    const hlsInstance = {
+      config: {
+        maxBufferLength: 60,
+        maxMaxBufferLength: 180,
+        maxBufferSize: 150 * 1000 * 1000,
+        backBufferLength: 30,
+      },
+      levels: [{ height: 1080 }],
+      on: jest.fn(),
+      off: jest.fn(),
+      destroy: jest.fn(),
+    };
+    (initAdaptiveHls as jest.Mock).mockImplementation(
+      (video: HTMLVideoElement) => {
+        (video as unknown as { hls?: unknown }).hls = hlsInstance;
+        return hlsInstance;
+      },
+    );
+    mockArtplayerConstructor.mockImplementation(() => player);
+    (loadArtplayerModules as jest.Mock).mockResolvedValue({
+      Artplayer: mockArtplayerConstructor,
+      artplayerPluginDanmuku: jest.fn(() => ({})),
+    });
+    (createArtplayerConfig as jest.Mock).mockImplementation(
+      (options: unknown) => options,
+    );
+
+    const params = createParams('https://example.com/slow-with-alt.m3u8');
+    const primaryDetail = params.detail;
+    if (!primaryDetail) {
+      throw new Error('expected primary detail');
+    }
+    params.availableSourcesRef.current = [
+      primaryDetail,
+      {
+        ...primaryDetail,
+        source: 'source-b',
+        id: 'id-b',
+        source_name: '备用源',
+        episodes: ['https://example.com/alt.m3u8'],
+      },
+    ];
+    renderHook(() => usePlayerInitializer(params));
+
+    await waitFor(() => {
+      expect(mockArtplayerConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const playerOptions = (createArtplayerConfig as jest.Mock).mock.calls[0][0];
+    act(() => {
+      playerOptions.customType.m3u8(
+        player.video,
+        'https://example.com/slow-with-alt.m3u8',
+      );
+    });
+
+    const setIsVideoLoading = params.setIsVideoLoading as jest.Mock;
+    setIsVideoLoading.mockClear();
+
+    // 即使存在备用源，只要当前源有真实 HLS 进度，10s 时应先宽限一次而非立即切走
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(params.handleSourceChange).not.toHaveBeenCalled();
+    expect(setIsVideoLoading).not.toHaveBeenCalledWith(false);
+    expect(player.notice.show).toContain('仍在努力缓冲');
+
+    // 宽限期满仍无画面才触发自动换源
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(params.handleSourceChange).toHaveBeenCalledWith(
+      'source-b',
+      'id-b',
+      primaryDetail.title,
+      { initiatedBy: 'auto' },
+    );
+  });
+
   test('prefetches the next episode once when approaching the end of current episode', async () => {
     const handlers = new Map<string, (...args: unknown[]) => void>();
     const player = createMockPlayer(handlers);

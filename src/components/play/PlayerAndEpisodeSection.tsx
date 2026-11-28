@@ -7,13 +7,9 @@ import { ComponentProps, RefObject, useState } from 'react';
 import { SearchResult } from '@/lib/types';
 
 import DanmakuPanel from '@/components/play/DanmakuPanel';
+import EpisodePanel from '@/components/play/EpisodePanel';
 import PlayerContainer from '@/components/play/PlayerContainer';
 import type VideoDetailsPanelComponent from '@/components/play/VideoDetailsPanel';
-
-const EpisodePanel = dynamic(() => import('@/components/play/EpisodePanel'), {
-  ssr: false,
-  loading: () => <div className='h-20 bg-gray-800 animate-pulse rounded-lg' />,
-});
 
 const VideoDetailsPanelDynamic = dynamic(
   () => import('@/components/play/VideoDetailsPanel'),
@@ -42,6 +38,10 @@ interface EpisodePanelConfig {
   onLoadSources?: () => boolean | Promise<boolean>;
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  /** 正在拉取详情并准备切换的目标源 key（source-id） */
+  switchingSourceKey?: string | null;
+  /** 播放器当前是否处于换源加载阶段 */
+  isSourceSwitching?: boolean;
   /** 访客（未登录）禁用换源 */
   disableSourceSwitch?: boolean;
 }

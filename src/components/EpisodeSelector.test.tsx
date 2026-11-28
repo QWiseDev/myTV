@@ -204,4 +204,97 @@ describe('EpisodeSelector', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mockProbePlayableMediaUrl).not.toHaveBeenCalled();
   });
+
+  test('keeps source list order stable when switching sources and shows switching feedback while preventing duplicate clicks', () => {
+    const sourceA = createSource('source-a', 'a', ['https://a.example/1.m3u8']);
+    const sourceB = createSource('source-b', 'b', ['https://b.example/1.m3u8']);
+    const sourceC = createSource('source-c', 'c', ['https://c.example/1.m3u8']);
+    const onSourceChange = jest.fn();
+
+    const { rerender } = render(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        currentSource='source-a'
+        currentId='a'
+        availableSources={[sourceA, sourceB, sourceC]}
+        onSourceChange={onSourceChange}
+      />,
+    );
+
+    // 切换当前源到 source-c 后，列表顺序不应把 source-c 顶到第一行
+    rerender(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        currentSource='source-c'
+        currentId='c'
+        availableSources={[sourceA, sourceB, sourceC]}
+        onSourceChange={onSourceChange}
+      />,
+    );
+
+    const headings = screen.getAllByRole('heading', { level: 3 });
+    expect(headings.map((h) => h.textContent)).toEqual([
+      'source-a-a',
+      'source-b-b',
+      'source-c-c',
+    ]);
+
+    // 正在切换至 source-b 时展示「切换中」且重复点击不再次触发 onSourceChange
+    rerender(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        currentSource='source-c'
+        currentId='c'
+        switchingSourceKey='source-b-b'
+        availableSources={[sourceA, sourceB, sourceC]}
+        onSourceChange={onSourceChange}
+      />,
+    );
+
+    expect(screen.getByText('切换中')).not.toBeNull();
+    fireEvent.click(screen.getByRole('heading', { name: 'source-b-b' }));
+    expect(onSourceChange).not.toHaveBeenCalled();
+  });
+
+  test('renders amber slow/unmeasured badges instead of green playable badge for slow or unknown-speed sources', async () => {
+    localStorage.setItem('enableOptimization', 'true');
+    const slowSource = createSource('source-slow', 's', [
+      'https://slow.example/1.m3u8',
+    ]);
+    const unknownSource = createSource('source-unk', 'u', [
+      'https://unk.example/1.m3u8',
+    ]);
+
+    mockProbePlayableMediaUrl
+      .mockResolvedValueOnce({
+        quality: '1080p',
+        loadSpeed: '120.00 KB/s',
+        pingTimeMs: 400,
+        slow: true,
+      })
+      .mockResolvedValueOnce({
+        quality: '1080p',
+        loadSpeed: '未知',
+        pingTimeMs: 160,
+      });
+
+    render(
+      <EpisodeSelector
+        totalEpisodes={1}
+        episodes_titles={[]}
+        value={1}
+        availableSources={[slowSource, unknownSource]}
+      />,
+    );
+
+    expect(await screen.findByText('较慢 1080p')).not.toBeNull();
+    expect(await screen.findByText('未测速 1080p')).not.toBeNull();
+    expect(screen.queryByText('可播 1080p')).toBeNull();
+  });
 });

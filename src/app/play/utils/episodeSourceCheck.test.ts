@@ -2,6 +2,7 @@ import type { SearchResult } from '@/lib/types';
 
 import {
   buildEpisodeProbeCacheKey,
+  classifyEpisodeProbeSpeed,
   EPISODE_PROBE_CACHE_TTL_MS,
   EpisodeSourceCheckResult,
   followManifestToSegment,
@@ -729,6 +730,35 @@ describe('episodeSourceCheck', () => {
         });
         jest.restoreAllMocks();
       }
+    });
+
+    test('classifyEpisodeProbeSpeed 将低速与未知速率与正常高速区分开', () => {
+      expect(classifyEpisodeProbeSpeed('1.50 MB/s')).toBe('normal');
+      expect(classifyEpisodeProbeSpeed('220.00 KB/s')).toBe('normal');
+      expect(classifyEpisodeProbeSpeed('140.00 KB/s')).toBe('slow');
+      expect(classifyEpisodeProbeSpeed('14.00 KB/s')).toBe('slow');
+      expect(classifyEpisodeProbeSpeed('未知')).toBe('unknown');
+      expect(classifyEpisodeProbeSpeed('未知', true)).toBe('slow');
+    });
+
+    test('measureSegmentLoadSpeedDetailed 在超时无字节时标记 timedOut=true', async () => {
+      global.fetch = jest.fn(
+        (_url: string, init: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            );
+          }),
+      ) as unknown as typeof fetch;
+
+      const res = await measureSegmentLoadSpeedDetailed(
+        'https://cdn.test/stalled.ts',
+        { timeoutMs: 30, partialOnAbort: true },
+      );
+      expect(res.timedOut).toBe(true);
+      expect(res.reachable).toBe(false);
+      expect(res.bytes).toBe(0);
+      expect(res.speed).toBe('未知');
     });
   });
 });

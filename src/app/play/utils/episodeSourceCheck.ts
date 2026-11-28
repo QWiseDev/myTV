@@ -1,7 +1,29 @@
 import type { SearchResult } from '@/lib/types';
 
 import { appendSourceFragmentParam } from './fragmentUrlParams';
-import { filterAdsFromM3U8, filterAdsFromM3U8Async } from './helpers';
+import {
+  filterAdsFromM3U8,
+  filterAdsFromM3U8Async,
+  parseSpeedToKBps,
+} from './helpers';
+
+/** 低于该速度（KB/s）的分片在 10s 起播窗口内极易超时失败，探测阶段直接判慢源异常 */
+export const UNPLAYABLE_SLOW_SPEED_KBPS = 50;
+/** 低于该速度（KB/s）的可播源在列表里标记为「较慢」（琥珀色），不误标为绿色流畅源 */
+export const SLOW_SOURCE_SPEED_KBPS = 180;
+
+export type EpisodeProbeSpeedTier = 'normal' | 'slow' | 'unknown';
+
+export function classifyEpisodeProbeSpeed(
+  loadSpeed?: string,
+  slow?: boolean,
+): EpisodeProbeSpeedTier {
+  if (slow) return 'slow';
+  if (!loadSpeed || loadSpeed === '未知') return 'unknown';
+  const kbps = parseSpeedToKBps(loadSpeed);
+  if (kbps <= 0) return 'unknown';
+  return kbps < SLOW_SOURCE_SPEED_KBPS ? 'slow' : 'normal';
+}
 
 const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
 
@@ -76,6 +98,8 @@ export interface EpisodeSourceCheckResult {
   loadSpeed?: string;
   /** 首字节延迟（ms），0 表示未知 */
   pingTimeMs?: number;
+  /** 虽可播但实测速度偏慢，UI 降级展示避免误导 */
+  slow?: boolean;
   message?: string;
   details?: string;
   checkedAt?: number;
@@ -287,6 +311,7 @@ export interface SegmentSpeedMeasurement {
   bytes: number;
   durationMs: number;
   ttfbMs?: number;
+  timedOut?: boolean;
 }
 
 /**
@@ -392,12 +417,18 @@ export async function measureSegmentLoadSpeedDetailed(
     sampleBytes: number,
     sampleDuration: number,
     isPartial: boolean,
+    isTimedOut: boolean,
   ): boolean => {
     if (sampleBytes >= MIN_SAMPLE_BYTES && sampleDuration >= MIN_SAMPLE_MS) {
       return true;
     }
     if (sampleBytes >= RELAXED_SAMPLE_BYTES) {
       return isPartial ? sampleDuration >= 500 : sampleDuration >= 150;
+    }
+    // 完整跑完测速超时窗口仍只收到极少字节（如跨境限速 14 KB/s）：
+    // 按实测字节算出真实极低速，避免丢弃为「未知」导致误判为可播源
+    if (isTimedOut && sampleBytes > 0 && sampleDuration >= 1000) {
+      return true;
     }
     return false;
   };
@@ -429,9 +460,10 @@ export async function measureSegmentLoadSpeedDetailed(
         bytes,
         durationMs: duration,
         ttfbMs,
+        timedOut,
       };
     }
-    if (!isSampleValid(bytes, duration, true)) {
+    if (!isSampleValid(bytes, duration, true, timedOut)) {
       return {
         speed: '未知',
         reachable: headersOk,
@@ -439,6 +471,7 @@ export async function measureSegmentLoadSpeedDetailed(
         bytes,
         durationMs: duration,
         ttfbMs,
+        timedOut,
       };
     }
     return {
@@ -448,6 +481,7 @@ export async function measureSegmentLoadSpeedDetailed(
       bytes,
       durationMs: duration,
       ttfbMs,
+      timedOut,
     };
   };
 
@@ -494,7 +528,7 @@ export async function measureSegmentLoadSpeedDetailed(
     const duration = performance.now() - startedAt;
     void reader.cancel().catch(() => undefined);
 
-    if (!isSampleValid(bytes, duration, false)) {
+    if (!isSampleValid(bytes, duration, false, false)) {
       return {
         speed: '未知',
         reachable: true,
@@ -502,6 +536,7 @@ export async function measureSegmentLoadSpeedDetailed(
         bytes,
         durationMs: duration,
         ttfbMs,
+        timedOut: false,
       };
     }
     return {
@@ -511,6 +546,7 @@ export async function measureSegmentLoadSpeedDetailed(
       bytes,
       durationMs: duration,
       ttfbMs,
+      timedOut: false,
     };
   } catch {
     if (headersOk && (timedOut || partialOnAbort)) {
@@ -523,6 +559,7 @@ export async function measureSegmentLoadSpeedDetailed(
       bytes,
       durationMs: performance.now() - startedAt,
       ttfbMs,
+      timedOut,
     };
   } finally {
     clearTimeout(timer);
@@ -574,7 +611,7 @@ function getHlsErrorReason(data: unknown): string {
       ? (data as { response?: { code?: unknown } }).response
       : undefined;
   const code = response?.code;
-  if (code === 0) return '跨域被拒或未开放 CORS';
+  if (code === 0) return '网络被拒（可能受地区/代理限制或未开放 CORS）';
   if (code === 403) return '403 禁止访问，可能需要白名单';
 
   const reason =
@@ -618,6 +655,7 @@ export async function probePlayableMediaUrl(
   quality: string;
   loadSpeed: string;
   pingTimeMs: number;
+  slow?: boolean;
 }> {
   if (!url.trim()) {
     throw new EpisodeSourceProbeError('播放地址为空');
@@ -652,6 +690,7 @@ export async function probePlayableMediaUrl(
   let loadSpeed = '未知';
   // 0 表示未知：HLS 取 manifest TTFB，直链用串行 HEAD 探活
   let pingTimeMs = 0;
+  let speedMeasurement: SegmentSpeedMeasurement | null = null;
 
   const probeDeadline = Date.now() + options.timeoutMs;
 
@@ -765,15 +804,19 @@ export async function probePlayableMediaUrl(
               probeDeadline - Date.now(),
             ),
           );
-          const speed = await measureSegmentLoadSpeed(targetSegmentUrl, {
-            signal: speedController.signal,
-            timeoutMs: remainingForSegMs,
-            maxBytes: isLikelyHlsUrl(url) ? 512 * 1024 : 384 * 1024,
-            partialOnAbort: true,
-            sourceKey: options.sourceKey,
-          });
-          if (speed !== '未知') {
-            loadSpeed = speed;
+          const measurement = await measureSegmentLoadSpeedDetailed(
+            targetSegmentUrl,
+            {
+              signal: speedController.signal,
+              timeoutMs: remainingForSegMs,
+              maxBytes: isLikelyHlsUrl(url) ? 512 * 1024 : 384 * 1024,
+              partialOnAbort: true,
+              sourceKey: options.sourceKey,
+            },
+          );
+          speedMeasurement = measurement;
+          if (measurement.speed !== '未知') {
+            loadSpeed = measurement.speed;
           }
         } catch {
           // CORS 受限或直链测速失败时保留「未知」，不影响已确认的可播结果
@@ -812,7 +855,25 @@ export async function probePlayableMediaUrl(
           reject(new EpisodeSourceProbeError('已取消'));
           return;
         }
-        resolve({ quality, loadSpeed, pingTimeMs });
+
+        // 分片独立测速明显超时无字节，或实测速率低于最低可播门槛（如跨境限速 14 KB/s）：
+        // 直接判异常而非误标绿色「可播」，避免用户点进去必撞 10 秒起播超时。
+        if (
+          speedMeasurement?.timedOut &&
+          (!speedMeasurement.reachable || speedMeasurement.bytes === 0)
+        ) {
+          reject(
+            new EpisodeSourceProbeError('分片测速超时（当前源过慢或不可用）'),
+          );
+          return;
+        }
+        const speedKbps = parseSpeedToKBps(loadSpeed);
+        if (speedKbps > 0 && speedKbps < UNPLAYABLE_SLOW_SPEED_KBPS) {
+          reject(new EpisodeSourceProbeError(`源速度过慢 (${loadSpeed})`));
+          return;
+        }
+        const slow = speedKbps > 0 && speedKbps < SLOW_SOURCE_SPEED_KBPS;
+        resolve({ quality, loadSpeed, pingTimeMs, slow });
       };
 
       const safeReject = (message: string, details?: string) => {
@@ -878,12 +939,12 @@ export async function probePlayableMediaUrl(
         const code = mediaError?.code || 0;
         const messageMap: Record<number, string> = {
           1: '加载被用户中止',
-          2: '网络错误或跨域限制',
+          2: '网络错误（可能受地区/代理或跨域限制）',
           3: '解码失败，可能格式不受支持',
-          4: '资源不可用或跨域限制',
+          4: '资源不可用（可能受地区/代理或跨域限制）',
         };
         void safeReject(
-          messageMap[code] || '播放失败，可能被跨域限制',
+          messageMap[code] || '播放失败（可能受地区/代理或跨域限制）',
           mediaError?.message,
         );
       };
@@ -1225,7 +1286,12 @@ export async function runEpisodeSourceChecks(params: {
     url: string,
     signal: AbortSignal,
     item: EpisodeSourceCheckPlanItem,
-  ) => Promise<{ quality: string; loadSpeed: string; pingTimeMs: number }>;
+  ) => Promise<{
+    quality: string;
+    loadSpeed: string;
+    pingTimeMs: number;
+    slow?: boolean;
+  }>;
   /** 命中未过期结果时直接复用，跳过真实探测（保留原始 checkedAt） */
   resolveCache?: (
     item: EpisodeSourceCheckPlanItem,
@@ -1327,7 +1393,8 @@ export async function runEpisodeSourceChecks(params: {
           quality: metrics.quality,
           loadSpeed: metrics.loadSpeed,
           pingTimeMs: metrics.pingTimeMs,
-          message: '可播放',
+          slow: metrics.slow,
+          message: metrics.slow ? '速度偏慢' : '可播放',
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : '检测失败';

@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
 } from 'react';
 
 import { analytics } from '@/lib/analytics';
@@ -107,6 +108,9 @@ export function useSourceSwitcher({
     null,
   );
   const operationGenerationRef = useRef(0);
+  const [switchingSourceKey, setSwitchingSourceKey] = useState<string | null>(
+    null,
+  );
   availableSourcesRef.current = availableSources;
   currentEpisodeIndexRef.current = currentEpisodeIndex;
 
@@ -115,6 +119,7 @@ export function useSourceSwitcher({
       operationGenerationRef.current += 1;
       isSourceChangingRef.current = false;
       sourceChangeOwnerRef.current = null;
+      setSwitchingSourceKey(null);
       if (deferredDanmuTimeoutRef.current) {
         clearTimeout(deferredDanmuTimeoutRef.current);
         deferredDanmuTimeoutRef.current = null;
@@ -142,6 +147,25 @@ export function useSourceSwitcher({
       options?: SourceChangeOptions,
     ) => {
       const initiatedBy = options?.initiatedBy ?? 'user';
+      if (
+        isSourceChangingRef.current &&
+        sourceChangeOwnerRef.current?.source === newSource &&
+        sourceChangeOwnerRef.current?.id === newId
+      ) {
+        // 正在切换至同一个目标源：忽略重复点击，避免反复取消并重启详情请求；
+        // 若原先由自动换源发起而用户主动点击同一目标，则升级归属为 user。
+        if (
+          initiatedBy === 'user' &&
+          sourceChangeOwnerRef.current.by !== 'user'
+        ) {
+          sourceChangeOwnerRef.current = {
+            by: 'user',
+            source: newSource,
+            id: newId,
+          };
+        }
+        return;
+      }
       if (isSourceChangingRef.current && initiatedBy === 'auto') {
         // 自动换源不得打断进行中的切换（尤其是用户手动发起的换源）
         return;
@@ -155,6 +179,7 @@ export function useSourceSwitcher({
       }
 
       const activeEpisodeIndex = currentEpisodeIndexRef.current;
+      const targetSourceKey = `${String(newSource)}-${String(newId)}`;
 
       // 换源尝试埋点：from/to 源名在 lib 层统一脱敏
       analytics.trackFeatureUsage('source_switch', true, {
@@ -176,6 +201,7 @@ export function useSourceSwitcher({
         if (isCurrentOperation()) {
           isSourceChangingRef.current = false;
           sourceChangeOwnerRef.current = null;
+          setSwitchingSourceKey(null);
         }
       };
 
@@ -186,6 +212,7 @@ export function useSourceSwitcher({
           source: newSource,
           id: newId,
         };
+        setSwitchingSourceKey(targetSourceKey);
 
         setVideoLoadingStage('sourceChanging');
         setIsVideoLoading(true);
@@ -222,6 +249,7 @@ export function useSourceSwitcher({
         if (!newDetail) {
           isSourceChangingRef.current = false;
           sourceChangeOwnerRef.current = null;
+          setSwitchingSourceKey(null);
           setIsVideoLoading(false);
           showSwitchFailureNotice('未找到匹配结果');
           return;
@@ -323,6 +351,7 @@ export function useSourceSwitcher({
           return;
         }
         replacePlayPageUrl(newUrl.toString());
+        setSwitchingSourceKey(null);
 
         deferredDanmuTimeoutRef.current = setTimeout(async () => {
           deferredDanmuTimeoutRef.current = null;
@@ -372,6 +401,7 @@ export function useSourceSwitcher({
         if (!isCurrentOperation()) return;
         isSourceChangingRef.current = false;
         sourceChangeOwnerRef.current = null;
+        setSwitchingSourceKey(null);
         if (!isStillOnSourcePage()) return;
         setIsVideoLoading(false);
         showSwitchFailureNotice(
@@ -418,5 +448,5 @@ export function useSourceSwitcher({
     ],
   );
 
-  return { handleSourceChange };
+  return { handleSourceChange, switchingSourceKey };
 }

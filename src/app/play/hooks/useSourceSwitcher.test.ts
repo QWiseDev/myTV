@@ -569,4 +569,50 @@ describe('useSourceSwitcher', () => {
 
     expect(params.setCurrentEpisodeIndex).toHaveBeenCalledWith(2);
   });
+
+  test('exposes switchingSourceKey immediately and ignores duplicate clicks on the same in-flight target', async () => {
+    const deferred = createDeferred<SearchResult>();
+    const sourceA = createSource('source-a', 'id-a', { douban_id: 1 });
+    const sourceB = createSource('source-b', 'id-b', {
+      douban_id: undefined,
+    });
+    const hydratedB = createSource('source-b', 'id-b', { douban_id: 99 });
+    const params = createParams([sourceA, sourceB]);
+    (cachedGet as jest.Mock).mockReset();
+    (cachedGet as jest.Mock).mockReturnValue(deferred.promise);
+
+    const { result } = renderHook(() => useSourceSwitcher(params));
+
+    let firstSwitch: Promise<void> | void;
+    act(() => {
+      firstSwitch = result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'source-b title',
+      );
+    });
+
+    expect(result.current.switchingSourceKey).toBe('source-b-id-b');
+
+    // 用户连续重复点击同一个切换中的源：应直接忽略，不重启详情请求
+    await act(async () => {
+      await result.current.handleSourceChange(
+        'source-b',
+        'id-b',
+        'source-b title',
+      );
+    });
+
+    expect(cachedGet).toHaveBeenCalledTimes(1);
+    expect(result.current.switchingSourceKey).toBe('source-b-id-b');
+
+    await act(async () => {
+      deferred.resolve(hydratedB);
+      await firstSwitch;
+    });
+
+    expect(result.current.switchingSourceKey).toBeNull();
+    expect(params.setCurrentSource).toHaveBeenCalledWith('source-b');
+    expect(params.setCurrentId).toHaveBeenCalledWith('id-b');
+  });
 });

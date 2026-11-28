@@ -14,6 +14,7 @@ import {
 } from '@/lib/db.client';
 import { safeJsonParse } from '@/lib/safe-storage';
 import { useBackToTopController } from '@/hooks/useBackToTopController';
+import { usePrefetchPlayRoute } from '@/hooks/usePrefetchPlayRoute';
 import { useSearchPageAnalytics } from '@/hooks/useSearchPageAnalytics';
 
 import NetDiskSearchResults from '@/components/NetDiskSearchResults';
@@ -47,6 +48,7 @@ function SearchPageClient() {
   const { scrollToTop } = useBackToTopController({ setShowBackToTop });
 
   const router = useRouter();
+  usePrefetchPlayRoute();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
 

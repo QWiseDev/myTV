@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import {
   Suspense,
@@ -24,6 +23,9 @@ import { usePlayPageAnalytics } from '@/hooks/usePlayPageAnalytics';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
 import PageLayout from '@/components/PageLayout';
+import BackToTopButton from '@/components/play/BackToTopButton';
+import ErrorScreen from '@/components/play/ErrorScreen';
+import LoadingScreen from '@/components/play/LoadingScreen';
 import PlayerAndEpisodeSection from '@/components/play/PlayerAndEpisodeSection';
 
 import {
@@ -60,19 +62,6 @@ import type {
 import { readExternalDanmuPref } from './utils/danmuPreference';
 import { detectDevice } from './utils/deviceDetection';
 import type { PlayerMediaSwitchResult } from './utils/playerSwitch';
-
-// 🚀 性能优化：基于内存压力的动态组件导入
-// 非关键组件 - 完全动态导入
-const BackToTopButton = dynamic(
-  () => import('@/components/play/BackToTopButton'),
-  { ssr: false },
-);
-const LoadingScreen = dynamic(() => import('@/components/play/LoadingScreen'), {
-  ssr: false,
-});
-const ErrorScreen = dynamic(() => import('@/components/play/ErrorScreen'), {
-  ssr: false,
-});
 
 const VIDEO_HAVE_CURRENT_DATA = 2;
 
@@ -594,6 +583,7 @@ function PlayPageClient() {
     currentSourceRef,
     currentIdRef,
     detailRef,
+    availableSourcesRef,
     setDetail,
     setAvailableSources,
     setCurrentEpisodeIndex,
@@ -758,7 +748,7 @@ function PlayPageClient() {
     isRestoringFromRecordRef,
   });
 
-  const { handleSourceChange } = useSourceSwitcher({
+  const { handleSourceChange, switchingSourceKey } = useSourceSwitcher({
     setVideoLoadingStage,
     setIsVideoLoading,
     lastDanmuLoadKeyRef,
@@ -980,6 +970,9 @@ function PlayPageClient() {
               onLoadSources: loadAvailableSources,
               sourceSearchLoading,
               sourceSearchError,
+              switchingSourceKey,
+              isSourceSwitching:
+                isVideoLoading && videoLoadingStage === 'sourceChanging',
               disableSourceSwitch: !isLoggedIn,
             }}
             infoProps={{

@@ -15,6 +15,7 @@ import {
   pickDefaultSourceCategory,
 } from '@/lib/source-browser-shared';
 import { processImageUrl } from '@/lib/utils';
+import { usePrefetchPlayRoute } from '@/hooks/usePrefetchPlayRoute';
 
 import PageLayout from '@/components/PageLayout';
 
@@ -39,6 +40,7 @@ export default function GuestHome({
   initialData?: GuestHomeInitialData;
 }) {
   const router = useRouter();
+  usePrefetchPlayRoute();
   const [source, setSource] = useState<Source | null>(
     initialData?.source ?? null,
   );

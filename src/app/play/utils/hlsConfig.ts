@@ -378,6 +378,10 @@ export function handleHlsError(
         }
       }
 
+      if (extractHlsHttpStatus(errorData) === 0) {
+        message += '（可能受地区/代理限制或未开放 CORS）';
+      }
+
       message += `\n地址: ${url}`;
 
       return message;
