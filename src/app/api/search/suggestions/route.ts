@@ -3,43 +3,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { AdminConfig } from '@/lib/admin.types';
-import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import {
+  authenticateSearchRequest,
+  filterSearchResults,
+  normalizeSearchQuery,
+} from '@/lib/search-service';
 import { pickFirstHealthySite } from '@/lib/site-health';
-import { ensureUserAccessOrResponse } from '@/lib/user-access';
-import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
-    // 从 cookie 获取用户信息
-    const auth = await requireUser(request);
-    if (!auth.authInfo) return auth.response;
-    const authInfo = auth.authInfo;
-
-    const guardResult = await ensureUserAccessOrResponse(
-      authInfo.username,
-      authInfo.timestamp,
-    );
-    if ('response' in guardResult) {
-      return guardResult.response;
-    }
+    const auth = await authenticateSearchRequest(request);
+    if ('response' in auth) return auth.response;
 
     const config = await getConfig();
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('q')?.trim();
+    const query = normalizeSearchQuery(searchParams.get('q'));
 
     if (!query) {
       return NextResponse.json({ suggestions: [] });
     }
 
     // 生成建议
-    const suggestions = await generateSuggestions(
-      config,
-      query,
-      authInfo.username,
-    );
+    const suggestions = await generateSuggestions(config, query, auth.username);
 
     // 从配置中获取缓存时间，如果没有配置则使用默认值300秒（5分钟）
     const cacheTime = config.SiteConfig.SiteInterfaceCacheTime || 300;
@@ -77,19 +65,14 @@ async function generateSuggestions(
   const firstSite = pickFirstHealthySite(apiSites);
   if (firstSite) {
     // 取第一个健康（非熔断）的数据源进行搜索建议，避免首位源故障拖死联想
-    const results = await searchFromApi(firstSite, query);
+    const results = filterSearchResults(await searchFromApi(firstSite, query), {
+      disableYellowFilter: config.SiteConfig.DisableYellowFilter,
+    });
 
     realKeywords = Array.from(
       new Set(
         results
-          .filter(
-            (r: any) =>
-              config.SiteConfig.DisableYellowFilter ||
-              !yellowWords.some((word: string) =>
-                (r.type_name || '').includes(word),
-              ),
-          )
-          .map((r: any) => r.title)
+          .map((r) => r.title)
           .filter(Boolean)
           .flatMap((title: string) => title.split(/[ -:：·、-]/))
           .filter(

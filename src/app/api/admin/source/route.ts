@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
+import { clearSearchCache } from '@/lib/search-cache';
 import { resetSiteHealth } from '@/lib/site-health';
 
 export const runtime = 'nodejs';
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
           adult: Boolean(adult),
         });
         resetSiteHealth(key);
+        clearSearchCache(key);
         break;
       }
       case 'disable': {
@@ -101,6 +103,7 @@ export async function POST(request: NextRequest) {
         if (!entry)
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         entry.disabled = true;
+        clearSearchCache(key);
         break;
       }
       case 'enable': {
@@ -112,6 +115,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         entry.disabled = false;
         resetSiteHealth(key);
+        clearSearchCache(key);
         break;
       }
       case 'delete': {
@@ -144,6 +148,7 @@ export async function POST(request: NextRequest) {
           }
         });
         resetSiteHealth(key);
+        clearSearchCache(key);
         break;
       }
       case 'batch_disable': {
@@ -158,6 +163,7 @@ export async function POST(request: NextRequest) {
           const entry = adminConfig.SourceConfig.find((s) => s.key === key);
           if (entry) {
             entry.disabled = true;
+            clearSearchCache(key);
           }
         });
         break;
@@ -175,6 +181,7 @@ export async function POST(request: NextRequest) {
           if (entry) {
             entry.disabled = false;
             resetSiteHealth(key);
+            clearSearchCache(key);
           }
         });
         break;
@@ -199,6 +206,7 @@ export async function POST(request: NextRequest) {
           if (idx !== -1) {
             adminConfig.SourceConfig.splice(idx, 1);
             resetSiteHealth(key);
+            clearSearchCache(key);
           }
         });
 

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { DatabaseCacheManager } from '@/lib/database-cache';
 import { db } from '@/lib/db';
+import { clearSearchCache as clearInMemorySearchCache } from '@/lib/search-cache';
 
 export const runtime = 'nodejs';
 
@@ -217,15 +218,15 @@ async function clearNetdiskCache(): Promise<number> {
   return clearedCount;
 }
 
-// 清理搜索缓存（直接调用数据库，因为search类型已从DatabaseCacheManager中移除）
+// 清理搜索缓存（同时清理内存 LRU 搜索缓存与数据库持久化缓存）
 async function clearSearchCache(): Promise<number> {
-  let clearedCount = 0;
+  let clearedCount = clearInMemorySearchCache();
 
   try {
     // 直接清理数据库中的search-和cache-前缀缓存
     await db.clearExpiredCache('search-');
     await db.clearExpiredCache('cache-');
-    clearedCount = 1; // 标记操作已执行
+    clearedCount = Math.max(clearedCount, 1); // 标记操作已执行
   } catch (error) {
     console.error('清理搜索缓存失败:', error);
   }

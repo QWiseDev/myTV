@@ -1,4 +1,8 @@
-import { getDetailFromApi } from './downstream';
+import { getConfig } from '@/lib/config';
+import { clearSearchCache } from '@/lib/search-cache';
+import { resetSiteHealth } from '@/lib/site-health';
+
+import { getDetailFromApi, searchFromApi } from './downstream';
 
 jest.mock('@/lib/config', () => ({
   API_CONFIG: {
@@ -99,5 +103,85 @@ describe('getDetailFromApi', () => {
     expect(fetchMock.mock.calls[1][0]).toBe(
       'https://mtzy.me/index.php/vod/detail/id/131288.html',
     );
+  });
+});
+
+describe('searchFromApi 变体优化与分页修复', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+    clearSearchCache();
+    resetSiteHealth();
+    (getConfig as jest.Mock).mockResolvedValue({
+      SiteConfig: {
+        SearchDownstreamMaxPage: 3,
+      },
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  test('原始关键词首查已命中时不再白发多余变体请求', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockReturnValue(
+      mockJsonResponse({
+        pagecount: 1,
+        list: [
+          {
+            vod_id: '101',
+            vod_name: '死神来了：血脉诅咒',
+            vod_pic: '',
+            vod_year: '2025',
+            vod_play_url: 'HD$https://cdn.example/101.m3u8',
+          },
+        ],
+      }),
+    );
+
+    const results = await searchFromApi(apiSite, '死神来了：血脉诅咒');
+    expect(results).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('第一页声明 pagecount > 1 时按 SearchDownstreamMaxPage 正常拉取后续页', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock
+      .mockReturnValueOnce(
+        mockJsonResponse({
+          pagecount: 2,
+          list: [
+            {
+              vod_id: '201',
+              vod_name: '测试剧集1',
+              vod_pic: '',
+              vod_year: '2026',
+              vod_play_url: '第1集$https://cdn.example/201.m3u8',
+            },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(
+        mockJsonResponse({
+          pagecount: 2,
+          list: [
+            {
+              vod_id: '202',
+              vod_name: '测试剧集2',
+              vod_pic: '',
+              vod_year: '2026',
+              vod_play_url: '第1集$https://cdn.example/202.m3u8',
+            },
+          ],
+        }),
+      );
+
+    const results = await searchFromApi(apiSite, '测试剧集');
+    expect(results.map((r) => r.id)).toEqual(['201', '202']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain('pg=2');
   });
 });

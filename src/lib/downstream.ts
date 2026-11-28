@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { API_CONFIG, ApiSite, getConfig } from '@/lib/config';
-import { getCachedSearchPage, setCachedSearchPage } from '@/lib/search-cache';
+import {
+  getCachedSearchPage,
+  runSearchPageSingleFlight,
+  setCachedSearchPage,
+} from '@/lib/search-cache';
 import {
   finishSiteHealthProbe,
   HALF_OPEN_PROBE_TIMEOUT_MS,
@@ -71,100 +75,107 @@ async function searchWithCache(
   url: string,
   timeoutMs = 8000,
 ): Promise<{ results: SearchResult[]; pageCount?: number }> {
-  // 先查缓存
+  // 先查内存 LRU 缓存
   const cached = getCachedSearchPage(apiSite.key, query, page);
   if (cached) {
     if (cached.status === 'ok') {
       return { results: cached.data, pageCount: cached.pageCount };
-    } else {
-      return { results: [] };
-    }
-  }
-
-  // 缓存未命中，发起真实网络请求并向站点健康度模块上报真实结果
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  const startedAt = Date.now();
-
-  try {
-    const response = await fetch(url, {
-      headers: API_CONFIG.search.headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        if (response.status === 403) {
-          setCachedSearchPage(apiSite.key, query, page, 'forbidden', []);
-        }
-        markSiteSearchFailure(apiSite.key, 'forbidden');
-      } else if (response.status >= 500) {
-        markSiteSearchFailure(apiSite.key, 'server_error');
-      }
-      return { results: [] };
-    }
-
-    const data = await response.json();
-    markSiteSearchSuccess(apiSite.key, Date.now() - startedAt);
-    if (
-      !data ||
-      !data.list ||
-      !Array.isArray(data.list) ||
-      data.list.length === 0
-    ) {
-      // 空结果不做负缓存要求，这里不写入缓存
-      return { results: [] };
-    }
-
-    // 处理结果数据
-    const allResults = data.list.map((item: ApiSearchItem) => {
-      const { episodes, titles } = parseVodPlayUrl(item.vod_play_url);
-
-      return {
-        id: item.vod_id.toString(),
-        title: item.vod_name.trim().replace(/\s+/g, ' '),
-        poster: item.vod_pic,
-        episodes,
-        episodes_titles: titles,
-        source: apiSite.key,
-        source_name: apiSite.name,
-        class: item.vod_class,
-        year: item.vod_year
-          ? item.vod_year.match(/\d{4}/)?.[0] || ''
-          : 'unknown',
-        desc: cleanHtmlTags(item.vod_content || ''),
-        type_name: item.type_name,
-        douban_id: item.vod_douban_id,
-        remarks: item.vod_remarks, // 传递备注信息（如"已完结"等）
-      };
-    });
-
-    // 过滤掉集数为 0 的结果
-    const results = allResults.filter(
-      (result: SearchResult) => result.episodes.length > 0,
-    );
-
-    const pageCount = page === 1 ? data.pagecount || 1 : undefined;
-    // 写入缓存（成功）
-    setCachedSearchPage(apiSite.key, query, page, 'ok', results, pageCount);
-    return { results, pageCount };
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    // 识别被 AbortController 中止（超时）
-    const aborted =
-      error?.name === 'AbortError' ||
-      error?.code === 20 ||
-      error?.message?.includes('aborted');
-    if (aborted) {
-      setCachedSearchPage(apiSite.key, query, page, 'timeout', []);
-      markSiteSearchFailure(apiSite.key, 'timeout');
-    } else {
-      markSiteSearchFailure(apiSite.key, 'network_error');
     }
     return { results: [] };
   }
+
+  // Single-Flight：并发相同 (source, query, page) 复用同一次上游请求
+  return runSearchPageSingleFlight(apiSite.key, query, page, async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const startedAt = Date.now();
+
+    try {
+      const response = await fetch(url, {
+        headers: API_CONFIG.search.headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          if (response.status === 403) {
+            setCachedSearchPage(apiSite.key, query, page, 'forbidden', []);
+          }
+          markSiteSearchFailure(apiSite.key, 'forbidden');
+        } else if (response.status >= 500) {
+          markSiteSearchFailure(apiSite.key, 'server_error');
+        }
+        return { results: [] };
+      }
+
+      const data = await response.json();
+      markSiteSearchSuccess(apiSite.key, Date.now() - startedAt);
+      if (
+        !data ||
+        !data.list ||
+        !Array.isArray(data.list) ||
+        data.list.length === 0
+      ) {
+        // 上游正常响应但无结果：写入 2 分钟短时 empty 缓存，避免高频重复穿透
+        setCachedSearchPage(apiSite.key, query, page, 'empty', []);
+        return { results: [] };
+      }
+
+      // 处理结果数据
+      const allResults = data.list.map((item: ApiSearchItem) => {
+        const { episodes, titles } = parseVodPlayUrl(item.vod_play_url);
+
+        return {
+          id: item.vod_id.toString(),
+          title: item.vod_name.trim().replace(/\s+/g, ' '),
+          poster: item.vod_pic,
+          episodes,
+          episodes_titles: titles,
+          source: apiSite.key,
+          source_name: apiSite.name,
+          class: item.vod_class,
+          year: item.vod_year
+            ? item.vod_year.match(/\d{4}/)?.[0] || ''
+            : 'unknown',
+          desc: cleanHtmlTags(item.vod_content || ''),
+          type_name: item.type_name,
+          douban_id: item.vod_douban_id,
+          remarks: item.vod_remarks, // 传递备注信息（如"已完结"等）
+        };
+      });
+
+      // 过滤掉集数为 0 的结果
+      const results = allResults.filter(
+        (result: SearchResult) => result.episodes.length > 0,
+      );
+
+      if (results.length === 0) {
+        setCachedSearchPage(apiSite.key, query, page, 'empty', []);
+        return { results: [] };
+      }
+
+      const pageCount = page === 1 ? data.pagecount || 1 : undefined;
+      // 写入缓存（成功，10 分钟 TTL）
+      setCachedSearchPage(apiSite.key, query, page, 'ok', results, pageCount);
+      return { results, pageCount };
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      // 识别被 AbortController 中止（超时）
+      const aborted =
+        error?.name === 'AbortError' ||
+        error?.code === 20 ||
+        error?.message?.includes('aborted');
+      if (aborted) {
+        setCachedSearchPage(apiSite.key, query, page, 'timeout', []);
+        markSiteSearchFailure(apiSite.key, 'timeout');
+      } else {
+        markSiteSearchFailure(apiSite.key, 'network_error');
+      }
+      return { results: [] };
+    }
+  });
 }
 
 /**
@@ -227,124 +238,139 @@ export async function searchFromApi(
   const requestTimeoutMs = options?.timeoutMs ?? 8000;
   try {
     const apiBaseUrl = apiSite.api;
-
-    // 智能搜索：生成搜索变体
-    const searchVariants = generateSearchVariants(query);
-    let results: SearchResult[] = [];
-    let pageCountFromFirst = 0;
-
-    // 调试：输出搜索变体
-
-    // 尝试所有搜索变体，收集所有结果，然后选择最相关的
-    const allVariantResults: Array<{
-      variant: string;
-      results: SearchResult[];
-      relevanceScore: number;
-    }> = [];
-
-    // 变体分批并行请求：逐个串行时单变体超时 8s、最坏 8s×N，分批并发在保持选取语义不变的前提下大幅缩短等待
-    const VARIANT_BATCH_SIZE = 3;
-    for (let i = 0; i < searchVariants.length; i += VARIANT_BATCH_SIZE) {
-      const batch = searchVariants.slice(i, i + VARIANT_BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (variant) => {
-          const apiUrl =
-            apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(variant);
-          try {
-            // 使用新的缓存搜索函数处理第一页
-            const firstPageResult = await searchWithCache(
-              apiSite,
-              variant,
-              1,
-              apiUrl,
-              requestTimeoutMs,
-            );
-
-            if (firstPageResult.results.length > 0) {
-              // 计算相关性分数
-              return {
-                variant,
-                results: firstPageResult.results,
-                relevanceScore: calculateRelevanceScore(
-                  query,
-                  variant,
-                  firstPageResult.results,
-                ),
-              };
-            }
-          } catch (error) {
-            /* 忽略错误 */
-          }
-          return null;
-        }),
-      );
-      for (const item of batchResults) {
-        if (item) allVariantResults.push(item);
-      }
-    }
-
-    // 如果没有任何结果，返回空数组
-    if (allVariantResults.length === 0) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
       return [];
     }
 
-    // 选择相关性分数最高的结果
-    const bestResult = allVariantResults.reduce((best, current) =>
-      current.relevanceScore > best.relevanceScore ? current : best,
+    // 优先直接查询原始关键词：已命中则立即返回，避免对所有标点/子串变体白发 3~6 倍重复上游请求；
+    // 仅在原始词 0 命中时才回退到变体批次。
+    const searchVariants = generateSearchVariants(trimmedQuery);
+    const primaryVariant = searchVariants[0] || trimmedQuery;
+    const primaryUrl =
+      apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(primaryVariant);
+    const primaryPage = await searchWithCache(
+      apiSite,
+      primaryVariant,
+      1,
+      primaryUrl,
+      requestTimeoutMs,
     );
 
-    results = bestResult.results;
-    query = bestResult.variant; // 用于后续分页
-    pageCountFromFirst = 1; // 重置页数
+    let results: SearchResult[] = [];
+    let effectiveQuery = primaryVariant;
+    let pageCountFromFirst = primaryPage.pageCount || 1;
 
-    // 如果所有变体都没有结果，直接返回空数组
+    if (primaryPage.results.length > 0) {
+      results = primaryPage.results.slice();
+    } else if (searchVariants.length > 1) {
+      const fallbackVariants = searchVariants.slice(1);
+      const allVariantResults: Array<{
+        variant: string;
+        results: SearchResult[];
+        pageCount: number;
+        relevanceScore: number;
+      }> = [];
+
+      const VARIANT_BATCH_SIZE = 3;
+      for (let i = 0; i < fallbackVariants.length; i += VARIANT_BATCH_SIZE) {
+        const batch = fallbackVariants.slice(i, i + VARIANT_BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (variant) => {
+            const apiUrl =
+              apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(variant);
+            try {
+              const firstPageResult = await searchWithCache(
+                apiSite,
+                variant,
+                1,
+                apiUrl,
+                requestTimeoutMs,
+              );
+
+              if (firstPageResult.results.length > 0) {
+                return {
+                  variant,
+                  results: firstPageResult.results,
+                  pageCount: firstPageResult.pageCount || 1,
+                  relevanceScore: calculateRelevanceScore(
+                    trimmedQuery,
+                    variant,
+                    firstPageResult.results,
+                  ),
+                };
+              }
+            } catch {
+              /* 忽略错误 */
+            }
+            return null;
+          }),
+        );
+        for (const item of batchResults) {
+          if (item) allVariantResults.push(item);
+        }
+        // 已拿到高相关性变体命中即可提前结束后续批次
+        if (allVariantResults.length > 0) {
+          break;
+        }
+      }
+
+      if (allVariantResults.length === 0) {
+        return [];
+      }
+
+      const bestResult = allVariantResults.reduce((best, current) =>
+        current.relevanceScore > best.relevanceScore ? current : best,
+      );
+
+      results = bestResult.results.slice();
+      effectiveQuery = bestResult.variant;
+      pageCountFromFirst = bestResult.pageCount;
+    } else {
+      return [];
+    }
+
     if (results.length === 0) {
       return [];
     }
 
-    const config = await getConfig();
-    const MAX_SEARCH_PAGES: number = config.SiteConfig.SearchDownstreamMaxPage;
+    // 仅在第一页确实声明存在多页时才读配置并并发拉取后续分页（修复此前 pageCountFromFirst 硬编码为 1 的死代码）
+    if (pageCountFromFirst > 1) {
+      const config = await getConfig();
+      const maxSearchPages = Math.max(
+        1,
+        Number(config?.SiteConfig?.SearchDownstreamMaxPage) || 1,
+      );
+      const pagesToFetch = Math.min(pageCountFromFirst - 1, maxSearchPages - 1);
 
-    // 获取总页数
-    const pageCount = pageCountFromFirst || 1;
-    // 确定需要获取的额外页数
-    const pagesToFetch = Math.min(pageCount - 1, MAX_SEARCH_PAGES - 1);
+      if (pagesToFetch > 0) {
+        const additionalPagePromises = Array.from(
+          { length: pagesToFetch },
+          (_, idx) => {
+            const page = idx + 2;
+            const pageUrl =
+              apiBaseUrl +
+              API_CONFIG.search.pagePath
+                .replace('{query}', encodeURIComponent(effectiveQuery))
+                .replace('{page}', page.toString());
 
-    // 如果有额外页数，获取更多页的结果
-    if (pagesToFetch > 0) {
-      const additionalPagePromises = [];
+            return searchWithCache(
+              apiSite,
+              effectiveQuery,
+              page,
+              pageUrl,
+              requestTimeoutMs,
+            ).then((pageResult) => pageResult.results);
+          },
+        );
 
-      for (let page = 2; page <= pagesToFetch + 1; page++) {
-        const pageUrl =
-          apiBaseUrl +
-          API_CONFIG.search.pagePath
-            .replace('{query}', encodeURIComponent(query))
-            .replace('{page}', page.toString());
-
-        const pagePromise = (async () => {
-          // 使用新的缓存搜索函数处理分页
-          const pageResult = await searchWithCache(
-            apiSite,
-            query,
-            page,
-            pageUrl,
-            requestTimeoutMs,
-          );
-          return pageResult.results;
-        })();
-
-        additionalPagePromises.push(pagePromise);
+        const additionalResults = await Promise.all(additionalPagePromises);
+        additionalResults.forEach((pageResults) => {
+          if (pageResults.length > 0) {
+            results.push(...pageResults);
+          }
+        });
       }
-
-      // 等待所有额外页的结果
-      const additionalResults = await Promise.all(additionalPagePromises);
-
-      // 合并所有页的结果
-      additionalResults.forEach((pageResults) => {
-        if (pageResults.length > 0) {
-          results.push(...pageResults);
-        }
-      });
     }
 
     return results;
