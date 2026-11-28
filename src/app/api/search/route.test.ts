@@ -9,6 +9,8 @@ const mockGetAdultApiSites = jest.fn();
 const mockGetCacheTime = jest.fn();
 const mockGetConfig = jest.fn();
 const mockSearchFromApi = jest.fn();
+const mockProbeSiteSearchHealth = jest.fn();
+const mockShouldSkipSiteSearch = jest.fn();
 
 jest.mock('@/lib/auth', () => ({
   requireUser: mockRequireUser,
@@ -34,14 +36,15 @@ jest.mock('@/lib/config', () => ({
 
 jest.mock('@/lib/downstream', () => ({
   searchFromApi: mockSearchFromApi,
+  probeSiteSearchHealth: mockProbeSiteSearchHealth,
 }));
 
 jest.mock('@/lib/site-health', () => ({
+  getSiteSearchTimeoutMs: jest.fn((_key: string, base: number) => base),
   isSearchTimeoutError: jest.fn(() => false),
-  isSiteSearchBenched: jest.fn(() => false),
-  markSiteSearchSuccess: jest.fn(),
-  markSiteSearchTimeout: jest.fn(),
+  markSiteSearchFailure: jest.fn(),
   SEARCH_SITE_TIMEOUT_MS: 8000,
+  shouldSkipSiteSearch: mockShouldSkipSiteSearch,
 }));
 
 const edgePrimitives = jest.requireActual(
@@ -98,6 +101,12 @@ describe('GET /api/search 源分组与隔离', () => {
     mockGetAvailableApiSites
       .mockReset()
       .mockResolvedValue([NORMAL_SITE, NORMAL_SITE_2]);
+    mockShouldSkipSiteSearch.mockReset().mockReturnValue({
+      skip: false,
+      shouldBackgroundProbe: false,
+      state: 'closed',
+    });
+    mockProbeSiteSearchHealth.mockReset().mockResolvedValue(true);
     mockGetAdultApiSites.mockReset().mockResolvedValue([ADULT_SITE]);
     mockGetCacheTime.mockReset().mockResolvedValue(300);
     mockGetConfig.mockReset().mockResolvedValue({
@@ -181,6 +190,33 @@ describe('GET /api/search 源分组与隔离', () => {
     expect(mockGetAdultApiSites).not.toHaveBeenCalled();
     expect(mockSearchFromApi).toHaveBeenCalledTimes(1);
     expect(mockSearchFromApi).toHaveBeenCalledWith(NORMAL_SITE_2, '南部档案');
+  });
+
+  it('skips half-open sites without waiting and triggers background health probe', async () => {
+    mockShouldSkipSiteSearch.mockImplementation((key: string) =>
+      key === NORMAL_SITE.key
+        ? { skip: true, shouldBackgroundProbe: true, state: 'half_open' }
+        : { skip: false, shouldBackgroundProbe: false, state: 'closed' },
+    );
+    mockSearchFromApi.mockResolvedValue([
+      {
+        id: 'n2',
+        title: '后会友期',
+        poster: '',
+        episodes: ['https://normal2.example.com/1.m3u8'],
+        episodes_titles: [],
+        source: NORMAL_SITE_2.key,
+        source_name: NORMAL_SITE_2.name,
+        year: '2026',
+      },
+    ]);
+
+    const response = await GET(makeRequest('q=后会友期'));
+    expect(response.status).toBe(200);
+    expect(mockProbeSiteSearchHealth).toHaveBeenCalledTimes(1);
+    expect(mockProbeSiteSearchHealth).toHaveBeenCalledWith(NORMAL_SITE);
+    expect(mockSearchFromApi).toHaveBeenCalledTimes(1);
+    expect(mockSearchFromApi).toHaveBeenCalledWith(NORMAL_SITE_2, '后会友期');
   });
 });
 

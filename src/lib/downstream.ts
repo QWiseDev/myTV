@@ -2,6 +2,12 @@
 
 import { API_CONFIG, ApiSite, getConfig } from '@/lib/config';
 import { getCachedSearchPage, setCachedSearchPage } from '@/lib/search-cache';
+import {
+  finishSiteHealthProbe,
+  HALF_OPEN_PROBE_TIMEOUT_MS,
+  markSiteSearchFailure,
+  markSiteSearchSuccess,
+} from '@/lib/site-health';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
 
@@ -75,9 +81,10 @@ async function searchWithCache(
     }
   }
 
-  // 缓存未命中，发起网络请求
+  // 缓存未命中，发起真实网络请求并向站点健康度模块上报真实结果
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
   try {
     const response = await fetch(url, {
@@ -88,13 +95,19 @@ async function searchWithCache(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      if (response.status === 403) {
-        setCachedSearchPage(apiSite.key, query, page, 'forbidden', []);
+      if (response.status === 401 || response.status === 403) {
+        if (response.status === 403) {
+          setCachedSearchPage(apiSite.key, query, page, 'forbidden', []);
+        }
+        markSiteSearchFailure(apiSite.key, 'forbidden');
+      } else if (response.status >= 500) {
+        markSiteSearchFailure(apiSite.key, 'server_error');
       }
       return { results: [] };
     }
 
     const data = await response.json();
+    markSiteSearchSuccess(apiSite.key, Date.now() - startedAt);
     if (
       !data ||
       !data.list ||
@@ -146,15 +159,72 @@ async function searchWithCache(
       error?.message?.includes('aborted');
     if (aborted) {
       setCachedSearchPage(apiSite.key, query, page, 'timeout', []);
+      markSiteSearchFailure(apiSite.key, 'timeout');
+    } else {
+      markSiteSearchFailure(apiSite.key, 'network_error');
     }
     return { results: [] };
+  }
+}
+
+/**
+ * 半开状态的轻量后台探活（4s 短超时，不阻塞当前用户搜索）。
+ * 成功则立即恢复该源为 closed；失败则升级退避时长并释放单飞探活锁。
+ */
+export async function probeSiteSearchHealth(
+  apiSite: ApiSite,
+  timeoutMs = HALF_OPEN_PROBE_TIMEOUT_MS,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  const probeUrl = apiSite.api + API_CONFIG.search.path;
+
+  try {
+    const response = await fetch(probeUrl, {
+      headers: API_CONFIG.search.headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        markSiteSearchFailure(apiSite.key, 'forbidden');
+      } else if (response.status >= 500) {
+        markSiteSearchFailure(apiSite.key, 'server_error');
+      } else {
+        markSiteSearchFailure(apiSite.key, 'network_error');
+      }
+      return false;
+    }
+
+    const data = await response.json();
+    if (!data || typeof data !== 'object') {
+      markSiteSearchFailure(apiSite.key, 'network_error');
+      return false;
+    }
+
+    markSiteSearchSuccess(apiSite.key, Date.now() - startedAt);
+    return true;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    const aborted =
+      error?.name === 'AbortError' ||
+      error?.code === 20 ||
+      error?.message?.includes('aborted');
+    markSiteSearchFailure(apiSite.key, aborted ? 'timeout' : 'network_error');
+    return false;
+  } finally {
+    finishSiteHealthProbe(apiSite.key);
   }
 }
 
 export async function searchFromApi(
   apiSite: ApiSite,
   query: string,
+  options?: { timeoutMs?: number },
 ): Promise<SearchResult[]> {
+  const requestTimeoutMs = options?.timeoutMs ?? 8000;
   try {
     const apiBaseUrl = apiSite.api;
 
@@ -187,7 +257,7 @@ export async function searchFromApi(
               variant,
               1,
               apiUrl,
-              8000,
+              requestTimeoutMs,
             );
 
             if (firstPageResult.results.length > 0) {
@@ -258,7 +328,7 @@ export async function searchFromApi(
             query,
             page,
             pageUrl,
-            8000,
+            requestTimeoutMs,
           );
           return pageResult.results;
         })();

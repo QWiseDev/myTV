@@ -492,6 +492,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                 const url = (item.episodeData || '').trim();
                 return isEpisodeProbeResultFresh(cached, url) ? cached : null;
               },
+          concurrency: 3,
           onUpdate,
         });
 
@@ -917,7 +918,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           ? `已完成 ${episodeCheckRun.completed}/${episodeCheckRun.total}`
                           : episodeCheckRun.status === 'cancelled'
                             ? `已取消 ${episodeCheckRun.completed}/${episodeCheckRun.total}`
-                            : '点击后将按顺序检测每个源'}
+                            : '点击后将并发检测每个源（3 路并发）'}
                     </div>
                   </div>
                   <div className='flex items-center gap-2 flex-shrink-0'>

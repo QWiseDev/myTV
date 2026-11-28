@@ -10,14 +10,14 @@ import {
   getCacheTime,
   getConfig,
 } from '@/lib/config';
-import { searchFromApi } from '@/lib/downstream';
+import { probeSiteSearchHealth, searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import {
+  getSiteSearchTimeoutMs,
   isSearchTimeoutError,
-  isSiteSearchBenched,
-  markSiteSearchSuccess,
-  markSiteSearchTimeout,
+  markSiteSearchFailure,
   SEARCH_SITE_TIMEOUT_MS,
+  shouldSkipSiteSearch,
 } from '@/lib/site-health';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
@@ -69,28 +69,38 @@ export async function GET(request: NextRequest) {
     ? candidateSites.filter((site) => site.key !== forSource)
     : candidateSites;
 
-  // 添加超时控制和错误处理，避免慢接口拖累整体响应；近期连续超时的站点
-  // 直接跳过（站点级隔离），防止挂死站点把整体完成时间钉在超时上限
+  // 三态熔断与慢源收紧超时：
+  // - open 状态直接跳过；
+  // - half_open 到期时本次请求 0 等待跳过，并在后台跨源并发触发单路 4s 轻探活；
+  // - 真实网络成功/失败由 downstream.ts 精准上报，外层仅保留兜底超时避免漏判。
   const searchPromises = apiSites.map((site) => {
-    if (isSiteSearchBenched(site.key)) {
+    const decision = shouldSkipSiteSearch(site.key);
+    if (decision.skip) {
+      if (decision.shouldBackgroundProbe) {
+        void probeSiteSearchHealth(site);
+      }
       return Promise.resolve([]);
     }
 
-    return withAbortableTimeout(
-      async () => searchFromApi(site, query),
+    const requestTimeoutMs = getSiteSearchTimeoutMs(site.key, 8000);
+    const outerTimeoutMs = getSiteSearchTimeoutMs(
+      site.key,
       SEARCH_SITE_TIMEOUT_MS,
-    )
-      .then((results) => {
-        markSiteSearchSuccess(site.key);
-        return results;
-      })
-      .catch((err) => {
-        if (isSearchTimeoutError(err)) {
-          markSiteSearchTimeout(site.key);
-        }
-        console.warn(`搜索失败 ${site.name}:`, err.message);
-        return []; // 返回空数组而不是抛出错误
-      });
+    );
+
+    return withAbortableTimeout(
+      async () =>
+        requestTimeoutMs < 8000
+          ? searchFromApi(site, query, { timeoutMs: requestTimeoutMs })
+          : searchFromApi(site, query),
+      outerTimeoutMs,
+    ).catch((err) => {
+      if (isSearchTimeoutError(err)) {
+        markSiteSearchFailure(site.key, 'timeout');
+      }
+      console.warn(`搜索失败 ${site.name}:`, err.message);
+      return []; // 返回空数组而不是抛出错误
+    });
   });
 
   try {

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { clearConfigCache } from '@/lib/config';
 import { db } from '@/lib/db';
+import { resetSiteHealth } from '@/lib/site-health';
 
 export const runtime = 'nodejs';
 
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
           disabled: false,
           adult: Boolean(adult),
         });
+        resetSiteHealth(key);
         break;
       }
       case 'disable': {
@@ -109,6 +111,7 @@ export async function POST(request: NextRequest) {
         if (!entry)
           return NextResponse.json({ error: '源不存在' }, { status: 404 });
         entry.disabled = false;
+        resetSiteHealth(key);
         break;
       }
       case 'delete': {
@@ -140,6 +143,7 @@ export async function POST(request: NextRequest) {
             user.enabledApis = user.enabledApis.filter((api) => api !== key);
           }
         });
+        resetSiteHealth(key);
         break;
       }
       case 'batch_disable': {
@@ -170,6 +174,7 @@ export async function POST(request: NextRequest) {
           const entry = adminConfig.SourceConfig.find((s) => s.key === key);
           if (entry) {
             entry.disabled = false;
+            resetSiteHealth(key);
           }
         });
         break;
@@ -193,6 +198,7 @@ export async function POST(request: NextRequest) {
           const idx = adminConfig.SourceConfig.findIndex((s) => s.key === key);
           if (idx !== -1) {
             adminConfig.SourceConfig.splice(idx, 1);
+            resetSiteHealth(key);
           }
         });
 

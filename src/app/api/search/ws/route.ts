@@ -4,14 +4,13 @@ import { NextRequest } from 'next/server';
 
 import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
-import { searchFromApi } from '@/lib/downstream';
+import { probeSiteSearchHealth, searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import {
   isSearchTimeoutError,
-  isSiteSearchBenched,
-  markSiteSearchSuccess,
-  markSiteSearchTimeout,
+  markSiteSearchFailure,
   SEARCH_SITE_TIMEOUT_MS,
+  shouldSkipSiteSearch,
 } from '@/lib/site-health';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
@@ -125,8 +124,12 @@ export async function GET(request: NextRequest) {
             return;
           }
 
-          if (isSiteSearchBenched(site.key)) {
-            // 近期连续超时的站点直接跳过，仍推送空结果推进进度
+          const decision = shouldSkipSiteSearch(site.key);
+          if (decision.skip) {
+            if (decision.shouldBackgroundProbe) {
+              void probeSiteSearchHealth(site);
+            }
+            // 熔断/半开中的站点直接跳过，仍推送空结果推进进度
             completedSources++;
 
             if (!streamClosed) {
@@ -148,13 +151,12 @@ export async function GET(request: NextRequest) {
           }
 
           try {
-            // 添加超时控制与客户端断开级联取消
+            // 添加超时控制与客户端断开级联取消（真实网络成功/失败由 downstream.ts 精准上报）
             const results = (await withAbortableTimeout(
               async () => searchFromApi(site, query),
               SEARCH_SITE_TIMEOUT_MS,
               abortController.signal,
             )) as any[];
-            markSiteSearchSuccess(site.key);
 
             // 过滤黄色内容
             let filteredResults = results;
@@ -196,7 +198,7 @@ export async function GET(request: NextRequest) {
             console.warn(`搜索失败 ${site.name}:`, error);
 
             if (isSearchTimeoutError(error)) {
-              markSiteSearchTimeout(site.key);
+              markSiteSearchFailure(site.key, 'timeout');
             }
 
             // 发送源错误事件

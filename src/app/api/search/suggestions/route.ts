@@ -6,6 +6,7 @@ import { AdminConfig } from '@/lib/admin.types';
 import { requireUser } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { pickFirstHealthySite } from '@/lib/site-health';
 import { ensureUserAccessOrResponse } from '@/lib/user-access';
 import { yellowWords } from '@/lib/yellow';
 
@@ -73,9 +74,9 @@ async function generateSuggestions(
   const apiSites = await getAvailableApiSites(username);
   let realKeywords: string[] = [];
 
-  if (apiSites.length > 0) {
-    // 取第一个可用的数据源进行搜索
-    const firstSite = apiSites[0];
+  const firstSite = pickFirstHealthySite(apiSites);
+  if (firstSite) {
+    // 取第一个健康（非熔断）的数据源进行搜索建议，避免首位源故障拖死联想
     const results = await searchFromApi(firstSite, query);
 
     realKeywords = Array.from(
