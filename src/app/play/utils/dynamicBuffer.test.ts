@@ -6,6 +6,7 @@ import {
   classifySourceSpeedTier,
   clearDynamicBufferSpeedHints,
   computeDynamicBufferTarget,
+  computeRebufferTargetSeconds,
   getForwardBufferedSeconds,
   installDynamicBuffer,
   readBufferStrategyPreference,
@@ -764,6 +765,213 @@ describe('installDynamicBuffer runtime controller', () => {
     video.readyState = 2;
     video.emit('waiting');
     expect(art.notice?.show).toContain('换源');
+
+    controller.dispose();
+  });
+
+  test('computeRebufferTargetSeconds enables hysteresis only for slow VOD under low memory pressure', () => {
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'fast',
+        strategy: 'auto',
+        playbackRate: 1,
+        memoryPressure: 'low',
+        isLive: false,
+        maxBufferLength: 60,
+        remainingDurationSeconds: 600,
+      }),
+    ).toBe(0);
+
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'slow',
+        strategy: 'auto',
+        playbackRate: 1,
+        memoryPressure: 'low',
+        isLive: false,
+        maxBufferLength: 180,
+        remainingDurationSeconds: 600,
+      }),
+    ).toBe(8);
+
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'very_slow',
+        strategy: 'auto',
+        playbackRate: 1.5,
+        memoryPressure: 'low',
+        isLive: false,
+        maxBufferLength: 300,
+        remainingDurationSeconds: 600,
+      }),
+    ).toBe(18);
+
+    // 临近片尾不再触发攒缓冲暂停
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'very_slow',
+        strategy: 'auto',
+        playbackRate: 1,
+        memoryPressure: 'low',
+        isLive: false,
+        maxBufferLength: 300,
+        remainingDurationSeconds: 5,
+      }),
+    ).toBe(0);
+
+    // 省流/直播/内存压力下关闭
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'very_slow',
+        strategy: 'balanced',
+        playbackRate: 1,
+        memoryPressure: 'low',
+        isLive: false,
+        maxBufferLength: 60,
+      }),
+    ).toBe(0);
+    expect(
+      computeRebufferTargetSeconds({
+        speedTier: 'very_slow',
+        strategy: 'auto',
+        playbackRate: 1,
+        memoryPressure: 'high',
+        isLive: false,
+        maxBufferLength: 3,
+      }),
+    ).toBe(0);
+  });
+
+  test('pauses to accumulate buffer on slow-source stall and resumes automatically once target is reached', () => {
+    jest.useFakeTimers();
+    let clock = 1_000;
+    let bufferEnd = 10.5;
+    const playMock = jest.fn(() => {
+      video.paused = false;
+      return Promise.resolve();
+    });
+    const pauseMock = jest.fn(() => {
+      video.paused = true;
+      video.emit('pause');
+    });
+    const video = createMockVideo({
+      duration: 600,
+      buffered: {
+        length: 1,
+        start: () => 0,
+        end: () => bufferEnd,
+      } as unknown as TimeRanges,
+      pause: pauseMock,
+      play: playMock,
+    });
+    video.currentTime = 10;
+    video.readyState = 2;
+    const art = createMockArt(video);
+    const hls = createMockHls();
+    video.hls = hls;
+
+    const controller = installDynamicBuffer(art, {
+      deviceInfo: { isMobile: false, isIOS: false, isIOS13: false },
+      now: () => clock,
+    });
+
+    // 先喂入极慢样本（4s 分片耗时 5s -> ratio 0.8 -> very_slow）
+    clock = 6_000;
+    hls.emit('hlsFragLoaded', {
+      frag: {
+        sn: 1,
+        type: 'main',
+        duration: 4,
+        stats: {
+          loaded: 400_000,
+          loading: { start: 1_000, first: 1_500, end: 6_000 },
+        },
+      },
+    });
+    if (art.notice) art.notice.show = '';
+
+    // 仅剩 0.5s 缓冲且触发 waiting -> 自动进入攒缓冲滞回（目标 12s）
+    clock = 7_000;
+    video.emit('waiting');
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(true);
+    expect(art.notice?.show).toContain('正在缓冲至 12s');
+
+    // 缓冲增至 18s（前向 8s，未达 12s）-> 仍在攒缓冲
+    bufferEnd = 18;
+    clock = 10_000;
+    video.emit('progress');
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(true);
+    expect(playMock).not.toHaveBeenCalled();
+
+    // 缓冲增至 23s（前向 13s >= 12s）-> 自动恢复播放
+    bufferEnd = 23;
+    clock = 12_000;
+    video.emit('progress');
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(false);
+    expect(playMock).toHaveBeenCalledTimes(1);
+    expect(art.notice?.show).toContain('恢复播放');
+
+    controller.dispose();
+  });
+
+  test('respects manual user play override during rebuffer hold and applies cooldown', () => {
+    jest.useFakeTimers();
+    let clock = 1_000;
+    const pauseMock = jest.fn(() => {
+      video.paused = true;
+      video.emit('pause');
+    });
+    const playMock = jest.fn(() => Promise.resolve());
+    const video = createMockVideo({
+      duration: 600,
+      buffered: {
+        length: 1,
+        start: () => 0,
+        end: () => 10.2,
+      } as unknown as TimeRanges,
+      pause: pauseMock,
+      play: playMock,
+    });
+    video.currentTime = 10;
+    video.readyState = 2;
+    const art = createMockArt(video);
+    const hls = createMockHls();
+    video.hls = hls;
+
+    const controller = installDynamicBuffer(art, {
+      deviceInfo: { isMobile: false, isIOS: false, isIOS13: false },
+      now: () => clock,
+    });
+
+    clock = 6_000;
+    hls.emit('hlsFragLoaded', {
+      frag: {
+        sn: 1,
+        type: 'main',
+        duration: 4,
+        stats: {
+          loaded: 400_000,
+          loading: { start: 1_000, first: 1_500, end: 6_000 },
+        },
+      },
+    });
+
+    clock = 7_000;
+    video.emit('waiting');
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(true);
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+
+    // 用户手动点击播放 -> 立即退出滞回，并在 45s 冷却期内不再强制暂停
+    clock = 8_000;
+    video.paused = false;
+    video.emit('play');
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(false);
+
+    clock = 15_000;
+    video.emit('waiting');
+    expect(controller.getSnapshot().rebufferHoldActive).toBe(false);
+    expect(pauseMock).toHaveBeenCalledTimes(1);
 
     controller.dispose();
   });

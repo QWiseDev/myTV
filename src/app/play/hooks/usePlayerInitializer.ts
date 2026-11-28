@@ -1181,22 +1181,48 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
             lastSaveTimeRef.current = saveNow;
           }
 
-          // 临近片尾时提前预热下一集清单与首片，缩短连播切集等待
+          // 临近片尾（或慢源在当前集已基本缓冲完毕的空闲窗口）提前预热下一集清单与前 1~2 个完整分片
           const d = detailRef.current;
           const idx = currentEpisodeIndexRef.current;
           const nextEpisodeUrl = d?.episodes?.[idx + 1]?.trim();
           const bufferSnapshot = dynamicBufferRef.current?.getSnapshot();
+          const remainingSeconds = duration - currentTime;
+          const speedTier = bufferSnapshot?.speedTier;
+          const isSlowSpeedTier =
+            speedTier === 'slow' || speedTier === 'very_slow';
+          const videoEl = (artPlayer.video || artPlayer.$video) as
+            | HTMLVideoElement
+            | null
+            | undefined;
+          let forwardBuffered = 0;
+          if (videoEl?.buffered) {
+            for (let i = 0; i < videoEl.buffered.length; i += 1) {
+              if (
+                videoEl.buffered.start(i) <= currentTime + 0.5 &&
+                videoEl.buffered.end(i) >= currentTime
+              ) {
+                forwardBuffered = Math.max(
+                  forwardBuffered,
+                  videoEl.buffered.end(i) - currentTime,
+                );
+              }
+            }
+          }
+          const shouldPrefetchNextEpisode = isSlowSpeedTier
+            ? remainingSeconds <= 60 &&
+              (currentTime + forwardBuffered >= duration - 5 ||
+                (remainingSeconds <= 45 && forwardBuffered >= 15))
+            : remainingSeconds <= 25;
           if (
             nextEpisodeUrl &&
             nextEpisodeUrl !== prefetchedEpisodeUrlRef.current &&
             duration >= 60 &&
             currentTime > 0 &&
-            duration - currentTime <= 25 &&
-            duration - currentTime > 1 &&
+            remainingSeconds > 1 &&
+            shouldPrefetchNextEpisode &&
             !artPlayer.paused &&
             latestParamsRef.current.memoryPressure === 'low' &&
-            bufferSnapshot?.strategy !== 'balanced' &&
-            bufferSnapshot?.speedTier !== 'very_slow'
+            bufferSnapshot?.strategy !== 'balanced'
           ) {
             prefetchedEpisodeUrlRef.current = nextEpisodeUrl;
             nextEpisodePrefetchControllerRef.current?.abort();
@@ -1206,6 +1232,8 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
               sourceKey: latestParamsRef.current.currentSource,
               adFilterType: latestParamsRef.current.currentSource,
               signal: controller.signal,
+              speedTier,
+              isMobile,
             });
           }
         });

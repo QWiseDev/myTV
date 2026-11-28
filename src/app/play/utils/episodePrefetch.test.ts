@@ -1,9 +1,15 @@
-import { prefetchNextEpisodeMedia } from './episodePrefetch';
+import {
+  clearEpisodePrefetchCache,
+  consumePrefetchedManifest,
+  consumePrefetchedSegment,
+  prefetchNextEpisodeMedia,
+} from './episodePrefetch';
 
 describe('prefetchNextEpisodeMedia', () => {
   const originalFetch = global.fetch;
 
   afterEach(() => {
+    clearEpisodePrefetchCache();
     global.fetch = originalFetch;
     jest.restoreAllMocks();
   });
@@ -124,5 +130,68 @@ describe('prefetchNextEpisodeMedia', () => {
       'https://cdn.example/ep2/main0.ts',
       expect.objectContaining({ cache: 'default' }),
     );
+  });
+
+  test('prefetches 2 full segments and child playlist into memory cache on slow sources', async () => {
+    const seg0 = new Uint8Array([0x47, 0x01, 0x02]);
+    const seg1 = new Uint8Array([0x47, 0x03, 0x04]);
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://cdn.example/ep3/master.m3u8',
+        text: async () =>
+          '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\n1080p/index.m3u8\n',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://cdn.example/ep3/1080p/index.m3u8',
+        text: async () =>
+          '#EXTM3U\n#EXTINF:5,\nseg0.ts\n#EXTINF:5,\nseg1.ts\n#EXTINF:5,\nseg2.ts\n',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => seg0.buffer,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => seg1.buffer,
+      });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const ok = await prefetchNextEpisodeMedia(
+      'https://cdn.example/ep3/master.m3u8',
+      { sourceKey: 'slow-src', speedTier: 'very_slow' },
+    );
+
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    // 清单与前 2 片可一次性消费，二次消费返回 null
+    const master = consumePrefetchedManifest(
+      'https://cdn.example/ep3/master.m3u8',
+    );
+    expect(master?.text).toContain('1080p/index.m3u8');
+    expect(
+      consumePrefetchedManifest('https://cdn.example/ep3/master.m3u8'),
+    ).toBeNull();
+
+    const child = consumePrefetchedManifest(
+      'https://cdn.example/ep3/1080p/index.m3u8',
+    );
+    expect(child?.text).toContain('seg1.ts');
+
+    const cachedSeg0 = consumePrefetchedSegment(
+      'https://cdn.example/ep3/1080p/seg0.ts',
+    );
+    const cachedSeg1 = consumePrefetchedSegment(
+      'https://cdn.example/ep3/1080p/seg1.ts',
+    );
+    expect(cachedSeg0?.bytes).toBe(3);
+    expect(cachedSeg1?.bytes).toBe(3);
+    expect(
+      consumePrefetchedSegment('https://cdn.example/ep3/1080p/seg0.ts'),
+    ).toBeNull();
   });
 });

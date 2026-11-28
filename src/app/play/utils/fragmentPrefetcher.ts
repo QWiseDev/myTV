@@ -12,6 +12,10 @@
  */
 
 import { getForwardBufferedSeconds, readNetworkHint } from './dynamicBuffer';
+import {
+  fetchFragmentWithStallWatchdog,
+  isFragmentStallError,
+} from './fragmentFetch';
 
 export type PrefetchSpeedTier = 'fast' | 'normal' | 'slow' | 'very_slow';
 export type PrefetchMemoryPressure = 'low' | 'medium' | 'high' | 'critical';
@@ -33,10 +37,20 @@ export interface PrefetchedFragment {
   endAt: number;
 }
 
+export interface PrefetchClaimProgress {
+  status: 'loading' | 'done' | 'error';
+  startedAt: number;
+  firstByteAt: number;
+  lastProgressAt: number;
+  receivedBytes: number;
+}
+
 export interface PrefetchClaim {
   promise: Promise<PrefetchedFragment>;
   /** loader 被 hls.js 中止时调用，放弃尚未完成的下载 */
   cancel: () => void;
+  /** 可选：读取在途预取进度，用于 loader 决定是否发起对冲请求 */
+  getProgress?: () => PrefetchClaimProgress;
 }
 
 export interface PrefetchFragmentLike {
@@ -75,15 +89,19 @@ export interface FragmentPrefetcherOptions {
   onActivate?: (concurrency: number) => void;
   fetchImpl?: typeof fetch;
   perfNow?: () => number;
+  /** 预取单分片连续无进展超时（毫秒），默认普通 6000ms / 慢源 8000ms */
+  noProgressTimeoutMs?: number;
 }
 
 export interface FragmentPrefetcherStats {
   active: boolean;
   yielding: boolean;
   concurrency: number;
+  adaptiveCap: number;
   started: number;
   hits: number;
   failed: number;
+  stalls: number;
   discarded: number;
   cachedBytes: number;
   pending: number;
@@ -96,6 +114,8 @@ export interface FragmentPrefetcher {
   ) => void;
   detach: () => void;
   claim: (url: string | undefined | null) => PrefetchClaim | null;
+  /** 当起播/拖动后的紧急首片已收到首字节进展时调用，已知慢源可提前结束让路 */
+  notifyUrgentProgress?: (sn?: number) => void;
   getStats: () => FragmentPrefetcherStats;
   dispose: () => void;
 }
@@ -105,7 +125,10 @@ const HLS_FRAG_LOADED = 'hlsFragLoaded';
 const HLS_DESTROYING = 'hlsDestroying';
 const DESKTOP_BYTE_BUDGET = 120 * 1000 * 1000;
 const MOBILE_BYTE_BUDGET = 40 * 1000 * 1000;
-const DEFAULT_PREFETCH_TIMEOUT_MS = 90_000;
+const DEFAULT_PREFETCH_TIMEOUT_MS = 45_000;
+const NORMAL_NO_PROGRESS_TIMEOUT_MS = 6_000;
+const SLOW_NO_PROGRESS_TIMEOUT_MS = 8_000;
+const ADAPTIVE_CAP_COOLDOWN_MS = 60_000;
 /** 超出 hls 前向缓冲目标的额外预取余量（秒） */
 const HORIZON_SLACK_SECONDS = 10;
 /** 起播或拖动后，前向缓冲达到该阈值即视为安全，无需再让路 */
@@ -115,13 +138,16 @@ interface PrefetchEntry {
   url: string;
   sn: number;
   level: number;
+  concurrencyAtStart: number;
   controller: AbortController;
   status: 'loading' | 'done' | 'error';
   slotReleased: boolean;
   data: ArrayBuffer | null;
   bytes: number;
+  receivedBytes: number;
   startedAt: number;
   firstByteAt: number;
+  lastProgressAt: number;
   endAt: number;
   error: unknown;
   settled: Promise<void>;
@@ -164,7 +190,7 @@ function isRangeBuffered(
  * - 省流/内存压力/系统省流 -> 0
  * - 快源/普通源 -> 1（流水线预取下一片）
  * - 慢源/历史慢源 -> 2
- * - 极慢源/强力模式 -> 桌面 3、移动 2
+ * - 极慢源/强力模式 -> 桌面最高 4（受自适应拥塞上限约束）、移动 2
  */
 export function resolvePrefetchConcurrency(
   signals: PrefetchSignals | null | undefined,
@@ -172,6 +198,7 @@ export function resolvePrefetchConcurrency(
     isMobile: boolean;
     historicallySlow?: boolean;
     saveData?: boolean;
+    adaptiveCap?: number;
   },
 ): number {
   if (options.saveData) return 0;
@@ -179,12 +206,16 @@ export function resolvePrefetchConcurrency(
   if (signals.memoryPressure !== 'low') return 0;
   if (signals.strategy === 'balanced') return 0;
 
-  const cap = options.isMobile ? 2 : 3;
+  const baseCap = options.isMobile ? 2 : 4;
+  const cap =
+    typeof options.adaptiveCap === 'number' && options.adaptiveCap >= 1
+      ? Math.min(baseCap, Math.floor(options.adaptiveCap))
+      : baseCap;
   if (signals.strategy === 'aggressive' || signals.speedTier === 'very_slow') {
     return cap;
   }
   if (signals.speedTier === 'slow' || options.historicallySlow) {
-    return 2;
+    return Math.min(2, cap);
   }
   return 1;
 }
@@ -202,6 +233,7 @@ export function createFragmentPrefetcher(
   const byteBudget = options.isMobile
     ? MOBILE_BYTE_BUDGET
     : DESKTOP_BYTE_BUDGET;
+  const maxDesktopOrMobileCap = options.isMobile ? 2 : 4;
 
   const entries = new Map<string, PrefetchEntry>();
   let hls: PrefetchHlsLike | null = null;
@@ -212,11 +244,18 @@ export function createFragmentPrefetcher(
   let historicallySlow = false;
   let concurrency = 0;
   let slowFloor = 0;
+  let adaptiveCap = maxDesktopOrMobileCap;
+  let adaptiveCapResetAt = 0;
+  let consecutiveHighConcurrencyStalls = 0;
+  const throughputByConcurrency = new Map<
+    number,
+    { ewmaAggBps: number; samples: number }
+  >();
   let yieldingForUrgentFrag = true;
   let activeDownloads = 0;
   let currentSn: number | null = null;
   let currentLevel: number | null = null;
-  const stats = { started: 0, hits: 0, failed: 0, discarded: 0 };
+  const stats = { started: 0, hits: 0, failed: 0, stalls: 0, discarded: 0 };
 
   const hasHealthyForwardBuffer = () =>
     Boolean(
@@ -252,12 +291,50 @@ export function createFragmentPrefetcher(
     return total;
   };
 
+  const stepDownAdaptiveCap = (targetCap: number) => {
+    const nextCap = Math.max(2, Math.min(maxDesktopOrMobileCap, targetCap));
+    if (nextCap < adaptiveCap) {
+      adaptiveCap = nextCap;
+      slowFloor = Math.min(slowFloor, adaptiveCap);
+      adaptiveCapResetAt = perfNow() + ADAPTIVE_CAP_COOLDOWN_MS;
+    }
+  };
+
+  const recordThroughputSample = (entry: PrefetchEntry) => {
+    const durationMs = Math.max(1, entry.endAt - entry.startedAt);
+    if (entry.bytes <= 0) return;
+    const level = Math.max(1, entry.concurrencyAtStart);
+    // 估算当前并发度下的等效总吞吐（单分片速率 × 同时在途并发数）
+    const aggBps = (entry.bytes * 8000 * level) / durationMs;
+    const prev = throughputByConcurrency.get(level);
+    const nextEwma = prev ? prev.ewmaAggBps * 0.65 + aggBps * 0.35 : aggBps;
+    const nextSamples = (prev?.samples ?? 0) + 1;
+    throughputByConcurrency.set(level, {
+      ewmaAggBps: nextEwma,
+      samples: nextSamples,
+    });
+
+    // 拥塞回退：当高并发（>=3）累计 >=3 个样本且等效总吞吐反比低一档低 >15%，自动降档
+    if (level >= 3 && nextSamples >= 3) {
+      const lower = throughputByConcurrency.get(level - 1);
+      if (lower && lower.samples >= 2 && nextEwma < lower.ewmaAggBps * 0.85) {
+        stepDownAdaptiveCap(level - 1);
+      }
+    }
+  };
+
   const refreshConcurrency = () => {
+    const currentNow = perfNow();
+    if (adaptiveCapResetAt > 0 && currentNow >= adaptiveCapResetAt) {
+      adaptiveCap = maxDesktopOrMobileCap;
+      adaptiveCapResetAt = 0;
+    }
     const signals = options.getSignals();
     const next = resolvePrefetchConcurrency(signals, {
       isMobile: options.isMobile,
       historicallySlow,
       saveData: readNetworkHint().saveData,
+      adaptiveCap,
     });
     if (next <= 0) {
       concurrency = 0;
@@ -270,9 +347,9 @@ export function createFragmentPrefetcher(
       signals?.speedTier === 'very_slow';
     if (isSlowSignal) {
       // 慢源提档后保留并发下限，避免并发期间单片测速波动引起档位来回振荡
-      slowFloor = Math.max(slowFloor, next);
+      slowFloor = Math.min(adaptiveCap, Math.max(slowFloor, next));
     }
-    const target = Math.max(next, slowFloor);
+    const target = Math.min(adaptiveCap, Math.max(next, slowFloor));
     if (!activated) {
       activated = true;
       options.onActivate?.(target);
@@ -286,25 +363,42 @@ export function createFragmentPrefetcher(
   ) => {
     if (!fetchImpl) return;
     const controller = new AbortController();
+    const startedAt = perfNow();
+    const signals = options.getSignals();
+    const isSlowTier =
+      historicallySlow ||
+      signals?.speedTier === 'slow' ||
+      signals?.speedTier === 'very_slow';
+    const noProgressTimeoutMs =
+      typeof options.noProgressTimeoutMs === 'number'
+        ? options.noProgressTimeoutMs
+        : isSlowTier
+          ? SLOW_NO_PROGRESS_TIMEOUT_MS
+          : NORMAL_NO_PROGRESS_TIMEOUT_MS;
+    const maxLoadTimeMs = Math.min(
+      hls?.config?.fragLoadPolicy?.default?.maxLoadTimeMs ??
+        DEFAULT_PREFETCH_TIMEOUT_MS,
+      DEFAULT_PREFETCH_TIMEOUT_MS,
+    );
+
     const entry: PrefetchEntry = {
       url: frag.url,
       sn: frag.sn,
       level: typeof frag.level === 'number' ? frag.level : 0,
+      concurrencyAtStart: Math.max(1, concurrency),
       controller,
       status: 'loading',
       slotReleased: false,
       data: null,
       bytes: 0,
-      startedAt: perfNow(),
+      receivedBytes: 0,
+      startedAt,
       firstByteAt: 0,
+      lastProgressAt: startedAt,
       endAt: 0,
       error: null,
       settled: Promise.resolve(),
     };
-    const timeoutMs =
-      hls?.config?.fragLoadPolicy?.default?.maxLoadTimeMs ??
-      DEFAULT_PREFETCH_TIMEOUT_MS;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const requestUrl = options.resolveUrl
       ? options.resolveUrl(frag.url)
       : frag.url;
@@ -313,34 +407,56 @@ export function createFragmentPrefetcher(
     stats.started += 1;
     entries.set(entry.url, entry);
 
-    entry.settled = fetchImpl(requestUrl, {
+    entry.settled = fetchFragmentWithStallWatchdog(requestUrl, {
+      fetchImpl,
       signal: controller.signal,
+      noProgressTimeoutMs,
+      maxLoadTimeMs,
+      perfNow,
       mode: 'cors',
       credentials: 'same-origin',
+      onFirstByte: (at) => {
+        entry.firstByteAt = at;
+        entry.lastProgressAt = at;
+      },
+      onProgress: (loadedBytes, at) => {
+        entry.receivedBytes = loadedBytes;
+        entry.lastProgressAt = at;
+      },
     })
-      .then(async (response) => {
-        entry.firstByteAt = perfNow();
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.arrayBuffer();
-        entry.data = data;
-        entry.bytes = data.byteLength;
-        entry.endAt = perfNow();
+      .then((result) => {
+        entry.data = result.data;
+        entry.bytes = result.bytes;
+        entry.receivedBytes = result.bytes;
+        entry.firstByteAt = result.firstByteAt;
+        entry.endAt = result.endAt;
+        entry.lastProgressAt = result.endAt;
         entry.status = 'done';
+        consecutiveHighConcurrencyStalls = 0;
+        recordThroughputSample(entry);
       })
       .catch((error: unknown) => {
         entry.status = 'error';
         entry.error = error;
         entry.data = null;
         entry.bytes = 0;
+        const stalled = isFragmentStallError(error);
+        if (stalled) {
+          stats.stalls += 1;
+          if (entry.concurrencyAtStart >= 3) {
+            consecutiveHighConcurrencyStalls += 1;
+            if (consecutiveHighConcurrencyStalls >= 2) {
+              consecutiveHighConcurrencyStalls = 0;
+              stepDownAdaptiveCap(entry.concurrencyAtStart - 1);
+            }
+          }
+        }
         if (entries.get(entry.url) === entry) {
           entries.delete(entry.url);
           stats.failed += 1;
         }
       })
       .finally(() => {
-        clearTimeout(timeoutId);
         releaseDownloadSlot(entry);
         if (!disposed && hls) {
           schedule();
@@ -430,7 +546,7 @@ export function createFragmentPrefetcher(
     currentLevel = typeof frag.level === 'number' ? frag.level : 0;
 
     // 丢弃已越过、跨码率或因跳转远离当前位置的预取
-    const upperSn = currentSn + 6;
+    const upperSn = currentSn + Math.max(6, concurrency + 3);
     for (const entry of Array.from(entries.values())) {
       if (
         entry.level !== currentLevel ||
@@ -481,6 +597,10 @@ export function createFragmentPrefetcher(
     currentSn = null;
     currentLevel = null;
     slowFloor = 0;
+    adaptiveCap = maxDesktopOrMobileCap;
+    adaptiveCapResetAt = 0;
+    consecutiveHighConcurrencyStalls = 0;
+    throughputByConcurrency.clear();
     yieldingForUrgentFrag = true;
   };
 
@@ -496,6 +616,10 @@ export function createFragmentPrefetcher(
     activated = false;
     concurrency = 0;
     slowFloor = 0;
+    adaptiveCap = maxDesktopOrMobileCap;
+    adaptiveCapResetAt = 0;
+    consecutiveHighConcurrencyStalls = 0;
+    throughputByConcurrency.clear();
     yieldingForUrgentFrag = !hasHealthyForwardBuffer();
     try {
       historicallySlow = options.isHistoricallySlow?.() === true;
@@ -530,6 +654,27 @@ export function createFragmentPrefetcher(
     };
   };
 
+  /**
+   * 已知慢源（历史慢源 / slow / very_slow / 强力模式）在起播或拖动后的首片拿到首字节进展后，
+   * 立即提前解除让路开启并发预取，避免单连接限速源在首片播完瞬间二次卡顿。
+   */
+  const notifyUrgentProgress = (sn?: number) => {
+    if (disposed || !hls || !yieldingForUrgentFrag) return;
+    if (typeof sn === 'number' && currentSn !== null && sn !== currentSn) {
+      return;
+    }
+    const signals = options.getSignals();
+    const isSlowSource =
+      historicallySlow ||
+      signals?.speedTier === 'slow' ||
+      signals?.speedTier === 'very_slow' ||
+      signals?.strategy === 'aggressive';
+    if (!isSlowSource) return;
+
+    yieldingForUrgentFrag = false;
+    schedule();
+  };
+
   const claim = (url: string | undefined | null): PrefetchClaim | null => {
     if (disposed || !url) return null;
     const entry = entries.get(url);
@@ -560,6 +705,13 @@ export function createFragmentPrefetcher(
           entry.controller.abort();
         }
       },
+      getProgress: () => ({
+        status: entry.status,
+        startedAt: entry.startedAt,
+        firstByteAt: entry.firstByteAt,
+        lastProgressAt: entry.lastProgressAt,
+        receivedBytes: entry.receivedBytes,
+      }),
     };
   };
 
@@ -567,10 +719,12 @@ export function createFragmentPrefetcher(
     attach,
     detach,
     claim,
+    notifyUrgentProgress,
     getStats: () => ({
       active: activated && concurrency > 0 && !yieldingForUrgentFrag,
       yielding: yieldingForUrgentFrag,
       concurrency,
+      adaptiveCap,
       ...stats,
       cachedBytes: cachedBytes(),
       pending: activeDownloads,

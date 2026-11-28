@@ -162,7 +162,13 @@ describe('resolvePrefetchConcurrency', () => {
         { speedTier: 'very_slow', memoryPressure: 'low', strategy: 'auto' },
         { isMobile: false },
       ),
-    ).toBe(3);
+    ).toBe(4);
+    expect(
+      resolvePrefetchConcurrency(
+        { speedTier: 'very_slow', memoryPressure: 'low', strategy: 'auto' },
+        { isMobile: false, adaptiveCap: 2 },
+      ),
+    ).toBe(2);
     expect(
       resolvePrefetchConcurrency(
         { speedTier: 'very_slow', memoryPressure: 'low', strategy: 'auto' },
@@ -420,7 +426,7 @@ describe('createFragmentPrefetcher', () => {
     prefetcher.attach(hls);
     hls.emit('hlsFragLoaded', { frag: fragments[0] });
     hls.emit('hlsFragLoading', { frag: fragments[1] });
-    expect(prefetcher.getStats().concurrency).toBe(3);
+    expect(prefetcher.getStats().concurrency).toBe(4);
 
     strategy = 'auto';
     hls.emit('hlsFragLoading', { frag: fragments[2] });
@@ -457,5 +463,107 @@ describe('createFragmentPrefetcher', () => {
     await expect(claim.promise).rejects.toThrow('HTTP 503');
 
     prefetcher.dispose();
+  });
+
+  it('un-yields on first-byte progress for historically slow sources while fast sources keep yielding', () => {
+    const slowUrls: string[] = [];
+    const slowPrefetcher = createFragmentPrefetcher({
+      isMobile: false,
+      isHistoricallySlow: () => true,
+      getSignals: () => ({
+        speedTier: 'normal',
+        memoryPressure: 'low',
+        strategy: 'auto',
+      }),
+      fetchImpl: jest.fn((url: RequestInfo | URL) => {
+        slowUrls.push(String(url));
+        return new Promise<Response>(() => undefined);
+      }) as unknown as typeof fetch,
+    });
+
+    const slowHls = createFakeHls();
+    slowPrefetcher.attach(slowHls.hls);
+    slowHls.hls.emit('hlsFragLoading', { frag: slowHls.fragments[0] });
+    expect(slowUrls).toEqual([]);
+    expect(slowPrefetcher.getStats().yielding).toBe(true);
+
+    // 已知慢源在首片拿到首字节后立即提前开启并发预取
+    slowPrefetcher.notifyUrgentProgress?.(0);
+    expect(slowPrefetcher.getStats().yielding).toBe(false);
+    expect(slowUrls).toEqual([
+      'https://cdn.example.com/seg-1.ts',
+      'https://cdn.example.com/seg-2.ts',
+    ]);
+    slowPrefetcher.dispose();
+
+    // 快源不受影响，继续等首片完全下完
+    const fastUrls: string[] = [];
+    const fastPrefetcher = createFragmentPrefetcher({
+      isMobile: false,
+      isHistoricallySlow: () => false,
+      getSignals: () => ({
+        speedTier: 'fast',
+        memoryPressure: 'low',
+        strategy: 'auto',
+      }),
+      fetchImpl: jest.fn((url: RequestInfo | URL) => {
+        fastUrls.push(String(url));
+        return new Promise<Response>(() => undefined);
+      }) as unknown as typeof fetch,
+    });
+    const fastHls = createFakeHls();
+    fastPrefetcher.attach(fastHls.hls);
+    fastHls.hls.emit('hlsFragLoading', { frag: fastHls.fragments[0] });
+    fastPrefetcher.notifyUrgentProgress?.(0);
+    expect(fastPrefetcher.getStats().yielding).toBe(true);
+    expect(fastUrls).toEqual([]);
+    fastPrefetcher.dispose();
+  });
+
+  it('aborts stalled prefetches via watchdog and steps down concurrency after repeated stalls', async () => {
+    jest.useFakeTimers();
+    let clock = 1_000;
+    const fetchImpl = jest.fn(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new Error('aborted'));
+          });
+        }),
+    ) as unknown as typeof fetch;
+
+    const prefetcher = createFragmentPrefetcher({
+      isMobile: false,
+      getSignals: () => ({
+        speedTier: 'very_slow',
+        memoryPressure: 'low',
+        strategy: 'auto',
+      }),
+      fetchImpl,
+      perfNow: () => clock,
+      noProgressTimeoutMs: 1_000,
+    });
+
+    const { hls, fragments } = createFakeHls({ fragCount: 12 });
+    prefetcher.attach(hls);
+    hls.emit('hlsFragLoaded', { frag: fragments[0] });
+    hls.emit('hlsFragLoading', { frag: fragments[1] });
+
+    // 极慢源桌面初始并发 4 路
+    expect(prefetcher.getStats().concurrency).toBe(4);
+    expect(prefetcher.getStats().pending).toBe(4);
+
+    // 4 个请求同时假死超 1s -> 看门狗中止，连续高并发卡顿触发拥塞回退（4 -> 3）
+    clock += 1_100;
+    jest.advanceTimersByTime(1_100);
+    for (let i = 0; i < 6; i += 1) {
+      await Promise.resolve();
+    }
+
+    expect(prefetcher.getStats().stalls).toBeGreaterThanOrEqual(2);
+    expect(prefetcher.getStats().adaptiveCap).toBeLessThan(4);
+
+    prefetcher.dispose();
+    jest.useRealTimers();
   });
 });

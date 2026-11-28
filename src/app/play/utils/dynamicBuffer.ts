@@ -87,6 +87,7 @@ export interface DynamicBufferTelemetrySnapshot {
   memoryPressure: BufferMemoryPressure;
   quotaCapSeconds: number | null;
   hasActiveProgress: boolean;
+  rebufferHoldActive: boolean;
   plan: DynamicBufferPlan;
 }
 
@@ -171,6 +172,11 @@ const IN_FLIGHT_WATCHDOG_INTERVAL_MS = 1_000;
 const BUFFERING_NOTICE_DELAY_MS = 1_500;
 const SOURCE_SPEED_HINT_TTL_MS = 10 * 60 * 1000;
 const MAX_SOURCE_SPEED_HINTS = 50;
+const REBUFFER_TRIGGER_FORWARD_THRESHOLD_SEC = 2;
+const REBUFFER_POLL_INTERVAL_MS = 500;
+const REBUFFER_MAX_HOLD_MS = 15_000;
+const REBUFFER_COOLDOWN_MS = 20_000;
+const REBUFFER_USER_OVERRIDE_COOLDOWN_MS = 45_000;
 
 interface SourceSpeedHintEntry {
   ewmaSpeedRatio: number;
@@ -614,6 +620,59 @@ export function classifySourceSpeedTier(
   return 'normal';
 }
 
+export interface RebufferTargetInput {
+  speedTier: SourceSpeedTier;
+  strategy: BufferStrategy;
+  playbackRate: number;
+  memoryPressure: BufferMemoryPressure;
+  isLive: boolean;
+  maxBufferLength: number;
+  remainingDurationSeconds?: number | null;
+}
+
+/**
+ * 卡顿滞回目标水位（秒）：
+ * 仅对慢源/极慢源（或强力模式）在低内存压力点播场景启用，避免卡住后刚下完 1~2 秒就续播造成连环卡顿。
+ * 返回 0 表示不启用主动攒缓冲。
+ */
+export function computeRebufferTargetSeconds(
+  input: RebufferTargetInput,
+): number {
+  if (
+    input.memoryPressure !== 'low' ||
+    input.isLive ||
+    input.strategy === 'balanced'
+  ) {
+    return 0;
+  }
+  if (
+    input.strategy !== 'aggressive' &&
+    input.speedTier !== 'slow' &&
+    input.speedTier !== 'very_slow'
+  ) {
+    return 0;
+  }
+  const rate = clamp(
+    Number.isFinite(input.playbackRate) ? input.playbackRate : 1,
+    1,
+    2,
+  );
+  const base =
+    input.strategy === 'aggressive' || input.speedTier === 'very_slow' ? 12 : 8;
+  let target = Math.min(18, Math.round(base * rate), input.maxBufferLength);
+  if (
+    typeof input.remainingDurationSeconds === 'number' &&
+    Number.isFinite(input.remainingDurationSeconds) &&
+    input.remainingDurationSeconds > 0
+  ) {
+    if (input.remainingDurationSeconds <= 6) {
+      return 0;
+    }
+    target = Math.min(target, Math.floor(input.remainingDurationSeconds - 2));
+  }
+  return target >= 4 ? target : 0;
+}
+
 function formatTooltip(
   strategy: BufferStrategy,
   speedTier: SourceSpeedTier,
@@ -921,6 +980,13 @@ export function installDynamicBuffer(
   let watchdogTimer: ReturnType<typeof setInterval> | null = null;
   let bufferingNoticeTimer: ReturnType<typeof setTimeout> | null = null;
   let lastBufferingNoticeText = '';
+  let rebufferHoldActive = false;
+  let rebufferTargetSeconds = 0;
+  let rebufferStartedAt = 0;
+  let rebufferCooldownUntil = 0;
+  let rebufferTimer: ReturnType<typeof setInterval> | null = null;
+  let programmaticPauseInProgress = false;
+  let programmaticPlayInProgress = false;
 
   // 每个 HLS 会话的实时网络与卡顿遥测
   let sampleCount = 0;
@@ -996,7 +1062,150 @@ export function installDynamicBuffer(
     lastBufferingNoticeText = '';
   };
 
+  const cancelRebufferHold = (userOverride: boolean) => {
+    const wasActive = rebufferHoldActive;
+    rebufferHoldActive = false;
+    rebufferTargetSeconds = 0;
+    rebufferStartedAt = 0;
+    if (rebufferTimer) {
+      clearInterval(rebufferTimer);
+      rebufferTimer = null;
+    }
+    if (userOverride) {
+      rebufferCooldownUntil = now() + REBUFFER_USER_OVERRIDE_COOLDOWN_MS;
+    }
+    if (wasActive) {
+      clearBufferingNotice();
+    }
+  };
+
+  const updateRebufferNotice = (forwardSec: number) => {
+    if (!rebufferHoldActive || !art.notice) return;
+    const speedText = formatThroughput(ewmaThroughputBps);
+    const bufferedText = forwardSec.toFixed(1);
+    const msg = speedText
+      ? `网络较慢，正在缓冲至 ${rebufferTargetSeconds}s（已缓 ${bufferedText}s，约 ${speedText}），点击播放可立即继续`
+      : `网络较慢，正在缓冲至 ${rebufferTargetSeconds}s（已缓 ${bufferedText}s），点击播放可立即继续`;
+    if (!art.notice.show || art.notice.show === lastBufferingNoticeText) {
+      lastBufferingNoticeText = msg;
+      art.notice.show = msg;
+    }
+  };
+
+  const checkRebufferHoldProgress = () => {
+    if (!rebufferHoldActive || disposed) return;
+    const targetVideo = resolveArtVideo(art);
+    if (!targetVideo || targetVideo.ended || targetVideo.seeking) {
+      cancelRebufferHold(false);
+      return;
+    }
+    const forwardSec = getForwardBufferedSeconds(targetVideo);
+    const elapsedMs = now() - rebufferStartedAt;
+    const reachedTarget = forwardSec >= rebufferTargetSeconds;
+    const timedOut = elapsedMs >= REBUFFER_MAX_HOLD_MS;
+
+    if (reachedTarget || timedOut) {
+      cancelRebufferHold(false);
+      rebufferCooldownUntil = now() + REBUFFER_COOLDOWN_MS;
+      if (targetVideo.paused && typeof targetVideo.play === 'function') {
+        programmaticPlayInProgress = true;
+        Promise.resolve(targetVideo.play())
+          .catch(() => undefined)
+          .finally(() => {
+            programmaticPlayInProgress = false;
+          });
+      }
+      if (reachedTarget && art.notice) {
+        const msg = `已缓冲 ${Math.floor(forwardSec)}s，恢复播放`;
+        lastBufferingNoticeText = msg;
+        art.notice.show = msg;
+      }
+      return;
+    }
+
+    updateRebufferNotice(forwardSec);
+  };
+
+  const maybeStartRebufferHold = (
+    targetVideo: HTMLVideoElement | null | undefined,
+    plan: DynamicBufferPlan,
+  ): boolean => {
+    if (
+      disposed ||
+      rebufferHoldActive ||
+      !hasRenderedPlayback ||
+      !targetVideo ||
+      targetVideo.paused ||
+      targetVideo.seeking ||
+      targetVideo.ended ||
+      typeof targetVideo.pause !== 'function' ||
+      typeof targetVideo.play !== 'function'
+    ) {
+      return false;
+    }
+    const currentNow = now();
+    if (currentNow < rebufferCooldownUntil) {
+      return false;
+    }
+    const forwardSec = getForwardBufferedSeconds(targetVideo);
+    if (forwardSec >= REBUFFER_TRIGGER_FORWARD_THRESHOLD_SEC) {
+      return false;
+    }
+    const duration = targetVideo.duration;
+    const currentTime = targetVideo.currentTime;
+    const remainingDurationSeconds =
+      Number.isFinite(duration) &&
+      duration > 0 &&
+      Number.isFinite(currentTime) &&
+      currentTime >= 0
+        ? Math.max(0, duration - currentTime)
+        : null;
+    const target = computeRebufferTargetSeconds({
+      speedTier: plan.speedTier,
+      strategy,
+      playbackRate: targetVideo.playbackRate ?? 1,
+      memoryPressure,
+      isLive,
+      maxBufferLength: plan.maxBufferLength,
+      remainingDurationSeconds,
+    });
+    if (target <= 0) {
+      return false;
+    }
+
+    rebufferHoldActive = true;
+    rebufferTargetSeconds = target;
+    rebufferStartedAt = currentNow;
+    if (bufferingNoticeTimer) {
+      clearTimeout(bufferingNoticeTimer);
+      bufferingNoticeTimer = null;
+    }
+    programmaticPauseInProgress = true;
+    try {
+      targetVideo.pause();
+    } catch {
+      rebufferHoldActive = false;
+      rebufferTargetSeconds = 0;
+      rebufferStartedAt = 0;
+      programmaticPauseInProgress = false;
+      return false;
+    }
+    programmaticPauseInProgress = false;
+
+    updateRebufferNotice(forwardSec);
+    if (rebufferTimer) {
+      clearInterval(rebufferTimer);
+    }
+    rebufferTimer = setInterval(
+      checkRebufferHoldProgress,
+      REBUFFER_POLL_INTERVAL_MS,
+    );
+    recomputeAndApply();
+    return true;
+  };
+
   const resetSessionTelemetry = () => {
+    cancelRebufferHold(false);
     clearBufferingNotice();
     sampleCount = 0;
     realSampleCount = 0;
@@ -1160,6 +1369,22 @@ export function installDynamicBuffer(
       art.notice.show = `检测到当前源较慢，已自动加大预缓冲至 ${plan.maxBufferLength}s`;
     }
 
+    if (
+      rebufferHoldActive &&
+      (memoryPressure !== 'low' || strategy === 'balanced' || isLive)
+    ) {
+      const targetVideo = resolveArtVideo(art);
+      cancelRebufferHold(false);
+      if (targetVideo?.paused && typeof targetVideo.play === 'function') {
+        programmaticPlayInProgress = true;
+        Promise.resolve(targetVideo.play())
+          .catch(() => undefined)
+          .finally(() => {
+            programmaticPlayInProgress = false;
+          });
+      }
+    }
+
     syncWatchdog();
     return plan;
   };
@@ -1245,6 +1470,7 @@ export function installDynamicBuffer(
 
   const detachHls = () => {
     flushSpeedHistory();
+    cancelRebufferHold(false);
     clearBufferingNotice();
     unbindHlsEvents?.();
     unbindHlsEvents = null;
@@ -1427,6 +1653,9 @@ export function installDynamicBuffer(
           flushSpeedHistory();
         }
         recomputeAndApply({ allowNotice: true });
+        if (rebufferHoldActive) {
+          checkRebufferHoldProgress();
+        }
       };
 
       const onLevelLoaded = (_event: unknown, data: unknown) => {
@@ -1471,8 +1700,9 @@ export function installDynamicBuffer(
 
         if (details === HLS_ERROR_DETAILS.BUFFER_STALLED_ERROR) {
           const video = resolveArtVideo(art);
-          if (!video?.seeking && !video?.paused) {
+          if (video && !video.seeking && !video.paused) {
             recordStall(30, true);
+            maybeStartRebufferHold(video, buildPlan(now()));
           }
           return;
         }
@@ -1559,8 +1789,20 @@ export function installDynamicBuffer(
     clearBufferingNotice();
     recomputeAndApply();
   };
+  const onPlay = () => {
+    if (rebufferHoldActive && !programmaticPlayInProgress) {
+      cancelRebufferHold(true);
+    }
+  };
+  const onProgress = () => {
+    if (rebufferHoldActive) {
+      checkRebufferHoldProgress();
+    }
+  };
   const onPause = () => {
-    clearBufferingNotice();
+    if (!programmaticPauseInProgress && !rebufferHoldActive) {
+      clearBufferingNotice();
+    }
     recomputeAndApply();
   };
   const onRateChange = () => {
@@ -1593,6 +1835,7 @@ export function installDynamicBuffer(
   };
   const onSeeking = () => {
     lastObservedMediaTime = null;
+    cancelRebufferHold(false);
     clearBufferingNotice();
     inFlightFrag = null;
     inFlightSlowRatio = null;
@@ -1610,6 +1853,9 @@ export function installDynamicBuffer(
       return;
     }
     recordStall(30, true);
+    if (maybeStartRebufferHold(targetVideo, buildPlan(now()))) {
+      return;
+    }
     if (!bufferingNoticeTimer && !disposed) {
       bufferingNoticeTimer = setTimeout(() => {
         bufferingNoticeTimer = null;
@@ -1642,6 +1888,8 @@ export function installDynamicBuffer(
   };
 
   video?.addEventListener('playing', onPlaying);
+  video?.addEventListener('play', onPlay);
+  video?.addEventListener('progress', onProgress);
   video?.addEventListener('canplay', onCanPlay);
   video?.addEventListener('pause', onPause);
   video?.addEventListener('ratechange', onRateChange);
@@ -1676,6 +1924,7 @@ export function installDynamicBuffer(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    cancelRebufferHold(false);
     clearBufferingNotice();
     if (watchdogTimer) {
       clearInterval(watchdogTimer);
@@ -1683,6 +1932,8 @@ export function installDynamicBuffer(
     }
     detachHls();
     video?.removeEventListener('playing', onPlaying);
+    video?.removeEventListener('play', onPlay);
+    video?.removeEventListener('progress', onProgress);
     video?.removeEventListener('canplay', onCanPlay);
     video?.removeEventListener('pause', onPause);
     video?.removeEventListener('ratechange', onRateChange);
@@ -1745,6 +1996,7 @@ export function installDynamicBuffer(
           realSampleCount > 0 ||
           inFlightFrag !== null ||
           (activeHls?.levels?.length ?? 0) > 0,
+        rebufferHoldActive,
         plan,
       };
     },
