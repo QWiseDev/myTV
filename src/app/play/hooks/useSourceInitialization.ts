@@ -175,6 +175,10 @@ export function useSourceInitialization({
           if (query && query.trim()) {
             const { bestResults } = await searchSourcesByTitle({
               query,
+              extraSearchParams: {
+                mode: 'exact',
+                title: query.trim(),
+              },
               matchResult: (result) =>
                 matchesSourceLoosely(result.title, query),
               onVariantError: (variant, error) =>
@@ -227,7 +231,16 @@ export function useSourceInitialization({
         const effectiveYear = normalizeSearchYear(
           options?.year ?? videoYearRef.current,
         );
-        const extraSearchParams: Record<string, string> = {};
+        const extraSearchParams: Record<string, string> = {
+          mode: 'exact',
+          title: referenceTitle,
+        };
+        if (effectiveYear) {
+          extraSearchParams.year = effectiveYear;
+        }
+        if (searchType) {
+          extraSearchParams.type = searchType;
+        }
         if (options?.group) {
           extraSearchParams.group = options.group;
         }
@@ -236,11 +249,8 @@ export function useSourceInitialization({
         }
         const { allResults, bestResults } = await searchSourcesByTitle({
           query,
-          minMatchesToStop: 5,
-          extraSearchParams:
-            Object.keys(extraSearchParams).length > 0
-              ? extraSearchParams
-              : undefined,
+          minMatchesToStop: 1,
+          extraSearchParams,
           matchResult: (result) =>
             (!options?.excludeSource ||
               result.source !== options.excludeSource) &&

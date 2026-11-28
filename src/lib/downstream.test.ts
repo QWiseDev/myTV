@@ -184,4 +184,51 @@ describe('searchFromApi 变体优化与分页修复', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][0]).toContain('pg=2');
   });
+
+  test('坏站无视搜索词返回全站最新列表时拦截无关条目且禁止继续翻页', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    const junkList = Array.from({ length: 20 }, (_, i) => ({
+      vod_id: `junk-${i}`,
+      vod_name: `无关最新电影${i}`,
+      vod_pic: '',
+      vod_year: '2026',
+      vod_play_url: `HD$https://cdn.example/junk-${i}.m3u8`,
+    }));
+
+    fetchMock.mockReturnValue(
+      mockJsonResponse({
+        pagecount: 300,
+        list: junkList,
+      }),
+    );
+
+    const results = await searchFromApi(apiSite, 'zz不存在影片测试98765');
+    expect(results).toEqual([]);
+    // 只查了第 1 页，绝不继续拉第 2~5 页
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('maxPages 为 1 时即使第一页声明多页也不再拉取后续分页', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockReturnValue(
+      mockJsonResponse({
+        pagecount: 5,
+        list: [
+          {
+            vod_id: '301',
+            vod_name: '现在就出发第四季',
+            vod_pic: '',
+            vod_year: '2026',
+            vod_play_url: '第1期$https://cdn.example/301.m3u8',
+          },
+        ],
+      }),
+    );
+
+    const results = await searchFromApi(apiSite, '现在就出发第四季', {
+      maxPages: 1,
+    });
+    expect(results).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

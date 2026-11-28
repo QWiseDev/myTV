@@ -112,6 +112,10 @@ describe('useSourceInitialization', () => {
     await waitFor(() => {
       expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
         q: '测试影片',
+        mode: 'exact',
+        title: '测试影片',
+        year: '2024',
+        type: 'tv',
       });
     });
   });
@@ -142,6 +146,10 @@ describe('useSourceInitialization', () => {
 
     expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
       q: '测试影片',
+      mode: 'exact',
+      title: '测试影片',
+      year: '2024',
+      type: 'tv',
     });
     await waitFor(() => {
       expect(params.setAvailableSources).toHaveBeenLastCalledWith([
@@ -178,6 +186,10 @@ describe('useSourceInitialization', () => {
     await waitFor(() => {
       expect(mockedCachedGet).toHaveBeenCalledWith('/api/search', {
         q: '测试影片',
+        mode: 'exact',
+        title: '测试影片',
+        year: '2024',
+        type: 'tv',
       });
     });
   });

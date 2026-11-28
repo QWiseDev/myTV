@@ -6,6 +6,7 @@ import {
   runSearchPageSingleFlight,
   setCachedSearchPage,
 } from '@/lib/search-cache';
+import { sanitizeUpstreamSearchPage } from '@/lib/search-match';
 import {
   finishSiteHealthProbe,
   HALF_OPEN_PROBE_TIMEOUT_MS,
@@ -147,19 +148,37 @@ async function searchWithCache(
       });
 
       // 过滤掉集数为 0 的结果
-      const results = allResults.filter(
+      const playableResults = allResults.filter(
         (result: SearchResult) => result.episodes.length > 0,
       );
 
-      if (results.length === 0) {
+      if (playableResults.length === 0) {
         setCachedSearchPage(apiSite.key, query, page, 'empty', []);
         return { results: [] };
       }
 
-      const pageCount = page === 1 ? data.pagecount || 1 : undefined;
+      const rawPageCount = page === 1 ? Number(data.pagecount) || 1 : 1;
+      const sanitized = sanitizeUpstreamSearchPage(
+        playableResults,
+        rawPageCount,
+        query,
+      );
+      if (sanitized.results.length === 0) {
+        setCachedSearchPage(apiSite.key, query, page, 'empty', []);
+        return { results: [] };
+      }
+
+      const pageCount = page === 1 ? sanitized.effectivePageCount : undefined;
       // 写入缓存（成功，10 分钟 TTL）
-      setCachedSearchPage(apiSite.key, query, page, 'ok', results, pageCount);
-      return { results, pageCount };
+      setCachedSearchPage(
+        apiSite.key,
+        query,
+        page,
+        'ok',
+        sanitized.results,
+        pageCount,
+      );
+      return { results: sanitized.results, pageCount };
     } catch (error: any) {
       clearTimeout(timeoutId);
       // 识别被 AbortController 中止（超时）
@@ -233,9 +252,13 @@ export async function probeSiteSearchHealth(
 export async function searchFromApi(
   apiSite: ApiSite,
   query: string,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; maxPages?: number },
 ): Promise<SearchResult[]> {
   const requestTimeoutMs = options?.timeoutMs ?? 8000;
+  const maxPagesCap =
+    typeof options?.maxPages === 'number' && options.maxPages >= 1
+      ? Math.floor(options.maxPages)
+      : undefined;
   try {
     const apiBaseUrl = apiSite.api;
     const trimmedQuery = query.trim();
@@ -334,13 +357,17 @@ export async function searchFromApi(
       return [];
     }
 
-    // 仅在第一页确实声明存在多页时才读配置并并发拉取后续分页（修复此前 pageCountFromFirst 硬编码为 1 的死代码）
-    if (pageCountFromFirst > 1) {
+    // 仅在第一页确实声明存在多页且调用方未限制为单页时，才读配置并并发拉取后续分页
+    if (pageCountFromFirst > 1 && maxPagesCap !== 1) {
       const config = await getConfig();
-      const maxSearchPages = Math.max(
+      const configuredMaxPages = Math.max(
         1,
         Number(config?.SiteConfig?.SearchDownstreamMaxPage) || 1,
       );
+      const maxSearchPages =
+        typeof maxPagesCap === 'number'
+          ? Math.min(configuredMaxPages, maxPagesCap)
+          : configuredMaxPages;
       const pagesToFetch = Math.min(pageCountFromFirst - 1, maxSearchPages - 1);
 
       if (pagesToFetch > 0) {

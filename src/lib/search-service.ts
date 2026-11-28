@@ -13,6 +13,10 @@ import {
 import { probeSiteSearchHealth, searchFromApi } from '@/lib/downstream';
 import { withAbortableTimeout } from '@/lib/promise-timeout';
 import {
+  type StrictSourceMatchContext,
+  filterExactSourceMatches,
+} from '@/lib/search-match';
+import {
   type SoftDeadlineOptions,
   collectSearchResultsWithSoftDeadline,
 } from '@/lib/search-soft-deadline';
@@ -189,6 +193,8 @@ export async function runAggregatedSearch(
     isAdultSearch?: boolean;
     disableYellowFilter?: boolean;
     softDeadline?: SoftDeadlineOptions;
+    maxPages?: number;
+    exactMatch?: StrictSourceMatchContext;
   } = {},
 ): Promise<{ results: SearchResult[]; earlyReturned: boolean }> {
   const activeTasks: Array<Promise<SearchResult[]>> = [];
@@ -210,11 +216,19 @@ export async function runAggregatedSearch(
       site.key,
       SEARCH_SITE_TIMEOUT_MS,
     );
+    const searchOptions: { timeoutMs?: number; maxPages?: number } = {};
+    if (requestTimeoutMs < DEFAULT_DOWNSTREAM_TIMEOUT_MS) {
+      searchOptions.timeoutMs = requestTimeoutMs;
+    }
+    if (typeof options.maxPages === 'number') {
+      searchOptions.maxPages = options.maxPages;
+    }
+    const hasSearchOptions = Object.keys(searchOptions).length > 0;
 
     const task = withAbortableTimeout(
       async () =>
-        requestTimeoutMs < DEFAULT_DOWNSTREAM_TIMEOUT_MS
-          ? searchFromApi(site, query, { timeoutMs: requestTimeoutMs })
+        hasSearchOptions
+          ? searchFromApi(site, query, searchOptions)
           : searchFromApi(site, query),
       outerTimeoutMs,
     ).catch((err) => {
@@ -237,11 +251,17 @@ export async function runAggregatedSearch(
       options.softDeadline,
     );
 
+  let results = filterSearchResults(collectedResults, {
+    isAdultSearch: options.isAdultSearch,
+    disableYellowFilter: options.disableYellowFilter,
+  });
+
+  if (options.exactMatch) {
+    results = filterExactSourceMatches(results, options.exactMatch);
+  }
+
   return {
-    results: filterSearchResults(collectedResults, {
-      isAdultSearch: options.isAdultSearch,
-      disableYellowFilter: options.disableYellowFilter,
-    }),
+    results,
     earlyReturned,
   };
 }

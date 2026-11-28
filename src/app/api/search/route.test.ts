@@ -218,6 +218,57 @@ describe('GET /api/search 源分组与隔离', () => {
     expect(mockSearchFromApi).toHaveBeenCalledTimes(1);
     expect(mockSearchFromApi).toHaveBeenCalledWith(NORMAL_SITE_2, '后会友期');
   });
+
+  it('mode=exact limits downstream to 1 page and filters unrelated results on server', async () => {
+    mockGetAvailableApiSites.mockResolvedValue([NORMAL_SITE]);
+    mockSearchFromApi.mockResolvedValue([
+      {
+        id: 'match-1',
+        title: '现在就出发第四季',
+        poster: '',
+        episodes: ['https://normal1.example.com/1.m3u8'],
+        episodes_titles: ['第1期'],
+        source: NORMAL_SITE.key,
+        source_name: NORMAL_SITE.name,
+        year: '2026',
+      },
+      {
+        id: 'junk-1',
+        title: '现在就出发 第一季',
+        poster: '',
+        episodes: ['https://normal1.example.com/old.m3u8'],
+        episodes_titles: ['第1期'],
+        source: NORMAL_SITE.key,
+        source_name: NORMAL_SITE.name,
+        year: '2023',
+      },
+      {
+        id: 'junk-2',
+        title: '完全无关综艺',
+        poster: '',
+        episodes: ['https://normal1.example.com/other.m3u8'],
+        episodes_titles: ['第1期'],
+        source: NORMAL_SITE.key,
+        source_name: NORMAL_SITE.name,
+        year: '2026',
+      },
+    ]);
+
+    const response = await GET(
+      makeRequest(
+        'q=%E7%8E%B0%E5%9C%A8%E5%B0%B1%E5%87%BA%E5%8F%91%20%E7%AC%AC%E5%9B%9B%E5%AD%A3&mode=exact&title=%E7%8E%B0%E5%9C%A8%E5%B0%B1%E5%87%BA%E5%8F%91%20%E7%AC%AC%E5%9B%9B%E5%AD%A3&year=2026',
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSearchFromApi).toHaveBeenCalledWith(
+      NORMAL_SITE,
+      '现在就出发 第四季',
+      { maxPages: 1 },
+    );
+    const json = await response.json();
+    expect(json.results.map((r: { id: string }) => r.id)).toEqual(['match-1']);
+  });
 });
 
 export {};

@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
   const query = normalizeSearchQuery(searchParams.get('q'));
   const group = searchParams.get('group');
   const forSource = searchParams.get('forSource') || '';
+  const mode = (searchParams.get('mode') || '').trim().toLowerCase();
+  const isExactMode = mode === 'exact';
+  const exactTitle = normalizeSearchQuery(searchParams.get('title')) || query;
+  const exactYear = (searchParams.get('year') || '').trim();
+  const exactType = (searchParams.get('type') || '').trim();
 
   if (!query) {
     const cacheTime = await getCacheTime();
@@ -46,6 +51,16 @@ export async function GET(request: NextRequest) {
       {
         isAdultSearch,
         disableYellowFilter: config.SiteConfig.DisableYellowFilter,
+        ...(isExactMode
+          ? {
+              maxPages: 1,
+              exactMatch: {
+                queryTitle: exactTitle,
+                year: exactYear || undefined,
+                searchType: exactType || undefined,
+              },
+            }
+          : {}),
       },
     );
 
