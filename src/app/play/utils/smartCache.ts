@@ -394,23 +394,8 @@ class SmartCache {
   }
 }
 
-// 全局智能缓存实例
+// 全局智能缓存实例（get 惰性过期淘汰 + set 容量控制，避免在浏览器端注册永不销毁的顶层定时器）
 const smartCache = new SmartCache();
-
-// 定期清理过期缓存
-const cleanupTimer = setInterval(
-  () => {
-    smartCache.cleanup();
-  },
-  5 * 60 * 1000,
-); // 每5分钟清理一次
-if (
-  typeof cleanupTimer === 'object' &&
-  cleanupTimer !== null &&
-  'unref' in cleanupTimer
-) {
-  (cleanupTimer as NodeJS.Timeout).unref();
-}
 
 export { SmartCache, smartCache };
 export type { HLSLevel, SourceReliability, SourceTestResult };

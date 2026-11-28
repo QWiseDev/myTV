@@ -28,6 +28,8 @@ interface PlayerContainerProps {
   isSkipSettingOpen: boolean;
   onSkipSettingChange: (open: boolean) => void;
   onNextEpisode?: () => void;
+  /** 是否允许配置保存跳过片段（访客隐藏右上角设置入口，避免触发需登录保存报错） */
+  canConfigureSkip?: boolean;
 
   // 样式和控制
   isEpisodeSelectorCollapsed: boolean;
@@ -51,6 +53,7 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
       isSkipSettingOpen,
       onSkipSettingChange,
       onNextEpisode,
+      canConfigureSkip = true,
       isEpisodeSelectorCollapsed,
       onToggleEpisodePanel,
       onOpenDanmuModal,
@@ -192,14 +195,14 @@ const PlayerContainer = forwardRef<HTMLDivElement, PlayerContainerProps>(
           </div>
 
           {/* 控制按钮组 - 播放器内右上角（悬停播放器时显示） */}
-          {((currentSource && currentId) ||
+          {((canConfigureSkip && currentSource && currentId) ||
             (isEpisodeSelectorCollapsed && onOpenDanmuModal)) && (
             <div
               className={`absolute top-3 right-3 z-10 flex flex-col gap-1.5 transition-opacity duration-300 ${
                 showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              {currentSource && currentId && (
+              {canConfigureSkip && currentSource && currentId && (
                 /* 跳过设置按钮 */
                 <button
                   onClick={() => onSkipSettingChange(true)}

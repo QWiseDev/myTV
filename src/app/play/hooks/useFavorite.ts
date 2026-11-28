@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   deleteFavorite,
@@ -8,6 +8,8 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import type { Favorite, SearchResult } from '@/lib/types';
+
+export type ToggleFavoriteOutcome = 'favorited' | 'unfavorited' | null;
 
 interface UseFavoriteOptions {
   currentSource: string;
@@ -25,18 +27,32 @@ export const useFavorite = ({
   searchTitle,
 }: UseFavoriteOptions) => {
   const [favorited, setFavorited] = useState(false);
+  const togglingRef = useRef(false);
 
-  // 检查收藏状态
+  // 检查收藏状态（带取消保护，避免快速换源时旧源异步结果覆盖新源状态）
   useEffect(() => {
-    if (!currentSource || !currentId) return;
+    if (!currentSource || !currentId) {
+      setFavorited(false);
+      return;
+    }
+
+    let cancelled = false;
     (async () => {
       try {
         const fav = await isFavorited(currentSource, currentId);
-        setFavorited(fav);
+        if (!cancelled) {
+          setFavorited(fav);
+        }
       } catch (err) {
-        console.error('检查收藏状态失败:', err);
+        if (!cancelled) {
+          console.error('检查收藏状态失败:', err);
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentSource, currentId]);
 
   // 监听收藏数据更新事件
@@ -55,19 +71,27 @@ export const useFavorite = ({
     return unsubscribe;
   }, [currentSource, currentId]);
 
-  // 切换收藏
-  const handleToggleFavorite = async () => {
-    if (!videoTitle || !detail || !currentSource || !currentId) {
-      return;
-    }
+  // 切换收藏（防连点重入，并返回真实落库结果供埋点对齐）
+  const handleToggleFavorite =
+    useCallback(async (): Promise<ToggleFavoriteOutcome> => {
+      if (
+        togglingRef.current ||
+        !videoTitle ||
+        !detail ||
+        !currentSource ||
+        !currentId
+      ) {
+        return null;
+      }
 
-    try {
-      if (favorited) {
-        // 如果已收藏，删除收藏
-        await deleteFavorite(currentSource, currentId);
-        setFavorited(false);
-      } else {
-        // 如果未收藏，添加收藏
+      togglingRef.current = true;
+      try {
+        if (favorited) {
+          await deleteFavorite(currentSource, currentId);
+          setFavorited(false);
+          return 'unfavorited';
+        }
+
         await saveFavorite(currentSource, currentId, {
           title: videoTitle,
           source_name: detail?.source_name || '',
@@ -78,11 +102,14 @@ export const useFavorite = ({
           search_title: searchTitle,
         });
         setFavorited(true);
+        return 'favorited';
+      } catch (err) {
+        console.error('切换收藏失败:', err);
+        return null;
+      } finally {
+        togglingRef.current = false;
       }
-    } catch (err) {
-      console.error('切换收藏失败:', err);
-    }
-  };
+    }, [currentId, currentSource, detail, favorited, searchTitle, videoTitle]);
 
   return {
     favorited,

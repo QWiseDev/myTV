@@ -127,6 +127,7 @@ export function getLoadingIcon() {
  */
 export function getSettingsConfig(options: ArtplayerConfigOptions) {
   const {
+    artPlayerRef,
     blockAdEnabled,
     blockAdEnabledRef,
     externalDanmuEnabledRef,
@@ -146,6 +147,11 @@ export function getSettingsConfig(options: ArtplayerConfigOptions) {
           localStorage.setItem('enable_blockad', String(newVal));
           blockAdEnabledRef.current = newVal;
           onBlockAdToggle(newVal);
+          if (artPlayerRef.current?.notice) {
+            artPlayerRef.current.notice.show = newVal
+              ? '去广告已开启，切换选集或刷新后生效'
+              : '去广告已关闭，切换选集或刷新后生效';
+          }
         } catch (_) {
           // ignore
         }

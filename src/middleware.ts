@@ -118,6 +118,6 @@ function shouldSkipAuth(pathname: string): boolean {
 // 配置middleware匹配规则（仅排除登录/注册/静态公共端点，避免前缀误放行 /api/tvbox-* 等）
 export const config = {
   matcher: [
-    '/((?!_next/static|favicon\\.ico|login$|register$|warning$|api/login$|api/register$|api/logout$|api/cron$|api/server-config$|api/live/merged$|api/parse$|api/bing-wallpaper$|api/image-proxy$|api/proxy/spider\\.jar$).*)',
+    '/((?!_next/static|favicon\\.ico|login$|register$|warning$|api/login$|api/register$|api/logout$|api/cron$|api/server-config$|api/live/merged$|api/bing-wallpaper$|api/image-proxy$|api/proxy/spider\\.jar$).*)',
   ],
 };

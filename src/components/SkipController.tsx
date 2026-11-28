@@ -64,6 +64,9 @@ export function getEndingBatchTimeValues(
   };
 }
 
+/** 未保存单剧跳过配置时，仅对正片时长达标的剧集启用默认临时片头/片尾跳过，避免吞噬微短剧或短视频 */
+export const MIN_DEFAULT_SKIP_DURATION_SECONDS = 360;
+
 // 从 localStorage 读取全局自动跳过设置（脏数据安全回退默认值）
 function readAutoSkipFlags() {
   const savedEnableAutoSkip =
@@ -308,13 +311,18 @@ export default function SkipController({
     const segments = skipConfig?.segments;
 
     if (!segments || segments.length === 0) {
-      // 如果没有保存的配置，根据 batchSettings 生成临时配置
+      // 未配置单剧自定义跳过规则且视频总时长不足正片阈值（如微短剧/预告片/时长未就绪）时，
+      // 不套用全局默认 90s 片头 / 120s 片尾规则，避免起播即把整集误判为片尾跳过。
+      if (duration < MIN_DEFAULT_SKIP_DURATION_SECONDS) {
+        return [];
+      }
+
       const tempSegments: SkipSegment[] = [];
 
       // 添加片头配置
       const openingStart = timeToSeconds(batchSettings.openingStart);
       const openingEnd = timeToSeconds(batchSettings.openingEnd);
-      if (openingStart < openingEnd) {
+      if (openingStart < openingEnd && openingEnd < duration) {
         tempSegments.push({
           type: 'opening',
           start: openingStart,
@@ -324,25 +332,27 @@ export default function SkipController({
       }
 
       // 添加片尾配置
-      if (duration > 0 && batchSettings.endingStart) {
+      if (batchSettings.endingStart) {
         const endingStartSeconds = timeToSeconds(batchSettings.endingStart);
         const endingStart =
           batchSettings.endingMode === 'remaining'
             ? duration - endingStartSeconds
             : endingStartSeconds;
 
-        tempSegments.push({
-          type: 'ending',
-          start: endingStart,
-          end: duration,
-          autoSkip: batchSettings.autoSkip,
-          autoNextEpisode: batchSettings.autoNextEpisode,
-          mode: batchSettings.endingMode as 'absolute' | 'remaining',
-          remainingTime:
-            batchSettings.endingMode === 'remaining'
-              ? endingStartSeconds
-              : undefined,
-        });
+        if (endingStart > Math.max(0, openingEnd) && endingStart < duration) {
+          tempSegments.push({
+            type: 'ending',
+            start: endingStart,
+            end: duration,
+            autoSkip: batchSettings.autoSkip,
+            autoNextEpisode: batchSettings.autoNextEpisode,
+            mode: batchSettings.endingMode as 'absolute' | 'remaining',
+            remainingTime:
+              batchSettings.endingMode === 'remaining'
+                ? endingStartSeconds
+                : undefined,
+          });
+        }
       }
       return tempSegments;
     }
@@ -496,15 +506,28 @@ export default function SkipController({
     }
   }, [currentSkipSegment, artPlayerRef, onNextEpisode]);
 
+  const notifyPlayer = useCallback(
+    (message: string) => {
+      if (artPlayerRef.current?.notice) {
+        artPlayerRef.current.notice.show = message;
+      }
+    },
+    [artPlayerRef],
+  );
+
   // 保存新的跳过片段（单个片段模式）
   const handleSaveSegment = useCallback(async () => {
-    if (!newSegment.start || !newSegment.end || !newSegment.type) {
-      alert('请填写完整的跳过片段信息');
+    if (
+      newSegment.start === undefined ||
+      newSegment.end === undefined ||
+      !newSegment.type
+    ) {
+      notifyPlayer('请填写完整的跳过片段信息');
       return;
     }
 
     if (newSegment.start >= newSegment.end) {
-      alert('开始时间必须小于结束时间');
+      notifyPlayer('开始时间必须小于结束时间');
       return;
     }
 
@@ -534,14 +557,15 @@ export default function SkipController({
       onSettingModeChange?.(false);
       setNewSegment({});
 
-      alert('跳过片段已保存');
+      notifyPlayer('跳过片段已保存');
     } catch (err) {
       console.error('保存跳过片段失败:', err);
-      alert('保存失败，请重试');
+      notifyPlayer('保存失败，请重试');
     }
   }, [
     id,
     newSegment,
+    notifyPlayer,
     onSettingModeChange,
     setSkipConfig,
     skipConfig,
@@ -559,7 +583,7 @@ export default function SkipController({
       const end = timeToSeconds(batchSettings.openingEnd);
 
       if (start >= end) {
-        alert('片头开始时间必须小于结束时间');
+        notifyPlayer('片头开始时间必须小于结束时间');
         return;
       }
 
@@ -604,7 +628,7 @@ export default function SkipController({
           : duration;
 
         if (actualStartSeconds >= actualEndSeconds) {
-          alert('片尾开始时间必须小于结束时间');
+          notifyPlayer('片尾开始时间必须小于结束时间');
           return;
         }
 
@@ -621,7 +645,7 @@ export default function SkipController({
     }
 
     if (segments.length === 0) {
-      alert('请至少设置片头或片尾时间');
+      notifyPlayer('请至少设置片头或片尾时间');
       return;
     }
 
@@ -639,14 +663,15 @@ export default function SkipController({
       // batchSettings 会通过 useEffect 自动从 skipConfig 同步，不需要手动重置
       onSettingModeChange?.(false);
 
-      alert('跳过配置已保存');
+      notifyPlayer('跳过配置已保存');
     } catch (err) {
       console.error('保存跳过配置失败:', err);
-      alert('保存失败，请重试');
+      notifyPlayer('保存失败，请重试');
     }
   }, [
     batchSettings,
     duration,
+    notifyPlayer,
     source,
     id,
     title,
@@ -679,13 +704,13 @@ export default function SkipController({
           setSkipConfig(updatedConfig);
         }
 
-        alert('跳过片段已删除');
+        notifyPlayer('跳过片段已删除');
       } catch (err) {
         console.error('删除跳过片段失败:', err);
-        alert('删除失败，请重试');
+        notifyPlayer('删除失败，请重试');
       }
     },
-    [id, setSkipConfig, skipConfig, source],
+    [id, notifyPlayer, setSkipConfig, skipConfig, source],
   );
 
   // 计算实际的 segments（处理 remaining 模式）

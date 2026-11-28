@@ -37,6 +37,7 @@ interface UseEpisodeDanmuSyncParams {
   danmuPluginStateRef: MutableRefObject<DanmakuPluginStateSnapshot | null>;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
   loadExternalDanmu: () => Promise<DanmakuItemLike[]>;
+  resetDanmuLoadState?: () => void;
 }
 
 export function useEpisodeDanmuSync({
@@ -54,6 +55,7 @@ export function useEpisodeDanmuSync({
   danmuPluginStateRef,
   externalDanmuEnabledRef,
   loadExternalDanmu,
+  resetDanmuLoadState,
 }: UseEpisodeDanmuSyncParams) {
   const syncGenerationRef = useRef(0);
 
@@ -78,8 +80,13 @@ export function useEpisodeDanmuSync({
       return;
     }
 
-    lastDanmuLoadKeyRef.current = '';
-    danmuLoadingRef.current = false;
+    // 切集瞬间立即中止上一集仍在飞行的外部弹幕请求
+    if (resetDanmuLoadState) {
+      resetDanmuLoadState();
+    } else {
+      lastDanmuLoadKeyRef.current = '';
+      danmuLoadingRef.current = false;
+    }
 
     if (
       externalDanmuEnabledRef.current &&
@@ -159,6 +166,7 @@ export function useEpisodeDanmuSync({
     isSourceChangingRef,
     lastDanmuLoadKeyRef,
     loadExternalDanmu,
+    resetDanmuLoadState,
     updateVideoUrl,
     videoEndedHandledRef,
   ]); // loadExternalDanmu 必须在依赖中，否则会使用过期的闭包导致请求错误集数的弹幕

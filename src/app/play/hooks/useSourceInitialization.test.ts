@@ -423,4 +423,96 @@ describe('useSourceInitialization', () => {
     });
     expect(params.setDetail).not.toHaveBeenCalled();
   });
+
+  test('preserves switched source on same route signature but re-initializes on client navigation to another media', async () => {
+    const movieADetail: SearchResult = {
+      ...detail,
+      source: 'site-a',
+      id: 'video-1',
+      title: '影片A',
+    };
+    const switchedDetail: SearchResult = {
+      ...detail,
+      source: 'site-switched',
+      id: 'video-switched',
+      title: '影片A',
+    };
+    const movieBDetail: SearchResult = {
+      ...detail,
+      source: 'site-b',
+      id: 'video-2',
+      title: '影片B',
+    };
+
+    mockedCachedGet.mockImplementation(async (url, queryParams) => {
+      if (url === '/api/detail') {
+        if (queryParams?.source === 'site-a') {
+          return mockCachedResult(movieADetail);
+        }
+        if (queryParams?.source === 'site-b') {
+          return mockCachedResult(movieBDetail);
+        }
+      }
+      if (url === '/api/search') {
+        return mockCachedResult({ results: [] });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const currentSourceRef = { current: 'site-a' };
+    const currentIdRef = { current: 'video-1' };
+    const detailRef = { current: null as SearchResult | null };
+
+    const initialProps = createParams({
+      currentSource: 'site-a',
+      currentId: 'video-1',
+      videoTitle: '影片A',
+      searchTitle: '',
+      currentSourceRef,
+      currentIdRef,
+      detailRef,
+      setDetail: jest.fn((next) => {
+        detailRef.current = next;
+      }),
+    });
+
+    const { rerender } = renderHook(
+      (props: typeof initialProps) => useSourceInitialization(props),
+      { initialProps },
+    );
+
+    await waitFor(() => {
+      expect(initialProps.setDetail).toHaveBeenCalledWith(movieADetail);
+    });
+
+    // 模拟用户手动换源，而外部 routeParams 仍停留在旧签名（非路由依赖触发重渲染）
+    currentSourceRef.current = 'site-switched';
+    currentIdRef.current = 'video-switched';
+    detailRef.current = switchedDetail;
+    (initialProps.setDetail as jest.Mock).mockClear();
+
+    rerender({
+      ...initialProps,
+      optimizationEnabled: true,
+    });
+
+    await waitFor(() => {
+      expect(initialProps.setLoading).toHaveBeenLastCalledWith(false);
+    });
+    expect(initialProps.setDetail).not.toHaveBeenCalledWith(movieADetail);
+
+    // 模拟播放页内通过搜索热榜或继续观看进行客户端路由跳转到新影片 B
+    rerender({
+      ...initialProps,
+      currentSource: 'site-b',
+      currentId: 'video-2',
+      videoTitle: '影片B',
+    });
+
+    await waitFor(() => {
+      expect(initialProps.setDetail).toHaveBeenCalledWith(movieBDetail);
+    });
+    expect(initialProps.setCurrentSource).toHaveBeenLastCalledWith('site-b');
+    expect(initialProps.setCurrentId).toHaveBeenLastCalledWith('video-2');
+  });
 });

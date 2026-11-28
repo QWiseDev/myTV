@@ -131,18 +131,22 @@ describe('db.client skip-configs（redis 模式，裸 fetch 客户端语义）',
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('saveSkipConfig 服务端失败时抛错并触发全局错误', async () => {
+  it('saveSkipConfig 服务端失败时回滚乐观缓存、抛错并触发全局错误', async () => {
     fetchMock.mockImplementation(
       async () => ({ ok: false, status: 500 }) as Response,
     );
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const updates = listen('skipConfigsUpdated');
     const globalErrors = listen('globalError');
-    const { saveSkipConfig } = await import('./db.client');
+    const { saveSkipConfig, getSkipConfig } = await import('./db.client');
 
     await expect(saveSkipConfig('src', 'id1', skipConfig)).rejects.toThrow(
       '保存跳过配置失败',
     );
     expect(globalErrors).toEqual([{ message: '保存跳过配置失败' }]);
+    // 第一次为乐观写入，第二次为失败回滚为空对象
+    expect(updates).toEqual([{ 'src+id1': skipConfig }, {}]);
+    await expect(getSkipConfig('src', 'id1')).resolves.toBeNull();
   });
 
   it('deleteSkipConfig 乐观移除后 POST action:delete', async () => {

@@ -11,6 +11,7 @@ import {
 
 import { analytics } from '@/lib/analytics';
 import { cachedGet } from '@/lib/api-cache.client';
+import { replacePlayPageUrl } from '@/lib/play-navigation';
 import type { SearchResult } from '@/lib/types';
 
 import {
@@ -68,6 +69,7 @@ interface UseSourceSwitcherParams {
   sourceChangeOwnerRef: MutableRefObject<SourceChangeOwner | null>;
   externalDanmuEnabledRef: MutableRefObject<boolean>;
   loadExternalDanmu: () => Promise<DanmakuItemLike[]>;
+  resetDanmuLoadState?: () => void;
 }
 
 export function useSourceSwitcher({
@@ -97,6 +99,7 @@ export function useSourceSwitcher({
   sourceChangeOwnerRef,
   externalDanmuEnabledRef,
   loadExternalDanmu,
+  resetDanmuLoadState,
 }: UseSourceSwitcherParams) {
   const availableSourcesRef = useRef(availableSources);
   const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
@@ -187,8 +190,12 @@ export function useSourceSwitcher({
         setVideoLoadingStage('sourceChanging');
         setIsVideoLoading(true);
 
-        lastDanmuLoadKeyRef.current = '';
-        danmuLoadingRef.current = false;
+        if (resetDanmuLoadState) {
+          resetDanmuLoadState();
+        } else {
+          lastDanmuLoadKeyRef.current = '';
+          danmuLoadingRef.current = false;
+        }
 
         if (danmuOperationTimeoutRef.current) {
           clearTimeout(danmuOperationTimeoutRef.current);
@@ -315,7 +322,7 @@ export function useSourceSwitcher({
           abandonOperation();
           return;
         }
-        window.history.replaceState({}, '', newUrl.toString());
+        replacePlayPageUrl(newUrl.toString());
 
         deferredDanmuTimeoutRef.current = setTimeout(async () => {
           deferredDanmuTimeoutRef.current = null;
@@ -392,6 +399,7 @@ export function useSourceSwitcher({
       isSourceChangingRef,
       lastDanmuLoadKeyRef,
       loadExternalDanmu,
+      resetDanmuLoadState,
       resumeTimeRef,
       setCurrentEpisodeIndex,
       setCurrentId,

@@ -20,13 +20,29 @@ export function readSuperResolutionPreference(): {
   }
 }
 
-export function installSuperResolution(art: Artplayer) {
+export interface InstallSuperResolutionOptions {
+  /** 同会话换源重建播放器时继承上次开启状态；新进入页面默认 false */
+  initialEnabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
+}
+
+export function installSuperResolution(
+  art: Artplayer,
+  options: InstallSuperResolutionOptions = {},
+) {
   let { scale, mode } = readSuperResolutionPreference();
-  let enabled = false;
+  let enabled = options.initialEnabled === true;
   let disposed = false;
   let session: AbortController | null = null;
   let canvas: HTMLCanvasElement | null = null;
   const video = art.video;
+
+  const setEnabled = (next: boolean) => {
+    if (enabled !== next) {
+      enabled = next;
+      options.onEnabledChange?.(next);
+    }
+  };
 
   const suspend = () => {
     session?.abort();
@@ -45,18 +61,18 @@ export function installSuperResolution(art: Artplayer) {
     if (!disposed)
       art.setting.update({ name: 'super-resolution', tooltip: text });
   };
-  const start = async () => {
+  const start = async (): Promise<string> => {
     suspend();
-    if (!enabled || disposed) return;
+    if (!enabled || disposed) return '已关闭';
     if (!window.isSecureContext || !navigator.gpu) {
-      enabled = false;
+      setEnabled(false);
       updateStatus('已关闭');
       art.notice.show = '超分需要 HTTPS 或 localhost，以及支持 WebGPU 的浏览器';
-      return;
+      return '已关闭';
     }
     if (video.readyState < 2 || !video.videoWidth) {
       updateStatus('等待视频');
-      return;
+      return '等待视频';
     }
     const controller = new AbortController();
     session = controller;
@@ -79,45 +95,59 @@ export function installSuperResolution(art: Artplayer) {
     updateStatus('初始化中');
     const fail = (error: Error) => {
       if (session !== controller || disposed) return;
-      enabled = false;
+      setEnabled(false);
       suspend();
       updateStatus('已关闭');
       art.notice.show = `${error.message}，已恢复原画`;
     };
-    try {
-      const { createAnime4KRenderer } = await import('@/lib/anime4k-renderer');
-      if (controller.signal.aborted) return;
-      await createAnime4KRenderer({
-        video,
-        canvas: output,
-        scale,
-        mode,
-        signal: controller.signal,
-        onError: fail,
-      });
-      if (session === controller && !controller.signal.aborted)
-        updateStatus(`${scale}x · ${mode}`);
-    } catch (error) {
-      if (!controller.signal.aborted)
-        fail(error instanceof Error ? error : new Error('超分初始化失败'));
-    }
+    void (async () => {
+      try {
+        const { createAnime4KRenderer } =
+          await import('@/lib/anime4k-renderer');
+        if (controller.signal.aborted) return;
+        await createAnime4KRenderer({
+          video,
+          canvas: output,
+          scale,
+          mode,
+          signal: controller.signal,
+          onError: fail,
+        });
+        if (session === controller && !controller.signal.aborted)
+          updateStatus(`${scale}x · ${mode}`);
+      } catch (error) {
+        if (!controller.signal.aborted)
+          fail(error instanceof Error ? error : new Error('超分初始化失败'));
+      }
+    })();
+    return '初始化中';
   };
   art.setting.add({
     name: 'super-resolution',
     html: '视频超分',
-    tooltip: '已关闭',
+    tooltip: enabled ? '等待视频' : '已关闭',
     width: 220,
     selector: [
-      { html: '关闭', value: 0 },
-      ...SCALES.map((value) => ({ html: `${value}x`, value })),
+      { html: '关闭', value: 0, default: !enabled },
+      ...SCALES.map((value) => ({
+        html: `${value}x`,
+        value,
+        default: enabled && value === scale,
+      })),
     ],
     onSelect(item) {
       const value = Number(item.value);
-      enabled = value !== 0;
-      if (enabled) scale = value;
+      const nextEnabled = value !== 0;
+      if (nextEnabled) scale = value;
+      setEnabled(nextEnabled);
       save();
-      void start();
-      return enabled ? `${scale}x · ${mode}` : '已关闭';
+      let immediateTooltip = nextEnabled ? '初始化中' : '已关闭';
+      void start().then((statusText) => {
+        immediateTooltip = statusText;
+      });
+      // start() 的同步前置分支（已关闭 / 不支持 WebGPU / 等待视频 / 初始化中）会立即给出真实状态，
+      // 避免同步返回固定倍率文案覆盖掉“等待视频”或“初始化中”提示。
+      return immediateTooltip;
     },
   });
   art.setting.add({
@@ -127,6 +157,7 @@ export function installSuperResolution(art: Artplayer) {
     selector: ['A', 'B', 'C'].map((value) => ({
       html: `Mode ${value}`,
       value,
+      default: value === mode,
     })),
     onSelect(item) {
       mode = item.value as SuperResolutionMode;
@@ -135,6 +166,10 @@ export function installSuperResolution(art: Artplayer) {
       return mode;
     },
   });
+
+  if (enabled) {
+    void start();
+  }
 
   const reload = () => {
     void start();

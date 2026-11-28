@@ -33,6 +33,14 @@ export const useBangumiDetails = ({
 
   useEffect(() => {
     if (!videoDoubanId || videoDoubanId === 0) {
+      if (loadedKeyRef.current !== null || bangumiDetails || movieDetails) {
+        loadedKeyRef.current = null;
+        activeRequestKeyRef.current = null;
+        if (bangumiDetails) setBangumiDetails(null);
+        if (movieDetails) setMovieDetails(null);
+        setLoadingBangumiDetails(false);
+        setLoadingMovieDetails(false);
+      }
       return;
     }
 
@@ -52,12 +60,10 @@ export const useBangumiDetails = ({
       return;
     }
 
+    // 跨 ID 或跨类型（Bangumi <-> 豆瓣影视）切换时，双侧旧详情均须清空，防止海报与简介串台
     if (loadedKeyRef.current && loadedKeyRef.current !== requestKey) {
-      if (isBangumi) {
-        setBangumiDetails(null);
-      } else {
-        setMovieDetails(null);
-      }
+      if (bangumiDetails) setBangumiDetails(null);
+      if (movieDetails) setMovieDetails(null);
     }
 
     let cancelled = false;

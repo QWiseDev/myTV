@@ -405,4 +405,43 @@ describe('useDanmuController', () => {
       tooltip: '已开启',
     });
   });
+
+  test('aborts in-flight external danmaku request immediately on unmount', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    global.fetch = jest.fn(
+      (_url: RequestInfo | URL, options?: RequestInit) =>
+        new Promise<Response>(() => {
+          capturedSignal = options?.signal as AbortSignal | undefined;
+        }),
+    ) as typeof fetch;
+
+    const { result, unmount } = renderHook(() =>
+      useDanmuController({
+        artPlayerRef: { current: null },
+        danmuOperationTimeoutRef: { current: null },
+        externalDanmuEnabledRef: { current: true },
+        setExternalDanmuEnabled: jest.fn(),
+        videoTitleRef: { current: '测试剧' },
+        videoYearRef: { current: '2026' },
+        videoDoubanIdRef: { current: 123 },
+        videoUrlRef: { current: 'https://example.com/episode.m3u8' },
+        currentEpisodeIndexRef: { current: 0 },
+        danmuLoadingRef: { current: false },
+        lastDanmuLoadKeyRef: { current: '' },
+        currentSourceRef: { current: 'source-a' },
+        episodeTitleRef: { current: '' },
+        variantEpisodeRef: { current: 0 },
+        canUseSharedCacheRef: { current: false },
+      }),
+    );
+
+    act(() => {
+      void result.current.loadExternalDanmu().catch(() => undefined);
+    });
+    await waitFor(() => expect(capturedSignal).toBeDefined());
+    expect(capturedSignal?.aborted).toBe(false);
+
+    unmount();
+    expect(capturedSignal?.aborted).toBe(true);
+  });
 });

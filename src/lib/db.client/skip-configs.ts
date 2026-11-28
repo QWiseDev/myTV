@@ -81,25 +81,30 @@ export async function saveSkipConfig(
   id: string,
   config: EpisodeSkipConfig,
 ): Promise<void> {
+  const key = generateStorageKey(source, id);
+  const previousCached = cacheManager.getCachedSkipConfigs();
+  const snapshotBeforeOptimistic = previousCached
+    ? { ...previousCached }
+    : null;
+  let optimisticApplied = false;
+
   try {
-    const key = generateStorageKey(source, id);
-
-    // 乐观更新策略
-    const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
-    cachedConfigs[key] = config;
-    cacheManager.cacheSkipConfigs(cachedConfigs);
-
-    window.dispatchEvent(
-      new CustomEvent('skipConfigsUpdated', {
-        detail: cachedConfigs,
-      }),
-    );
-
-    // 异步同步到数据库
+    // 先校验登录态，避免访客误触时污染本地乐观缓存
     const authInfo = getAuthInfoFromBrowserCookie();
     if (!authInfo?.username) {
       throw new Error('未登录');
     }
+
+    // 乐观更新策略
+    const nextConfigs = { ...(snapshotBeforeOptimistic || {}), [key]: config };
+    cacheManager.cacheSkipConfigs(nextConfigs);
+    optimisticApplied = true;
+
+    window.dispatchEvent(
+      new CustomEvent('skipConfigsUpdated', {
+        detail: nextConfigs,
+      }),
+    );
 
     const response = await fetch('/api/skipconfigs', {
       method: 'POST',
@@ -118,6 +123,15 @@ export async function saveSkipConfig(
       throw new Error('保存跳过配置失败');
     }
   } catch (err) {
+    if (optimisticApplied) {
+      const rollback = snapshotBeforeOptimistic || {};
+      cacheManager.cacheSkipConfigs(rollback);
+      window.dispatchEvent(
+        new CustomEvent('skipConfigsUpdated', {
+          detail: rollback,
+        }),
+      );
+    }
     console.error('保存跳过配置失败:', err);
     triggerGlobalError('保存跳过配置失败');
     throw err;
@@ -174,25 +188,30 @@ export async function deleteSkipConfig(
   source: string,
   id: string,
 ): Promise<void> {
+  const key = generateStorageKey(source, id);
+  const previousCached = cacheManager.getCachedSkipConfigs();
+  const snapshotBeforeOptimistic = previousCached
+    ? { ...previousCached }
+    : null;
+  let optimisticApplied = false;
+
   try {
-    const key = generateStorageKey(source, id);
-
-    // 乐观更新策略
-    const cachedConfigs = cacheManager.getCachedSkipConfigs() || {};
-    delete cachedConfigs[key];
-    cacheManager.cacheSkipConfigs(cachedConfigs);
-
-    window.dispatchEvent(
-      new CustomEvent('skipConfigsUpdated', {
-        detail: cachedConfigs,
-      }),
-    );
-
-    // 异步同步到数据库
     const authInfo = getAuthInfoFromBrowserCookie();
     if (!authInfo?.username) {
       throw new Error('未登录');
     }
+
+    // 乐观更新策略
+    const nextConfigs = { ...(snapshotBeforeOptimistic || {}) };
+    delete nextConfigs[key];
+    cacheManager.cacheSkipConfigs(nextConfigs);
+    optimisticApplied = true;
+
+    window.dispatchEvent(
+      new CustomEvent('skipConfigsUpdated', {
+        detail: nextConfigs,
+      }),
+    );
 
     const response = await fetch('/api/skipconfigs', {
       method: 'POST',
@@ -210,6 +229,15 @@ export async function deleteSkipConfig(
       throw new Error('删除跳过配置失败');
     }
   } catch (err) {
+    if (optimisticApplied) {
+      const rollback = snapshotBeforeOptimistic || {};
+      cacheManager.cacheSkipConfigs(rollback);
+      window.dispatchEvent(
+        new CustomEvent('skipConfigsUpdated', {
+          detail: rollback,
+        }),
+      );
+    }
     console.error('删除跳过片头片尾配置失败:', err);
     triggerGlobalError('删除跳过片头片尾配置失败');
     throw err;

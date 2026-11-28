@@ -4,6 +4,7 @@
 
 const mockGetConfig = jest.fn();
 const mockSetSkipConfig = jest.fn();
+const mockGetAllSkipConfigs = jest.fn();
 const mockGetCache = jest.fn();
 const mockSetCache = jest.fn();
 const mockClearAllData = jest.fn();
@@ -30,6 +31,7 @@ jest.mock('@/lib/config', () => ({
 jest.mock('@/lib/db', () => ({
   db: {
     setSkipConfig: mockSetSkipConfig,
+    getAllSkipConfigs: mockGetAllSkipConfigs,
     getCache: mockGetCache,
     setCache: mockSetCache,
     clearExpiredCache: jest.fn(),
@@ -64,7 +66,9 @@ const edgePrimitives = jest.requireActual(
 describe('API security and bug regression suite', () => {
   let NextRequest: typeof import('next/server').NextRequest;
   let generateAuthCookie: typeof import('@/lib/auth').generateAuthCookie;
+  let skipGET: typeof import('./skipconfigs/route').GET;
   let skipPOST: typeof import('./skipconfigs/route').POST;
+  let parseGET: typeof import('./parse/route').GET;
   let cacheGET: typeof import('./cache/route').GET;
   let cachePOST: typeof import('./cache/route').POST;
   let m3u8GET: typeof import('./proxy/m3u8/route').GET;
@@ -80,7 +84,8 @@ describe('API security and bug regression suite', () => {
     global.Response = edgePrimitives.Response;
     ({ NextRequest } = await import('next/server'));
     ({ generateAuthCookie } = await import('@/lib/auth'));
-    ({ POST: skipPOST } = await import('./skipconfigs/route'));
+    ({ GET: skipGET, POST: skipPOST } = await import('./skipconfigs/route'));
+    ({ GET: parseGET } = await import('./parse/route'));
     ({ GET: cacheGET, POST: cachePOST } = await import('./cache/route'));
     ({ GET: m3u8GET } = await import('./proxy/m3u8/route'));
     ({ POST: importPOST } =
@@ -313,6 +318,59 @@ describe('API security and bug regression suite', () => {
     expect(mockSaveAdminConfig).toHaveBeenCalledWith(
       expect.objectContaining({ selfChecked: true }),
     );
+  });
+
+  test('GET /api/parse requires auth, rejects unknown domains, and isolates iframe output', async () => {
+    const unauthRes = await parseGET(
+      new NextRequest(
+        'http://localhost/api/parse?url=https%3A%2F%2Fv.qq.com%2Fx%2Fpage%2Ftest.html',
+      ),
+    );
+    expect(unauthRes.status).toBe(401);
+
+    const cookie = await generateAuthCookie('alice', 'user');
+    const unknownDomainRes = await parseGET(
+      new NextRequest(
+        'http://localhost/api/parse?url=https%3A%2F%2Fevil.example.com%2Fvideo&format=redirect',
+        { headers: { cookie: `user_auth=${cookie}` } },
+      ),
+    );
+    expect(unknownDomainRes.status).toBe(400);
+
+    const iframeRes = await parseGET(
+      new NextRequest(
+        'http://localhost/api/parse?url=https%3A%2F%2Fv.qq.com%2Fx%2Fpage%2Ftest.html&format=iframe',
+        { headers: { cookie: `user_auth=${cookie}` } },
+      ),
+    );
+    expect(iframeRes.status).toBe(200);
+    expect(iframeRes.headers.get('Content-Security-Policy')).toContain(
+      "frame-ancestors 'self'",
+    );
+    const html = await iframeRes.text();
+    expect(html).toContain('sandbox=');
+  });
+
+  test('GET /api/skipconfigs enforces auth and returns skip config map', async () => {
+    const unauthRes = await skipGET(
+      new NextRequest('http://localhost/api/skipconfigs'),
+    );
+    expect(unauthRes.status).toBe(401);
+
+    mockGetAllSkipConfigs.mockResolvedValueOnce({
+      'src1+vid1': { source: 'src1', id: 'vid1', title: '剧集', segments: [] },
+    });
+    const cookie = await generateAuthCookie('alice', 'user');
+    const okRes = await skipGET(
+      new NextRequest('http://localhost/api/skipconfigs', {
+        headers: { cookie: `user_auth=${cookie}` },
+      }),
+    );
+    expect(okRes.status).toBe(200);
+    expect(await okRes.json()).toEqual({
+      'src1+vid1': { source: 'src1', id: 'vid1', title: '剧集', segments: [] },
+    });
+    expect(mockGetAllSkipConfigs).toHaveBeenCalledWith('alice');
   });
 });
 

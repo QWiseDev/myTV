@@ -10,6 +10,27 @@ import { ensureUserAccessOrResponse } from '@/lib/user-access';
 export const runtime = 'nodejs';
 
 // 强制动态渲染，避免在构建时预生成
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await requireUser(request);
+    if (!auth.authInfo) return auth.response;
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
+    }
+
+    const allConfigs = await db.getAllSkipConfigs(auth.authInfo.username);
+    return NextResponse.json(allConfigs);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('获取全部跳过配置 API 错误:', error);
+    return NextResponse.json({ error: '服务器内部错误' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 认证与账号状态校验（仅使用签名校验后的身份，禁止客户端伪造 username）

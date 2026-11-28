@@ -302,4 +302,52 @@ describe('SkipController', () => {
       expect.any(Function),
     );
   });
+
+  test('does not auto-skip entire short video (<360s) when no per-series skipConfig is saved', async () => {
+    localStorage.setItem('enableAutoSkip', 'true');
+    localStorage.setItem('enableAutoNextEpisode', 'true');
+    mockGetSkipConfig.mockResolvedValue(null);
+
+    let timeUpdateListener: (() => void) | null = null;
+    const player = {
+      currentTime: 10,
+      paused: false,
+      isReady: true,
+      pause: jest.fn(),
+      on: jest.fn((event: string, cb: () => void) => {
+        if (event === 'video:timeupdate') timeUpdateListener = cb;
+      }),
+      off: jest.fn(),
+      once: jest.fn(),
+    };
+    const onNextEpisode = jest.fn();
+
+    jest.spyOn(Date, 'now').mockReturnValue(10_000);
+    render(
+      <SkipController
+        source='source-short'
+        id='id-short'
+        title='微短剧'
+        duration={90}
+        artPlayerRef={{ current: player }}
+        onNextEpisode={onNextEpisode}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mockGetSkipConfig).toHaveBeenCalledWith(
+        'source-short',
+        'id-short',
+      ),
+    );
+
+    // 越过 3s 切集冷却期后触发 timeupdate
+    jest.spyOn(Date, 'now').mockReturnValue(20_000);
+    act(() => {
+      timeUpdateListener?.();
+    });
+
+    expect(onNextEpisode).not.toHaveBeenCalled();
+    expect(player.currentTime).toBe(10);
+  });
 });

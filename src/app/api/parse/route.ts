@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAdmin } from '@/lib/admin-auth';
+import { requireUser } from '@/lib/auth';
 import { assertPublicHttpUrl } from '@/lib/url-safety';
+import { ensureUserAccessOrResponse } from '@/lib/user-access';
 
 function escapeHtmlAttr(value: string): string {
   return value
@@ -66,23 +68,39 @@ const PARSERS: Parser[] = [
   },
 ];
 
-// 根据URL识别视频平台
-function detectPlatform(url: string): string {
-  const urlLower = url.toLowerCase();
+const PLATFORM_DOMAIN_RULES: Array<{ platform: string; domains: string[] }> = [
+  { platform: 'qq', domains: ['qq.com'] },
+  { platform: 'iqiyi', domains: ['iqiyi.com', 'qiyi.com'] },
+  { platform: 'youku', domains: ['youku.com'] },
+  { platform: 'mgtv', domains: ['mgtv.com'] },
+  { platform: 'bilibili', domains: ['bilibili.com', 'b23.tv'] },
+  { platform: 'sohu', domains: ['sohu.com'] },
+  { platform: 'letv', domains: ['letv.com', 'le.com'] },
+  { platform: 'pptv', domains: ['pptv.com'] },
+  { platform: 'tudou', domains: ['tudou.com'] },
+  { platform: 'wasu', domains: ['wasu.com'] },
+  { platform: '1905', domains: ['1905.com'] },
+];
 
-  if (urlLower.includes('qq.com') || urlLower.includes('v.qq.com')) return 'qq';
-  if (urlLower.includes('iqiyi.com') || urlLower.includes('qiyi.com'))
-    return 'iqiyi';
-  if (urlLower.includes('youku.com')) return 'youku';
-  if (urlLower.includes('mgtv.com')) return 'mgtv';
-  if (urlLower.includes('bilibili.com')) return 'bilibili';
-  if (urlLower.includes('sohu.com')) return 'sohu';
-  if (urlLower.includes('letv.com') || urlLower.includes('le.com'))
-    return 'letv';
-  if (urlLower.includes('pptv.com')) return 'pptv';
-  if (urlLower.includes('tudou.com')) return 'tudou';
-  if (urlLower.includes('wasu.com')) return 'wasu';
-  if (urlLower.includes('1905.com')) return '1905';
+function matchesHostDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+// 根据 URL hostname 严格识别视频平台（避免 example.com 命中 le.com 或查询串伪造域名）
+function detectPlatform(url: string): string {
+  let hostname = '';
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return 'unknown';
+  }
+  if (!hostname) return 'unknown';
+
+  for (const rule of PLATFORM_DOMAIN_RULES) {
+    if (rule.domains.some((domain) => matchesHostDomain(hostname, domain))) {
+      return rule.platform;
+    }
+  }
 
   return 'unknown';
 }
@@ -116,10 +134,13 @@ async function checkParserHealth(parser: Parser): Promise<boolean> {
   }
 }
 
-// 获取可用的解析器（优先返回活跃状态的解析器）
+// 获取可用的解析器（仅匹配已知支持的视频平台，拒绝 unknown 任意域名）
 function getAvailableParsers(platform: string): Parser[] {
-  const filtered = PARSERS.filter(
-    (parser) => parser.platforms.includes(platform) || platform === 'unknown',
+  if (!platform || platform === 'unknown') {
+    return [];
+  }
+  const filtered = PARSERS.filter((parser) =>
+    parser.platforms.includes(platform),
   );
 
   // 按优先级和状态排序：active > unknown > inactive，同级别按priority排序
@@ -149,7 +170,7 @@ async function updateParsersHealth() {
   await Promise.allSettled(healthChecks);
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
@@ -160,7 +181,12 @@ export async function GET(request: NextRequest) {
     // 如果是健康检查请求（限制仅管理员可触发，防止外部探测扇出放大）
     if (healthCheck) {
       const admin = await requireAdmin(request);
-      if ('response' in admin) return admin.response;
+      if ('response' in admin) {
+        return (
+          admin.response ??
+          NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        );
+      }
 
       await updateParsersHealth();
       return NextResponse.json({
@@ -175,6 +201,22 @@ export async function GET(request: NextRequest) {
           timestamp: new Date().toISOString(),
         },
       });
+    }
+
+    // 纳入登录鉴权与账号可用性校验，禁止未登录匿名滥用为重定向跳板或解析代理
+    const auth = await requireUser(request);
+    if (!auth.authInfo) {
+      return (
+        auth.response ??
+        NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      );
+    }
+    const guardResult = await ensureUserAccessOrResponse(
+      auth.authInfo.username,
+      auth.authInfo.timestamp,
+    );
+    if ('response' in guardResult) {
+      return guardResult.response;
     }
 
     if (!url) {
@@ -195,15 +237,18 @@ export async function GET(request: NextRequest) {
     const availableParsers = getAvailableParsers(platform);
 
     if (availableParsers.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: '该平台暂不支持解析',
-        data: {
-          original_url: url,
-          platform: platform,
-          available_parsers: [],
+      return NextResponse.json(
+        {
+          success: false,
+          error: '该平台暂不支持解析',
+          data: {
+            original_url: url,
+            platform: platform,
+            available_parsers: [],
+          },
         },
-      });
+        { status: 400 },
+      );
     }
 
     // 选择解析器
@@ -235,10 +280,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(parseUrl);
 
       case 'iframe': {
-        // 返回可嵌入的iframe HTML
+        // 返回带沙箱隔离的 iframe HTML
         const safeParseUrl = escapeHtmlAttr(parseUrl);
-        const iframeHtml = `
-<!DOCTYPE html>
+        const iframeHtml = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -250,20 +294,23 @@ export async function GET(request: NextRequest) {
     </style>
 </head>
 <body>
-    <iframe src="${safeParseUrl}" allowfullscreen></iframe>
+    <iframe src="${safeParseUrl}" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer" allowfullscreen></iframe>
 </body>
 </html>`;
         return new NextResponse(iframeHtml, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'private, no-store',
+            'X-Frame-Options': 'SAMEORIGIN',
+            'Content-Security-Policy':
+              "default-src 'none'; style-src 'unsafe-inline'; frame-src https: http:; frame-ancestors 'self'",
           },
         });
       }
 
       case 'json':
       default:
-        // 返回JSON格式的解析信息
+        // 返回JSON格式的解析信息（鉴权接口使用 private 缓存，不暴露跨源通配符）
         return NextResponse.json(
           {
             success: true,
@@ -277,10 +324,7 @@ export async function GET(request: NextRequest) {
           },
           {
             headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET',
-              'Access-Control-Allow-Headers': 'Content-Type',
-              'Cache-Control': 'public, max-age=300',
+              'Cache-Control': 'private, max-age=300',
             },
           },
         );
@@ -298,16 +342,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-// 支持CORS预检请求
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
 }

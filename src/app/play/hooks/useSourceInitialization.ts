@@ -3,6 +3,7 @@
 import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
 import { cachedGet } from '@/lib/api-cache.client';
+import { replacePlayPageUrl } from '@/lib/play-navigation';
 import type { SearchResult } from '@/lib/types';
 import { selectUsableImageUrl } from '@/lib/utils';
 
@@ -119,6 +120,8 @@ export function useSourceInitialization({
 }: UseSourceInitializationParams): UseSourceInitializationResult {
   const latestRequestRef = useRef(0);
   const sourceSearchLoaderRef = useRef<(() => Promise<void>) | null>(null);
+  // 记录已消费过的外部路由参数签名：用于区分“旧路由参数下非路由依赖重跑”与“跨片客户端路由导航”
+  const appliedRouteSignatureRef = useRef<string | null>(null);
   const handleError = errorHandler.handleError;
   // 异步到达的播放记录兜底字段存 ref：避免 playRecords 晚到时中断首轮 /api/detail 或重复全源搜索
   const fallbackTitleRef = useRef(fallbackTitle);
@@ -329,6 +332,13 @@ export function useSourceInitialization({
 
     const initAll = async () => {
       try {
+        const routeSignature = [
+          currentSource,
+          currentId,
+          videoTitle,
+          searchTitle,
+          searchType,
+        ].join('\u0000');
         const currentDetail = detailRef?.current;
         const routeAlreadyApplied =
           Boolean(currentSource && currentId) &&
@@ -343,6 +353,7 @@ export function useSourceInitialization({
           );
 
         if (routeAlreadyApplied && currentDetail) {
+          appliedRouteSignatureRef.current = routeSignature;
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
           setLoading(false);
@@ -351,20 +362,22 @@ export function useSourceInitialization({
         }
 
         // 🩹 修复：用户手动换源后，ref 中的 source/id 已经被
-        // handleSourceChange 更新，但 routeParams（来自 useSearchParams）
-        // 不会感知 replaceState 的变化，仍停留在旧值。
-        // 若此时 effect 因其他依赖变化重新执行，会以旧 routeParams 重新
-        // 初始化，导致"换源后又变回去"。
-        // 检测到 ref 已有有效源且与传入的 routeParams 不同时，说明用户
-        // 已经换过源，跳过重新初始化，仅补充可选源列表。
-        const userHasSwitchedSource =
-          currentSourceRef?.current &&
-          currentIdRef?.current &&
-          currentDetail &&
-          (currentSourceRef.current !== currentSource ||
-            currentIdRef.current !== currentId);
+        // handleSourceChange 更新，但若 routeParams 未感知 replaceState 的变化仍停留在旧值，
+        // 且 effect 因其他非路由依赖重新执行时，跳过以旧 routeParams 重新初始化。
+        // 注意：必须校验 routeSignature 与上次已应用的路由签名相同；若外部通过
+        // router.push('/play?...') 导航到了另一部影片（routeSignature 已变），则必须正常重新初始化。
+        const userHasSwitchedSourceOnSameRoute =
+          appliedRouteSignatureRef.current !== null &&
+          appliedRouteSignatureRef.current === routeSignature &&
+          Boolean(
+            currentSourceRef?.current &&
+            currentIdRef?.current &&
+            currentDetail &&
+            (currentSourceRef.current !== currentSource ||
+              currentIdRef.current !== currentId),
+          );
 
-        if (userHasSwitchedSource) {
+        if (userHasSwitchedSourceOnSameRoute && currentDetail) {
           sourceSearchLoaderRef.current = () =>
             enrichAvailableSources(currentDetail);
           setLoading(false);
@@ -376,6 +389,7 @@ export function useSourceInitialization({
           failInitialization(new Error('缺少必要参数'));
           return;
         }
+        appliedRouteSignatureRef.current = routeSignature;
         setLoading(true);
         setError(null);
         setLoadingStage(currentSource && currentId ? 'fetching' : 'searching');
@@ -543,7 +557,7 @@ export function useSourceInitialization({
           newUrl.searchParams.delete('douban_id');
         }
         newUrl.searchParams.delete('prefer');
-        window.history.replaceState({}, '', newUrl.toString());
+        replacePlayPageUrl(newUrl.toString());
 
         setLoadingStage('ready');
         setLoadingMessage('✨ 准备就绪，即将开始播放...');

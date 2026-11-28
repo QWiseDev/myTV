@@ -26,6 +26,7 @@ import {
   triggerGlobalError,
 } from '../core';
 import { findCrossKeySameShowRecords } from '../../play-record-merge';
+import { resolvePlayRecordOriginalEpisodes } from '../../play-record-original-episodes';
 import {
   DEFAULT_PLAY_RECORDS_PAGE_SIZE,
   paginatePlayRecords,
@@ -38,84 +39,14 @@ import type {
 } from '../../types';
 import { shouldInvalidateWatchingUpdates } from '../../watching-updates-invalidation';
 
-/**
- * 检查是否应该更新原始集数
- *
- * 设计思路：original_episodes 记录的是"用户上次知道的总集数"
- * 当用户观看了超出原始集数的新集数后，说明用户已经"消费"了这次更新提醒
- * 此时应该更新 original_episodes，这样下次更新才能准确计算新增集数
- *
- * 更新条件（所有条件都必须满足）：
- * 1. 用户观看了超过原始集数的集数（说明看了新更新的内容）
- * 2. 当前总集数比原始集数多（确实有新集数）
- * 3. 用户观看进度有实质性进展（防止误触）
- * 4. 新集数增加量合理（防止API错误数据）
- * 5. 用户观看的新集数超过原始集数至少1集（确保真的看了新内容）
- *
- * 例子：
- * - 第一次看10集 → original_episodes = 10
- * - 更新到15集 → 提醒"5集新增"
- * - 用户看第11集 → original_episodes 更新为 15（用户已消费这次更新）
- * - 下次更新到24集 → 提醒"9集新增"（24-15），而不是"14集新增"（24-10）
- */
-function checkShouldUpdateOriginalEpisodes(
-  existingRecord: PlayRecord,
-  newRecord: PlayRecord,
-): boolean {
-  const originalEpisodes =
-    existingRecord.original_episodes || existingRecord.total_episodes;
-
-  // 条件1：用户观看进度超过原始集数，说明用户追到了新更新
-  const hasWatchedBeyondOriginal = newRecord.index > originalEpisodes;
-
-  // 条件2：当前总集数确实比原始集数多
-  const hasMoreEpisodes = newRecord.total_episodes > originalEpisodes;
-
-  // 条件3：用户观看进度有实质性进展（不是刚点进去就退出）
-  const hasSignificantProgress = newRecord.play_time > 60; // 观看超过1分钟
-
-  // 条件4：新增集数增量合理，避免接口异常导致大幅跳变
-  const episodeIncrement = newRecord.total_episodes - originalEpisodes;
-  const reasonableIncrement = episodeIncrement > 0 && episodeIncrement <= 100; // 最多增加100集
-
-  // 条件5：用户观看的新集数至少比原始集数多 1 集（确保真的看了新内容）
-  const watchedNewEpisodes = newRecord.index >= originalEpisodes + 1;
-
-  // 条件6：观看进度与总集数匹配，避免脏数据
-  const progressMatches = newRecord.index <= newRecord.total_episodes;
-
-  const shouldUpdate =
-    hasWatchedBeyondOriginal &&
-    hasMoreEpisodes &&
-    hasSignificantProgress &&
-    reasonableIncrement &&
-    watchedNewEpisodes &&
-    progressMatches;
-
-  return shouldUpdate;
-}
-
 function preparePlayRecordForSave(
   existingRecord: PlayRecord | undefined,
   record: PlayRecord,
 ): boolean {
-  if (!existingRecord && record.total_episodes > 1) {
-    record.original_episodes = record.total_episodes;
-  } else if (
-    existingRecord &&
-    !existingRecord.original_episodes &&
-    record.total_episodes > 1
-  ) {
-    record.original_episodes = record.total_episodes;
-  } else if (existingRecord?.original_episodes) {
-    const shouldUpdateOriginal = checkShouldUpdateOriginalEpisodes(
-      existingRecord,
-      record,
-    );
-    record.original_episodes = shouldUpdateOriginal
-      ? record.total_episodes
-      : existingRecord.original_episodes;
-  }
+  record.original_episodes = resolvePlayRecordOriginalEpisodes(
+    existingRecord,
+    record,
+  );
 
   return shouldInvalidateWatchingUpdates(existingRecord || null, record);
 }

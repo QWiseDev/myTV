@@ -1,7 +1,7 @@
 import type { SearchResult } from '@/lib/types';
 
 import { appendSourceFragmentParam } from './fragmentUrlParams';
-import { filterAdsFromM3U8 } from './helpers';
+import { filterAdsFromM3U8, filterAdsFromM3U8Async } from './helpers';
 
 const CUSTOM_AD_FILTER_CODE_CACHE_KEY = 'custom_ad_filter_code_cache';
 
@@ -307,9 +307,9 @@ export async function followManifestToSegment(
     customAdFilterCode?: string;
   } = {},
 ): Promise<{ segmentUrl: string | null; declaredHeight: number }> {
-  const applyFilter = (text: string) =>
+  const applyFilter = async (text: string) =>
     options.filterAds
-      ? filterAdsFromM3U8(text, {
+      ? filterAdsFromM3U8Async(text, {
           type: options.adFilterType,
           customCode: options.customAdFilterCode,
         })
@@ -317,7 +317,10 @@ export async function followManifestToSegment(
 
   const declaredHeightOuter = pickDeclaredResolutionHeight(manifestText);
   let declaredHeight = declaredHeightOuter;
-  let segmentUrl = pickFirstMediaSegment(applyFilter(manifestText), baseUrl);
+  let segmentUrl = pickFirstMediaSegment(
+    await applyFilter(manifestText),
+    baseUrl,
+  );
 
   if (!segmentUrl || !isLikelyHlsUrl(segmentUrl)) {
     return { segmentUrl, declaredHeight };
@@ -342,7 +345,7 @@ export async function followManifestToSegment(
     // 重定向后的相对路径要基于最终地址解析
     const childBase = response.url || segmentUrl;
     const childSegment = pickFirstMediaSegment(
-      applyFilter(childText),
+      await applyFilter(childText),
       childBase,
     );
     if (childSegment) segmentUrl = childSegment;
@@ -945,23 +948,54 @@ export async function probePlayableMediaUrl(
                         context.type === 'level') &&
                       typeof response?.data === 'string'
                     ) {
-                      const manifestText = blockAdEnabled
-                        ? filterAdsFromM3U8(response.data, {
-                            type: options.adFilterType,
-                            customCode: customAdFilterCode,
-                          })
-                        : response.data;
-                      response.data = manifestText;
-                      const manifestBase =
-                        response.url ||
-                        (typeof context.url === 'string' ? context.url : url);
-                      const firstSeg = pickFirstMediaSegment(
-                        manifestText,
-                        manifestBase,
-                      );
-                      if (firstSeg && !isLikelyHlsUrl(firstSeg)) {
-                        capturedSegmentUrl = firstSeg;
+                      const recordFirstSegment = (manifestText: string) => {
+                        response.data = manifestText;
+                        const manifestBase =
+                          response.url ||
+                          (typeof context.url === 'string' ? context.url : url);
+                        const firstSeg = pickFirstMediaSegment(
+                          manifestText,
+                          manifestBase,
+                        );
+                        if (firstSeg && !isLikelyHlsUrl(firstSeg)) {
+                          capturedSegmentUrl = firstSeg;
+                        }
+                      };
+
+                      if (!blockAdEnabled) {
+                        recordFirstSegment(response.data);
+                        return originalOnSuccess(
+                          response,
+                          stats,
+                          ctx,
+                          networkDetails,
+                        );
                       }
+
+                      const trimmedCustom = customAdFilterCode.trim();
+                      if (!trimmedCustom) {
+                        recordFirstSegment(
+                          filterAdsFromM3U8(response.data, {
+                            type: options.adFilterType,
+                          }),
+                        );
+                        return originalOnSuccess(
+                          response,
+                          stats,
+                          ctx,
+                          networkDetails,
+                        );
+                      }
+
+                      void filterAdsFromM3U8Async(response.data, {
+                        type: options.adFilterType,
+                        customCode: trimmedCustom,
+                      }).then((filtered) => {
+                        if (done || options.signal.aborted) return;
+                        recordFirstSegment(filtered);
+                        originalOnSuccess(response, stats, ctx, networkDetails);
+                      });
+                      return;
                     }
                     return originalOnSuccess(
                       response,

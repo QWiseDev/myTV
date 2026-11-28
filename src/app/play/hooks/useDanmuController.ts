@@ -1,6 +1,6 @@
 'use client';
 
-import { MutableRefObject, useCallback, useRef } from 'react';
+import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
 import { analytics } from '@/lib/analytics';
 import {
@@ -67,6 +67,14 @@ export function useDanmuController({
     danmuLoadingRef.current = false;
     lastDanmuLoadKeyRef.current = '';
   }, [danmuLoadingRef, lastDanmuLoadKeyRef]);
+
+  // 组件卸载时立即中止在飞的 30s 外部弹幕请求，释放连接与服务端抓取资源
+  useEffect(() => {
+    const manager = loadManagerRef.current;
+    return () => {
+      manager.reset();
+    };
+  }, []);
 
   const loadExternalDanmu = useCallback(async (): Promise<
     DanmakuItemLike[]
@@ -256,5 +264,6 @@ export function useDanmuController({
   return {
     handleDanmuOperationOptimized,
     loadExternalDanmu,
+    resetDanmuLoadState,
   };
 }

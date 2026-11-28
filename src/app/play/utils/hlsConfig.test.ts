@@ -241,6 +241,88 @@ describe('hlsConfig error guards', () => {
     expect(mediaHls.destroy).toHaveBeenCalledTimes(1);
     expect(onMediaFatal).toHaveBeenCalledTimes(1);
   });
+
+  test('manifestLoadError uses bounded retries instead of 500ms unconditional failure and guards destroyed MSE timer', () => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation();
+    jest.spyOn(console, 'warn').mockImplementation();
+
+    const hls = {
+      recoverMediaError: jest.fn(),
+      startLoad: jest.fn(),
+      destroy: jest.fn(),
+      trigger: jest.fn(),
+      levels: [{ height: 1080 }, { height: 720 }],
+      currentLevel: -1,
+    } as unknown as HlsErrorHandlerInstance;
+    const video = document.createElement('video');
+    const onFatalError = jest.fn();
+
+    // 第一次 manifestLoadError：仅调用 startLoad 重试，500ms 后不应误触发 onFatalError
+    handleHlsError(
+      'hlsError',
+      { fatal: true, type: 'networkError', details: 'manifestLoadError' },
+      hls,
+      video,
+      onFatalError,
+    );
+    jest.advanceTimersByTime(600);
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    expect(onFatalError).not.toHaveBeenCalled();
+
+    // 耗尽重试后销毁实例并上报致命错误
+    handleHlsError(
+      'hlsError',
+      { fatal: true, type: 'networkError', details: 'manifestLoadError' },
+      hls,
+      video,
+      onFatalError,
+    );
+    handleHlsError(
+      'hlsError',
+      { fatal: true, type: 'networkError', details: 'manifestLoadError' },
+      hls,
+      video,
+      onFatalError,
+    );
+    expect(hls.destroy).toHaveBeenCalledTimes(1);
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+
+    // MSE_ERROR 启动 1000ms 降级定时器后，若实例在到期前已销毁则不再调用 startLoad
+    const mseHls = {
+      recoverMediaError: jest.fn(),
+      startLoad: jest.fn(),
+      destroy: jest.fn(),
+      trigger: jest.fn(),
+      levels: [{ height: 1080 }, { height: 720 }],
+      currentLevel: 0,
+    } as unknown as HlsErrorHandlerInstance;
+
+    handleHlsError(
+      'hlsError',
+      { fatal: true, type: 'mediaError', details: 'mseError' },
+      mseHls,
+      video,
+      jest.fn(),
+    );
+    // 模拟随后遭遇上游 503 销毁了该实例
+    handleHlsError(
+      'hlsError',
+      {
+        fatal: true,
+        type: 'networkError',
+        details: 'manifestLoadError',
+        response: { status: 503 },
+      },
+      mseHls,
+      video,
+      jest.fn(),
+    );
+    jest.advanceTimersByTime(1100);
+    expect(mseHls.startLoad).not.toHaveBeenCalled();
+
+    jest.useRealTimers();
+  });
 });
 
 describe('hlsConfig performance defaults', () => {

@@ -1,7 +1,7 @@
 import type { HlsConfig } from 'hls.js';
 import type { MutableRefObject } from 'react';
 
-import { filterAdsFromM3U8 } from '@/lib/ad-filter';
+import { filterAdsFromM3U8, filterAdsFromM3U8Async } from '@/lib/ad-filter';
 
 import { appendSourceFragmentParam } from './fragmentUrlParams';
 import { stripMpegTsPrefix } from './mpegTs';
@@ -50,12 +50,39 @@ export function createAdFilterHlsLoader(
   return class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
     constructor(config: HlsConfig) {
       super(config);
+      let cancelled = false;
+      const lifecycleTarget = this as unknown as {
+        abort?: (...args: unknown[]) => unknown;
+        destroy?: (...args: unknown[]) => unknown;
+      };
+      const rawAbort =
+        typeof lifecycleTarget.abort === 'function'
+          ? lifecycleTarget.abort.bind(this)
+          : null;
+      if (rawAbort) {
+        lifecycleTarget.abort = (...args: unknown[]) => {
+          cancelled = true;
+          return rawAbort(...args);
+        };
+      }
+      const rawDestroy =
+        typeof lifecycleTarget.destroy === 'function'
+          ? lifecycleTarget.destroy.bind(this)
+          : null;
+      if (rawDestroy) {
+        lifecycleTarget.destroy = (...args: unknown[]) => {
+          cancelled = true;
+          return rawDestroy(...args);
+        };
+      }
+
       const load = this.load.bind(this);
       this.load = function (
         context: HlsLoaderContext,
         conf: unknown,
         callbacks: HlsLoaderCallbacks,
       ) {
+        cancelled = false;
         if (context.type === 'manifest' || context.type === 'level') {
           const onSuccess = callbacks.onSuccess;
           if (typeof onSuccess === 'function') {
@@ -65,22 +92,35 @@ export function createAdFilterHlsLoader(
               ctx: HlsLoaderContext,
             ) {
               if (
-                blockAdEnabledRef.current &&
-                response.data &&
-                typeof response.data === 'string'
+                !blockAdEnabledRef.current ||
+                !response.data ||
+                typeof response.data !== 'string'
               ) {
+                return onSuccess(response, stats, ctx, null);
+              }
+
+              const customCode = customAdFilterCodeRef.current.trim();
+              if (!customCode) {
                 response.data = filterAdsFromM3U8(response.data, {
                   type: source,
-                  customCode: customAdFilterCodeRef.current,
-                  onCustomError: (error) => {
-                    console.error(
-                      '执行自定义去广告代码失败，使用默认规则:',
-                      error,
-                    );
-                  },
                 });
+                return onSuccess(response, stats, ctx, null);
               }
-              return onSuccess(response, stats, ctx, null);
+
+              void filterAdsFromM3U8Async(response.data, {
+                type: source,
+                customCode,
+                onCustomError: (error) => {
+                  console.error(
+                    '执行自定义去广告代码失败，使用默认规则:',
+                    error,
+                  );
+                },
+              }).then((filtered) => {
+                if (cancelled) return;
+                response.data = filtered;
+                onSuccess(response, stats, ctx, null);
+              });
             };
           }
         } else if (context.type === 'media-fragment') {

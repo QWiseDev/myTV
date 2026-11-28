@@ -33,7 +33,7 @@ describe('usePlayProgress', () => {
     Reflect.deleteProperty(navigator, 'sendBeacon');
   });
 
-  test('uses sendBeacon instead of async save during beforeunload', () => {
+  test('uses sendBeacon on beforeunload without destroying player prematurely, and cleans up on non-persisted pagehide', () => {
     const sendBeacon = jest.fn().mockReturnValue(true);
     const releaseWakeLock = jest.fn();
     const cleanupPlayer = jest.fn();
@@ -71,15 +71,25 @@ describe('usePlayProgress', () => {
     );
 
     act(() => {
+      window.dispatchEvent(new CustomEvent('savePlayProgress'));
       window.dispatchEvent(new Event('beforeunload'));
     });
 
+    // savePlayProgress 与紧随的 beforeunload 在 1s 窗口内去重，且 beforeunload 不提前销毁播放器
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(sendBeacon).toHaveBeenCalledWith(
       '/api/playrecords',
       expect.any(Blob),
     );
     expect(savePlayRecord).not.toHaveBeenCalled();
     expect(releaseWakeLock).toHaveBeenCalledTimes(1);
+    expect(cleanupPlayer).not.toHaveBeenCalled();
+
+    act(() => {
+      const pageHideEvent = new Event('pagehide') as PageTransitionEvent;
+      Object.defineProperty(pageHideEvent, 'persisted', { value: false });
+      window.dispatchEvent(pageHideEvent);
+    });
     expect(cleanupPlayer).toHaveBeenCalledTimes(1);
   });
 });
@@ -208,5 +218,46 @@ describe('buildPlayProgressPayload', () => {
     });
 
     expect(payload).toBeNull();
+  });
+
+  test('advances original_episodes in beacon/unload payload when user watched newly updated episode', () => {
+    const detailWithNewEpisodes = {
+      ...createDetail(),
+      episodes: ['ep1', 'ep2', 'ep3'],
+    };
+    const payload = buildPlayProgressPayload({
+      player: {
+        currentTime: 120,
+        duration: 1200,
+      } as ArtPlayerLike,
+      currentSource: 'source',
+      currentId: 'id',
+      videoTitle: 'Title',
+      videoCover: '',
+      videoDoubanId: 123,
+      detail: detailWithNewEpisodes,
+      playRecords: {
+        'source+id': {
+          title: 'Title',
+          source_name: 'Source',
+          year: '2024',
+          cover: '',
+          index: 2,
+          total_episodes: 2,
+          original_episodes: 2,
+          play_time: 500,
+          total_time: 1200,
+          save_time: 1000,
+          search_title: 'Title',
+        },
+      },
+      availableSources: [detailWithNewEpisodes],
+      movieDetails: null,
+      bangumiDetails: null,
+      currentEpisodeIndex: 2, // 第 3 集（超过原 original_episodes=2）且播放超过 60s
+      searchTitle: 'Title',
+    });
+
+    expect(payload?.record.original_episodes).toBe(3);
   });
 });

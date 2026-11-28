@@ -54,6 +54,11 @@ const hlsFatalRetryCounts = new WeakMap<
   HlsRuntimeInstance,
   { network: number; media: number }
 >();
+const destroyedHlsInstances = new WeakSet<HlsRuntimeInstance>();
+
+function markHlsDestroyed(hls: HlsRuntimeInstance): void {
+  destroyedHlsInstances.add(hls);
+}
 
 function getFatalRetryState(hls: HlsRuntimeInstance) {
   let state = hlsFatalRetryCounts.get(hls);
@@ -441,6 +446,7 @@ export function handleHlsError(
         if (isServerUnavailableManifestError(data)) {
           console.warn(`检测到上游 ${status}，停止当前源并触发切源`);
           try {
+            markHlsDestroyed(hls);
             hls.destroy();
           } catch (e) {
             console.warn('销毁 HLS 实例失败:', e);
@@ -456,31 +462,15 @@ export function handleHlsError(
         // 获取详细错误信息并传递给回调
         const networkDetails = extractNetworkErrorDetails(data);
 
-        // manifest 级别错误直接触发回调
-        if (
-          data.details === 'manifestLoadError' ||
-          data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR
-        ) {
-          hls.startLoad();
-          setTimeout(() => {
-            if (onFatalError) {
-              onFatalError(
-                errorMessage +
-                  (networkDetails ? `\n\n详情: ${networkDetails}` : ''),
-              );
-            }
-          }, 500);
-          break;
-        }
-
-        // 其他致命网络错误（如 404/403/CORS 分片或子清单失败）限制重试次数，
-        // 避免无限 startLoad() 循环导致永远无法触发自动换源
+        // 致命网络错误（含 manifestLoadError / levelLoadError / fragLoadError）统一按有界次数重试，
+        // 避免一边 startLoad() 重试一边 500ms 定时器强判源失败，也避免无限重试阻塞自动换源。
         const retryState = getFatalRetryState(hls);
         if (retryState.network < MAX_FATAL_NETWORK_RETRIES) {
           retryState.network += 1;
           hls.startLoad();
         } else {
           try {
+            markHlsDestroyed(hls);
             hls.destroy();
           } catch (e) {
             console.warn('销毁 HLS 实例失败:', e);
@@ -498,6 +488,7 @@ export function handleHlsError(
         const retryState = getFatalRetryState(hls);
         if (retryState.media >= MAX_FATAL_MEDIA_RETRIES) {
           try {
+            markHlsDestroyed(hls);
             hls.destroy();
           } catch (e) {
             console.warn('销毁 HLS 实例失败:', e);
@@ -520,8 +511,9 @@ export function handleHlsError(
             data.details === Hls.ErrorDetails.MSE_ERROR ||
             data.details === Hls.ErrorDetails.MSE_UNSUPPORTED_CODEC
           ) {
-            // 尝试重新加载更低码率的级别
+            // 尝试重新加载更低码率的级别（若期间实例已销毁则跳过）
             setTimeout(() => {
+              if (destroyedHlsInstances.has(hls)) return;
               if (hls.levels && hls.levels.length > 0) {
                 const levelsWithHeight = hls.levels
                   .map((level, index) => ({
@@ -550,6 +542,7 @@ export function handleHlsError(
         break;
       }
       default:
+        markHlsDestroyed(hls);
         hls.destroy();
         if (onFatalError) {
           onFatalError(errorMessage);
@@ -580,6 +573,7 @@ export function initAdaptiveHls(
 
   // 清理旧的 HLS 实例
   if (video.hls) {
+    markHlsDestroyed(video.hls as HlsRuntimeInstance);
     video.hls.destroy();
   }
 
@@ -592,6 +586,12 @@ export function initAdaptiveHls(
 
   // 创建新的 HLS 实例
   const hls = new Hls(hlsConfig as Partial<HlsConfig>) as HlsRuntimeInstance;
+  const destroyingEvent = Hls.Events?.DESTROYING ?? 'hlsDestroying';
+  if (typeof hls.on === 'function') {
+    hls.on(destroyingEvent as Parameters<typeof hls.on>[0], () => {
+      markHlsDestroyed(hls);
+    });
+  }
 
   hls.loadSource(url);
   hls.attachMedia(video);

@@ -21,8 +21,8 @@ export interface PlayPageState {
   // 视频信息
   video: VideoInfo;
 
-  // 播放状态
-  playback: PlaybackInfo;
+  // 播放状态（仅保留页面层真实消费的集数与总时长，高频 currentTime 等由播放器实例自身承载）
+  playback: Pick<PlaybackInfo, 'currentEpisode' | 'duration'>;
 
   // 播放器 UI 状态
   player: PlayerState & {
@@ -30,14 +30,12 @@ export interface PlayPageState {
   };
 
   // 弹幕状态
-  danmaku: DanmakuConfig;
+  danmaku: Pick<DanmakuConfig, 'enabled'>;
 
   // UI 状态
   ui: {
     isSkipSettingOpen: boolean;
     showBackToTop: boolean;
-    selectedTab: string;
-    isMobile: boolean;
   };
 
   // 详情数据
@@ -57,8 +55,10 @@ export type PlayPageAction =
   | { type: 'SET_VIDEO_URL'; payload: string }
 
   // 播放状态更新
-  | { type: 'SET_PLAYBACK_INFO'; payload: Partial<PlaybackInfo> }
-  | { type: 'SET_CURRENT_TIME'; payload: number }
+  | {
+      type: 'SET_PLAYBACK_INFO';
+      payload: Partial<Pick<PlaybackInfo, 'currentEpisode' | 'duration'>>;
+    }
   | { type: 'SET_EPISODE'; payload: number }
 
   // 播放器状态更新
@@ -72,13 +72,13 @@ export type PlayPageAction =
   | { type: 'SET_SPEED_TEST_PROGRESS'; payload: SpeedTestProgress | null }
 
   // 弹幕状态更新
-  | { type: 'SET_DANMAKU_CONFIG'; payload: Partial<DanmakuConfig> }
-  | { type: 'TOGGLE_DANMAKU' }
-  | { type: 'SET_DANMAKU_LOADING'; payload: boolean }
+  | {
+      type: 'SET_DANMAKU_CONFIG';
+      payload: Partial<Pick<DanmakuConfig, 'enabled'>>;
+    }
 
   // UI 状态更新
   | { type: 'TOGGLE_SKIP_SETTING' }
-  | { type: 'SET_SELECTED_TAB'; payload: string }
   | { type: 'TOGGLE_BACK_TO_TOP'; payload: boolean }
 
   // 详情数据更新
@@ -108,12 +108,7 @@ const defaultInitialState: PlayPageState = {
   },
   playback: {
     currentEpisode: 0,
-    totalEpisodes: 0,
-    currentTime: 0,
     duration: 0,
-    isPlaying: false,
-    volume: 0.8,
-    playbackRate: 1,
   },
   player: {
     loading: false,
@@ -124,18 +119,10 @@ const defaultInitialState: PlayPageState = {
   },
   danmaku: {
     enabled: true,
-    loading: false,
-    opacity: 0.5,
-    fontSize: 20,
-    speed: 5,
-    unlimited: false,
-    sources: [],
   },
   ui: {
     isSkipSettingOpen: false,
     showBackToTop: false,
-    selectedTab: 'episodes',
-    isMobile: false,
   },
   details: {
     movie: null,
@@ -170,12 +157,6 @@ function playPageReducer(
       return {
         ...state,
         playback: { ...state.playback, ...action.payload },
-      };
-
-    case 'SET_CURRENT_TIME':
-      return {
-        ...state,
-        playback: { ...state.playback, currentTime: action.payload },
       };
 
     case 'SET_EPISODE':
@@ -222,18 +203,6 @@ function playPageReducer(
         danmaku: { ...state.danmaku, ...action.payload },
       };
 
-    case 'TOGGLE_DANMAKU':
-      return {
-        ...state,
-        danmaku: { ...state.danmaku, enabled: !state.danmaku.enabled },
-      };
-
-    case 'SET_DANMAKU_LOADING':
-      return {
-        ...state,
-        danmaku: { ...state.danmaku, loading: action.payload },
-      };
-
     // UI 状态
     case 'TOGGLE_SKIP_SETTING':
       return {
@@ -242,12 +211,6 @@ function playPageReducer(
           ...state.ui,
           isSkipSettingOpen: !state.ui.isSkipSettingOpen,
         },
-      };
-
-    case 'SET_SELECTED_TAB':
-      return {
-        ...state,
-        ui: { ...state.ui, selectedTab: action.payload },
       };
 
     case 'TOGGLE_BACK_TO_TOP':
@@ -306,8 +269,9 @@ export interface UsePlayerStateReturn {
     setVideoUrl: (url: string) => void;
 
     // 播放相关
-    setPlaybackInfo: (info: Partial<PlaybackInfo>) => void;
-    setCurrentTime: (time: number) => void;
+    setPlaybackInfo: (
+      info: Partial<Pick<PlaybackInfo, 'currentEpisode' | 'duration'>>,
+    ) => void;
     setEpisode: (index: number) => void;
 
     // 播放器状态
@@ -318,13 +282,10 @@ export interface UsePlayerStateReturn {
     setSpeedTestProgress: (progress: SpeedTestProgress | null) => void;
 
     // 弹幕
-    setDanmakuConfig: (config: Partial<DanmakuConfig>) => void;
-    toggleDanmaku: () => void;
-    setDanmakuLoading: (loading: boolean) => void;
+    setDanmakuConfig: (config: Partial<Pick<DanmakuConfig, 'enabled'>>) => void;
 
     // UI
     toggleSkipSetting: () => void;
-    setSelectedTab: (tab: string) => void;
     toggleBackToTop: (show: boolean) => void;
 
     // 详情
@@ -359,10 +320,9 @@ export const usePlayerState = (
         dispatch({ type: 'SET_VIDEO_URL', payload: url }),
 
       // 播放相关
-      setPlaybackInfo: (info: Partial<PlaybackInfo>) =>
-        dispatch({ type: 'SET_PLAYBACK_INFO', payload: info }),
-      setCurrentTime: (time: number) =>
-        dispatch({ type: 'SET_CURRENT_TIME', payload: time }),
+      setPlaybackInfo: (
+        info: Partial<Pick<PlaybackInfo, 'currentEpisode' | 'duration'>>,
+      ) => dispatch({ type: 'SET_PLAYBACK_INFO', payload: info }),
       setEpisode: (index: number) =>
         dispatch({ type: 'SET_EPISODE', payload: index }),
 
@@ -379,16 +339,11 @@ export const usePlayerState = (
         dispatch({ type: 'SET_SPEED_TEST_PROGRESS', payload: progress }),
 
       // 弹幕
-      setDanmakuConfig: (config: Partial<DanmakuConfig>) =>
+      setDanmakuConfig: (config: Partial<Pick<DanmakuConfig, 'enabled'>>) =>
         dispatch({ type: 'SET_DANMAKU_CONFIG', payload: config }),
-      toggleDanmaku: () => dispatch({ type: 'TOGGLE_DANMAKU' }),
-      setDanmakuLoading: (loading: boolean) =>
-        dispatch({ type: 'SET_DANMAKU_LOADING', payload: loading }),
 
       // UI
       toggleSkipSetting: () => dispatch({ type: 'TOGGLE_SKIP_SETTING' }),
-      setSelectedTab: (tab: string) =>
-        dispatch({ type: 'SET_SELECTED_TAB', payload: tab }),
       toggleBackToTop: (show: boolean) =>
         dispatch({ type: 'TOGGLE_BACK_TO_TOP', payload: show }),
 

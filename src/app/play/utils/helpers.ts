@@ -1,4 +1,4 @@
-export { filterAdsFromM3U8 } from '@/lib/ad-filter';
+export { filterAdsFromM3U8, filterAdsFromM3U8Async } from '@/lib/ad-filter';
 
 /**
  * 格式化时间（秒）为 HH:MM:SS 或 MM:SS 格式

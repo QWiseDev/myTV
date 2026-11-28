@@ -191,7 +191,7 @@ export default function PlayerAndEpisodeSection({
               </button>
               <div className='p-3 pt-2'>
                 <DanmakuPanel
-                  key={`${danmakuProps.title}-${danmakuProps.episodeIndex}`}
+                  key={`${danmakuProps.mediaKey}-${danmakuProps.episodeIndex}`}
                   {...danmakuProps}
                 />
               </div>

@@ -15,6 +15,7 @@ import { logAccess } from '@/lib/access-log';
 import { danmakuMediaKey } from '@/lib/danmaku';
 import { computeVariantOrdinal } from '@/lib/danmu/episode-match';
 import { generateStorageKey } from '@/lib/db.client';
+import { isInternalPlayUrlSync } from '@/lib/play-navigation';
 import type { SearchResult } from '@/lib/types';
 import { isUsableImageUrl, selectUsableImageUrl } from '@/lib/utils';
 import { useBackToTopController } from '@/hooks/useBackToTopController';
@@ -155,18 +156,11 @@ function PlayPageClient() {
     },
     playback: {
       currentEpisode: 0,
-      totalEpisodes: 0,
-      currentTime: 0,
       duration: 0,
-      isPlaying: false,
-      volume: 0.7,
-      playbackRate: 1,
     },
     ui: {
       isSkipSettingOpen: false,
       showBackToTop: false,
-      selectedTab: 'episodes',
-      isMobile: false,
     },
     details: {
       movie: null,
@@ -176,12 +170,6 @@ function PlayPageClient() {
     },
     danmaku: {
       enabled: initialExternalDanmuEnabled,
-      loading: false,
-      opacity: 0.5,
-      fontSize: 20,
-      speed: 5,
-      unlimited: false,
-      sources: [],
     },
   });
 
@@ -405,16 +393,15 @@ function PlayPageClient() {
     searchTitle,
   });
 
-  // 包装收藏功能以添加分析埋点
-  const handleFavoriteWithAnalytics = useCallback(() => {
-    handleToggleFavorite();
-    // 📊 分析埋点：收藏/取消收藏事件
-    if (favorited) {
-      analytics.trackUnfavorite(); // 取消收藏
-    } else {
-      analytics.trackFavorite(); // 添加收藏
+  // 包装收藏功能以添加分析埋点（仅在落库真实成功后上报对应事件）
+  const handleFavoriteWithAnalytics = useCallback(async () => {
+    const outcome = await handleToggleFavorite();
+    if (outcome === 'favorited') {
+      analytics.trackFavorite();
+    } else if (outcome === 'unfavorited') {
+      analytics.trackUnfavorite();
     }
-  }, [handleToggleFavorite, favorited, analytics]);
+  }, [handleToggleFavorite, analytics]);
 
   const initialAccessLogRef = useRef({
     source: state.video.source,
@@ -621,31 +608,45 @@ function PlayPageClient() {
     errorHandler,
   });
 
-  const { handleDanmuOperationOptimized, loadExternalDanmu } =
-    useDanmuController({
-      artPlayerRef,
-      danmuOperationTimeoutRef,
-      externalDanmuEnabledRef,
-      setExternalDanmuEnabled,
-      videoTitleRef,
-      videoYearRef,
-      videoDoubanIdRef,
-      videoUrlRef,
-      episodeTitleRef,
-      variantEpisodeRef,
-      danmuLoadingRef,
-      lastDanmuLoadKeyRef,
-      currentSourceRef,
-      currentEpisodeIndexRef,
-      canUseSharedCacheRef: isLoggedInRef,
-    });
+  const {
+    handleDanmuOperationOptimized,
+    loadExternalDanmu,
+    resetDanmuLoadState,
+  } = useDanmuController({
+    artPlayerRef,
+    danmuOperationTimeoutRef,
+    externalDanmuEnabledRef,
+    setExternalDanmuEnabled,
+    videoTitleRef,
+    videoYearRef,
+    videoDoubanIdRef,
+    videoUrlRef,
+    episodeTitleRef,
+    variantEpisodeRef,
+    danmuLoadingRef,
+    lastDanmuLoadKeyRef,
+    currentSourceRef,
+    currentEpisodeIndexRef,
+    canUseSharedCacheRef: isLoggedInRef,
+  });
   // 🔥 同步 loadExternalDanmu 到 ref，确保播放器回调中使用最新版本
   loadExternalDanmuRef.current = loadExternalDanmu;
   const requestWakeLock = useCallback(async () => {
     try {
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        return;
+      }
       const wakeLock = (navigator as WakeLockNavigator).wakeLock;
       if (wakeLock) {
-        wakeLockRef.current = await wakeLock.request('screen');
+        const sentinel = await wakeLock.request('screen');
+        wakeLockRef.current = sentinel;
+        const handleSentinelRelease = () => {
+          sentinel.removeEventListener('release', handleSentinelRelease);
+          if (wakeLockRef.current === sentinel) {
+            wakeLockRef.current = null;
+          }
+        };
+        sentinel.addEventListener('release', handleSentinelRelease);
       }
     } catch (err) {
       console.warn('Wake Lock 请求失败:', err);
@@ -654,9 +655,10 @@ function PlayPageClient() {
 
   const releaseWakeLock = useCallback(async () => {
     try {
-      if (wakeLockRef.current) {
-        await wakeLockRef.current.release();
-        wakeLockRef.current = null;
+      const sentinel = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (sentinel && !sentinel.released) {
+        await sentinel.release();
       }
     } catch (err) {
       console.warn('Wake Lock 释放失败:', err);
@@ -665,6 +667,7 @@ function PlayPageClient() {
 
   // 清理播放器资源的统一函数（添加更完善的清理逻辑）
   const cleanupPlayer = useCallback(() => {
+    resetDanmuLoadState();
     // 🚀 新增：清理弹幕优化相关的定时器
     if (danmuOperationTimeoutRef.current) {
       clearTimeout(danmuOperationTimeoutRef.current);
@@ -718,7 +721,7 @@ function PlayPageClient() {
         artPlayerRef.current = null;
       }
     }
-  }, []);
+  }, [resetDanmuLoadState]);
 
   useEpisodeDanmuSync({
     detail,
@@ -735,6 +738,7 @@ function PlayPageClient() {
     danmuPluginStateRef,
     externalDanmuEnabledRef,
     loadExternalDanmu,
+    resetDanmuLoadState,
   });
 
   // 播放记录处理 - 使用Context避免重复请求
@@ -781,6 +785,7 @@ function PlayPageClient() {
     sourceChangeOwnerRef,
     externalDanmuEnabledRef,
     loadExternalDanmu,
+    resetDanmuLoadState,
   });
 
   // 🚀 组件卸载时清理所有定时器和状态
@@ -960,6 +965,7 @@ function PlayPageClient() {
               isSkipSettingOpen,
               onSkipSettingChange: setIsSkipSettingOpen,
               onNextEpisode: handleNextEpisode,
+              canConfigureSkip: isLoggedIn,
             }}
             episodePanelProps={{
               detail,
@@ -1022,6 +1028,16 @@ export default function PlayPage() {
 function PlayPageDataBoundary() {
   const searchParams = useSearchParams();
   const routeQuery = searchParams.toString();
+  // 区分页内 replaceState 同步（初始化补参/换源）与外部跨影片客户端路由跳转（搜索热榜/继续观看/收藏/追更）
+  const lastRouteQueryRef = useRef(routeQuery);
+  const sessionKeyRef = useRef(0);
+  if (lastRouteQueryRef.current !== routeQuery) {
+    lastRouteQueryRef.current = routeQuery;
+    if (!isInternalPlayUrlSync(routeQuery)) {
+      sessionKeyRef.current += 1;
+    }
+  }
+
   const includePlayRecordKeys = useMemo(() => {
     const params = new URLSearchParams(routeQuery);
     const source = params.get('source');
@@ -1032,7 +1048,7 @@ function PlayPageDataBoundary() {
 
   return (
     <PlaybackDataProvider includePlayRecordKeys={includePlayRecordKeys} eager>
-      <PlayPageClient />
+      <PlayPageClient key={sessionKeyRef.current} />
     </PlaybackDataProvider>
   );
 }

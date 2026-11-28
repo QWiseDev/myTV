@@ -199,6 +199,7 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
   const bufferStartAtRef = useRef<number>(0);
   const lastPlayTimeRef = useRef<number>(0);
   const dynamicBufferRef = useRef<DynamicBufferController | null>(null);
+  const superResolutionEnabledRef = useRef<boolean>(false);
   const nextEpisodePrefetchControllerRef = useRef<AbortController | null>(null);
   const prefetchedEpisodeUrlRef = useRef<string>('');
 
@@ -686,7 +687,12 @@ export function usePlayerInitializer(params: UsePlayerInitializerParams) {
           currentEpisodeIndex,
           detail?.episodes_titles?.[currentEpisodeIndex],
         );
-        installSuperResolution(artPlayer);
+        installSuperResolution(artPlayer, {
+          initialEnabled: superResolutionEnabledRef.current,
+          onEnabledChange: (nextEnabled) => {
+            superResolutionEnabledRef.current = nextEnabled;
+          },
+        });
         dynamicBufferRef.current?.dispose();
         const dynamicBuffer = installDynamicBuffer(artPlayer, {
           deviceInfo: { isMobile, isIOS, isIOS13 },

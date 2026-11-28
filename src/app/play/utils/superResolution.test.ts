@@ -107,3 +107,39 @@ it('损坏或越界的偏好恢复默认值', () => {
   );
   expect(readSuperResolutionPreference()).toEqual({ scale: 2, mode: 'A' });
 });
+
+it('同会话换源重建时可通过 initialEnabled 继承开启状态，并同步状态回调', async () => {
+  const container = document.createElement('div');
+  const video = document.createElement('video');
+  container.append(video);
+  document.body.append(container);
+  Object.defineProperties(video, {
+    readyState: { value: 2 },
+    videoWidth: { value: 640 },
+    videoHeight: { value: 360 },
+  });
+  const onEnabledChange = jest.fn();
+  const settings: Record<string, Setting> = {};
+  const art = {
+    video,
+    notice: { show: '' },
+    setting: {
+      add: (setting: Setting) => {
+        settings[setting.name || ''] = setting;
+      },
+      update: jest.fn(),
+    },
+    on: jest.fn(),
+    off: jest.fn(),
+  } as unknown as Artplayer;
+
+  const cleanup = installSuperResolution(art, {
+    initialEnabled: true,
+    onEnabledChange,
+  });
+  await waitFor(() => expect(createRenderer).toHaveBeenCalledTimes(1));
+
+  settings['super-resolution'].onSelect?.call(art, { value: 0 }, container);
+  expect(onEnabledChange).toHaveBeenCalledWith(false);
+  cleanup();
+});

@@ -112,6 +112,7 @@ describe('middleware', () => {
         '/api/playrecords',
         '/api/favorites',
         '/api/sources',
+        '/api/parse?url=https%3A%2F%2Fv.qq.com%2Fx%2Fpage%2Ftest.html',
         '/api/tvbox-config',
         '/api/tvbox/health',
       ];

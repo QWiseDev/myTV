@@ -4,6 +4,7 @@ import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { generateStorageKey, savePlayRecord } from '@/lib/db.client';
+import { resolvePlayRecordOriginalEpisodes } from '@/lib/play-record-original-episodes';
 import type { PlayRecord, SearchResult } from '@/lib/types';
 import { selectUsableImageUrl } from '@/lib/utils';
 
@@ -108,25 +109,31 @@ export function buildPlayProgressPayload({
     existingRecord?.cover,
   );
 
+  const record: PlayRecord = {
+    title: titleToSave,
+    source_name: detail.source_name || existingRecord?.source_name || '',
+    year: detail.year || existingRecord?.year || '',
+    douban_id: detail.douban_id || videoDoubanId || existingRecord?.douban_id,
+    cover: coverToSave,
+    index: currentEpisodeIndex + 1,
+    total_episodes: currentTotalEpisodes,
+    original_episodes: existingRecord?.original_episodes,
+    play_time: Math.floor(currentTime),
+    total_time: Math.floor(duration),
+    save_time: Date.now(),
+    search_title: searchTitle || existingRecord?.search_title || titleToSave,
+    remarks: remarksToSave,
+  };
+  record.original_episodes = resolvePlayRecordOriginalEpisodes(
+    existingRecord,
+    record,
+  );
+
   return {
     source: currentSource,
     id: currentId,
     key,
-    record: {
-      title: titleToSave,
-      source_name: detail.source_name || existingRecord?.source_name || '',
-      year: detail.year || existingRecord?.year || '',
-      douban_id: detail.douban_id || videoDoubanId || existingRecord?.douban_id,
-      cover: coverToSave,
-      index: currentEpisodeIndex + 1,
-      total_episodes: currentTotalEpisodes,
-      original_episodes: existingRecord?.original_episodes,
-      play_time: Math.floor(currentTime),
-      total_time: Math.floor(duration),
-      save_time: Date.now(),
-      search_title: searchTitle || existingRecord?.search_title || titleToSave,
-      remarks: remarksToSave,
-    },
+    record,
   };
 }
 
@@ -282,16 +289,25 @@ export function usePlayProgress({
       }
     };
 
+    // beforeunload 期间禁止调用 cleanupPlayer()：若用户取消关闭标签页或仅触发外部协议/附件下载，
+    // 页面不会卸载，提前销毁播放器会导致当前播放直接黑屏中断。
     const handleBeforeUnload = () => {
       saveOnPageExit();
       releaseWakeLock();
-      cleanupPlayer();
     };
 
-    // 移动端 Safari / iOS 不稳定触发 beforeunload，补充 pagehide 兜底上报
-    const handlePageHide = () => {
+    // 移动端 Safari / iOS 依赖 pagehide 兜底上报；非 bfcache 真实卸载时同步释放播放器
+    const handlePageHide = (event: PageTransitionEvent) => {
       saveOnPageExit();
       releaseWakeLock();
+      if (!event.persisted) {
+        cleanupPlayer();
+      }
+    };
+
+    // 顶栏/侧栏/底栏/Logo 调用 saveProgressAndNavigate 时同步派发该事件，立即发送信标避免进度丢失
+    const handleSavePlayProgressEvent = () => {
+      saveOnPageExit();
     };
 
     const handleVisibilityChange = () => {
@@ -307,11 +323,16 @@ export function usePlayProgress({
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('savePlayProgress', handleSavePlayProgressEvent);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener(
+        'savePlayProgress',
+        handleSavePlayProgressEvent,
+      );
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [

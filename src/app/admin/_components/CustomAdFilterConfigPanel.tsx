@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import {
   DEFAULT_CUSTOM_AD_FILTER_CODE,
-  validateCustomAdFilterCode,
+  validateCustomAdFilterCodeAsync,
 } from '@/lib/ad-filter';
 import { AdminConfig } from '@/lib/admin.types';
 
@@ -41,7 +41,7 @@ const CustomAdFilterConfigPanel = ({
       try {
         const code = adFilterCode.trim();
         if (code) {
-          validateCustomAdFilterCode(code);
+          await validateCustomAdFilterCodeAsync(code);
         }
 
         if (!config) {
